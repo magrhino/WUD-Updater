@@ -113122,19 +113122,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -113191,10 +113195,12 @@ export const generatedFixtures = {
                 "id": 7,
                 "image": "ghcr.io/magrhino/wudup:latest",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "v0.16.1",
                   "service_key": "media/wudup",
                   "source": "webui",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 },
                 "new_digest": "",
@@ -113245,6 +113251,7 @@ export const generatedFixtures = {
                   "service_key": "media/wudup",
                   "source_image": "ghcr.io/magrhino/wudup:latest",
                   "stack": "media",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 }
               ],
@@ -113255,7 +113262,10 @@ export const generatedFixtures = {
                 "media/wudup"
               ],
               "source": "webui",
-              "status": "success"
+              "status": "success",
+              "targets": [
+                "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
+              ]
             },
             "mode": "web-retag",
             "pending_updates": [],
@@ -113295,10 +113305,12 @@ export const generatedFixtures = {
                 "id": 7,
                 "image": "ghcr.io/magrhino/wudup:latest",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "v0.16.1",
                   "service_key": "media/wudup",
                   "source": "webui",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 },
                 "new_digest": "",
@@ -113349,6 +113361,7 @@ export const generatedFixtures = {
                   "service_key": "media/wudup",
                   "source_image": "ghcr.io/magrhino/wudup:latest",
                   "stack": "media",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 }
               ],
@@ -113359,7 +113372,10 @@ export const generatedFixtures = {
                 "media/wudup"
               ],
               "source": "webui",
-              "status": "success"
+              "status": "success",
+              "targets": [
+                "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
+              ]
             },
             "mode": "web-retag",
             "started_at": "2026-05-30T20:12:26+00:00",
@@ -113533,6 +113549,7 @@ export const generatedFixtures = {
                     "service_key": "media/wudup",
                     "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
+                    "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                     "watch_tag": "v0.16.1"
                   }
                 ],
@@ -113597,19 +113614,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -113656,6 +113677,7 @@ export const generatedFixtures = {
                 "service_key": "media/wudup",
                 "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
+                "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                 "watch_tag": "v0.16.1"
               }
             ],
@@ -113748,19 +113770,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -113846,6 +113872,7 @@ export const generatedFixtures = {
                     "service_key": "media/wudup",
                     "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
+                    "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                     "watch_tag": "v0.16.1"
                   }
                 ],
@@ -113910,19 +113937,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -113980,6 +114011,7 @@ export const generatedFixtures = {
                 "service_key": "media/wudup",
                 "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
+                "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                 "watch_tag": "v0.16.1"
               }
             ],
@@ -114072,19 +114104,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -114170,6 +114206,7 @@ export const generatedFixtures = {
                     "service_key": "media/wudup",
                     "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
+                    "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                     "watch_tag": "v0.16.1"
                   }
                 ],
@@ -114234,19 +114271,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -114304,6 +114345,7 @@ export const generatedFixtures = {
                 "service_key": "media/wudup",
                 "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
+                "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                 "watch_tag": "v0.16.1"
               }
             ],
@@ -114406,19 +114448,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -114524,6 +114570,7 @@ export const generatedFixtures = {
                     "service_key": "media/wudup",
                     "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
+                    "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                     "watch_tag": "v0.16.1"
                   }
                 ],
@@ -114588,19 +114635,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -114668,6 +114719,7 @@ export const generatedFixtures = {
                 "service_key": "media/wudup",
                 "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
+                "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                 "watch_tag": "v0.16.1"
               }
             ],
@@ -114760,19 +114812,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -114858,6 +114914,7 @@ export const generatedFixtures = {
                     "service_key": "media/wudup",
                     "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
+                    "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                     "watch_tag": "v0.16.1"
                   }
                 ],
@@ -114922,19 +114979,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -114992,6 +115053,7 @@ export const generatedFixtures = {
                 "service_key": "media/wudup",
                 "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
+                "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                 "watch_tag": "v0.16.1"
               }
             ],
@@ -115094,19 +115156,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -115212,6 +115278,7 @@ export const generatedFixtures = {
                     "service_key": "media/wudup",
                     "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
+                    "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                     "watch_tag": "v0.16.1"
                   }
                 ],
@@ -115276,19 +115343,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -115356,6 +115427,7 @@ export const generatedFixtures = {
                 "service_key": "media/wudup",
                 "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
+                "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                 "watch_tag": "v0.16.1"
               }
             ],
@@ -115458,19 +115530,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -115576,6 +115652,7 @@ export const generatedFixtures = {
                     "service_key": "media/wudup",
                     "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
+                    "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                     "watch_tag": "v0.16.1"
                   }
                 ],
@@ -115640,19 +115717,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -115720,6 +115801,7 @@ export const generatedFixtures = {
                 "service_key": "media/wudup",
                 "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
+                "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                 "watch_tag": "v0.16.1"
               }
             ],
@@ -115832,19 +115914,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -115970,6 +116056,7 @@ export const generatedFixtures = {
                     "service_key": "media/wudup",
                     "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
+                    "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                     "watch_tag": "v0.16.1"
                   }
                 ],
@@ -116034,19 +116121,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -116124,6 +116215,7 @@ export const generatedFixtures = {
                 "service_key": "media/wudup",
                 "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
+                "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                 "watch_tag": "v0.16.1"
               }
             ],
@@ -116180,10 +116272,12 @@ export const generatedFixtures = {
                 "id": 7,
                 "image": "lscr.io/linuxserver/radarr:5.21.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "5.22.4",
                   "service_key": "media/radarr",
                   "source": "webui",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 },
                 "new_digest": "",
@@ -116223,6 +116317,7 @@ export const generatedFixtures = {
                   "service_key": "media/radarr",
                   "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                   "stack": "media",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 }
               ],
@@ -116233,7 +116328,10 @@ export const generatedFixtures = {
                 "media/radarr"
               ],
               "source": "webui",
-              "status": "success"
+              "status": "success",
+              "targets": [
+                "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
+              ]
             },
             "mode": "web-retag",
             "pending_updates": [],
@@ -116273,10 +116371,12 @@ export const generatedFixtures = {
                 "id": 7,
                 "image": "lscr.io/linuxserver/radarr:5.21.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "5.22.4",
                   "service_key": "media/radarr",
                   "source": "webui",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 },
                 "new_digest": "",
@@ -116316,6 +116416,7 @@ export const generatedFixtures = {
                   "service_key": "media/radarr",
                   "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                   "stack": "media",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 }
               ],
@@ -116326,7 +116427,10 @@ export const generatedFixtures = {
                 "media/radarr"
               ],
               "source": "webui",
-              "status": "success"
+              "status": "success",
+              "targets": [
+                "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
+              ]
             },
             "mode": "web-retag",
             "started_at": "2026-05-30T20:12:26+00:00",
@@ -116489,6 +116593,7 @@ export const generatedFixtures = {
                     "service_key": "media/radarr",
                     "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                     "stack": "media",
+                    "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                     "watch_tag": "5.22.4"
                   }
                 ],
@@ -116553,20 +116658,24 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
             "target_tag": "5.22.4"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -116602,6 +116711,7 @@ export const generatedFixtures = {
                 "service_key": "media/radarr",
                 "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                 "stack": "media",
+                "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                 "watch_tag": "5.22.4"
               }
             ],
@@ -116658,10 +116768,12 @@ export const generatedFixtures = {
                 "id": 7,
                 "image": "lscr.io/linuxserver/radarr:5.21.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "5.22.4",
                   "service_key": "media/radarr",
                   "source": "webui",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 },
                 "new_digest": "",
@@ -116688,10 +116800,12 @@ export const generatedFixtures = {
                 "id": 8,
                 "image": "ghcr.io/magrhino/wudup:latest",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "v0.16.1",
                   "service_key": "media/wudup",
                   "source": "webui",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 },
                 "new_digest": "",
@@ -116731,6 +116845,7 @@ export const generatedFixtures = {
                   "service_key": "media/radarr",
                   "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                   "stack": "media",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 },
                 {
@@ -116765,6 +116880,7 @@ export const generatedFixtures = {
                   "service_key": "media/wudup",
                   "source_image": "ghcr.io/magrhino/wudup:latest",
                   "stack": "media",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 }
               ],
@@ -116776,7 +116892,11 @@ export const generatedFixtures = {
                 "media/wudup"
               ],
               "source": "webui",
-              "status": "success"
+              "status": "success",
+              "targets": [
+                "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
+                "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
+              ]
             },
             "mode": "web-retag",
             "pending_updates": [],
@@ -116816,10 +116936,12 @@ export const generatedFixtures = {
                 "id": 7,
                 "image": "lscr.io/linuxserver/radarr:5.21.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "5.22.4",
                   "service_key": "media/radarr",
                   "source": "webui",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 },
                 "new_digest": "",
@@ -116846,10 +116968,12 @@ export const generatedFixtures = {
                 "id": 8,
                 "image": "ghcr.io/magrhino/wudup:latest",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "v0.16.1",
                   "service_key": "media/wudup",
                   "source": "webui",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 },
                 "new_digest": "",
@@ -116889,6 +117013,7 @@ export const generatedFixtures = {
                   "service_key": "media/radarr",
                   "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                   "stack": "media",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 },
                 {
@@ -116923,6 +117048,7 @@ export const generatedFixtures = {
                   "service_key": "media/wudup",
                   "source_image": "ghcr.io/magrhino/wudup:latest",
                   "stack": "media",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 }
               ],
@@ -116934,7 +117060,11 @@ export const generatedFixtures = {
                 "media/wudup"
               ],
               "source": "webui",
-              "status": "success"
+              "status": "success",
+              "targets": [
+                "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
+                "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
+              ]
             },
             "mode": "web-retag",
             "started_at": "2026-05-30T20:12:26+00:00",
@@ -117105,6 +117235,7 @@ export const generatedFixtures = {
                     "service_key": "media/radarr",
                     "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                     "stack": "media",
+                    "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                     "watch_tag": "5.22.4"
                   },
                   {
@@ -117139,6 +117270,7 @@ export const generatedFixtures = {
                     "service_key": "media/wudup",
                     "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
+                    "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                     "watch_tag": "v0.16.1"
                   }
                 ],
@@ -117204,20 +117336,24 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
             "target_tag": "5.22.4"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -117253,6 +117389,7 @@ export const generatedFixtures = {
                 "service_key": "media/radarr",
                 "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                 "stack": "media",
+                "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                 "watch_tag": "5.22.4"
               },
               {
@@ -117287,6 +117424,7 @@ export const generatedFixtures = {
                 "service_key": "media/wudup",
                 "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
+                "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                 "watch_tag": "v0.16.1"
               }
             ],
@@ -117344,10 +117482,12 @@ export const generatedFixtures = {
                 "id": 7,
                 "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "2026.5.3",
                   "service_key": "home/home-assistant",
                   "source": "webui",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 },
                 "new_digest": "",
@@ -117387,6 +117527,7 @@ export const generatedFixtures = {
                   "service_key": "home/home-assistant",
                   "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                   "stack": "home",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 }
               ],
@@ -117397,7 +117538,10 @@ export const generatedFixtures = {
                 "home/home-assistant"
               ],
               "source": "webui",
-              "status": "success"
+              "status": "success",
+              "targets": [
+                "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
+              ]
             },
             "mode": "web-retag",
             "pending_updates": [],
@@ -117437,10 +117581,12 @@ export const generatedFixtures = {
                 "id": 7,
                 "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "2026.5.3",
                   "service_key": "home/home-assistant",
                   "source": "webui",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 },
                 "new_digest": "",
@@ -117480,6 +117626,7 @@ export const generatedFixtures = {
                   "service_key": "home/home-assistant",
                   "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                   "stack": "home",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 }
               ],
@@ -117490,7 +117637,10 @@ export const generatedFixtures = {
                 "home/home-assistant"
               ],
               "source": "webui",
-              "status": "success"
+              "status": "success",
+              "targets": [
+                "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
+              ]
             },
             "mode": "web-retag",
             "started_at": "2026-05-30T20:12:26+00:00",
@@ -117653,6 +117803,7 @@ export const generatedFixtures = {
                     "service_key": "home/home-assistant",
                     "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                     "stack": "home",
+                    "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                     "watch_tag": "2026.5.3"
                   }
                 ],
@@ -117717,20 +117868,24 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
             "target_tag": "2026.5.3"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -117766,6 +117921,7 @@ export const generatedFixtures = {
                 "service_key": "home/home-assistant",
                 "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                 "stack": "home",
+                "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                 "watch_tag": "2026.5.3"
               }
             ],
@@ -117822,10 +117978,12 @@ export const generatedFixtures = {
                 "id": 7,
                 "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "2026.5.3",
                   "service_key": "home/home-assistant",
                   "source": "webui",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 },
                 "new_digest": "",
@@ -117852,10 +118010,12 @@ export const generatedFixtures = {
                 "id": 8,
                 "image": "ghcr.io/magrhino/wudup:latest",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "v0.16.1",
                   "service_key": "media/wudup",
                   "source": "webui",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 },
                 "new_digest": "",
@@ -117895,6 +118055,7 @@ export const generatedFixtures = {
                   "service_key": "home/home-assistant",
                   "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                   "stack": "home",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 },
                 {
@@ -117929,6 +118090,7 @@ export const generatedFixtures = {
                   "service_key": "media/wudup",
                   "source_image": "ghcr.io/magrhino/wudup:latest",
                   "stack": "media",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 }
               ],
@@ -117940,7 +118102,11 @@ export const generatedFixtures = {
                 "media/wudup"
               ],
               "source": "webui",
-              "status": "success"
+              "status": "success",
+              "targets": [
+                "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
+                "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
+              ]
             },
             "mode": "web-retag",
             "pending_updates": [],
@@ -117980,10 +118146,12 @@ export const generatedFixtures = {
                 "id": 7,
                 "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "2026.5.3",
                   "service_key": "home/home-assistant",
                   "source": "webui",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 },
                 "new_digest": "",
@@ -118010,10 +118178,12 @@ export const generatedFixtures = {
                 "id": 8,
                 "image": "ghcr.io/magrhino/wudup:latest",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "v0.16.1",
                   "service_key": "media/wudup",
                   "source": "webui",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 },
                 "new_digest": "",
@@ -118053,6 +118223,7 @@ export const generatedFixtures = {
                   "service_key": "home/home-assistant",
                   "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                   "stack": "home",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 },
                 {
@@ -118087,6 +118258,7 @@ export const generatedFixtures = {
                   "service_key": "media/wudup",
                   "source_image": "ghcr.io/magrhino/wudup:latest",
                   "stack": "media",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 }
               ],
@@ -118098,7 +118270,11 @@ export const generatedFixtures = {
                 "media/wudup"
               ],
               "source": "webui",
-              "status": "success"
+              "status": "success",
+              "targets": [
+                "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
+                "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
+              ]
             },
             "mode": "web-retag",
             "started_at": "2026-05-30T20:12:26+00:00",
@@ -118357,6 +118533,7 @@ export const generatedFixtures = {
                     "service_key": "home/home-assistant",
                     "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                     "stack": "home",
+                    "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                     "watch_tag": "2026.5.3"
                   }
                 ],
@@ -118402,6 +118579,7 @@ export const generatedFixtures = {
                     "service_key": "media/wudup",
                     "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
+                    "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                     "watch_tag": "v0.16.1"
                   }
                 ],
@@ -118466,20 +118644,24 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
             "target_tag": "2026.5.3"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -118515,6 +118697,7 @@ export const generatedFixtures = {
                 "service_key": "home/home-assistant",
                 "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                 "stack": "home",
+                "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                 "watch_tag": "2026.5.3"
               }
             ],
@@ -118560,6 +118743,7 @@ export const generatedFixtures = {
                 "service_key": "media/wudup",
                 "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
+                "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                 "watch_tag": "v0.16.1"
               }
             ],
@@ -118616,10 +118800,12 @@ export const generatedFixtures = {
                 "id": 7,
                 "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "2026.5.3",
                   "service_key": "home/home-assistant",
                   "source": "webui",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 },
                 "new_digest": "",
@@ -118646,10 +118832,12 @@ export const generatedFixtures = {
                 "id": 8,
                 "image": "lscr.io/linuxserver/radarr:5.21.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "5.22.4",
                   "service_key": "media/radarr",
                   "source": "webui",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 },
                 "new_digest": "",
@@ -118689,6 +118877,7 @@ export const generatedFixtures = {
                   "service_key": "home/home-assistant",
                   "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                   "stack": "home",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 },
                 {
@@ -118712,6 +118901,7 @@ export const generatedFixtures = {
                   "service_key": "media/radarr",
                   "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                   "stack": "media",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 }
               ],
@@ -118723,7 +118913,11 @@ export const generatedFixtures = {
                 "media/radarr"
               ],
               "source": "webui",
-              "status": "success"
+              "status": "success",
+              "targets": [
+                "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
+                "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
+              ]
             },
             "mode": "web-retag",
             "pending_updates": [],
@@ -118763,10 +118957,12 @@ export const generatedFixtures = {
                 "id": 7,
                 "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "2026.5.3",
                   "service_key": "home/home-assistant",
                   "source": "webui",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 },
                 "new_digest": "",
@@ -118793,10 +118989,12 @@ export const generatedFixtures = {
                 "id": 8,
                 "image": "lscr.io/linuxserver/radarr:5.21.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "5.22.4",
                   "service_key": "media/radarr",
                   "source": "webui",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 },
                 "new_digest": "",
@@ -118836,6 +119034,7 @@ export const generatedFixtures = {
                   "service_key": "home/home-assistant",
                   "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                   "stack": "home",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 },
                 {
@@ -118859,6 +119058,7 @@ export const generatedFixtures = {
                   "service_key": "media/radarr",
                   "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                   "stack": "media",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 }
               ],
@@ -118870,7 +119070,11 @@ export const generatedFixtures = {
                 "media/radarr"
               ],
               "source": "webui",
-              "status": "success"
+              "status": "success",
+              "targets": [
+                "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
+                "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
+              ]
             },
             "mode": "web-retag",
             "started_at": "2026-05-30T20:12:26+00:00",
@@ -119129,6 +119333,7 @@ export const generatedFixtures = {
                     "service_key": "home/home-assistant",
                     "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                     "stack": "home",
+                    "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                     "watch_tag": "2026.5.3"
                   }
                 ],
@@ -119163,6 +119368,7 @@ export const generatedFixtures = {
                     "service_key": "media/radarr",
                     "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                     "stack": "media",
+                    "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                     "watch_tag": "5.22.4"
                   }
                 ],
@@ -119227,21 +119433,25 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
             "target_tag": "2026.5.3"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
             "target_tag": "5.22.4"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -119277,6 +119487,7 @@ export const generatedFixtures = {
                 "service_key": "home/home-assistant",
                 "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                 "stack": "home",
+                "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                 "watch_tag": "2026.5.3"
               }
             ],
@@ -119311,6 +119522,7 @@ export const generatedFixtures = {
                 "service_key": "media/radarr",
                 "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                 "stack": "media",
+                "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                 "watch_tag": "5.22.4"
               }
             ],
@@ -119367,10 +119579,12 @@ export const generatedFixtures = {
                 "id": 7,
                 "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "2026.5.3",
                   "service_key": "home/home-assistant",
                   "source": "webui",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 },
                 "new_digest": "",
@@ -119397,10 +119611,12 @@ export const generatedFixtures = {
                 "id": 8,
                 "image": "lscr.io/linuxserver/radarr:5.21.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "5.22.4",
                   "service_key": "media/radarr",
                   "source": "webui",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 },
                 "new_digest": "",
@@ -119427,10 +119643,12 @@ export const generatedFixtures = {
                 "id": 9,
                 "image": "ghcr.io/magrhino/wudup:latest",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "v0.16.1",
                   "service_key": "media/wudup",
                   "source": "webui",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 },
                 "new_digest": "",
@@ -119470,6 +119688,7 @@ export const generatedFixtures = {
                   "service_key": "home/home-assistant",
                   "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                   "stack": "home",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 },
                 {
@@ -119493,6 +119712,7 @@ export const generatedFixtures = {
                   "service_key": "media/radarr",
                   "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                   "stack": "media",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 },
                 {
@@ -119527,6 +119747,7 @@ export const generatedFixtures = {
                   "service_key": "media/wudup",
                   "source_image": "ghcr.io/magrhino/wudup:latest",
                   "stack": "media",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 }
               ],
@@ -119539,7 +119760,12 @@ export const generatedFixtures = {
                 "media/wudup"
               ],
               "source": "webui",
-              "status": "success"
+              "status": "success",
+              "targets": [
+                "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
+                "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
+                "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
+              ]
             },
             "mode": "web-retag",
             "pending_updates": [],
@@ -119579,10 +119805,12 @@ export const generatedFixtures = {
                 "id": 7,
                 "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "2026.5.3",
                   "service_key": "home/home-assistant",
                   "source": "webui",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 },
                 "new_digest": "",
@@ -119609,10 +119837,12 @@ export const generatedFixtures = {
                 "id": 8,
                 "image": "lscr.io/linuxserver/radarr:5.21.1",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "5.22.4",
                   "service_key": "media/radarr",
                   "source": "webui",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 },
                 "new_digest": "",
@@ -119639,10 +119869,12 @@ export const generatedFixtures = {
                 "id": 9,
                 "image": "ghcr.io/magrhino/wudup:latest",
                 "metadata": {
+                  "known_image_recorded": true,
                   "operation": "retag",
                   "resolved_tag": "v0.16.1",
                   "service_key": "media/wudup",
                   "source": "webui",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 },
                 "new_digest": "",
@@ -119682,6 +119914,7 @@ export const generatedFixtures = {
                   "service_key": "home/home-assistant",
                   "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                   "stack": "home",
+                  "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                   "watch_tag": "2026.5.3"
                 },
                 {
@@ -119705,6 +119938,7 @@ export const generatedFixtures = {
                   "service_key": "media/radarr",
                   "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                   "stack": "media",
+                  "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                   "watch_tag": "5.22.4"
                 },
                 {
@@ -119739,6 +119973,7 @@ export const generatedFixtures = {
                   "service_key": "media/wudup",
                   "source_image": "ghcr.io/magrhino/wudup:latest",
                   "stack": "media",
+                  "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                   "watch_tag": "v0.16.1"
                 }
               ],
@@ -119751,7 +119986,12 @@ export const generatedFixtures = {
                 "media/wudup"
               ],
               "source": "webui",
-              "status": "success"
+              "status": "success",
+              "targets": [
+                "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
+                "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
+                "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
+              ]
             },
             "mode": "web-retag",
             "started_at": "2026-05-30T20:12:26+00:00",
@@ -120018,6 +120258,7 @@ export const generatedFixtures = {
                     "service_key": "home/home-assistant",
                     "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                     "stack": "home",
+                    "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                     "watch_tag": "2026.5.3"
                   }
                 ],
@@ -120052,6 +120293,7 @@ export const generatedFixtures = {
                     "service_key": "media/radarr",
                     "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                     "stack": "media",
+                    "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                     "watch_tag": "5.22.4"
                   },
                   {
@@ -120086,6 +120328,7 @@ export const generatedFixtures = {
                     "service_key": "media/wudup",
                     "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
+                    "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                     "watch_tag": "v0.16.1"
                   }
                 ],
@@ -120151,21 +120394,25 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
             "target_tag": "2026.5.3"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
             "target_tag": "5.22.4"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -120201,6 +120448,7 @@ export const generatedFixtures = {
                 "service_key": "home/home-assistant",
                 "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
                 "stack": "home",
+                "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
                 "watch_tag": "2026.5.3"
               }
             ],
@@ -120235,6 +120483,7 @@ export const generatedFixtures = {
                 "service_key": "media/radarr",
                 "source_image": "lscr.io/linuxserver/radarr:5.21.1",
                 "stack": "media",
+                "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
                 "watch_tag": "5.22.4"
               },
               {
@@ -120269,6 +120518,7 @@ export const generatedFixtures = {
                 "service_key": "media/wudup",
                 "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
+                "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
                 "watch_tag": "v0.16.1"
               }
             ],
@@ -120313,6 +120563,7 @@ export const generatedFixtures = {
         "service": "postgres",
         "service_key": "data/postgres",
         "stack": "data",
+        "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8",
         "tracking_tag": "16",
         "tracking_tag_source": "image"
       },
@@ -120340,6 +120591,7 @@ export const generatedFixtures = {
         "service": "home-assistant",
         "service_key": "home/home-assistant",
         "stack": "home",
+        "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
         "tracking_tag": "2026.5.1",
         "tracking_tag_source": "image"
       },
@@ -120367,6 +120619,7 @@ export const generatedFixtures = {
         "service": "radarr",
         "service_key": "media/radarr",
         "stack": "media",
+        "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
         "tracking_tag": "5.21.1",
         "tracking_tag_source": "image"
       },
@@ -120403,6 +120656,7 @@ export const generatedFixtures = {
         "service": "wudup",
         "service_key": "media/wudup",
         "stack": "media",
+        "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1",
         "tracking_tag": "latest",
         "tracking_tag_source": "label"
       }

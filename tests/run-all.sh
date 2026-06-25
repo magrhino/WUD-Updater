@@ -117,6 +117,7 @@ EOF
     src/wudup/web_pending_sources.py \
     src/wudup/web_plans.py \
     src/wudup/web_release_notes.py \
+    src/wudup/web_retag_identity.py \
     src/wudup/web_retag_plans.py \
     src/wudup/web_retags.py \
     src/wudup/web_run_verification.py \

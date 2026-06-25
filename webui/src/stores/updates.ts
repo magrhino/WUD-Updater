@@ -21,6 +21,7 @@ import {
   type RetagPlanResponse,
   type RetagPreviewJobResponse,
   type RetagTargetChoice,
+  type RetagTargetItem,
   type RetagTargetsResponse,
   type SelfUpdateApplyResponse,
   type SelfUpdatePlanResponse,
@@ -34,8 +35,10 @@ import { usePolledJob } from "../composables/usePolledJob";
 import { useAuthStore } from "./auth";
 import { errorMessage, runWithStoreState } from "./storeState";
 import {
+  canEnableRetagTargetChoice,
   normalizeRetagChoice,
   retagChoice as selectedRetagChoice,
+  retagTargetIdentity,
   retagTargetTagValue,
 } from "../utils/retagChoices";
 import {
@@ -52,6 +55,7 @@ const PENDING_RESCAN_SELECTION_REQUIRED_MESSAGE =
   "Select at least one pending update to rescan.";
 
 const APPLY_JOB_STORAGE_KEY = "applyJobId";
+const RETAG_GITHUB_LATEST_FALLBACK_STORAGE_KEY = "retagGithubLatestFallback";
 const TERMINAL_APPLY_JOB_STATUSES = new Set<ApplyJobResponse["status"]>([
   "success",
   "failure",
@@ -69,7 +73,7 @@ export const useUpdatesStore = defineStore("updates", () => {
   const retagChoices = ref<Record<string, RetagTargetChoice>>({});
   const retagTargetTags = ref<Record<string, string>>({});
   const retagPlan = ref<RetagPlanResponse | null>(null);
-  const retagGithubLatestFallback = ref(false);
+  const retagGithubLatestFallback = ref(readRememberedRetagGithubLatestFallback());
   let retagPreviewStart: (() => Promise<RetagPreviewJobResponse>) | null = null;
   const retagPreviewPoller = usePolledJob<RetagPreviewJobResponse>(
     () => {
@@ -144,11 +148,8 @@ export const useUpdatesStore = defineStore("updates", () => {
 
   async function setRetagGithubLatestFallback(enabled: boolean): Promise<void> {
     retagGithubLatestFallback.value = enabled;
-    if (enabled) {
-      await refreshRetagGithubLatest();
-      return;
-    }
-    await loadRetagTargets({ githubLatestFallback: false });
+    writeRememberedRetagGithubLatestFallback(enabled);
+    await loadRetagTargets({ githubLatestFallback: enabled });
   }
 
   async function refreshRetagGithubLatest(): Promise<void> {
@@ -158,6 +159,7 @@ export const useUpdatesStore = defineStore("updates", () => {
         await auth.ensureCsrf(),
       );
       retagGithubLatestFallback.value = true;
+      writeRememberedRetagGithubLatestFallback(true);
       resetRetagChoices();
       retagPlan.value = null;
       retagPreviewPoller.reset();
@@ -168,28 +170,39 @@ export const useUpdatesStore = defineStore("updates", () => {
     const items = retagTargets.value?.items ?? [];
     retagChoices.value = Object.fromEntries(
       items.map((item) => [
-        item.service_key,
+        retagTargetIdentity(item),
         "keep-current" satisfies RetagTargetChoice,
       ]),
     );
     retagTargetTags.value = Object.fromEntries(
       items.map((item) => [
-        item.service_key,
+        retagTargetIdentity(item),
         item.retag_available ? item.proposed_tag : "",
       ]),
     );
   }
 
+  function findRetagTarget(targetKey: string): RetagTargetItem | undefined {
+    const items = retagTargets.value?.items ?? [];
+    const targetIdMatch = items.find((target) => target.target_id === targetKey);
+    if (targetIdMatch) {
+      return targetIdMatch;
+    }
+    const serviceKeyMatches = items.filter(
+      (target) => target.service_key === targetKey,
+    );
+    return serviceKeyMatches.length === 1 ? serviceKeyMatches[0] : undefined;
+  }
+
   function setRetagChoice(
-    serviceKey: string,
+    targetKey: string,
     choice: RetagTargetChoice,
   ): void {
-    const item = retagTargets.value?.items.find(
-      (target) => target.service_key === serviceKey,
-    );
+    const item = findRetagTarget(targetKey);
+    const choiceKey = item ? retagTargetIdentity(item) : targetKey;
     retagChoices.value = {
       ...retagChoices.value,
-      [serviceKey]: item
+      [choiceKey]: item
         ? normalizeRetagChoice(item, choice, retagTargetTags.value)
         : choice,
     };
@@ -197,18 +210,62 @@ export const useUpdatesStore = defineStore("updates", () => {
     retagPreviewPoller.reset();
   }
 
-  function setRetagTargetTag(serviceKey: string, tag: string): void {
-    const item = retagTargets.value?.items.find(
-      (target) => target.service_key === serviceKey,
+  function setRetagChoicesForItems(
+    items: RetagTargetItem[],
+    choice: RetagTargetChoice,
+  ): void {
+    const currentItems = new Map(
+      (retagTargets.value?.items ?? []).map((item) => [
+        retagTargetIdentity(item),
+        item,
+      ]),
     );
+    const nextChoices = { ...retagChoices.value };
+    for (const requestedItem of items) {
+      const item = currentItems.get(retagTargetIdentity(requestedItem));
+      if (!item) {
+        continue;
+      }
+      nextChoices[retagTargetIdentity(item)] =
+        choice === "switch-to-concrete" &&
+        canEnableRetagTargetChoice(item, retagTargetTags.value)
+          ? "switch-to-concrete"
+          : "keep-current";
+    }
+    retagChoices.value = nextChoices;
+    retagPlan.value = null;
+    retagPreviewPoller.reset();
+  }
+
+  function setRetagOnlyChoice(targetKey: string): void {
+    const selectedItem = findRetagTarget(targetKey);
+    const selectedTargetId = selectedItem
+      ? retagTargetIdentity(selectedItem)
+      : targetKey;
+    const nextChoices = { ...retagChoices.value };
+    for (const item of retagTargets.value?.items ?? []) {
+      const targetId = retagTargetIdentity(item);
+      nextChoices[targetId] =
+        targetId === selectedTargetId
+          ? normalizeRetagChoice(item, "switch-to-concrete", retagTargetTags.value)
+          : "keep-current";
+    }
+    retagChoices.value = nextChoices;
+    retagPlan.value = null;
+    retagPreviewPoller.reset();
+  }
+
+  function setRetagTargetTag(targetKey: string, tag: string): void {
+    const item = findRetagTarget(targetKey);
+    const choiceKey = item ? retagTargetIdentity(item) : targetKey;
     retagTargetTags.value = {
       ...retagTargetTags.value,
-      [serviceKey]: tag,
+      [choiceKey]: tag,
     };
     if (item && tag.trim()) {
       retagChoices.value = {
         ...retagChoices.value,
-        [serviceKey]: "switch-to-concrete",
+        [choiceKey]: "switch-to-concrete",
       };
     }
     retagPlan.value = null;
@@ -228,6 +285,10 @@ export const useUpdatesStore = defineStore("updates", () => {
           service_key: item.service_key,
           choice,
         };
+        const targetId = retagTargetIdentity(item);
+        if (targetId !== item.service_key) {
+          request.target_id = targetId;
+        }
         if (choice === "switch-to-concrete") {
           const tag = retagTargetTagValue(item, retagTargetTags.value).trim();
           if (tag && (!item.retag_available || tag !== item.proposed_tag)) {
@@ -236,7 +297,11 @@ export const useUpdatesStore = defineStore("updates", () => {
         }
         return request;
       })
-      .sort((left, right) => left.service_key.localeCompare(right.service_key));
+      .sort(
+        (left, right) =>
+          left.service_key.localeCompare(right.service_key) ||
+          (left.target_id ?? "").localeCompare(right.target_id ?? ""),
+      );
   }
 
   async function createRetagPlan(): Promise<RetagPlanResponse> {
@@ -791,6 +856,8 @@ export const useUpdatesStore = defineStore("updates", () => {
     refreshRetagGithubLatest,
     resetRetagChoices,
     setRetagChoice,
+    setRetagChoicesForItems,
+    setRetagOnlyChoice,
     setRetagTargetTag,
     retagChoiceRequests,
     createRetagPlan,
@@ -860,6 +927,35 @@ function removeRememberedApplyJobId(): void {
     storage?.removeItem(APPLY_JOB_STORAGE_KEY);
   } catch {
     // Remembering a transient job id is best-effort.
+  }
+}
+
+function readRememberedRetagGithubLatestFallback(): boolean {
+  const storage = localStorageAvailable();
+  try {
+    return storage?.getItem(RETAG_GITHUB_LATEST_FALLBACK_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeRememberedRetagGithubLatestFallback(enabled: boolean): void {
+  const storage = localStorageAvailable();
+  try {
+    storage?.setItem(
+      RETAG_GITHUB_LATEST_FALLBACK_STORAGE_KEY,
+      enabled ? "true" : "false",
+    );
+  } catch {
+    // Remembering this harmless UI preference is best-effort.
+  }
+}
+
+function localStorageAvailable(): Storage | null {
+  try {
+    return "localStorage" in globalThis ? globalThis.localStorage : null;
+  } catch {
+    return null;
   }
 }
 

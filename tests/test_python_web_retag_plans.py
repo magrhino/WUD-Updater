@@ -13,6 +13,7 @@ from wudup.web_retag_plans import (
     retag_plan_stacks,
     retag_plan_status,
 )
+from wudup.web_retag_identity import retag_target_id
 
 
 def test_retag_plan_helpers_render_ordered_stacks_and_stable_ids(
@@ -95,6 +96,7 @@ def _update(
         service_images=(),
     )
     return RetagPlanUpdate(
+        target_id=retag_target_id(stack_dir, stack.file, "", stack.name, service),
         service_key=f"{stack_name}/{service}",
         stack=stack,
         update=DigestPinUpdate(

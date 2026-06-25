@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 from dataclasses import dataclass, fields
@@ -19,12 +20,17 @@ from tests.web_test_helpers import (
     _make_fake_stack,
     _wait_apply_job,
 )
+from wudup.compose import ComposeStack, ServiceImage
+from wudup.config import UpdaterConfig
 from wudup.db import init_db, open_db, upsert_known_image
 from wudup.digest_verifier import DigestResolveResult
 from wudup.digest_provenance import DigestTagProvenance
+from wudup.release_notes import ReleaseNoteInfo
+from wudup.updater_digest_pin import digest_pin_update_from_values
 from wudup import web_database
 from wudup import web_retags as web_retags_module
-from wudup.web_models import WebApplyJob
+from wudup.web_models import RetagPlanResponse, WebApplyJob, WebSettings
+from wudup.web_retag_plans import RetagPlanBuild, RetagPlanUpdate
 
 
 @dataclass(frozen=True)
@@ -50,6 +56,7 @@ def test_retag_targets_endpoint_returns_eligible_digest_pinned_service(
     assert body["count"] == 1
     assert body["warnings"] == []
     item = body["items"][0]
+    assert item["target_id"]
     assert item["service_key"] == "stack/app"
     assert item["image"] == "repo/app@sha256:old"
     assert item["current_tag"] == ""
@@ -229,6 +236,235 @@ def test_retag_targets_endpoint_includes_service_without_pending_line(
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
+def test_retag_plan_accepts_duplicate_service_keys_with_target_ids(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+            **fake_env,
+        },
+    )
+    first_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app@sha256:old", "cid-app-one")],
+        parent=tmp_path / "docker" / "one",
+    )
+    second_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app@sha256:old", "cid-app-two")],
+        parent=tmp_path / "docker" / "two",
+    )
+    _write_compose(
+        first_dir,
+        "app",
+        "repo/app@sha256:old",
+        label_value="^latest$$",
+    )
+    _write_compose(
+        second_dir,
+        "app",
+        "repo/app@sha256:old",
+        label_value="^latest$$",
+    )
+    _seed_known_image(
+        tmp_path,
+        service_key="stack/app",
+        image="repo/app@sha256:old",
+        source_image="repo/app:latest",
+        resolved_tag="2.0",
+        watch_tag="latest",
+        target_digest="sha256:old",
+        final_image="repo/app@sha256:old",
+    )
+    targets_response = client.get("/api/v1/retag-targets")
+
+    assert targets_response.status_code == 200
+    items = targets_response.json()["items"]
+    assert [item["service_key"] for item in items] == ["stack/app", "stack/app"]
+    assert len({item["target_id"] for item in items}) == 2
+    headers = _csrf_headers(client)
+
+    ambiguous_response = client.post(
+        "/api/v1/retag-plans",
+        json={
+            "choices": [
+                {"service_key": "stack/app", "choice": "switch-to-concrete"},
+                {"service_key": "stack/app", "choice": "switch-to-concrete"},
+            ]
+        },
+        headers=headers,
+    )
+
+    assert ambiguous_response.status_code == 422
+    assert "target_id" in ambiguous_response.json()["detail"]
+
+    plan_response = client.post(
+        "/api/v1/retag-plans",
+        json={
+            "choices": [
+                _switch_choice(
+                    service_key=item["service_key"],
+                    target_id=item["target_id"],
+                )
+                for item in items
+            ]
+        },
+        headers=headers,
+    )
+
+    assert plan_response.status_code == 200
+    plan = plan_response.json()
+    expected_target_ids = {item["target_id"] for item in items}
+    assert plan["status"] == "ready"
+    assert plan["selected_count"] == 2
+    assert len(plan["stacks"]) == 2
+    assert {
+        update["target_id"]
+        for stack in plan["stacks"]
+        for update in stack["digest_pin_updates"]
+    } == expected_target_ids
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+    choices = [
+        _switch_choice(service_key=item["service_key"], target_id=item["target_id"])
+        for item in items
+    ]
+    apply_response = _apply_retag_plan(client, headers, plan, choices=choices)
+    assert apply_response.status_code == 202
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+    assert job["status"] == "success"
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        known = conn.execute(
+            """
+            SELECT digest_provenance_source, digest_watch_tag
+            FROM known_images
+            WHERE service_key = 'stack/app'
+            """,
+        ).fetchone()
+        events = conn.execute(
+            """
+            SELECT metadata_json
+            FROM update_events
+            WHERE run_id = ?
+            ORDER BY id
+            """,
+            (job["run_id"],),
+        ).fetchall()
+
+    assert known["digest_provenance_source"] == "apply"
+    assert known["digest_watch_tag"] == "latest"
+    event_metadata = [json.loads(row["metadata_json"]) for row in events]
+    assert {event["target_id"] for event in event_metadata} == expected_target_ids
+    assert all(event["known_image_recorded"] is False for event in event_metadata)
+    assert {
+        event["known_image_skip_reason"] for event in event_metadata
+    } == {"duplicate service_key"}
+
+
+def test_retag_plan_rejects_unknown_target_id(tmp_path: Path) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+        },
+    )
+    client = fixture.client
+    targets_response = client.get("/api/v1/retag-targets")
+    headers = _csrf_headers(client)
+
+    assert targets_response.status_code == 200
+    item = targets_response.json()["items"][0]
+
+    response = client.post(
+        "/api/v1/retag-plans",
+        json={
+            "choices": [
+                {
+                    "service_key": item["service_key"],
+                    "target_id": "non-existent-target-id",
+                    "choice": "keep-current",
+                }
+            ]
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+    assert (
+        response.json()["detail"]
+        == "retag choices reference unknown target(s): non-existent-target-id"
+    )
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fixture.fake_root))
+
+
+def test_retag_plan_rejects_mismatched_service_key_and_target_id(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("worker", "repo/worker:latest", "cid-worker"),
+        ],
+    )
+    targets_response = client.get("/api/v1/retag-targets")
+    headers = _csrf_headers(client)
+
+    assert targets_response.status_code == 200
+    items_by_service_key = {
+        item["service_key"]: item for item in targets_response.json()["items"]
+    }
+    first = items_by_service_key["stack/app"]
+    second = items_by_service_key["stack/worker"]
+
+    response = client.post(
+        "/api/v1/retag-plans",
+        json={
+            "choices": [
+                {
+                    "service_key": first["service_key"],
+                    "target_id": second["target_id"],
+                    "choice": "keep-current",
+                }
+            ]
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+    assert (
+        response.json()["detail"]
+        == "retag choice target_id does not match service_key: "
+        f"{first['service_key']} ({second['target_id']})"
+    )
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
 @pytest.mark.parametrize(
     "image",
     [
@@ -348,6 +584,210 @@ def test_retag_github_latest_fallback_refresh_enables_cached_candidate(
     assert cached.json()["items"][0]["retag_available"] is True
     assert plain.json()["items"][0]["retag_reason"] == "missing-provenance"
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_retag_github_latest_fallback_keys_duplicate_services_by_target_id(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "ghcr.io/acme/app:latest", "cid-app-one")],
+        parent=tmp_path / "docker" / "one",
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "ghcr.io/acme/worker:latest", "cid-app-two")],
+        parent=tmp_path / "docker" / "two",
+    )
+    app_digest = "sha256:" + "1" * 64
+    worker_digest = "sha256:" + "2" * 64
+    _patch_github_latest(
+        monkeypatch,
+        tag="v2.1.0",
+        url="https://github.com/acme/app/releases/tag/v2.1.0",
+        extra={
+            "https://api.github.com/repos/acme/worker/releases/latest": {
+                "tag_name": "v3.4.0",
+                "name": "v3.4.0",
+                "html_url": "https://github.com/acme/worker/releases/tag/v3.4.0",
+                "body": "Routine worker update",
+                "published_at": "2026-01-02T00:00:00Z",
+            }
+        },
+    )
+    _patch_digest_resolution_map(
+        monkeypatch,
+        {
+            "ghcr.io/acme/app:v2.1.0": app_digest,
+            "ghcr.io/acme/worker:v3.4.0": worker_digest,
+        },
+    )
+    headers = _csrf_headers(client)
+
+    refresh = client.post(
+        "/api/v1/retag-targets/github-latest/refresh",
+        headers=headers,
+    )
+
+    assert refresh.status_code == 200
+    items = sorted(refresh.json()["items"], key=lambda item: item["image_repo"])
+    assert [item["service_key"] for item in items] == ["stack/app", "stack/app"]
+    assert len({item["target_id"] for item in items}) == 2
+    assert [item["proposed_tag"] for item in items] == ["v2.1.0", "v3.4.0"]
+    assert [item["final_image"] for item in items] == [
+        f"ghcr.io/acme/app@{app_digest}",
+        f"ghcr.io/acme/worker@{worker_digest}",
+    ]
+    assert all(item["candidate_source"] == "github-latest" for item in items)
+
+    choices = [
+        _switch_choice(service_key=item["service_key"], target_id=item["target_id"])
+        for item in items
+    ]
+    plan_response = client.post(
+        "/api/v1/retag-plans",
+        json={"choices": choices, "github_latest_fallback": True},
+        headers=headers,
+    )
+
+    assert plan_response.status_code == 200
+    plan = plan_response.json()
+    assert plan["status"] == "ready"
+    updates = [
+        update
+        for stack in plan["stacks"]
+        for update in stack["digest_pin_updates"]
+    ]
+    assert {update["target_id"] for update in updates} == {
+        item["target_id"] for item in items
+    }
+    assert {
+        (update["source_image"], update["resolved_tag"], update["planned_digest"])
+        for update in updates
+    } == {
+        ("ghcr.io/acme/app:latest", "v2.1.0", app_digest),
+        ("ghcr.io/acme/worker:latest", "v3.4.0", worker_digest),
+    }
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_retag_github_latest_fallback_labels_duplicate_services_by_target_id(
+    tmp_path: Path,
+) -> None:
+    first_dir = tmp_path / "docker" / "one" / "stack"
+    second_dir = tmp_path / "docker" / "two" / "stack"
+    stacks = [
+        ComposeStack(
+            index=1,
+            directory=first_dir,
+            file="docker-compose.yml",
+            name="stack",
+            images=("ghcr.io/acme/app:latest",),
+            service_images=(
+                ServiceImage("app", "ghcr.io/acme/app:latest"),
+            ),
+        ),
+        ComposeStack(
+            index=2,
+            directory=second_dir,
+            file="docker-compose.yml",
+            name="stack",
+            images=("ghcr.io/acme/worker:latest",),
+            service_images=(
+                ServiceImage("app", "ghcr.io/acme/worker:latest"),
+            ),
+        ),
+        ComposeStack(
+            index=3,
+            directory=tmp_path / "docker" / "solo",
+            file="docker-compose.yml",
+            name="solo",
+            images=("ghcr.io/acme/solo:latest",),
+            service_images=(
+                ServiceImage("app", "ghcr.io/acme/solo:latest"),
+            ),
+        ),
+    ]
+
+    labels = web_retags_module._github_latest_fallback_target_labels(stacks, {})
+    first_target_id = web_retags_module._retag_target_id(
+        stacks[0],
+        stacks[0].service_images[0],
+    )
+    second_target_id = web_retags_module._retag_target_id(
+        stacks[1],
+        stacks[1].service_images[0],
+    )
+    solo_target_id = web_retags_module._retag_target_id(
+        stacks[2],
+        stacks[2].service_images[0],
+    )
+
+    assert labels[first_target_id] == f"stack/app ({first_target_id})"
+    assert labels[second_target_id] == f"stack/app ({second_target_id})"
+    assert labels[solo_target_id] == "solo/app"
+
+
+def test_retag_github_latest_fallback_requires_matching_cache_info_count(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    settings = client.app.state.web_settings
+    with open_db(settings.config.db_path) as conn:
+        init_db(conn)
+    stack = ComposeStack(
+        index=0,
+        directory=tmp_path / "docker",
+        file="docker-compose.yml",
+        name="stack",
+        images=("ghcr.io/acme/app:latest", "ghcr.io/acme/worker:latest"),
+        service_images=(
+            ServiceImage(service="app", image="ghcr.io/acme/app:latest"),
+            ServiceImage(service="worker", image="ghcr.io/acme/worker:latest"),
+        ),
+    )
+
+    def fake_cached_release_notes(
+        *_args: object,
+        **_kwargs: object,
+    ) -> list[ReleaseNoteInfo]:
+        return [
+            ReleaseNoteInfo(
+                line_no=0,
+                status="ready",
+                provider="github",
+                image_repo="ghcr.io/acme/app",
+                upstream_repo="acme/app",
+            )
+        ]
+
+    monkeypatch.setattr(
+        web_retags_module,
+        "cached_release_notes",
+        fake_cached_release_notes,
+    )
+
+    with pytest.raises(ValueError, match="zip\\(\\) argument 2 is shorter"):
+        web_retags_module._cached_github_latest_fallback_by_target(
+            settings,
+            [stack],
+            {},
+        )
 
 
 def test_retag_preview_refreshes_github_latest_before_building_plan(
@@ -474,7 +914,7 @@ def test_retag_preview_rejects_second_active_job(
     assert job["status"] == "failure"
 
 
-def test_retag_preview_warns_when_github_latest_candidate_changes_after_refresh(
+def test_retag_preview_reuses_fresh_cached_github_latest_candidate(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -540,12 +980,21 @@ def test_retag_preview_warns_when_github_latest_candidate_changes_after_refresh(
     plan = job["plan"]
     assert plan["status"] == "ready"
     assert plan["can_apply"] is True
-    assert any(
-        "tag v1.0.0 -> v1.1.0" in warning
-        for warning in plan["warnings"]
+    assert not any(
+        "tag v1.0.0 -> v1.1.0" in warning for warning in plan["warnings"]
     )
     update = plan["stacks"][0]["digest_pin_updates"][0]
-    assert update["planned_digest"] == new_digest
+    assert update["resolved_tag"] == "v1.0.0"
+    assert update["planned_digest"] == old_digest
+
+    refreshed = client.post(
+        "/api/v1/retag-targets/github-latest/refresh",
+        headers=headers,
+    )
+    assert refreshed.status_code == 200
+    item = refreshed.json()["items"][0]
+    assert item["proposed_tag"] == "v1.1.0"
+    assert item["final_image"] == f"ghcr.io/acme/app@{new_digest}"
 
 
 def test_retag_apply_rejects_plan_when_fallback_flag_changes(
@@ -1642,6 +2091,81 @@ def test_retag_apply_records_partial_stack_success_when_later_stack_fails(
     ]
 
 
+def test_retag_failure_audit_keeps_ambiguous_known_image_skip_reason_off_failures(
+    tmp_path: Path,
+) -> None:
+    settings = _audit_settings(tmp_path)
+    stack = ComposeStack(
+        index=1,
+        directory=tmp_path / "docker" / "stack",
+        file="docker-compose.yml",
+        name="stack",
+        images=("repo/app@sha256:old",),
+        service_images=(
+            ServiceImage("app", "repo/app@sha256:old"),
+        ),
+    )
+    provenance = DigestTagProvenance(
+        source_image="repo/app:latest",
+        resolved_tag="2.0",
+        watch_tag="latest",
+        target_digest="sha256:old",
+        final_image="repo/app@sha256:old",
+        provenance_source="apply",
+        provenance_confidence="verified",
+    )
+    update = RetagPlanUpdate(
+        target_id="target-one",
+        service_key="stack/app",
+        stack=stack,
+        update=digest_pin_update_from_values(
+            old_image="repo/app@sha256:old",
+            resolved_tag="2.0",
+            planned_digest="sha256:old",
+            services=("app",),
+        ),
+        provenance=provenance,
+        known_image_service_key_ambiguous=True,
+    )
+    build = RetagPlanBuild(
+        response=RetagPlanResponse(
+            plan_id="plan-one",
+            status="ready",
+            can_apply=True,
+            selected_count=1,
+        ),
+        updates=(update,),
+    )
+    run_id = web_retags_module._insert_retag_audit_run(
+        settings,
+        build,
+        status="running",
+    )
+
+    web_retags_module._finish_retag_audit_run(
+        settings,
+        run_id,
+        build,
+        status="failure",
+        error="pull failed",
+    )
+
+    with open_db(settings.config.db_path) as conn:
+        event = conn.execute(
+            """
+            SELECT status, metadata_json
+            FROM update_events
+            WHERE run_id = ?
+            """,
+            (run_id,),
+        ).fetchone()
+
+    assert event["status"] == "failure"
+    metadata = json.loads(event["metadata_json"])
+    assert metadata["known_image_recorded"] is False
+    assert "known_image_skip_reason" not in metadata
+
+
 def test_retag_apply_redacts_rollback_failure_paths(tmp_path: Path) -> None:
     fixture = _make_retag_fixture(
         tmp_path,
@@ -1889,8 +2413,38 @@ def _make_retag_fixture(
     return _RetagFixture(client=client, compose_dir=compose_dir, fake_root=fake_root)
 
 
-def _switch_choice(service_key: str = "stack/app") -> dict[str, str]:
-    return {"service_key": service_key, "choice": "switch-to-concrete"}
+def _audit_settings(tmp_path: Path) -> WebSettings:
+    root = tmp_path / "state"
+    root.mkdir(exist_ok=True)
+    return WebSettings(
+        config=UpdaterConfig(
+            docker_base=tmp_path / "docker",
+            wud_out_file=root / "images.todo",
+            log_dir=root / "logs",
+            db_path=root / "wud.sqlite",
+            update_mode="live",
+            max_wait=0,
+            lock_timeout=0,
+            timezone_name="UTC",
+            compose_ignore_paths=(),
+            digest_pin_updates=False,
+            out_uid=None,
+            out_gid=None,
+        ),
+        auth_token="",
+        mutations_enabled=True,
+    )
+
+
+def _switch_choice(
+    service_key: str = "stack/app",
+    *,
+    target_id: str | None = None,
+) -> dict[str, str]:
+    choice = {"service_key": service_key, "choice": "switch-to-concrete"}
+    if target_id is not None:
+        choice["target_id"] = target_id
+    return choice
 
 
 def _create_retag_plan(

@@ -24,10 +24,12 @@ RETAG_PLAN_VERSION = 1
 
 @dataclass(frozen=True)
 class RetagPlanUpdate:
+    target_id: str
     service_key: str
     stack: ComposeStack
     update: DigestPinUpdate
     provenance: DigestTagProvenance
+    known_image_service_key_ambiguous: bool = False
     label_rewrites: tuple[RetagPlanLabelRewrite, ...] = ()
 
 
@@ -78,7 +80,10 @@ def retag_plan_stacks(
                 ),
                 digest_pin_updates=[
                     retag_plan_digest_update(item)
-                    for item in sorted(stack_updates, key=lambda value: value.service_key)
+                    for item in sorted(
+                        stack_updates,
+                        key=lambda value: (value.service_key, value.target_id),
+                    )
                 ],
             )
         )
@@ -91,6 +96,7 @@ def retag_plan_digest_update(
     update = item.update
     service = retag_update_service(item)
     return RetagPlanDigestPinUpdate(
+        target_id=item.target_id,
         service_key=item.service_key,
         stack=item.stack.name,
         service=service,
@@ -132,6 +138,7 @@ def retag_plan_id(
         "selected": [
             {
                 "service_key": item.service_key,
+                "target_id": item.target_id,
                 "stack": item.stack.name,
                 "service": retag_update_service(item),
                 "source_image": item.update.old_image,
@@ -141,7 +148,10 @@ def retag_plan_id(
                 "label_value": item.update.label_value,
                 "provenance": asdict(item.provenance),
             }
-            for item in sorted(updates, key=lambda value: value.service_key)
+            for item in sorted(
+                updates,
+                key=lambda value: (value.service_key, value.target_id),
+            )
         ],
         "compose_hashes": dict(sorted(compose_hashes.items())),
         "issues": [issue.model_dump() for issue in plan.issues],

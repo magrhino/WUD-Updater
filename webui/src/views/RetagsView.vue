@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { AlertTriangle, CheckCircle2, Info, Search } from "@lucide/vue";
+import { AlertTriangle, CheckCircle2, Info, RefreshCw, Search } from "@lucide/vue";
 import {
   NAlert,
+  NButton,
   NInput,
   NSelect,
   NSwitch,
@@ -20,12 +21,15 @@ import { useDataCardsBreakpoint } from "../responsive";
 import { useAuthStore } from "../stores/auth";
 import { useUpdatesStore } from "../stores/updates";
 import {
+  canEnableRetagTargetChoice,
   retagChoice as selectedRetagChoice,
+  retagTargetIdentity,
   retagTargetTagValidationError,
 } from "../utils/retagChoices";
 import {
   digestPinSummary,
   labelRewriteSummary,
+  composeLocation,
   pluralize,
   retagPlanContextLabel,
   retagPlanSourceFile,
@@ -39,6 +43,22 @@ import {
 } from "./pending/usePendingApplyJob";
 
 type RetagFilter = "all" | "available" | "attention";
+type RetagDuplicateServiceTarget = {
+  key: string;
+  label: string;
+  location: string;
+  image: string;
+};
+type RetagDuplicateServiceConflict = {
+  serviceKey: string;
+  targets: RetagDuplicateServiceTarget[];
+};
+
+const DUPLICATE_RETAG_CHOICES_PREFIXES = [
+  "retag choices contain duplicate service(s):",
+  "retag choices contain duplicate target(s):",
+  "retag choices for duplicate service(s) must include target_id:",
+];
 
 const updates = useUpdatesStore();
 const auth = useAuthStore();
@@ -187,6 +207,40 @@ const retagPlanUpdates = computed(() =>
     stack.digest_pin_updates.map((update) => ({ stack, update })),
   ),
 );
+const retagPreviewError = computed(
+  () => updates.retagPreviewError || updates.error,
+);
+const retagDuplicateServiceConflicts = computed<RetagDuplicateServiceConflict[]>(
+  () => {
+    const duplicateServiceKeys = duplicateServiceKeysFromError(
+      retagPreviewError.value,
+    );
+    if (!duplicateServiceKeys.length) {
+      return [];
+    }
+
+    const rowsByServiceKey = new Map<string, RetagTargetItem[]>();
+    for (const item of rows.value) {
+      rowsByServiceKey.set(item.service_key, [
+        ...(rowsByServiceKey.get(item.service_key) ?? []),
+        item,
+      ]);
+    }
+
+    return duplicateServiceKeys.map((serviceKey) => ({
+      serviceKey,
+      targets: (rowsByServiceKey.get(serviceKey) ?? []).map((item, index) => {
+        const location = composeLocation(item);
+        return {
+          key: `${item.service_key}-${index}-${location || item.image}`,
+          label: `${item.stack} / ${item.service}`,
+          location,
+          image: item.image,
+        };
+      }),
+    }));
+  },
+);
 const retagConfirmImpactLabel = computed(() => {
   const plan = updates.retagPlan;
   if (!plan) {
@@ -220,6 +274,32 @@ const filteredRows = computed(() => {
     return searchableText(item).includes(query);
   });
 });
+const eligibleRows = computed(() =>
+  rows.value.filter((item) =>
+    canEnableRetagTargetChoice(item, updates.retagTargetTags),
+  ),
+);
+const filteredEligibleRows = computed(() =>
+  filteredRows.value.filter((item) =>
+    canEnableRetagTargetChoice(item, updates.retagTargetTags),
+  ),
+);
+const bulkSelectionDisabled = computed(
+  () =>
+    updates.loading ||
+    applyJobActive.value ||
+    retagMutationDisabled.value ||
+    unavailable.value,
+);
+const retagAllDisabled = computed(
+  () => bulkSelectionDisabled.value || eligibleRows.value.length === 0,
+);
+const retagFilteredDisabled = computed(
+  () => bulkSelectionDisabled.value || filteredEligibleRows.value.length === 0,
+);
+const keepAllDisabled = computed(
+  () => bulkSelectionDisabled.value || selectedSwitchCount.value === 0,
+);
 
 function retagChoice(item: RetagTargetItem): RetagTargetChoice {
   return selectedRetagChoice(
@@ -229,15 +309,56 @@ function retagChoice(item: RetagTargetItem): RetagTargetChoice {
   );
 }
 
+function duplicateServiceKeysFromError(error: string): string[] {
+  const match = DUPLICATE_RETAG_CHOICES_PREFIXES.map((prefix) => ({
+    prefix,
+    index: error.indexOf(prefix),
+  })).find(({ index }) => index >= 0);
+  if (!match) {
+    return [];
+  }
+  return error
+    .slice(match.index + match.prefix.length)
+    .split(",")
+    .map((serviceKey) => serviceKey.trim())
+    .map((serviceKey) => serviceKey.replace(/\s+\([^)]+\)$/, ""))
+    .filter(Boolean);
+}
+
 function onRetagChoiceUpdate(
   item: RetagTargetItem,
   choice: RetagTargetChoice,
 ): void {
-  updates.setRetagChoice(item.service_key, choice);
+  updates.setRetagChoice(retagTargetIdentity(item), choice);
+}
+
+function onRetagOnly(item: RetagTargetItem): void {
+  updates.setRetagOnlyChoice(retagTargetIdentity(item));
 }
 
 function onRetagTargetTagUpdate(item: RetagTargetItem, tag: string): void {
-  updates.setRetagTargetTag(item.service_key, tag);
+  updates.setRetagTargetTag(retagTargetIdentity(item), tag);
+}
+
+function retagAllEligible(): void {
+  if (retagAllDisabled.value) {
+    return;
+  }
+  updates.setRetagChoicesForItems(rows.value, "switch-to-concrete");
+}
+
+function retagFilteredEligible(): void {
+  if (retagFilteredDisabled.value) {
+    return;
+  }
+  updates.setRetagChoicesForItems(filteredRows.value, "switch-to-concrete");
+}
+
+function keepAllRetags(): void {
+  if (keepAllDisabled.value) {
+    return;
+  }
+  updates.setRetagChoicesForItems(rows.value, "keep-current");
 }
 
 async function previewRetagChanges(): Promise<void> {
@@ -249,7 +370,17 @@ async function previewRetagChanges(): Promise<void> {
 }
 
 async function onGithubLatestFallbackUpdate(enabled: boolean): Promise<void> {
+  if (updates.loading || retagMutationDisabled.value) {
+    return;
+  }
   await updates.setRetagGithubLatestFallback(enabled).catch(() => undefined);
+}
+
+async function refreshGithubLatestFallback(): Promise<void> {
+  if (updates.loading || retagMutationDisabled.value) {
+    return;
+  }
+  await updates.refreshRetagGithubLatest().catch(() => undefined);
 }
 
 function openRetagApplyConfirm(): void {
@@ -292,7 +423,9 @@ function createRetagApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
     stack.digest_pin_updates.map((update) => {
       const rewrite = labelRewriteSummary(update);
       return {
-        key: update.service_key,
+        key:
+          update.target_id ||
+          `${stack.directory}-${stack.compose_file}-${stack.project_directory}-${update.service_key}`,
         lineNo: null,
         scopeLabel: stack.stack || "Retag",
         serviceLabel: update.service_key,
@@ -385,7 +518,8 @@ onMounted(() => {
       :show="showRetagPreviewModal"
       :plan="updates.retagPlan"
       :preview-job="updates.retagPreviewJob"
-      :preview-error="updates.retagPreviewError || updates.error"
+      :preview-error="retagPreviewError"
+      :duplicate-service-conflicts="retagDuplicateServiceConflicts"
       :impact-label="retagConfirmImpactLabel"
       :mutation-notice="retagMutationNotice"
       :apply-disabled="applyDisabled"
@@ -400,13 +534,21 @@ onMounted(() => {
       :available-count="availableCount"
       :attention-count="attentionCount"
       :selected-switch-count="selectedSwitchCount"
+      :retag-all-eligible-count="eligibleRows.length"
+      :retag-filtered-eligible-count="filteredEligibleRows.length"
       :preview-disabled="previewDisabled"
       :apply-disabled="applyDisabled"
+      :retag-all-disabled="retagAllDisabled"
+      :retag-filtered-disabled="retagFilteredDisabled"
+      :keep-all-disabled="keepAllDisabled"
       :loading="updates.loading"
       :apply-job-active="applyJobActive"
       :has-retag-plan="updates.retagPlan !== null"
       :mutation-notice="retagMutationNotice"
       :validation-error="retagTargetTagError"
+      @retag-all="retagAllEligible"
+      @retag-filtered="retagFilteredEligible"
+      @keep-all="keepAllRetags"
       @preview="previewRetagChanges"
       @apply="openRetagApplyConfirm"
     />
@@ -429,16 +571,35 @@ onMounted(() => {
           :options="filterOptions"
           aria-label="Retag status filter"
         />
-        <label class="retag-fallback-toggle" for="github-latest-fallback-switch">
-          <n-switch
-            id="github-latest-fallback-switch"
-            :value="updates.retagGithubLatestFallback"
-            :disabled="updates.loading"
-            aria-label="Use GitHub latest fallback"
-            @update:value="onGithubLatestFallbackUpdate"
-          />
-          <span>Use GitHub latest fallback</span>
-        </label>
+        <div class="retag-fallback-controls">
+          <label class="retag-fallback-toggle" for="github-latest-fallback-switch">
+            <n-switch
+              id="github-latest-fallback-switch"
+              :value="updates.retagGithubLatestFallback"
+              :disabled="updates.loading || retagMutationDisabled"
+              aria-label="Use cached GitHub latest fallback"
+              @update:value="onGithubLatestFallbackUpdate"
+            />
+            <span>Use cached GitHub latest fallback</span>
+          </label>
+          <n-button
+            size="small"
+            secondary
+            :disabled="updates.loading || retagMutationDisabled"
+            :title="
+              retagMutationDisabled
+                ? retagMutationNotice
+                : 'Refresh GitHub latest candidates'
+            "
+            aria-label="Refresh GitHub latest candidates"
+            @click="refreshGithubLatestFallback"
+          >
+            <template #icon>
+              <RefreshCw :size="15" aria-hidden="true" />
+            </template>
+            Refresh
+          </n-button>
+        </div>
       </div>
     </section>
 
@@ -510,6 +671,7 @@ onMounted(() => {
         :mutation-disabled="retagMutationDisabled"
         :mutation-notice="retagMutationNotice"
         @choice-update="onRetagChoiceUpdate"
+        @retag-only="onRetagOnly"
         @target-tag-update="onRetagTargetTagUpdate"
       />
 
@@ -521,6 +683,7 @@ onMounted(() => {
         :mutation-disabled="retagMutationDisabled"
         :mutation-notice="retagMutationNotice"
         @choice-update="onRetagChoiceUpdate"
+        @retag-only="onRetagOnly"
         @target-tag-update="onRetagTargetTagUpdate"
       />
     </template>
@@ -545,6 +708,12 @@ onMounted(() => {
   color: var(--color-muted-text);
   font-size: 0.9rem;
   white-space: nowrap;
+}
+
+.retag-fallback-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .retag-state svg {

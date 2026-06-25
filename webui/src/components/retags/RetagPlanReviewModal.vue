@@ -18,6 +18,17 @@ import {
   retagPlanSourceFile,
 } from "../../views/retags/display";
 
+type RetagDuplicateServiceTarget = {
+  key: string;
+  label: string;
+  location: string;
+  image: string;
+};
+type RetagDuplicateServiceConflict = {
+  serviceKey: string;
+  targets: RetagDuplicateServiceTarget[];
+};
+
 const props = defineProps<{
   show: boolean;
   plan: RetagPlanResponse | null;
@@ -25,6 +36,7 @@ const props = defineProps<{
   impactLabel: string;
   mutationNotice: string;
   previewError: string;
+  duplicateServiceConflicts: RetagDuplicateServiceConflict[];
   applyDisabled: boolean;
   loading: boolean;
   applyJobActive: boolean;
@@ -53,9 +65,40 @@ const statusType = computed(() => {
   return previewActive.value ? "info" : "default";
 });
 
+const duplicateServiceHeadline = computed(() => {
+  const keys = props.duplicateServiceConflicts.map((item) => item.serviceKey);
+  if (!keys.length) {
+    return "";
+  }
+  const label =
+    keys.length === 1 ? "Duplicate service key" : "Duplicate service keys";
+  return `${label}: ${keys.join(", ")}.`;
+});
+
+const duplicateServiceRecovery = computed(() => {
+  const conflicts = props.duplicateServiceConflicts;
+  if (!conflicts.length) {
+    return "";
+  }
+  if (conflicts.length === 1) {
+    const targetCount = conflicts[0].targets.length || 2;
+    const targetLabel = pluralize(targetCount, "discovered target");
+    return `${duplicateServiceHeadline.value} Retag preview stopped because ${targetLabel} share this Compose project/service identity. Keep only one target for this key, or update Compose so each project/service pair is unique, then reload retag targets and preview again.`;
+  }
+  return `${duplicateServiceHeadline.value} Retag preview stopped because discovered targets share these Compose project/service identities. Keep only one target for each key, or update Compose so each project/service pair is unique, then reload retag targets and preview again.`;
+});
+
+const previewErrorSummary = computed(
+  () => duplicateServiceHeadline.value || props.previewError,
+);
+
+const previewErrorDetail = computed(
+  () => duplicateServiceRecovery.value || props.previewError,
+);
+
 const summary = computed(() => {
-  if (props.previewError) {
-    return props.previewError;
+  if (previewErrorSummary.value) {
+    return previewErrorSummary.value;
   }
   if (props.previewJob?.status === "failure") {
     return props.previewJob.error || "Retag preview failed.";
@@ -122,11 +165,44 @@ const uniqueWarnings = computed(() => [...new Set(warnings.value)]);
     </n-alert>
 
     <n-alert
-      v-if="previewError"
+      v-if="previewErrorDetail"
       type="error"
       :show-icon="false"
     >
-      {{ previewError }}
+      <div
+        v-if="duplicateServiceConflicts.length"
+        class="duplicate-service-alert"
+      >
+        <p>{{ previewErrorDetail }}</p>
+        <div class="duplicate-service-list">
+          <section
+            v-for="conflict in duplicateServiceConflicts"
+            :key="conflict.serviceKey"
+            class="duplicate-service-group"
+          >
+            <strong>{{ conflict.serviceKey }}</strong>
+            <ul
+              v-if="conflict.targets.length"
+              class="duplicate-service-targets"
+            >
+              <li
+                v-for="target in conflict.targets"
+                :key="target.key"
+              >
+                <span>{{ target.label }}</span>
+                <code v-if="target.location">{{ target.location }}</code>
+                <code>{{ target.image }}</code>
+              </li>
+            </ul>
+            <p v-else>
+              Reload retag targets to see the affected Compose rows.
+            </p>
+          </section>
+        </div>
+      </div>
+      <template v-else>
+        {{ previewErrorDetail }}
+      </template>
     </n-alert>
 
     <PreflightMetricsGrid :items="metrics" />
@@ -153,8 +229,8 @@ const uniqueWarnings = computed(() => [...new Set(warnings.value)]);
       </div>
       <div v-if="retagPlanUpdates.length" class="compact-list">
         <div
-          v-for="{ stack, update } in retagPlanUpdates"
-          :key="`preview-${update.service_key}`"
+          v-for="({ stack, update }, index) in retagPlanUpdates"
+          :key="`preview-${stack.directory}-${stack.compose_file}-${stack.project_directory}-${update.service_key}-${index}`"
           class="list-row plan-line-row"
         >
           <span>{{ stack.stack }}</span>
@@ -170,7 +246,7 @@ const uniqueWarnings = computed(() => [...new Set(warnings.value)]);
 
     <PreflightFooterActions
       primary-label="Apply selected retags"
-      :primary-disabled="Boolean(previewError) || !plan || applyDisabled"
+      :primary-disabled="Boolean(previewErrorDetail) || !plan || applyDisabled"
       :primary-loading="loading || applyJobActive"
       secondary-label="Close"
       @primary="$emit('apply')"
@@ -183,5 +259,42 @@ const uniqueWarnings = computed(() => [...new Set(warnings.value)]);
 .plan-line-row em {
   display: grid;
   gap: 3px;
+}
+
+.duplicate-service-alert {
+  display: grid;
+  gap: 10px;
+}
+
+.duplicate-service-alert p {
+  margin: 0;
+}
+
+.duplicate-service-list {
+  display: grid;
+  gap: 8px;
+}
+
+.duplicate-service-group {
+  display: grid;
+  gap: 6px;
+}
+
+.duplicate-service-targets {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.duplicate-service-targets li {
+  display: grid;
+  gap: 2px;
+}
+
+.duplicate-service-targets code {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
 }
 </style>

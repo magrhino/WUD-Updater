@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { NInput, NRadioButton, NRadioGroup, NTag } from "naive-ui";
+import { NButton, NInput, NRadioButton, NRadioGroup, NTag } from "naive-ui";
 
 import type { RetagTargetChoice, RetagTargetItem } from "../../api/client";
 import { displayDigest } from "../../utils/digestProvenance";
 import {
-  canChooseRetagTarget,
   canEnableRetagTargetChoice,
+  canShowRetagOnlyAction,
   canSwitchToConcrete,
   emitRetagChoice,
+  emitRetagOnly,
   retagChoice,
+  retagOnlyActionDisabled,
+  retagOnlyActionTitle,
+  retagTargetChoiceTitle,
+  retagTargetIdentity,
   retagTargetTagValidationError,
   retagTargetTagValue,
 } from "./retagChoices";
@@ -30,32 +35,16 @@ defineProps<{
 
 const emit = defineEmits<{
   "choice-update": [item: RetagTargetItem, choice: RetagTargetChoice];
+  "retag-only": [item: RetagTargetItem];
   "target-tag-update": [item: RetagTargetItem, tag: string];
 }>();
-
-function retagTargetChoiceTitle(
-  item: RetagTargetItem,
-  targetTags: Record<string, string>,
-  mutationNotice: string,
-): string {
-  const canChooseTarget = canChooseRetagTarget(item, targetTags);
-  const targetError = canChooseTarget
-    ? retagTargetTagValidationError(item, targetTags)
-    : "";
-  if (targetError) {
-    return targetError;
-  }
-  return canChooseTarget
-    ? mutationNotice
-    : "Enter a target tag before retagging.";
-}
 </script>
 
 <template>
   <div class="mobile-list">
     <article
       v-for="item in rows"
-      :key="item.service_key"
+      :key="retagTargetIdentity(item)"
       class="mobile-card retag-card"
     >
       <div class="mobile-card-title">
@@ -70,6 +59,23 @@ function retagTargetChoiceTitle(
         >
           {{ reasonLabel(item.retag_reason) }}
         </n-tag>
+      </div>
+      <div
+        v-if="canShowRetagOnlyAction(item, targetTags)"
+        class="retag-card-primary-action"
+      >
+        <n-button
+          class="retag-one-service-button"
+          size="small"
+          secondary
+          type="primary"
+          :disabled="retagOnlyActionDisabled(item, targetTags, mutationDisabled)"
+          :title="retagOnlyActionTitle(item, targetTags, mutationDisabled, mutationNotice)"
+          :aria-label="`Retag only ${item.service_key}`"
+          @click="emitRetagOnly(emit, item, targetTags, mutationDisabled)"
+        >
+          Retag this service
+        </n-button>
       </div>
       <dl>
         <div>
@@ -198,6 +204,14 @@ function retagTargetChoiceTitle(
 .retag-card code {
   font-family: var(--font-mono);
   font-size: 0.82rem;
+}
+
+.retag-card-primary-action {
+  display: flex;
+}
+
+.retag-one-service-button {
+  width: 100%;
 }
 
 .retag-source-link {

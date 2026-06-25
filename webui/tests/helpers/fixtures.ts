@@ -696,10 +696,27 @@ export function updateTargetsResponse(
 export function retagTarget(
   overrides: Partial<RetagTargetItem> = {},
 ): RetagTargetItem {
+  const { target_id: targetIdOverride, ...itemOverrides } = overrides;
+  const serviceKeyOverride = itemOverrides.service_key;
+  const [serviceKeyStack, serviceKeyService] =
+    serviceKeyOverride?.split("/", 2) ?? [];
+  const stack = itemOverrides.stack ?? serviceKeyStack ?? "media";
+  const service = itemOverrides.service ?? serviceKeyService ?? "app";
+  const serviceKey = serviceKeyOverride ?? `${stack}/${service}`;
+  const directory = itemOverrides.directory ?? "/docker/media";
+  const composeFile = itemOverrides.compose_file ?? "docker-compose.yml";
+  const projectDirectory = itemOverrides.project_directory ?? "/docker/media";
   return {
-    service_key: "media/app",
-    stack: "media",
-    service: "app",
+    target_id:
+      targetIdOverride ??
+      [
+        "fixture-target",
+        directory,
+        composeFile,
+        projectDirectory,
+        stack,
+        service,
+      ].join("|"),
     image: "repo/app:latest",
     image_repo: "repo/app",
     current_tag: "latest",
@@ -716,9 +733,6 @@ export function retagTarget(
     choices: ["keep-current", "switch-to-concrete"],
     label_key: "wud.tag.include",
     label_value: "latest",
-    directory: "/docker/media",
-    compose_file: "docker-compose.yml",
-    project_directory: "/docker/media",
     digest_provenance: {
       source_image: "repo/app:latest",
       resolved_tag: "1.1",
@@ -728,7 +742,13 @@ export function retagTarget(
       provenance_source: "test",
       provenance_confidence: "high",
     },
-    ...overrides,
+    ...itemOverrides,
+    service_key: serviceKey,
+    stack,
+    service,
+    directory,
+    compose_file: composeFile,
+    project_directory: projectDirectory,
   };
 }
 
@@ -764,6 +784,7 @@ export function retagPlanResponse(
         services: ["app"],
         digest_pin_updates: [
           {
+            target_id: "media/app",
             service_key: "media/app",
             stack: "media",
             service: "app",

@@ -6,8 +6,13 @@ defineProps<{
   availableCount: number;
   attentionCount: number;
   selectedSwitchCount: number;
+  retagAllEligibleCount: number;
+  retagFilteredEligibleCount: number;
   previewDisabled: boolean;
   applyDisabled: boolean;
+  retagAllDisabled: boolean;
+  retagFilteredDisabled: boolean;
+  keepAllDisabled: boolean;
   loading: boolean;
   applyJobActive: boolean;
   hasRetagPlan: boolean;
@@ -16,6 +21,9 @@ defineProps<{
 }>();
 
 defineEmits<{
+  "retag-all": [];
+  "retag-filtered": [];
+  "keep-all": [];
   preview: [];
   apply: [];
 }>();
@@ -69,6 +77,40 @@ defineEmits<{
         <span>Selected switches</span>
         <strong class="wrap-anywhere">{{ selectedSwitchCount }}</strong>
       </div>
+    </div>
+
+    <div class="retag-bulk-actions" aria-label="Bulk retag selection">
+      <n-button
+        size="small"
+        :disabled="retagAllDisabled"
+        :title="
+          retagAllEligibleCount
+            ? `${retagAllEligibleCount} eligible service(s)`
+            : 'No eligible services to retag'
+        "
+        @click="$emit('retag-all')"
+      >
+        Retag all eligible
+      </n-button>
+      <n-button
+        size="small"
+        :disabled="retagFilteredDisabled"
+        :title="
+          retagFilteredEligibleCount
+            ? `${retagFilteredEligibleCount} filtered eligible service(s)`
+            : 'No filtered eligible services to retag'
+        "
+        @click="$emit('retag-filtered')"
+      >
+        Retag filtered eligible
+      </n-button>
+      <n-button
+        size="small"
+        :disabled="keepAllDisabled"
+        @click="$emit('keep-all')"
+      >
+        Keep all
+      </n-button>
     </div>
   </section>
 </template>
@@ -132,6 +174,12 @@ defineEmits<{
   line-height: 1.2;
 }
 
+.retag-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 @media (--wud-app-shell) {
   .retag-summary-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -146,6 +194,10 @@ defineEmits<{
   .retag-preview-action {
     display: grid;
     justify-content: stretch;
+  }
+
+  .retag-bulk-actions {
+    display: grid;
   }
 
   .retag-summary-strip {

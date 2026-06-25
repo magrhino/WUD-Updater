@@ -7,10 +7,11 @@ import secrets
 import shutil
 import sqlite3
 import time
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from threading import Condition, Lock
 from typing import Any
@@ -86,6 +87,7 @@ from .web_models import (
     WebSettings,
 )
 from .web_release_notes import release_note_source_resolver
+from .web_retag_identity import retag_target_id as _retag_target_id_from_values
 from .web_metadata import json_object as _json_object
 from .web_retag_plans import (
     RetagPlanBuild as _RetagPlanBuild,
@@ -127,6 +129,7 @@ class _RetagTargetRecord:
     service_image: ServiceImage
     known_image: str
     provenance: DigestTagProvenance | None
+    service_key_ambiguous: bool
 
 
 @dataclass(frozen=True)
@@ -138,6 +141,14 @@ class _RetagGitHubLatestFallback:
     link_url: str = ""
 
 
+@dataclass(frozen=True)
+class _RetagGitHubLatestTarget:
+    target_id: str
+    service_key: str
+    service_image: ServiceImage
+    target: WudTarget
+
+
 @dataclass
 class _RetagPreviewJob:
     id: str
@@ -146,6 +157,22 @@ class _RetagPreviewJob:
     warnings: tuple[str, ...] = ()
     error: str = ""
     progress: tuple[ApplyJobProgressEvent, ...] = ()
+
+
+@dataclass(frozen=True)
+class _RetagChoiceLookup:
+    records_by_target_id: Mapping[str, _RetagTargetRecord]
+    unique_target_id_by_service: Mapping[str, str]
+    duplicate_service_keys: frozenset[str]
+
+
+@dataclass
+class _RetagChoiceValidationFailures:
+    duplicates: list[str] = field(default_factory=list)
+    unknown_services: list[str] = field(default_factory=list)
+    unknown_targets: list[str] = field(default_factory=list)
+    target_id_required: list[str] = field(default_factory=list)
+    mismatches: list[str] = field(default_factory=list)
 
 
 class _RetagApplyFailed(RuntimeError):
@@ -353,16 +380,17 @@ def _build_refreshed_retag_plan(
     settings: WebSettings,
     payload: RetagPlanRequest,
 ) -> _RetagPlanBuild:
-    github_latest_by_service: dict[str, _RetagGitHubLatestFallback] | None = None
+    github_latest_by_target_id: dict[str, _RetagGitHubLatestFallback] | None = None
     warnings: tuple[str, ...] = ()
     if payload.github_latest_fallback:
-        github_latest_by_service, warnings = _refresh_retag_github_latest_for_preview(
-            settings
-        )
+        (
+            github_latest_by_target_id,
+            warnings,
+        ) = _refresh_retag_github_latest_for_preview(settings)
     return build_retag_plan(
         settings,
         payload,
-        github_latest_by_service=github_latest_by_service,
+        github_latest_by_target_id=github_latest_by_target_id,
         extra_warnings=warnings,
     )
 
@@ -374,20 +402,21 @@ def _refresh_retag_github_latest_for_preview(
     if isinstance(stacks_or_response, RetagTargetsResponse):
         return {}, ()
     known_by_service = web_database.known_digest_state_by_service(settings)
-    before = _cached_github_latest_fallback_by_service(
+    labels = _github_latest_fallback_target_labels(stacks_or_response, known_by_service)
+    before = _cached_github_latest_fallback_by_target(
         settings,
         stacks_or_response,
         known_by_service,
     )
-    response = _refresh_retag_github_latest_candidates(settings)
+    response = _refresh_retag_github_latest_candidates(settings, force=False)
     if response is not None:
         return before, ()
-    after = _cached_github_latest_fallback_by_service(
+    after = _cached_github_latest_fallback_by_target(
         settings,
         stacks_or_response,
         known_by_service,
     )
-    return after, _github_latest_drift_warnings(before, after)
+    return after, _github_latest_drift_warnings(before, after, labels)
 
 
 def _store_retag_preview_job(state: Any, job: _RetagPreviewJob) -> None:
@@ -493,18 +522,20 @@ def _retag_preview_job_response(
 def _github_latest_drift_warnings(
     before: Mapping[str, _RetagGitHubLatestFallback],
     after: Mapping[str, _RetagGitHubLatestFallback],
+    labels: Mapping[str, str] | None = None,
 ) -> tuple[str, ...]:
     warnings: list[str] = []
-    for service_key in sorted(set(before) | set(after)):
-        old = before.get(service_key)
-        new = after.get(service_key)
+    for target_id in sorted(set(before) | set(after)):
+        old = before.get(target_id)
+        new = after.get(target_id)
+        label = target_id if labels is None else labels.get(target_id, target_id)
         old_signature = _github_latest_candidate_signature(old)
         new_signature = _github_latest_candidate_signature(new)
         if old_signature == new_signature or not any(old_signature):
             continue
         if not any(new_signature):
             warnings.append(
-                f"{service_key} GitHub latest candidate changed after refresh: "
+                f"{label} GitHub latest candidate changed after refresh: "
                 "the previously cached candidate is no longer available."
             )
             continue
@@ -520,7 +551,7 @@ def _github_latest_drift_warnings(
         if old_final != new_final and not changes:
             changes.append("final image changed")
         warnings.append(
-            f"{service_key} GitHub latest candidate changed after refresh: "
+            f"{label} GitHub latest candidate changed after refresh: "
             + ", ".join(changes)
             + "."
         )
@@ -544,13 +575,13 @@ def build_retag_plan(
     settings: WebSettings,
     payload: RetagPlanRequest,
     *,
-    github_latest_by_service: Mapping[str, _RetagGitHubLatestFallback] | None = None,
+    github_latest_by_target_id: Mapping[str, _RetagGitHubLatestFallback] | None = None,
     extra_warnings: Sequence[str] = (),
 ) -> _RetagPlanBuild:
     records_or_response = _retag_target_records(
         settings,
         github_latest_fallback=payload.github_latest_fallback,
-        github_latest_by_service=github_latest_by_service,
+        github_latest_by_target_id=github_latest_by_target_id,
     )
     if isinstance(records_or_response, RetagTargetsResponse):
         plan = RetagPlanResponse(
@@ -570,20 +601,19 @@ def build_retag_plan(
         plan.plan_id = _retag_plan_id(plan, updates=(), compose_hashes={})
         return _RetagPlanBuild(response=plan, updates=())
 
-    choices = _validated_choice_map(payload.choices)
-    records_by_key = {record.item.service_key: record for record in records_or_response}
-    unknown = sorted(set(choices) - set(records_by_key))
-    if unknown:
-        values = ", ".join(unknown)
-        raise HTTPException(
-            status_code=422,
-            detail=f"retag choices reference unknown service(s): {values}",
-        )
+    choices = _validated_choice_map(payload.choices, records_or_response)
+    records_by_target_id = {
+        record.item.target_id: record for record in records_or_response
+    }
 
     keep_current_count = sum(
         1 for choice in choices.values() if choice.choice == KEEP_CURRENT_CHOICE
     )
-    selected, issues = _selected_retag_plan_updates(settings, choices, records_by_key)
+    selected, issues = _selected_retag_plan_updates(
+        settings,
+        choices,
+        records_by_target_id,
+    )
 
     selected, preview_issues = _preview_retag_updates(settings, selected)
     issues.extend(preview_issues)
@@ -607,17 +637,23 @@ def build_retag_plan(
 def _selected_retag_plan_updates(
     settings: WebSettings,
     choices: Mapping[str, RetagChoiceRequest],
-    records_by_key: Mapping[str, _RetagTargetRecord],
+    records_by_target_id: Mapping[str, _RetagTargetRecord],
 ) -> tuple[list[_RetagPlanUpdate], list[RetagPlanIssue]]:
     selected: list[_RetagPlanUpdate] = []
     issues: list[RetagPlanIssue] = []
-    for service_key, choice in sorted(choices.items()):
+    for target_id in sorted(
+        choices,
+        key=lambda value: _retag_record_sort_key(records_by_target_id[value]),
+    ):
+        choice = choices[target_id]
         if choice.choice == KEEP_CURRENT_CHOICE:
             continue
+        record = records_by_target_id[target_id]
+        service_key = record.item.service_key
         update, issue = _retag_plan_update_for_choice(
             settings,
             service_key,
-            records_by_key[service_key],
+            record,
             target_tag=choice.target_tag,
         )
         if issue is not None:
@@ -626,6 +662,20 @@ def _selected_retag_plan_updates(
         if update is not None:
             selected.append(update)
     return selected, issues
+
+
+def _retag_record_sort_key(
+    record: _RetagTargetRecord,
+) -> tuple[str, str, str, str, str, str]:
+    stack = record.stack
+    return (
+        record.item.service_key,
+        str(stack.directory),
+        stack.file,
+        "" if stack.project_directory is None else str(stack.project_directory),
+        record.item.service,
+        record.item.target_id,
+    )
 
 
 def _retag_plan_update_for_choice(
@@ -684,10 +734,12 @@ def _retag_plan_update_for_choice(
         )
     return (
         _RetagPlanUpdate(
+            target_id=item.target_id,
             service_key=service_key,
             stack=record.stack,
             update=update,
             provenance=provenance,
+            known_image_service_key_ambiguous=record.service_key_ambiguous,
         ),
         None,
     )
@@ -759,10 +811,12 @@ def _manual_retag_plan_update_for_choice(
     )
     return (
         _RetagPlanUpdate(
+            target_id=item.target_id,
             service_key=service_key,
             stack=record.stack,
             update=update,
             provenance=provenance,
+            known_image_service_key_ambiguous=record.service_key_ambiguous,
         ),
         None,
     )
@@ -790,7 +844,7 @@ def _retag_target_records(
     settings: WebSettings,
     *,
     github_latest_fallback: bool = False,
-    github_latest_by_service: Mapping[str, _RetagGitHubLatestFallback] | None = None,
+    github_latest_by_target_id: Mapping[str, _RetagGitHubLatestFallback] | None = None,
 ) -> tuple[_RetagTargetRecord, ...] | RetagTargetsResponse:
     stacks_or_response = _discover_retag_stacks(settings)
     if isinstance(stacks_or_response, RetagTargetsResponse):
@@ -798,26 +852,36 @@ def _retag_target_records(
     stacks = stacks_or_response
 
     known_by_service = web_database.known_digest_state_by_service(settings)
-    if github_latest_by_service is not None:
-        active_github_latest_by_service = dict(github_latest_by_service)
+    service_counts = _retag_service_counts(stacks)
+    if github_latest_by_target_id is not None:
+        active_github_latest_by_target_id = dict(github_latest_by_target_id)
     elif github_latest_fallback:
-        active_github_latest_by_service = _cached_github_latest_fallback_by_service(
+        active_github_latest_by_target_id = _cached_github_latest_fallback_by_target(
             settings,
             stacks,
             known_by_service,
         )
     else:
-        active_github_latest_by_service = {}
+        active_github_latest_by_target_id = {}
     records: list[_RetagTargetRecord] = []
     for stack in stacks:
         for service_image in stack.service_images:
             service_key = _retag_service_key(stack.name, service_image.service)
+            target_id = _retag_target_id(stack, service_image)
+            service_key_ambiguous = service_counts[service_key] > 1
+            known = _known_state_for_retag_target(
+                known_by_service.get(service_key),
+                service_image.image,
+                service_key_ambiguous=service_key_ambiguous,
+            )
             records.append(
                 _retag_target_record(
                     stack,
                     service_image,
-                    known_by_service.get(service_key),
-                    active_github_latest_by_service.get(service_key),
+                    target_id,
+                    known,
+                    active_github_latest_by_target_id.get(target_id),
+                    service_key_ambiguous=service_key_ambiguous,
                     github_latest_fallback=github_latest_fallback,
                 )
             )
@@ -854,14 +918,16 @@ def _discover_retag_stacks(
 
 def _refresh_retag_github_latest_candidates(
     settings: WebSettings,
+    *,
+    force: bool = True,
 ) -> RetagTargetsResponse | None:
     stacks_or_response = _discover_retag_stacks(settings)
     if isinstance(stacks_or_response, RetagTargetsResponse):
         return stacks_or_response
     known_by_service = web_database.known_digest_state_by_service(settings)
     targets = [
-        target
-        for _service_key, _service_image, target in _github_latest_fallback_targets(
+        row.target
+        for row in _github_latest_fallback_targets(
             stacks_or_response,
             known_by_service,
         )
@@ -880,7 +946,7 @@ def _refresh_retag_github_latest_candidates(
                 ),
                 source_resolver=release_note_source_resolver(settings),
                 redact_error=lambda value: _redact_sensitive_text(settings, value),
-                force=True,
+                force=force,
             )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
@@ -894,7 +960,7 @@ def _refresh_retag_github_latest_candidates(
     return None
 
 
-def _cached_github_latest_fallback_by_service(
+def _cached_github_latest_fallback_by_target(
     settings: WebSettings,
     stacks: Sequence[ComposeStack],
     known_by_service: Mapping[str, web_database.KnownDigestState],
@@ -909,13 +975,13 @@ def _cached_github_latest_fallback_by_service(
         with closing(web_database.connect_readonly_db(settings)) as conn:
             infos = cached_release_notes(
                 conn,
-                [target for _service_key, _service_image, target in target_rows],
+                [row.target for row in target_rows],
                 settings.command_env or {},
                 source_resolver=release_note_source_resolver(settings),
             )
     except ReadOnlyDatabaseMissing:
         return dict.fromkeys(
-            (service_key for service_key, _image, _target in target_rows),
+            (row.target_id for row in target_rows),
             missing_cache,
         )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
@@ -925,29 +991,52 @@ def _cached_github_latest_fallback_by_service(
             exc,
         )
         return {
-            service_key: _RetagGitHubLatestFallback(warning=warning)
-            for service_key, _image, _target in target_rows
+            row.target_id: _RetagGitHubLatestFallback(warning=warning)
+            for row in target_rows
         }
 
     result: dict[str, _RetagGitHubLatestFallback] = {}
-    for (service_key, service_image, _target), info in zip(target_rows, infos):
-        result[service_key] = _fallback_from_release_info(
+    for row, info in zip(target_rows, infos, strict=True):
+        result[row.target_id] = _fallback_from_release_info(
             settings,
-            service_image,
+            row.service_image,
             info,
         )
     return result
 
 
+def _github_latest_fallback_target_labels(
+    stacks: Sequence[ComposeStack],
+    known_by_service: Mapping[str, web_database.KnownDigestState],
+) -> dict[str, str]:
+    rows = _github_latest_fallback_targets(stacks, known_by_service)
+    service_counts = Counter(row.service_key for row in rows)
+    return {
+        row.target_id: (
+            row.service_key
+            if service_counts[row.service_key] == 1
+            else f"{row.service_key} ({row.target_id})"
+        )
+        for row in rows
+    }
+
+
 def _github_latest_fallback_targets(
     stacks: Sequence[ComposeStack],
     known_by_service: Mapping[str, web_database.KnownDigestState],
-) -> list[tuple[str, ServiceImage, WudTarget]]:
-    rows: list[tuple[str, ServiceImage, WudTarget]] = []
+) -> list[_RetagGitHubLatestTarget]:
+    rows: list[_RetagGitHubLatestTarget] = []
+    service_counts = _retag_service_counts(stacks)
     for stack in stacks:
         for service_image in stack.service_images:
             service_key = _retag_service_key(stack.name, service_image.service)
-            if service_key in known_by_service:
+            service_key_ambiguous = service_counts[service_key] > 1
+            known = _known_state_for_retag_target(
+                known_by_service.get(service_key),
+                service_image.image,
+                service_key_ambiguous=service_key_ambiguous,
+            )
+            if known is not None:
                 continue
             label_value = _label_value(service_image.labels, WUD_TAG_INCLUDE_LABEL)
             tracking_tag, tracking_tag_source = _tracking_tag(
@@ -958,10 +1047,14 @@ def _github_latest_fallback_targets(
             if tracking_tag_source == "unsupported-label" or tracking_tag != "latest":
                 continue
             rows.append(
-                (
-                    service_key,
-                    service_image,
-                    _release_note_target_for_service(stack.index, service_image.image),
+                _RetagGitHubLatestTarget(
+                    target_id=_retag_target_id(stack, service_image),
+                    service_key=service_key,
+                    service_image=service_image,
+                    target=_release_note_target_for_service(
+                        stack.index,
+                        service_image.image,
+                    ),
                 )
             )
     return rows
@@ -1088,12 +1181,55 @@ def _retag_service_key(stack_name: str, service_name: str) -> str:
     return f"{stack_name}/{service_name}"
 
 
+def _retag_service_counts(stacks: Sequence[ComposeStack]) -> Counter[str]:
+    return Counter(
+        _retag_service_key(stack.name, service_image.service)
+        for stack in stacks
+        for service_image in stack.service_images
+    )
+
+
+def _retag_target_id(stack: ComposeStack, service_image: ServiceImage) -> str:
+    return _retag_target_id_from_values(
+        stack.directory,
+        stack.file,
+        stack.project_directory,
+        stack.name,
+        service_image.service,
+    )
+
+
+def _known_state_for_retag_target(
+    known: web_database.KnownDigestState | None,
+    current_image: str,
+    *,
+    service_key_ambiguous: bool,
+) -> web_database.KnownDigestState | None:
+    if known is None or not service_key_ambiguous:
+        return known
+    if _known_state_matches_image(known, current_image):
+        return known
+    return None
+
+
+def _known_state_matches_image(
+    known: web_database.KnownDigestState,
+    current_image: str,
+) -> bool:
+    return current_image in {
+        known.image,
+        known.digest_provenance.final_image,
+    }
+
+
 def _retag_target_record(
     stack: ComposeStack,
     service_image: ServiceImage,
+    target_id: str,
     known: web_database.KnownDigestState | None,
     github_latest: _RetagGitHubLatestFallback | None,
     *,
+    service_key_ambiguous: bool,
     github_latest_fallback: bool,
 ) -> _RetagTargetRecord:
     service_key = _retag_service_key(stack.name, service_image.service)
@@ -1107,6 +1243,7 @@ def _retag_target_record(
         provenance = github_latest.provenance
     known_image = "" if known is None else known.image
     item = _retag_target_item(
+        target_id=target_id,
         service_key=service_key,
         stack=stack.name,
         service_image=service_image,
@@ -1127,26 +1264,124 @@ def _retag_target_record(
         service_image=service_image,
         known_image=known_image,
         provenance=provenance,
+        service_key_ambiguous=service_key_ambiguous,
     )
 
 
 def _validated_choice_map(
     choices: Sequence[RetagChoiceRequest],
+    records: Sequence[_RetagTargetRecord],
 ) -> dict[str, RetagChoiceRequest]:
+    lookup = _retag_choice_lookup(records)
+    failures = _RetagChoiceValidationFailures()
     values: dict[str, RetagChoiceRequest] = {}
-    duplicates: list[str] = []
     for item in choices:
-        if item.service_key in values:
-            duplicates.append(item.service_key)
+        identity = _retag_choice_identity(item, lookup, failures)
+        if identity is None:
             continue
-        values[item.service_key] = item
-    if duplicates:
-        duplicate_list = ", ".join(sorted(set(duplicates)))
+        choice_key, duplicate_label = identity
+        if choice_key in values:
+            failures.duplicates.append(duplicate_label)
+            continue
+        values[choice_key] = item
+    _raise_retag_choice_validation_errors(failures)
+    return values
+
+
+def _retag_choice_lookup(records: Sequence[_RetagTargetRecord]) -> _RetagChoiceLookup:
+    records_by_target_id = {record.item.target_id: record for record in records}
+    service_counts = Counter(record.item.service_key for record in records)
+    return _RetagChoiceLookup(
+        records_by_target_id=records_by_target_id,
+        unique_target_id_by_service={
+            record.item.service_key: record.item.target_id
+            for record in records
+            if service_counts[record.item.service_key] == 1
+        },
+        duplicate_service_keys=frozenset(
+            service_key for service_key, count in service_counts.items() if count > 1
+        ),
+    )
+
+
+def _retag_choice_identity(
+    item: RetagChoiceRequest,
+    lookup: _RetagChoiceLookup,
+    failures: _RetagChoiceValidationFailures,
+) -> tuple[str, str] | None:
+    target_id = item.target_id or ""
+    if target_id:
+        return _retag_choice_identity_from_target_id(item, target_id, lookup, failures)
+    return _retag_choice_identity_from_service_key(item, lookup, failures)
+
+
+def _retag_choice_identity_from_target_id(
+    item: RetagChoiceRequest,
+    target_id: str,
+    lookup: _RetagChoiceLookup,
+    failures: _RetagChoiceValidationFailures,
+) -> tuple[str, str] | None:
+    record = lookup.records_by_target_id.get(target_id)
+    if record is None:
+        failures.unknown_targets.append(target_id)
+        return None
+    if record.item.service_key != item.service_key:
+        failures.mismatches.append(f"{item.service_key} ({target_id})")
+        return None
+    return target_id, f"{record.item.service_key} ({target_id})"
+
+
+def _retag_choice_identity_from_service_key(
+    item: RetagChoiceRequest,
+    lookup: _RetagChoiceLookup,
+    failures: _RetagChoiceValidationFailures,
+) -> tuple[str, str] | None:
+    if item.service_key in lookup.duplicate_service_keys:
+        failures.target_id_required.append(item.service_key)
+        return None
+    choice_key = lookup.unique_target_id_by_service.get(item.service_key)
+    if choice_key is None:
+        failures.unknown_services.append(item.service_key)
+        return None
+    return choice_key, item.service_key
+
+
+def _raise_retag_choice_validation_errors(
+    failures: _RetagChoiceValidationFailures,
+) -> None:
+    if failures.target_id_required:
+        duplicate_list = ", ".join(sorted(set(failures.target_id_required)))
         raise HTTPException(
             status_code=422,
-            detail=f"retag choices contain duplicate service(s): {duplicate_list}",
+            detail=(
+                "retag choices for duplicate service(s) must include target_id: "
+                f"{duplicate_list}"
+            ),
         )
-    return values
+    if failures.unknown_services:
+        values_list = ", ".join(sorted(set(failures.unknown_services)))
+        raise HTTPException(
+            status_code=422,
+            detail=f"retag choices reference unknown service(s): {values_list}",
+        )
+    if failures.unknown_targets:
+        values_list = ", ".join(sorted(set(failures.unknown_targets)))
+        raise HTTPException(
+            status_code=422,
+            detail=f"retag choices reference unknown target(s): {values_list}",
+        )
+    if failures.mismatches:
+        values_list = ", ".join(sorted(set(failures.mismatches)))
+        raise HTTPException(
+            status_code=422,
+            detail=f"retag choice target_id does not match service_key: {values_list}",
+        )
+    if failures.duplicates:
+        duplicate_list = ", ".join(sorted(set(failures.duplicates)))
+        raise HTTPException(
+            status_code=422,
+            detail=f"retag choices contain duplicate target(s): {duplicate_list}",
+        )
 
 
 def _preview_retag_updates(
@@ -1154,15 +1389,15 @@ def _preview_retag_updates(
     selected: Sequence[_RetagPlanUpdate],
 ) -> tuple[tuple[_RetagPlanUpdate, ...], list[RetagPlanIssue]]:
     issues: list[RetagPlanIssue] = []
-    updated_by_key = {item.service_key: item for item in selected}
+    updated_by_key = {_retag_update_identity(item): item for item in selected}
     for stack in _ordered_retag_stacks(selected):
         stack_updates = [item for item in selected if item.stack.index == stack.index]
         updated, stack_issues = _preview_retag_stack(settings, stack, stack_updates)
         issues.extend(stack_issues)
         for item in updated:
-            updated_by_key[item.service_key] = item
+            updated_by_key[_retag_update_identity(item)] = item
     return (
-        tuple(updated_by_key[item.service_key] for item in selected),
+        tuple(updated_by_key[_retag_update_identity(item)] for item in selected),
         issues,
     )
 
@@ -1239,10 +1474,12 @@ def _retag_update_with_label_rewrites(
     applied_item: AppliedDigestPinUpdate,
 ) -> _RetagPlanUpdate:
     return _RetagPlanUpdate(
+        target_id=item.target_id,
         service_key=item.service_key,
         stack=item.stack,
         update=item.update,
         provenance=item.provenance,
+        known_image_service_key_ambiguous=item.known_image_service_key_ambiguous,
         label_rewrites=tuple(
             RetagPlanLabelRewrite(
                 service=rewrite.service,
@@ -1257,6 +1494,10 @@ def _retag_update_with_label_rewrites(
             for rewrite in applied_item.label_rewrites
         ),
     )
+
+
+def _retag_update_identity(item: _RetagPlanUpdate) -> str:
+    return item.target_id
 
 
 def _submit_retag_apply_job(
@@ -1732,6 +1973,8 @@ def _record_successful_retag_known_images(
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
         for item in updates:
+            if item.known_image_service_key_ambiguous:
+                continue
             upsert_known_image(
                 conn,
                 service_key=item.service_key,
@@ -1783,16 +2026,35 @@ def _finish_retag_audit_run(
     successful_updates: Sequence[_RetagPlanUpdate] = (),
 ) -> None:
     metadata = _retag_audit_metadata(build, status=status, error=error)
-    successful_service_keys = {item.service_key for item in successful_updates}
+    successful_update_ids = {
+        _retag_update_identity(item) for item in successful_updates
+    }
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
         now = utc_timestamp()
         for item in build.updates:
             item_status = (
                 "success"
-                if status == "success" or item.service_key in successful_service_keys
+                if status == "success"
+                or _retag_update_identity(item) in successful_update_ids
                 else "failure"
             )
+            event_metadata: dict[str, object] = {
+                "source": "webui",
+                "operation": "retag",
+                "service_key": item.service_key,
+                "target_id": item.target_id,
+                "resolved_tag": item.update.resolved_tag,
+                "watch_tag": item.update.watch_tag,
+                "known_image_recorded": (
+                    item_status == "success"
+                    and not item.known_image_service_key_ambiguous
+                ),
+            }
+            if item_status == "success" and item.known_image_service_key_ambiguous:
+                event_metadata["known_image_skip_reason"] = (
+                    "duplicate service_key"
+                )
             insert_update_event(
                 conn,
                 run_id=run_id,
@@ -1802,15 +2064,7 @@ def _finish_retag_audit_run(
                 image=item.update.old_image,
                 target_image=item.update.final_image,
                 status=item_status,
-                metadata_json=_json_object(
-                    {
-                        "source": "webui",
-                        "operation": "retag",
-                        "service_key": item.service_key,
-                        "resolved_tag": item.update.resolved_tag,
-                        "watch_tag": item.update.watch_tag,
-                    }
-                ),
+                metadata_json=_json_object(event_metadata),
                 digest_provenance=DigestTagProvenance(
                     source_image=item.update.old_image,
                     resolved_tag=item.update.resolved_tag,
@@ -1846,6 +2100,7 @@ def _retag_audit_metadata(
         "status": status,
         "plan_id": build.response.plan_id,
         "services": [item.service_key for item in build.updates],
+        "targets": [item.target_id for item in build.updates],
         "external_recreate_required": False,
         "digest_pin_updates": [
             _retag_plan_digest_update(item).model_dump(mode="json")
@@ -1943,6 +2198,7 @@ def _effective_config(settings: WebSettings) -> UpdaterConfig:
 
 def _retag_target_item(
     *,
+    target_id: str,
     service_key: str,
     stack: str,
     service_image: ServiceImage,
@@ -1999,6 +2255,7 @@ def _retag_target_item(
             service_image.image
         )
     return RetagTargetItem(
+        target_id=target_id,
         service_key=service_key,
         stack=stack,
         service=service_image.service,

@@ -54,7 +54,7 @@ jobs:
           install-dependencies: "false"
 
       - name: Run Danger maintainability rules
-        run: npm exec --yes --package=danger@13.0.8 -- danger ci
+        run: npm exec --yes --package=danger@13.0.10 -- danger ci
         env:
           DANGER_GITHUB_API_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}

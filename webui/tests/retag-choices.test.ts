@@ -5,6 +5,7 @@ import {
   canEnableRetagTargetChoice,
   emitRetagChoice,
   retagChoice,
+  retagTargetIdentity,
   retagTargetTagValidationError,
   retagTargetTagValue,
 } from "../src/components/retags/retagChoices";
@@ -25,12 +26,12 @@ describe("retag choice helpers", () => {
 
     expect(
       retagChoice(unavailableItem, {
-        [unavailableItem.service_key]: "switch-to-concrete",
+        [unavailableItem.target_id]: "switch-to-concrete",
       }),
     ).toBe("keep-current");
     expect(
       retagChoice(missingChoiceItem, {
-        [missingChoiceItem.service_key]: "switch-to-concrete",
+        [missingChoiceItem.target_id]: "switch-to-concrete",
       }),
     ).toBe("keep-current");
   });
@@ -62,11 +63,11 @@ describe("retag choice helpers", () => {
       choices: ["keep-current"],
       digest_provenance: null,
     });
-    const targetTags = { [item.service_key]: "2.0" };
+    const targetTags = { [item.target_id]: "2.0" };
     const emit = vi.fn();
 
     expect(canChooseRetagTarget(item, targetTags)).toBe(true);
-    expect(retagChoice(item, { [item.service_key]: "switch-to-concrete" }, targetTags))
+    expect(retagChoice(item, { [item.target_id]: "switch-to-concrete" }, targetTags))
       .toBe("switch-to-concrete");
     expect(retagTargetTagValidationError(item, targetTags)).toBe("");
 
@@ -80,36 +81,57 @@ describe("retag choice helpers", () => {
 
     expect(
       retagTargetTagValidationError(item, {
-        [item.service_key]: "v1.2_3-alpha",
+        [item.target_id]: "v1.2_3-alpha",
       }),
     ).toBe("");
     expect(
       retagTargetTagValidationError(item, {
-        [item.service_key]: "a".repeat(128),
+        [item.target_id]: "a".repeat(128),
       }),
     ).toBe("");
-    expect(retagTargetTagValidationError(item, { [item.service_key]: "" }))
+    expect(retagTargetTagValidationError(item, { [item.target_id]: "" }))
       .toContain("needs a target tag");
-    expect(retagTargetTagValidationError(item, { [item.service_key]: "latest" }))
+    expect(retagTargetTagValidationError(item, { [item.target_id]: "latest" }))
       .toContain("not latest");
-    expect(retagTargetTagValidationError(item, { [item.service_key]: "-bad" }))
+    expect(retagTargetTagValidationError(item, { [item.target_id]: "-bad" }))
       .toContain("invalid target tag");
     expect(
-      retagTargetTagValidationError(item, { [item.service_key]: "bad:value" }),
+      retagTargetTagValidationError(item, { [item.target_id]: "bad:value" }),
     ).toContain("invalid target tag");
     expect(
       retagTargetTagValidationError(item, {
-        [item.service_key]: "a".repeat(129),
+        [item.target_id]: "a".repeat(129),
       }),
     ).toContain("invalid target tag");
   });
 
   it("treats blank automatch edits as no manual override", () => {
     const item = retagTarget();
-    const targetTags = { [item.service_key]: "   " };
+    const targetTags = { [item.target_id]: "   " };
 
     expect(retagTargetTagValue(item, targetTags)).toBe("1.1");
     expect(retagTargetTagValidationError(item, targetTags)).toBe("");
+  });
+
+  it("resolves legacy target state by service key when target_id is absent", () => {
+    const item = retagTarget({
+      proposed_tag: "",
+      retag_available: false,
+      retag_reason: "not-latest-tracking",
+      choices: ["keep-current"],
+      digest_provenance: null,
+    });
+    delete item.target_id;
+    const targetTags = { [item.service_key]: "2.0" };
+
+    expect(retagTargetIdentity(item)).toBe(item.service_key);
+    expect(retagTargetTagValue(item, targetTags)).toBe("2.0");
+    expect(canChooseRetagTarget(item, targetTags)).toBe(true);
+    expect(
+      retagChoice(item, {
+        [item.service_key]: "switch-to-concrete",
+      }, targetTags),
+    ).toBe("switch-to-concrete");
   });
 
   it("keeps invalid manual targets from enabling retag selection", () => {
@@ -120,12 +142,20 @@ describe("retag choice helpers", () => {
       choices: ["keep-current"],
       digest_provenance: null,
     });
-    const targetTags = { [item.service_key]: "-bad" };
+    const targetTags = { [item.target_id]: "-bad" };
 
     expect(canChooseRetagTarget(item, targetTags)).toBe(true);
     expect(canEnableRetagTargetChoice(item, targetTags)).toBe(false);
     expect(retagTargetTagValidationError(item, targetTags)).toContain(
       "invalid target tag",
     );
+  });
+
+  it("derives fixture target identity from resolved service key parts", () => {
+    const item = retagTarget({ service_key: "data/postgres" });
+
+    expect(item.stack).toBe("data");
+    expect(item.service).toBe("postgres");
+    expect(item.target_id ?? "").toContain("|data|postgres");
   });
 });
