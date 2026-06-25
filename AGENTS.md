@@ -52,6 +52,12 @@ Repo-local routing/context only for WUDup. Global instructions control default b
 - `webui/AGENTS.md` owns frontend state, typed API client, components/views, static demo, and frontend validation guidance.
 - Prefer the closest scoped file over expanding root; nested guidance should replace duplicated root detail.
 
+## Issue Creation
+
+- When creating GitHub issues, use the templates under `.github/ISSUE_TEMPLATE/` and choose the closest matching template before drafting issue content.
+- Keep issue bodies aligned with the selected template fields; do not replace them with freeform summaries unless no template applies.
+- Do not include secrets, private URLs, local absolute paths, usernames, hostnames, or other machine-specific details in issue content.
+
 ## Repo Commands
 
 Use the shell already used by the target script.
