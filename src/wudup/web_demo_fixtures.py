@@ -13,6 +13,7 @@ import re
 import shutil
 import tempfile
 import time
+from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -912,17 +913,26 @@ def _retag_cases(
     settings: WebSettings,
     retag_targets: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    targets = retag_targets.get("items", [])
+    targets = [
+        item for item in retag_targets.get("items", []) if isinstance(item, dict)
+    ]
     service_keys = [str(item["service_key"]) for item in targets]
+    service_counts = Counter(service_keys)
+    duplicate_service_keys = {
+        service_key for service_key, count in service_counts.items() if count > 1
+    }
     cases: list[dict[str, Any]] = []
-    seen: set[tuple[tuple[str, str, str], ...]] = set()
+    seen: set[tuple[tuple[str, str, str, str], ...]] = set()
 
     def append_case(choices: list[RetagChoiceRequest]) -> None:
         signature = _retag_choices_signature(choices)
         if signature in seen:
             return
         seen.add(signature)
-        key = _retag_case_key(choices)
+        key = _retag_case_key(
+            choices,
+            duplicate_service_keys=duplicate_service_keys,
+        )
         with _demo_retag_digest_resolution():
             response = _retag_plan_case(settings, f"demo-retag-plan-{key}", choices)
             case: dict[str, Any] = {
@@ -940,88 +950,133 @@ def _retag_cases(
 
     for choices_tuple in itertools.product(
         ("keep-current", "switch-to-concrete"),
-        repeat=len(service_keys),
+        repeat=len(targets),
     ):
         append_case(
             [
-                RetagChoiceRequest(service_key=service_key, choice=choice)
-                for service_key, choice in zip(
-                    service_keys,
+                _retag_choice_for_target(target, choice=choice)
+                for target, choice in zip(
+                    targets,
                     choices_tuple,
                     strict=True,
                 )
             ]
         )
 
-    switchable_service_keys = [
-        str(item["service_key"])
+    switchable_targets = [item for item in targets if item.get("retag_available")]
+    manual_targets = [
+        item
         for item in targets
-        if item.get("retag_available")
-    ]
-    manual_service_keys = [
-        service_key
-        for service_key in service_keys
-        if service_key in DEMO_MANUAL_RETAG_TARGETS
+        if str(item["service_key"]) in DEMO_MANUAL_RETAG_TARGETS
     ]
     for manual_tuple in itertools.product(
         (False, True),
-        repeat=len(manual_service_keys),
+        repeat=len(manual_targets),
     ):
         if not any(manual_tuple):
             continue
-        manual_by_service = dict(
-            zip(manual_service_keys, manual_tuple, strict=True)
+        manual_by_target = dict(
+            zip(
+                (_retag_target_case_key(item) for item in manual_targets),
+                manual_tuple,
+                strict=True,
+            )
         )
         for switch_tuple in itertools.product(
             ("keep-current", "switch-to-concrete"),
-            repeat=len(switchable_service_keys),
+            repeat=len(switchable_targets),
         ):
-            switch_by_service = dict(
-                zip(switchable_service_keys, switch_tuple, strict=True)
+            switch_by_target = dict(
+                zip(
+                    (_retag_target_case_key(item) for item in switchable_targets),
+                    switch_tuple,
+                    strict=True,
+                )
             )
             choices = []
-            for service_key in service_keys:
-                if manual_by_service.get(service_key):
+            for target in targets:
+                target_key = _retag_target_case_key(target)
+                service_key = str(target["service_key"])
+                if manual_by_target.get(target_key):
                     choices.append(
-                        RetagChoiceRequest(
-                            service_key=service_key,
+                        _retag_choice_for_target(
+                            target,
                             choice="switch-to-concrete",
                             target_tag=DEMO_MANUAL_RETAG_TARGETS[service_key],
                         )
                     )
                     continue
                 choices.append(
-                    RetagChoiceRequest(
-                        service_key=service_key,
-                        choice=switch_by_service.get(service_key, "keep-current"),
+                    _retag_choice_for_target(
+                        target,
+                        choice=switch_by_target.get(target_key, "keep-current"),
                     )
                 )
             append_case(choices)
     return cases
 
 
-def _retag_case_key(choices: list[Any]) -> str:
-    selected = [
-        (
-            _safe_case_part(f"{choice.service_key}-{choice.target_tag}")
-            if getattr(choice, "target_tag", None)
-            else _safe_case_part(choice.service_key)
+def _retag_choice_for_target(
+    target: dict[str, Any],
+    *,
+    choice: str,
+    target_tag: str | None = None,
+) -> RetagChoiceRequest:
+    target_id = target.get("target_id")
+    return RetagChoiceRequest(
+        service_key=str(target["service_key"]),
+        target_id=target_id if isinstance(target_id, str) and target_id else None,
+        choice=choice,
+        target_tag=target_tag,
+    )
+
+
+def _retag_target_case_key(target: dict[str, Any]) -> str:
+    target_id = target.get("target_id")
+    if isinstance(target_id, str) and target_id:
+        return target_id
+    return str(target["service_key"])
+
+
+def _retag_case_key(
+    choices: list[Any],
+    *,
+    duplicate_service_keys: set[str] | frozenset[str] = frozenset(),
+) -> str:
+    selected = []
+    for choice in choices:
+        if choice.choice != "switch-to-concrete":
+            continue
+        identity = _retag_choice_case_identity(choice, duplicate_service_keys)
+        target_tag = getattr(choice, "target_tag", None)
+        selected.append(
+            _safe_case_part(
+                f"{identity}-{target_tag}" if target_tag else identity
+            )
         )
-        for choice in choices
-        if choice.choice == "switch-to-concrete"
-    ]
     if not selected:
         return "keep-all"
     return "switch-" + "-".join(selected)
 
 
+def _retag_choice_case_identity(
+    choice: Any,
+    duplicate_service_keys: set[str] | frozenset[str],
+) -> str:
+    target_id = getattr(choice, "target_id", None)
+    if choice.service_key in duplicate_service_keys and target_id:
+        return str(target_id)
+    return str(choice.service_key)
+
+
 def _retag_choices_signature(
     choices: list[RetagChoiceRequest],
-) -> tuple[tuple[str, str, str], ...]:
+) -> tuple[tuple[str, str, str, str], ...]:
     return tuple(
         sorted(
             (
                 choice.service_key,
+                choice.target_id or "",
                 choice.choice,
                 (choice.target_tag or "").strip(),
             )
@@ -1213,9 +1268,13 @@ def _generate_retag_job_fixture(
     with tempfile.TemporaryDirectory(prefix=f"wud-static-demo-retag-{case_key}.") as tmpdir:
         context = _demo_context(Path(tmpdir) / "state")
         try:
+            current_choices = _retag_choices_for_current_targets(
+                context.settings,
+                choices,
+            )
             build = web_retags.build_retag_plan(
                 context.settings,
-                RetagPlanRequest(choices=choices),
+                RetagPlanRequest(choices=current_choices),
             )
             wud_lock = web_jobs._acquire_apply_wud_lock(context.settings)
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
@@ -1239,6 +1298,35 @@ def _generate_retag_job_fixture(
             return _sanitize_payload(fixture, context.paths)
         finally:
             web_jobs.shutdown_apply_job_state(context.state)
+
+
+def _retag_choices_for_current_targets(
+    settings: WebSettings,
+    choices: list[RetagChoiceRequest],
+) -> list[RetagChoiceRequest]:
+    targets = web_retags.retag_targets_response(settings).items
+    service_counts = Counter(target.service_key for target in targets)
+    unique_targets_by_service = {
+        target.service_key: target
+        for target in targets
+        if service_counts[target.service_key] == 1
+    }
+    translated: list[RetagChoiceRequest] = []
+    for index, choice in enumerate(choices):
+        target = None
+        if index < len(targets) and targets[index].service_key == choice.service_key:
+            target = targets[index]
+        if target is None:
+            target = unique_targets_by_service.get(choice.service_key)
+        translated.append(
+            RetagChoiceRequest(
+                service_key=choice.service_key,
+                target_id=None if target is None else target.target_id,
+                choice=choice.choice,
+                target_tag=choice.target_tag,
+            )
+        )
+    return translated
 
 
 def _job_fixture_from_terminal(

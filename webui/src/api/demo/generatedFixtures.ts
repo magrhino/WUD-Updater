@@ -113122,19 +113122,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -113610,19 +113614,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -113762,19 +113770,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -113925,19 +113937,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -114088,19 +114104,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -114251,19 +114271,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -114424,19 +114448,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -114607,19 +114635,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -114780,19 +114812,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -114943,19 +114979,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -115116,19 +115156,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -115299,19 +115343,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -115482,19 +115530,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -115665,19 +115717,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -115858,19 +115914,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -116061,19 +116121,23 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "switch-to-concrete",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -116594,20 +116658,24 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
             "target_tag": "5.22.4"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -117268,20 +117336,24 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "keep-current",
-            "service_key": "home/home-assistant"
+            "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
             "target_tag": "5.22.4"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -117796,20 +117868,24 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
             "target_tag": "2026.5.3"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -118568,20 +118644,24 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
             "target_tag": "2026.5.3"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/radarr"
+            "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -119353,21 +119433,25 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
             "target_tag": "2026.5.3"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
             "target_tag": "5.22.4"
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },
@@ -120310,21 +120394,25 @@ export const generatedFixtures = {
         "choices": [
           {
             "choice": "keep-current",
-            "service_key": "data/postgres"
+            "service_key": "data/postgres",
+            "target_id": "8e8909075cafd53e14257b2715e4419a302bdacf85edbe440114f946c01bddd8"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "home/home-assistant",
+            "target_id": "567deebddaff489558a449fe8e6f1ffabb0f05d24b573a2b1e2d8d568a41d9b9",
             "target_tag": "2026.5.3"
           },
           {
             "choice": "switch-to-concrete",
             "service_key": "media/radarr",
+            "target_id": "d5219838b02e1e7912a90f0daf536ecabc9f6088c539f88523206727d0e58842",
             "target_tag": "5.22.4"
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wudup"
+            "service_key": "media/wudup",
+            "target_id": "af3a38ddac3956b37579d67fe278bf531f79d2153eb2e2d0d0076bc2dd90f3d1"
           }
         ]
       },

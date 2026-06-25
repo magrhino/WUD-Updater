@@ -613,7 +613,7 @@ describe("updates store", () => {
       retagTarget({ service_key: "media/radarr", service: "radarr" }),
     ];
     updates.retagTargets = retagTargetsResponse(retagItems);
-    updates.setRetagChoice("media/app", "switch-to-concrete");
+    updates.setRetagChoice(retagItems[0].target_id, "switch-to-concrete");
 
     try {
       const planPromise = updates.createRetagPlan();
@@ -680,6 +680,51 @@ describe("updates store", () => {
     });
   });
 
+  it("uses service-key fallback only when the retag target is unique", () => {
+    const updates = useUpdatesStore();
+    const retagItems = [
+      retagTarget(),
+      retagTarget({ service_key: "media/radarr", service: "radarr" }),
+    ];
+    updates.retagTargets = retagTargetsResponse(retagItems);
+    updates.resetRetagChoices();
+
+    updates.setRetagChoice("media/app", "switch-to-concrete");
+    updates.setRetagTargetTag("media/app", "1.2");
+
+    expect(updates.retagChoices[retagItems[0].target_id]).toBe(
+      "switch-to-concrete",
+    );
+    expect(updates.retagTargetTags[retagItems[0].target_id]).toBe("1.2");
+  });
+
+  it("does not use service-key fallback for duplicate retag targets", () => {
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse([
+      retagTarget({ target_id: "target-a", service_key: "media/app" }),
+      retagTarget({ target_id: "target-b", service_key: "media/app" }),
+    ]);
+    updates.resetRetagChoices();
+
+    updates.setRetagChoice("media/app", "switch-to-concrete");
+    updates.setRetagTargetTag("media/app", "2.0");
+
+    expect(updates.retagChoiceRequests()).toEqual([
+      {
+        service_key: "media/app",
+        target_id: "target-a",
+        choice: "keep-current",
+      },
+      {
+        service_key: "media/app",
+        target_id: "target-b",
+        choice: "keep-current",
+      },
+    ]);
+    expect(updates.retagTargetTags["target-a"]).toBe("1.1");
+    expect(updates.retagTargetTags["target-b"]).toBe("1.1");
+  });
+
   it("sends retag fallback state when previewing", async () => {
     const fetchMock = mockFetch(retagPreviewJobResponse());
     const auth = useAuthStore();
@@ -688,7 +733,7 @@ describe("updates store", () => {
     updates.retagGithubLatestFallback = true;
     const retagItems = [retagTarget()];
     updates.retagTargets = retagTargetsResponse(retagItems);
-    updates.setRetagChoice("media/app", "switch-to-concrete");
+    updates.setRetagChoice(retagItems[0].target_id, "switch-to-concrete");
 
     await updates.createRetagPlan();
 
@@ -720,7 +765,7 @@ describe("updates store", () => {
     ];
     updates.retagTargets = retagTargetsResponse(retagItems);
 
-    updates.setRetagChoice("media/app", "switch-to-concrete");
+    updates.setRetagChoice(retagItems[0].target_id, "switch-to-concrete");
     expect(updates.retagChoices[retagItems[0].target_id]).toBe("keep-current");
 
     updates.retagChoices = { [retagItems[0].target_id]: "switch-to-concrete" };
@@ -762,7 +807,7 @@ describe("updates store", () => {
     ];
     updates.retagTargets = retagTargetsResponse(retagItems);
 
-    updates.setRetagTargetTag("media/radarr", "5.22.4");
+    updates.setRetagTargetTag(retagItems[0].target_id, "5.22.4");
     await updates.createRetagPlan();
 
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
@@ -786,7 +831,7 @@ describe("updates store", () => {
     const retagItems = [retagTarget()];
     updates.retagTargets = retagTargetsResponse(retagItems);
 
-    updates.setRetagTargetTag("media/app", "1.2");
+    updates.setRetagTargetTag(retagItems[0].target_id, "1.2");
     await updates.createRetagPlan();
 
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
@@ -810,9 +855,9 @@ describe("updates store", () => {
     const retagItems = [retagTarget()];
     updates.retagTargets = retagTargetsResponse(retagItems);
 
-    updates.setRetagChoice("media/app", "switch-to-concrete");
-    updates.setRetagTargetTag("media/app", "1.2");
-    updates.setRetagTargetTag("media/app", "   ");
+    updates.setRetagChoice(retagItems[0].target_id, "switch-to-concrete");
+    updates.setRetagTargetTag(retagItems[0].target_id, "1.2");
+    updates.setRetagTargetTag(retagItems[0].target_id, "   ");
     await updates.createRetagPlan();
 
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({

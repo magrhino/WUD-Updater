@@ -382,19 +382,31 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
         self.assertEqual(removal_requests, expected_subsets)
 
     def test_retag_catalog_covers_choice_combinations(self) -> None:
-        service_keys = [
-            item["service_key"] for item in self.fixtures["retagTargets"]["items"]
+        targets = [
+            (item["service_key"], item["target_id"])
+            for item in self.fixtures["retagTargets"]["items"]
         ]
         expected = {
-            tuple(zip(service_keys, choices, strict=True))
+            tuple(
+                (service_key, target_id, choice)
+                for (service_key, target_id), choice in zip(
+                    targets,
+                    choices,
+                    strict=True,
+                )
+            )
             for choices in itertools.product(
                 ("keep-current", "switch-to-concrete"),
-                repeat=len(service_keys),
+                repeat=len(targets),
             )
         }
         actual = {
             tuple(
-                (choice["service_key"], choice["choice"])
+                (
+                    choice["service_key"],
+                    choice.get("target_id"),
+                    choice["choice"],
+                )
                 for choice in case["request"]["choices"]
             )
             for case in self.fixtures["retagCases"]
@@ -420,6 +432,26 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
         self.assertEqual(
             web_demo_fixtures._retag_choices_signature(choices),
             web_demo_fixtures._retag_choices_signature(list(reversed(choices))),
+        )
+        self.assertNotEqual(
+            web_demo_fixtures._retag_choices_signature(
+                [
+                    web_demo_fixtures.RetagChoiceRequest(
+                        service_key="media/app",
+                        target_id="target-a",
+                        choice="switch-to-concrete",
+                    )
+                ]
+            ),
+            web_demo_fixtures._retag_choices_signature(
+                [
+                    web_demo_fixtures.RetagChoiceRequest(
+                        service_key="media/app",
+                        target_id="target-b",
+                        choice="switch-to-concrete",
+                    )
+                ]
+            ),
         )
 
     def test_demo_retag_digest_verifier_uses_instance_map(self) -> None:

@@ -183,11 +183,15 @@ export const useUpdatesStore = defineStore("updates", () => {
   }
 
   function findRetagTarget(targetKey: string): RetagTargetItem | undefined {
-    return retagTargets.value?.items.find(
-      (target) =>
-        retagTargetIdentity(target) === targetKey ||
-        target.service_key === targetKey,
+    const items = retagTargets.value?.items ?? [];
+    const targetIdMatch = items.find((target) => target.target_id === targetKey);
+    if (targetIdMatch) {
+      return targetIdMatch;
+    }
+    const serviceKeyMatches = items.filter(
+      (target) => target.service_key === targetKey,
     );
+    return serviceKeyMatches.length === 1 ? serviceKeyMatches[0] : undefined;
   }
 
   function setRetagChoice(
