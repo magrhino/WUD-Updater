@@ -64,6 +64,9 @@ describe("RetagsView", () => {
     const setRetagGithubLatestFallback = vi
       .spyOn(updates, "setRetagGithubLatestFallback")
       .mockResolvedValue();
+    const refreshRetagGithubLatest = vi
+      .spyOn(updates, "refreshRetagGithubLatest")
+      .mockResolvedValue();
 
     const wrapper = mountWithApp(RetagsView, { pinia });
     await flushPromises();
@@ -79,15 +82,20 @@ describe("RetagsView", () => {
     expect(text).toContain("Retag available");
     expect(text).toContain("Automatch ready");
     expect(text).toContain("GitHub release");
-    expect(text).toContain("Use GitHub latest fallback");
+    expect(text).toContain("Use cached GitHub latest fallback");
     expect(text).toContain("GitHub latest fallback will update latest tracking to 1.1.");
     expect(text).toContain("media/radarr");
     expect(text).toContain("Missing provenance");
 
     await wrapper
-      .find('input[aria-label="Use GitHub latest fallback"]')
+      .find('input[aria-label="Use cached GitHub latest fallback"]')
       .setValue(true);
     expect(setRetagGithubLatestFallback).toHaveBeenCalledWith(true);
+
+    await wrapper
+      .get('button[aria-label="Refresh GitHub latest candidates"]')
+      .trigger("click");
+    expect(refreshRetagGithubLatest).toHaveBeenCalledTimes(1);
 
     const switchControls = wrapper.findAll('input[value="switch-to-concrete"]');
     expect(switchControls).toHaveLength(2);
@@ -440,9 +448,13 @@ describe("RetagsView", () => {
     const keepAllButton = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Keep all"));
+    const refreshButton = wrapper.get(
+      'button[aria-label="Refresh GitHub latest candidates"]',
+    );
     expect(retagAllButton?.attributes("disabled")).toBeDefined();
     expect(retagFilteredButton?.attributes("disabled")).toBeDefined();
     expect(keepAllButton?.attributes("disabled")).toBeDefined();
+    expect(refreshButton.attributes("disabled")).toBeDefined();
     await retagAllButton?.trigger("click");
     await retagFilteredButton?.trigger("click");
     await keepAllButton?.trigger("click");
@@ -532,6 +544,100 @@ describe("RetagsView", () => {
       .findAll("button")
       .find((button) => button.text().includes("Apply selected retags"));
     expect(disabledApplyButton?.attributes("disabled")).toBeDefined();
+  });
+
+  it("keeps duplicate service apply snapshot rows keyed by target id", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const updates = useUpdatesStore();
+    const basePlan = retagPlanResponse();
+    const baseStack = basePlan.stacks[0];
+    const baseUpdate = baseStack.digest_pin_updates[0];
+    updates.retagTargets = retagTargetsResponse([
+      retagTarget({ target_id: "target-a", service_key: "media/app" }),
+      retagTarget({
+        target_id: "target-b",
+        service_key: "media/app",
+        image: "repo/app:latest-staging",
+        directory: "/docker/media-staging",
+        project_directory: "/docker/media-staging",
+      }),
+    ]);
+    updates.retagPlan = retagPlanResponse({
+      selected_count: 2,
+      stacks: [
+        {
+          ...baseStack,
+          digest_pin_updates: [
+            { ...baseUpdate, target_id: "target-a" },
+            {
+              ...baseUpdate,
+              target_id: "target-b",
+              source_image: "repo/app:latest-staging",
+              planned_digest: "sha256:def456",
+              final_image: "repo/app@sha256:def456",
+              digest_provenance: {
+                ...baseUpdate.digest_provenance,
+                target_digest: "sha256:def456",
+                final_image: "repo/app@sha256:def456",
+              },
+            },
+          ],
+        },
+      ],
+    });
+    vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    vi.spyOn(webApi, "openJobStream").mockReturnValue({
+      addEventListener: vi.fn(),
+      close: vi.fn(),
+      onerror: null,
+      onmessage: null,
+      onopen: null,
+      readyState: 1,
+      url: "",
+      withCredentials: true,
+      CONNECTING: 0,
+      OPEN: 1,
+      CLOSED: 2,
+      dispatchEvent: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+    vi.spyOn(updates, "applyRetagPlan").mockImplementation(async () => {
+      const job = applyJobResponse({
+        job_id: "retag-duplicate-job",
+        selected_line_numbers: [],
+        status: "queued",
+      });
+      updates.setApplyJob(job);
+      return job;
+    });
+
+    const wrapper = mountWithApp(RetagsView, { pinia });
+    await flushPromises();
+
+    const applyButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Apply selected retags"));
+    expect(applyButton).toBeDefined();
+    await applyButton?.trigger("click");
+    await flushPromises();
+
+    const confirmButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Confirm and apply"));
+    expect(confirmButton).toBeDefined();
+    await confirmButton?.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.findAll(".apply-job-impact .list-row")).toHaveLength(2);
+    expect(
+      warn.mock.calls
+        .map((call) => call.map((value) => String(value)).join(" "))
+        .join("\n"),
+    ).not.toContain("Duplicate keys");
   });
 
   it("filters retag targets by search text and review status", async () => {

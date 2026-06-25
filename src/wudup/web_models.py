@@ -647,6 +647,7 @@ class RetagPlanLabelRewrite(BaseModel):
     reason: str
 
 class RetagPlanDigestPinUpdate(BaseModel):
+    target_id: str = ""
     service_key: str
     stack: str
     service: str

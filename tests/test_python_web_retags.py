@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 from dataclasses import dataclass, fields
@@ -234,7 +235,16 @@ def test_retag_plan_accepts_duplicate_service_keys_with_target_ids(
     tmp_path: Path,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+            **fake_env,
+        },
+    )
     first_dir = _make_fake_stack(
         tmp_path,
         fake_root,
@@ -309,10 +319,51 @@ def test_retag_plan_accepts_duplicate_service_keys_with_target_ids(
 
     assert plan_response.status_code == 200
     plan = plan_response.json()
+    expected_target_ids = {item["target_id"] for item in items}
     assert plan["status"] == "ready"
     assert plan["selected_count"] == 2
     assert len(plan["stacks"]) == 2
+    assert {
+        update["target_id"]
+        for stack in plan["stacks"]
+        for update in stack["digest_pin_updates"]
+    } == expected_target_ids
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+    choices = [
+        _switch_choice(service_key=item["service_key"], target_id=item["target_id"])
+        for item in items
+    ]
+    apply_response = _apply_retag_plan(client, headers, plan, choices=choices)
+    assert apply_response.status_code == 202
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+    assert job["status"] == "success"
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        known = conn.execute(
+            """
+            SELECT digest_provenance_source, digest_watch_tag
+            FROM known_images
+            WHERE service_key = 'stack/app'
+            """,
+        ).fetchone()
+        events = conn.execute(
+            """
+            SELECT metadata_json
+            FROM update_events
+            WHERE run_id = ?
+            ORDER BY id
+            """,
+            (job["run_id"],),
+        ).fetchall()
+
+    assert known["digest_provenance_source"] == "apply"
+    assert known["digest_watch_tag"] == "latest"
+    event_metadata = [json.loads(row["metadata_json"]) for row in events]
+    assert {event["target_id"] for event in event_metadata} == expected_target_ids
+    assert all(event["known_image_recorded"] is False for event in event_metadata)
+    assert {
+        event["known_image_skip_reason"] for event in event_metadata
+    } == {"duplicate service_key"}
 
 
 @pytest.mark.parametrize(
@@ -433,6 +484,105 @@ def test_retag_github_latest_fallback_refresh_enables_cached_candidate(
     assert item["digest_provenance"]["provenance_source"] == "github-latest"
     assert cached.json()["items"][0]["retag_available"] is True
     assert plain.json()["items"][0]["retag_reason"] == "missing-provenance"
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_retag_github_latest_fallback_keys_duplicate_services_by_target_id(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "ghcr.io/acme/app:latest", "cid-app-one")],
+        parent=tmp_path / "docker" / "one",
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "ghcr.io/acme/worker:latest", "cid-app-two")],
+        parent=tmp_path / "docker" / "two",
+    )
+    app_digest = "sha256:" + "1" * 64
+    worker_digest = "sha256:" + "2" * 64
+    _patch_github_latest(
+        monkeypatch,
+        tag="v2.1.0",
+        url="https://github.com/acme/app/releases/tag/v2.1.0",
+        extra={
+            "https://api.github.com/repos/acme/worker/releases/latest": {
+                "tag_name": "v3.4.0",
+                "name": "v3.4.0",
+                "html_url": "https://github.com/acme/worker/releases/tag/v3.4.0",
+                "body": "Routine worker update",
+                "published_at": "2026-01-02T00:00:00Z",
+            }
+        },
+    )
+    _patch_digest_resolution_map(
+        monkeypatch,
+        {
+            "ghcr.io/acme/app:v2.1.0": app_digest,
+            "ghcr.io/acme/worker:v3.4.0": worker_digest,
+        },
+    )
+    headers = _csrf_headers(client)
+
+    refresh = client.post(
+        "/api/v1/retag-targets/github-latest/refresh",
+        headers=headers,
+    )
+
+    assert refresh.status_code == 200
+    items = sorted(refresh.json()["items"], key=lambda item: item["image_repo"])
+    assert [item["service_key"] for item in items] == ["stack/app", "stack/app"]
+    assert len({item["target_id"] for item in items}) == 2
+    assert [item["proposed_tag"] for item in items] == ["v2.1.0", "v3.4.0"]
+    assert [item["final_image"] for item in items] == [
+        f"ghcr.io/acme/app@{app_digest}",
+        f"ghcr.io/acme/worker@{worker_digest}",
+    ]
+    assert all(item["candidate_source"] == "github-latest" for item in items)
+
+    choices = [
+        _switch_choice(service_key=item["service_key"], target_id=item["target_id"])
+        for item in items
+    ]
+    plan_response = client.post(
+        "/api/v1/retag-plans",
+        json={"choices": choices, "github_latest_fallback": True},
+        headers=headers,
+    )
+
+    assert plan_response.status_code == 200
+    plan = plan_response.json()
+    assert plan["status"] == "ready"
+    updates = [
+        update
+        for stack in plan["stacks"]
+        for update in stack["digest_pin_updates"]
+    ]
+    assert {update["target_id"] for update in updates} == {
+        item["target_id"] for item in items
+    }
+    assert {
+        (update["source_image"], update["resolved_tag"], update["planned_digest"])
+        for update in updates
+    } == {
+        ("ghcr.io/acme/app:latest", "v2.1.0", app_digest),
+        ("ghcr.io/acme/worker:latest", "v3.4.0", worker_digest),
+    }
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
@@ -560,7 +710,7 @@ def test_retag_preview_rejects_second_active_job(
     assert job["status"] == "failure"
 
 
-def test_retag_preview_warns_when_github_latest_candidate_changes_after_refresh(
+def test_retag_preview_reuses_fresh_cached_github_latest_candidate(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -626,12 +776,21 @@ def test_retag_preview_warns_when_github_latest_candidate_changes_after_refresh(
     plan = job["plan"]
     assert plan["status"] == "ready"
     assert plan["can_apply"] is True
-    assert any(
-        "tag v1.0.0 -> v1.1.0" in warning
-        for warning in plan["warnings"]
+    assert not any(
+        "tag v1.0.0 -> v1.1.0" in warning for warning in plan["warnings"]
     )
     update = plan["stacks"][0]["digest_pin_updates"][0]
-    assert update["planned_digest"] == new_digest
+    assert update["resolved_tag"] == "v1.0.0"
+    assert update["planned_digest"] == old_digest
+
+    refreshed = client.post(
+        "/api/v1/retag-targets/github-latest/refresh",
+        headers=headers,
+    )
+    assert refreshed.status_code == 200
+    item = refreshed.json()["items"][0]
+    assert item["proposed_tag"] == "v1.1.0"
+    assert item["final_image"] == f"ghcr.io/acme/app@{new_digest}"
 
 
 def test_retag_apply_rejects_plan_when_fallback_flag_changes(

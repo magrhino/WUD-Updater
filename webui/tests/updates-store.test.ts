@@ -501,7 +501,30 @@ describe("updates store", () => {
     ]);
   });
 
-  it("refreshes retag GitHub latest fallback candidates", async () => {
+  it("loads cached retag GitHub latest fallback candidates", async () => {
+    const fetchMock = mockFetch(retagTargetsResponse([
+      retagTarget({
+        candidate_source: "github-latest",
+        candidate_warning: "GitHub latest fallback will update latest tracking to v1.1.",
+        candidate_link_label: "GitHub release",
+        candidate_link_url: "https://github.com/acme/app/releases/tag/v1.1",
+      }),
+    ]));
+    const updates = useUpdatesStore();
+
+    await updates.setRetagGithubLatestFallback(true);
+
+    expect(updates.retagGithubLatestFallback).toBe(true);
+    expect(updates.retagTargets?.items[0]?.candidate_source).toBe("github-latest");
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/v1/retag-targets?github_latest_fallback=true",
+    );
+    expect(globalThis.localStorage.getItem("retagGithubLatestFallback")).toBe(
+      "true",
+    );
+  });
+
+  it("refreshes retag GitHub latest fallback candidates explicitly", async () => {
     const fetchMock = mockFetch(retagTargetsResponse([
       retagTarget({
         candidate_source: "github-latest",
@@ -514,12 +537,33 @@ describe("updates store", () => {
     vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
     const updates = useUpdatesStore();
 
-    await updates.setRetagGithubLatestFallback(true);
+    await updates.refreshRetagGithubLatest();
 
     expect(updates.retagGithubLatestFallback).toBe(true);
     expect(updates.retagTargets?.items[0]?.candidate_source).toBe("github-latest");
     expect(fetchMock.mock.calls[0][0]).toBe(
       "/api/v1/retag-targets/github-latest/refresh",
+    );
+    expect(globalThis.localStorage.getItem("retagGithubLatestFallback")).toBe(
+      "true",
+    );
+  });
+
+  it("remembers the cached retag fallback preference", async () => {
+    globalThis.localStorage.setItem("retagGithubLatestFallback", "true");
+    const fetchMock = mockFetch(retagTargetsResponse());
+    const updates = useUpdatesStore();
+
+    expect(updates.retagGithubLatestFallback).toBe(true);
+    await updates.loadRetagTargets();
+    await updates.setRetagGithubLatestFallback(false);
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/v1/retag-targets?github_latest_fallback=true",
+    );
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/v1/retag-targets");
+    expect(globalThis.localStorage.getItem("retagGithubLatestFallback")).toBe(
+      "false",
     );
   });
 

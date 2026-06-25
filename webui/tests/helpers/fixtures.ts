@@ -766,6 +766,7 @@ export function retagPlanResponse(
         services: ["app"],
         digest_pin_updates: [
           {
+            target_id: "media/app",
             service_key: "media/app",
             stack: "media",
             service: "app",

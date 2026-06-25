@@ -334,6 +334,7 @@ export interface RetagPlanLabelRewrite {
 }
 
 export interface RetagPlanDigestPinUpdate {
+  target_id: string;
   service_key: string;
   stack: string;
   service: string;

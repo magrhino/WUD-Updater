@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { AlertTriangle, CheckCircle2, Info, Search } from "@lucide/vue";
+import { AlertTriangle, CheckCircle2, Info, RefreshCw, Search } from "@lucide/vue";
 import {
   NAlert,
+  NButton,
   NInput,
   NSelect,
   NSwitch,
@@ -378,6 +379,13 @@ async function onGithubLatestFallbackUpdate(enabled: boolean): Promise<void> {
   await updates.setRetagGithubLatestFallback(enabled).catch(() => undefined);
 }
 
+async function refreshGithubLatestFallback(): Promise<void> {
+  if (updates.loading || retagMutationDisabled.value) {
+    return;
+  }
+  await updates.refreshRetagGithubLatest().catch(() => undefined);
+}
+
 function openRetagApplyConfirm(): void {
   if (applyDisabled.value) {
     return;
@@ -418,7 +426,9 @@ function createRetagApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
     stack.digest_pin_updates.map((update) => {
       const rewrite = labelRewriteSummary(update);
       return {
-        key: update.service_key,
+        key:
+          update.target_id ||
+          `${stack.directory}-${stack.compose_file}-${stack.project_directory}-${update.service_key}`,
         lineNo: null,
         scopeLabel: stack.stack || "Retag",
         serviceLabel: update.service_key,
@@ -564,16 +574,35 @@ onMounted(() => {
           :options="filterOptions"
           aria-label="Retag status filter"
         />
-        <label class="retag-fallback-toggle" for="github-latest-fallback-switch">
-          <n-switch
-            id="github-latest-fallback-switch"
-            :value="updates.retagGithubLatestFallback"
-            :disabled="updates.loading"
-            aria-label="Use GitHub latest fallback"
-            @update:value="onGithubLatestFallbackUpdate"
-          />
-          <span>Use GitHub latest fallback</span>
-        </label>
+        <div class="retag-fallback-controls">
+          <label class="retag-fallback-toggle" for="github-latest-fallback-switch">
+            <n-switch
+              id="github-latest-fallback-switch"
+              :value="updates.retagGithubLatestFallback"
+              :disabled="updates.loading"
+              aria-label="Use cached GitHub latest fallback"
+              @update:value="onGithubLatestFallbackUpdate"
+            />
+            <span>Use cached GitHub latest fallback</span>
+          </label>
+          <n-button
+            size="small"
+            secondary
+            :disabled="updates.loading || retagMutationDisabled"
+            :title="
+              retagMutationDisabled
+                ? retagMutationNotice
+                : 'Refresh GitHub latest candidates'
+            "
+            aria-label="Refresh GitHub latest candidates"
+            @click="refreshGithubLatestFallback"
+          >
+            <template #icon>
+              <RefreshCw :size="15" aria-hidden="true" />
+            </template>
+            Refresh
+          </n-button>
+        </div>
       </div>
     </section>
 
@@ -682,6 +711,12 @@ onMounted(() => {
   color: var(--color-muted-text);
   font-size: 0.9rem;
   white-space: nowrap;
+}
+
+.retag-fallback-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .retag-state svg {

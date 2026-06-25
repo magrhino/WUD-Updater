@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import copy
+import hashlib
 import io
 import itertools
 import json
@@ -1816,7 +1817,100 @@ def _sanitize_payload(value: Any, paths: dict[str, Path]) -> Any:
         str(paths["root"]): "demo",
         str(REPO_ROOT): "demo/repo",
     }
-    return _normalize_demo_runtime_details(_replace_many(value, replacements))
+    sanitized = _normalize_demo_runtime_details(_replace_many(value, replacements))
+    return _normalize_demo_retag_target_ids(sanitized)
+
+
+def _normalize_demo_retag_target_ids(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    retag_targets = value.get("retagTargets")
+    if not isinstance(retag_targets, dict):
+        return value
+    items = retag_targets.get("items")
+    if not isinstance(items, list):
+        return value
+    replacements: dict[str, str] = {}
+    target_ids_by_service: dict[str, str] = {}
+    duplicate_services: set[str] = set()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        current = item.get("target_id")
+        if not isinstance(current, str) or not current:
+            continue
+        stable = _demo_retag_target_id(item)
+        if stable:
+            replacements[current] = stable
+            service_key = item.get("service_key")
+            if isinstance(service_key, str) and service_key:
+                if service_key in target_ids_by_service:
+                    duplicate_services.add(service_key)
+                target_ids_by_service[service_key] = stable
+    for service_key in duplicate_services:
+        target_ids_by_service.pop(service_key, None)
+    _collect_demo_retag_target_id_replacements(
+        value,
+        target_ids_by_service,
+        replacements,
+    )
+    if not replacements:
+        return value
+    return _replace_exact_strings(value, replacements)
+
+
+def _demo_retag_target_id(item: dict[str, Any]) -> str:
+    fields = (
+        item.get("directory", ""),
+        item.get("compose_file", ""),
+        item.get("project_directory", ""),
+        item.get("stack", ""),
+        item.get("service", ""),
+    )
+    raw = "\0".join(str(field) for field in fields)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _collect_demo_retag_target_id_replacements(
+    value: Any,
+    target_ids_by_service: dict[str, str],
+    replacements: dict[str, str],
+) -> None:
+    if isinstance(value, list):
+        for item in value:
+            _collect_demo_retag_target_id_replacements(
+                item,
+                target_ids_by_service,
+                replacements,
+            )
+        return
+    if not isinstance(value, dict):
+        return
+    service_key = value.get("service_key")
+    current = value.get("target_id")
+    if isinstance(service_key, str) and isinstance(current, str):
+        stable = target_ids_by_service.get(service_key)
+        if stable:
+            replacements[current] = stable
+    for item in value.values():
+        _collect_demo_retag_target_id_replacements(
+            item,
+            target_ids_by_service,
+            replacements,
+        )
+
+
+def _replace_exact_strings(value: Any, replacements: dict[str, str]) -> Any:
+    if isinstance(value, str):
+        return replacements.get(value, value)
+    if isinstance(value, list):
+        return [_replace_exact_strings(item, replacements) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _replace_exact_strings(item, replacements)
+            for key, item in value.items()
+        }
+    return value
 
 
 def _normalize_demo_runtime_details(value: Any) -> Any:

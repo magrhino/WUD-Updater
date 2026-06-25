@@ -55,6 +55,7 @@ const PENDING_RESCAN_SELECTION_REQUIRED_MESSAGE =
   "Select at least one pending update to rescan.";
 
 const APPLY_JOB_STORAGE_KEY = "applyJobId";
+const RETAG_GITHUB_LATEST_FALLBACK_STORAGE_KEY = "retagGithubLatestFallback";
 const TERMINAL_APPLY_JOB_STATUSES = new Set<ApplyJobResponse["status"]>([
   "success",
   "failure",
@@ -72,7 +73,7 @@ export const useUpdatesStore = defineStore("updates", () => {
   const retagChoices = ref<Record<string, RetagTargetChoice>>({});
   const retagTargetTags = ref<Record<string, string>>({});
   const retagPlan = ref<RetagPlanResponse | null>(null);
-  const retagGithubLatestFallback = ref(false);
+  const retagGithubLatestFallback = ref(readRememberedRetagGithubLatestFallback());
   let retagPreviewStart: (() => Promise<RetagPreviewJobResponse>) | null = null;
   const retagPreviewPoller = usePolledJob<RetagPreviewJobResponse>(
     () => {
@@ -147,11 +148,8 @@ export const useUpdatesStore = defineStore("updates", () => {
 
   async function setRetagGithubLatestFallback(enabled: boolean): Promise<void> {
     retagGithubLatestFallback.value = enabled;
-    if (enabled) {
-      await refreshRetagGithubLatest();
-      return;
-    }
-    await loadRetagTargets({ githubLatestFallback: false });
+    writeRememberedRetagGithubLatestFallback(enabled);
+    await loadRetagTargets({ githubLatestFallback: enabled });
   }
 
   async function refreshRetagGithubLatest(): Promise<void> {
@@ -161,6 +159,7 @@ export const useUpdatesStore = defineStore("updates", () => {
         await auth.ensureCsrf(),
       );
       retagGithubLatestFallback.value = true;
+      writeRememberedRetagGithubLatestFallback(true);
       resetRetagChoices();
       retagPlan.value = null;
       retagPreviewPoller.reset();
@@ -905,6 +904,35 @@ function removeRememberedApplyJobId(): void {
     storage?.removeItem(APPLY_JOB_STORAGE_KEY);
   } catch {
     // Remembering a transient job id is best-effort.
+  }
+}
+
+function readRememberedRetagGithubLatestFallback(): boolean {
+  const storage = localStorageAvailable();
+  try {
+    return storage?.getItem(RETAG_GITHUB_LATEST_FALLBACK_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeRememberedRetagGithubLatestFallback(enabled: boolean): void {
+  const storage = localStorageAvailable();
+  try {
+    storage?.setItem(
+      RETAG_GITHUB_LATEST_FALLBACK_STORAGE_KEY,
+      enabled ? "true" : "false",
+    );
+  } catch {
+    // Remembering this harmless UI preference is best-effort.
+  }
+}
+
+function localStorageAvailable(): Storage | null {
+  try {
+    return "localStorage" in globalThis ? globalThis.localStorage : null;
+  } catch {
+    return null;
   }
 }
 
