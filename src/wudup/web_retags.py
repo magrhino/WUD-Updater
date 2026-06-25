@@ -996,7 +996,7 @@ def _cached_github_latest_fallback_by_target(
         }
 
     result: dict[str, _RetagGitHubLatestFallback] = {}
-    for row, info in zip(target_rows, infos):
+    for row, info in zip(target_rows, infos, strict=True):
         result[row.target_id] = _fallback_from_release_info(
             settings,
             row.service_image,

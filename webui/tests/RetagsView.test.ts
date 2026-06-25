@@ -27,30 +27,30 @@ describe("RetagsView", () => {
     const auth = useAuthStore();
     auth.session = authSession({ mutations_enabled: true });
     const updates = useUpdatesStore();
-    updates.retagTargets = retagTargetsResponse(
-      [
-        retagTarget({
-          candidate_source: "github-latest",
-          candidate_warning:
-            "GitHub latest fallback will update latest tracking to 1.1.",
-          candidate_link_label: "GitHub release",
-          candidate_link_url: "https://github.com/acme/app/releases/tag/1.1",
-        }),
-        retagTarget({
-          service_key: "media/radarr",
-          service: "radarr",
-          image: "repo/radarr:latest",
-          image_repo: "repo/radarr",
-          proposed_tag: "",
-          final_image: "",
-          retag_available: false,
-          retag_reason: "missing-provenance",
-          choices: ["keep-current"],
-          digest_provenance: null,
-        }),
-      ],
-      { warnings: ["compose warning"] },
-    );
+    const retagItems = [
+      retagTarget({
+        candidate_source: "github-latest",
+        candidate_warning:
+          "GitHub latest fallback will update latest tracking to 1.1.",
+        candidate_link_label: "GitHub release",
+        candidate_link_url: "https://github.com/acme/app/releases/tag/1.1",
+      }),
+      retagTarget({
+        service_key: "media/radarr",
+        service: "radarr",
+        image: "repo/radarr:latest",
+        image_repo: "repo/radarr",
+        proposed_tag: "",
+        final_image: "",
+        retag_available: false,
+        retag_reason: "missing-provenance",
+        choices: ["keep-current"],
+        digest_provenance: null,
+      }),
+    ];
+    updates.retagTargets = retagTargetsResponse(retagItems, {
+      warnings: ["compose warning"],
+    });
     const loadRetagTargets = vi
       .spyOn(updates, "loadRetagTargets")
       .mockResolvedValue();
@@ -102,7 +102,9 @@ describe("RetagsView", () => {
     expect(switchControls[0].attributes("disabled")).toBeUndefined();
     expect(switchControls[1].attributes("disabled")).toBeDefined();
     await switchControls[0].setValue();
-    expect(updates.retagChoices["media/app"]).toBe("switch-to-concrete");
+    expect(updates.retagChoices[retagItems[0].target_id]).toBe(
+      "switch-to-concrete",
+    );
 
     await wrapper
       .findAll("button")
@@ -126,7 +128,7 @@ describe("RetagsView", () => {
     const auth = useAuthStore();
     auth.session = authSession({ mutations_enabled: true });
     const updates = useUpdatesStore();
-    updates.retagTargets = retagTargetsResponse([
+    const retagItems = [
       retagTarget(),
       retagTarget({
         service_key: "media/radarr",
@@ -145,10 +147,15 @@ describe("RetagsView", () => {
           provenance_confidence: "high",
         },
       }),
-    ]);
+    ];
+    updates.retagTargets = retagTargetsResponse(retagItems);
     updates.setRetagChoice("media/app", "switch-to-concrete");
     updates.setRetagChoice("media/radarr", "switch-to-concrete");
+    const appTarget = retagItems[0];
+    const radarrTarget = retagItems[1];
     vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    const setRetagChoice = vi.spyOn(updates, "setRetagChoice");
+    const setRetagOnlyChoice = vi.spyOn(updates, "setRetagOnlyChoice");
     const createRetagPlan = vi.spyOn(updates, "createRetagPlan").mockResolvedValue(
       retagPlanResponse(),
     );
@@ -161,8 +168,11 @@ describe("RetagsView", () => {
       .trigger("click");
     await flushPromises();
 
-    expect(updates.retagChoices["media/app"]).toBe("keep-current");
-    expect(updates.retagChoices["media/radarr"]).toBe("switch-to-concrete");
+    expect(setRetagChoice).not.toHaveBeenCalled();
+    expect(setRetagOnlyChoice).toHaveBeenCalledTimes(1);
+    expect(setRetagOnlyChoice).toHaveBeenCalledWith(radarrTarget);
+    expect(updates.retagChoices[appTarget.target_id]).toBe("keep-current");
+    expect(updates.retagChoices[radarrTarget.target_id]).toBe("switch-to-concrete");
     expect(createRetagPlan).not.toHaveBeenCalled();
     expect(wrapper.text()).not.toContain("Review retag preview");
   });
@@ -173,7 +183,7 @@ describe("RetagsView", () => {
     const auth = useAuthStore();
     auth.session = authSession({ mutations_enabled: true });
     const updates = useUpdatesStore();
-    updates.retagTargets = retagTargetsResponse([
+    const retagItems = [
       retagTarget(),
       retagTarget({
         service_key: "data/postgres",
@@ -201,7 +211,8 @@ describe("RetagsView", () => {
         choices: ["keep-current"],
         digest_provenance: null,
       }),
-    ]);
+    ];
+    updates.retagTargets = retagTargetsResponse(retagItems);
     updates.retagPlan = retagPlanResponse();
     vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
     const createRetagPlan = vi.spyOn(updates, "createRetagPlan").mockResolvedValue(
@@ -224,9 +235,9 @@ describe("RetagsView", () => {
 
     expect(updates.retagPlan).toBeNull();
     expect(updates.retagChoices).toMatchObject({
-      "data/postgres": "switch-to-concrete",
+      [retagItems[1].target_id]: "switch-to-concrete",
     });
-    expect(updates.retagChoices["media/app"]).toBeUndefined();
+    expect(updates.retagChoices[retagItems[0].target_id]).toBeUndefined();
     expect(wrapper.find(".retag-summary-strip").text()).toContain(
       "Selected switches1",
     );
@@ -240,9 +251,9 @@ describe("RetagsView", () => {
 
     expect(updates.retagPlan).toBeNull();
     expect(updates.retagChoices).toMatchObject({
-      "media/app": "switch-to-concrete",
-      "data/postgres": "switch-to-concrete",
-      "media/radarr": "keep-current",
+      [retagItems[0].target_id]: "switch-to-concrete",
+      [retagItems[1].target_id]: "switch-to-concrete",
+      [retagItems[2].target_id]: "keep-current",
     });
     expect(wrapper.find(".retag-summary-strip").text()).toContain(
       "Selected switches2",
@@ -252,9 +263,9 @@ describe("RetagsView", () => {
     await flushPromises();
 
     expect(updates.retagChoices).toMatchObject({
-      "media/app": "keep-current",
-      "data/postgres": "keep-current",
-      "media/radarr": "keep-current",
+      [retagItems[0].target_id]: "keep-current",
+      [retagItems[1].target_id]: "keep-current",
+      [retagItems[2].target_id]: "keep-current",
     });
     expect(wrapper.find(".retag-summary-strip").text()).toContain(
       "Selected switches0",
@@ -360,7 +371,7 @@ describe("RetagsView", () => {
     const auth = useAuthStore();
     auth.session = authSession({ mutations_enabled: true });
     const updates = useUpdatesStore();
-    updates.retagTargets = retagTargetsResponse([
+    const retagItems = [
       retagTarget({
         service_key: "media/radarr",
         service: "radarr",
@@ -376,7 +387,8 @@ describe("RetagsView", () => {
         choices: ["keep-current"],
         digest_provenance: null,
       }),
-    ]);
+    ];
+    updates.retagTargets = retagTargetsResponse(retagItems);
     vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
     const createRetagPlan = vi.spyOn(updates, "createRetagPlan").mockResolvedValue(
       retagPlanResponse(),
@@ -392,10 +404,13 @@ describe("RetagsView", () => {
     await targetInput.setValue("5.22.4");
     await flushPromises();
 
-    expect(updates.retagChoices["media/radarr"]).toBe("switch-to-concrete");
+    expect(updates.retagChoices[retagItems[0].target_id]).toBe(
+      "switch-to-concrete",
+    );
     expect(updates.retagChoiceRequests()).toEqual([
       {
         service_key: "media/radarr",
+        target_id: retagItems[0].target_id,
         choice: "switch-to-concrete",
         target_tag: "5.22.4",
       },

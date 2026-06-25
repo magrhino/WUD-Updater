@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from wudup import web_demo_fixtures, web_wud_api
+from wudup.web_retag_identity import retag_target_id
 from wudup.web_models import (
     ApplyJobLogResponse,
     ApplyJobResponse,
@@ -54,6 +55,28 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
         self._validate_plan_fixtures(data)
         self._validate_state_records(data)
         self._validate_run_records(data)
+
+    def test_demo_retag_target_id_treats_none_project_directory_as_empty(
+        self,
+    ) -> None:
+        item = {
+            "directory": "/docker/media",
+            "compose_file": "docker-compose.yml",
+            "project_directory": None,
+            "stack": "media",
+            "service": "app",
+        }
+
+        self.assertEqual(
+            web_demo_fixtures._demo_retag_target_id(item),
+            retag_target_id(
+                "/docker/media",
+                "docker-compose.yml",
+                "",
+                "media",
+                "app",
+            ),
+        )
 
     def _validate_core_responses(self, data: dict[str, object]) -> None:
         AuthSessionResponse.model_validate(data["auth"]["session"])

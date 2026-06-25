@@ -430,19 +430,20 @@ describe("updates store", () => {
   });
 
   it("loads retag targets for read-only review", async () => {
-    const fetchMock = mockFetch(retagTargetsResponse());
+    const response = retagTargetsResponse();
+    const fetchMock = mockFetch(response);
     const updates = useUpdatesStore();
 
     await updates.loadRetagTargets();
 
     expect(updates.retagTargets?.items[0]?.service_key).toBe("media/app");
-    expect(updates.retagTargetTags["media/app"]).toBe("1.1");
+    expect(updates.retagTargetTags[response.items[0].target_id]).toBe("1.1");
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-targets");
   });
 
   it("bulk selects only retag targets with valid concrete tags", async () => {
     const updates = useUpdatesStore();
-    updates.retagTargets = retagTargetsResponse([
+    const retagItems = [
       retagTarget(),
       retagTarget({
         service_key: "media/radarr",
@@ -471,30 +472,40 @@ describe("updates store", () => {
         choices: ["keep-current"],
         digest_provenance: null,
       }),
-    ]);
+    ];
+    updates.retagTargets = retagTargetsResponse(retagItems);
     updates.retagTargetTags = {
-      "media/radarr": "5.22.4",
-      "media/bad": "-bad",
+      [retagItems[1].target_id]: "5.22.4",
+      [retagItems[2].target_id]: "-bad",
     };
-    updates.retagChoices = { "media/bad": "switch-to-concrete" };
+    updates.retagChoices = { [retagItems[2].target_id]: "switch-to-concrete" };
     updates.retagPlan = retagPlanResponse();
 
     updates.setRetagChoicesForItems(
-      updates.retagTargets.items,
+      retagItems,
       "switch-to-concrete",
     );
 
     expect(updates.retagPlan).toBeNull();
     expect(updates.retagChoices).toMatchObject({
-      "media/app": "switch-to-concrete",
-      "media/radarr": "switch-to-concrete",
-      "media/bad": "keep-current",
+      [retagItems[0].target_id]: "switch-to-concrete",
+      [retagItems[1].target_id]: "switch-to-concrete",
+      [retagItems[2].target_id]: "keep-current",
     });
     expect(updates.retagChoiceRequests()).toEqual([
-      { service_key: "media/app", choice: "switch-to-concrete" },
-      { service_key: "media/bad", choice: "keep-current" },
+      {
+        service_key: "media/app",
+        target_id: retagItems[0].target_id,
+        choice: "switch-to-concrete",
+      },
+      {
+        service_key: "media/bad",
+        target_id: retagItems[2].target_id,
+        choice: "keep-current",
+      },
       {
         service_key: "media/radarr",
+        target_id: retagItems[1].target_id,
         choice: "switch-to-concrete",
         target_tag: "5.22.4",
       },
@@ -597,10 +608,11 @@ describe("updates store", () => {
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
     const updates = useUpdatesStore();
-    updates.retagTargets = retagTargetsResponse([
+    const retagItems = [
       retagTarget(),
       retagTarget({ service_key: "media/radarr", service: "radarr" }),
-    ]);
+    ];
+    updates.retagTargets = retagTargetsResponse(retagItems);
     updates.setRetagChoice("media/app", "switch-to-concrete");
 
     try {
@@ -619,8 +631,16 @@ describe("updates store", () => {
       );
       expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
         choices: [
-          { service_key: "media/app", choice: "switch-to-concrete" },
-          { service_key: "media/radarr", choice: "keep-current" },
+          {
+            service_key: "media/app",
+            target_id: retagItems[0].target_id,
+            choice: "switch-to-concrete",
+          },
+          {
+            service_key: "media/radarr",
+            target_id: retagItems[1].target_id,
+            choice: "keep-current",
+          },
         ],
         github_latest_fallback: false,
       });
@@ -666,13 +686,20 @@ describe("updates store", () => {
     vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
     const updates = useUpdatesStore();
     updates.retagGithubLatestFallback = true;
-    updates.retagTargets = retagTargetsResponse();
+    const retagItems = [retagTarget()];
+    updates.retagTargets = retagTargetsResponse(retagItems);
     updates.setRetagChoice("media/app", "switch-to-concrete");
 
     await updates.createRetagPlan();
 
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
-      choices: [{ service_key: "media/app", choice: "switch-to-concrete" }],
+      choices: [
+        {
+          service_key: "media/app",
+          target_id: retagItems[0].target_id,
+          choice: "switch-to-concrete",
+        },
+      ],
       github_latest_fallback: true,
     });
   });
@@ -682,7 +709,7 @@ describe("updates store", () => {
     const auth = useAuthStore();
     vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
     const updates = useUpdatesStore();
-    updates.retagTargets = retagTargetsResponse([
+    const retagItems = [
       retagTarget({
         proposed_tag: "",
         retag_available: false,
@@ -690,16 +717,23 @@ describe("updates store", () => {
         choices: ["keep-current"],
         digest_provenance: null,
       }),
-    ]);
+    ];
+    updates.retagTargets = retagTargetsResponse(retagItems);
 
     updates.setRetagChoice("media/app", "switch-to-concrete");
-    expect(updates.retagChoices["media/app"]).toBe("keep-current");
+    expect(updates.retagChoices[retagItems[0].target_id]).toBe("keep-current");
 
-    updates.retagChoices = { "media/app": "switch-to-concrete" };
+    updates.retagChoices = { [retagItems[0].target_id]: "switch-to-concrete" };
     await updates.createRetagPlan();
 
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
-      choices: [{ service_key: "media/app", choice: "keep-current" }],
+      choices: [
+        {
+          service_key: "media/app",
+          target_id: retagItems[0].target_id,
+          choice: "keep-current",
+        },
+      ],
       github_latest_fallback: false,
     });
   });
@@ -709,7 +743,7 @@ describe("updates store", () => {
     const auth = useAuthStore();
     vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
     const updates = useUpdatesStore();
-    updates.retagTargets = retagTargetsResponse([
+    const retagItems = [
       retagTarget({
         service_key: "media/radarr",
         service: "radarr",
@@ -725,7 +759,8 @@ describe("updates store", () => {
         choices: ["keep-current"],
         digest_provenance: null,
       }),
-    ]);
+    ];
+    updates.retagTargets = retagTargetsResponse(retagItems);
 
     updates.setRetagTargetTag("media/radarr", "5.22.4");
     await updates.createRetagPlan();
@@ -734,6 +769,7 @@ describe("updates store", () => {
       choices: [
         {
           service_key: "media/radarr",
+          target_id: retagItems[0].target_id,
           choice: "switch-to-concrete",
           target_tag: "5.22.4",
         },
@@ -747,7 +783,8 @@ describe("updates store", () => {
     const auth = useAuthStore();
     vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
     const updates = useUpdatesStore();
-    updates.retagTargets = retagTargetsResponse();
+    const retagItems = [retagTarget()];
+    updates.retagTargets = retagTargetsResponse(retagItems);
 
     updates.setRetagTargetTag("media/app", "1.2");
     await updates.createRetagPlan();
@@ -756,6 +793,7 @@ describe("updates store", () => {
       choices: [
         {
           service_key: "media/app",
+          target_id: retagItems[0].target_id,
           choice: "switch-to-concrete",
           target_tag: "1.2",
         },
@@ -769,7 +807,8 @@ describe("updates store", () => {
     const auth = useAuthStore();
     vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
     const updates = useUpdatesStore();
-    updates.retagTargets = retagTargetsResponse();
+    const retagItems = [retagTarget()];
+    updates.retagTargets = retagTargetsResponse(retagItems);
 
     updates.setRetagChoice("media/app", "switch-to-concrete");
     updates.setRetagTargetTag("media/app", "1.2");
@@ -777,7 +816,13 @@ describe("updates store", () => {
     await updates.createRetagPlan();
 
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
-      choices: [{ service_key: "media/app", choice: "switch-to-concrete" }],
+      choices: [
+        {
+          service_key: "media/app",
+          target_id: retagItems[0].target_id,
+          choice: "switch-to-concrete",
+        },
+      ],
       github_latest_fallback: false,
     });
   });
@@ -787,8 +832,9 @@ describe("updates store", () => {
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
     const updates = useUpdatesStore();
-    updates.retagTargets = retagTargetsResponse();
-    updates.retagChoices = { "media/app": "switch-to-concrete" };
+    const retagItems = [retagTarget()];
+    updates.retagTargets = retagTargetsResponse(retagItems);
+    updates.retagChoices = { [retagItems[0].target_id]: "switch-to-concrete" };
     updates.retagPlan = retagPlanResponse();
 
     const job = await updates.applyRetagPlan();
@@ -799,7 +845,13 @@ describe("updates store", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-plans/apply");
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       plan_id: "retag-plan-test",
-      choices: [{ service_key: "media/app", choice: "switch-to-concrete" }],
+      choices: [
+        {
+          service_key: "media/app",
+          target_id: retagItems[0].target_id,
+          choice: "switch-to-concrete",
+        },
+      ],
       github_latest_fallback: false,
       confirmation: "apply-retags",
     });

@@ -156,7 +156,7 @@ describe("RetagTargetsMobileList", () => {
     });
     const wrapper = mountMobileList({
       rows: [item],
-      targetTags: { "media/radarr": "5.22.4" },
+      targetTags: { [item.target_id]: "5.22.4" },
     });
 
     const targetInput = wrapper.find<HTMLInputElement>(
@@ -194,8 +194,8 @@ describe("RetagTargetsMobileList", () => {
     });
     const wrapper = mountMobileList({
       rows: [item],
-      choices: { [item.service_key]: "switch-to-concrete" },
-      targetTags: { [item.service_key]: "-bad" },
+      choices: { [item.target_id]: "switch-to-concrete" },
+      targetTags: { [item.target_id]: "-bad" },
     });
 
     const switchInput = wrapper.find<HTMLInputElement>(

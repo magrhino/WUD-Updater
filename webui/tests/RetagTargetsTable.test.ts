@@ -72,8 +72,8 @@ describe("RetagTargetsTable", () => {
 
     const wrapper = mountTable({
       rows: [item],
-      choices: { [item.service_key]: "switch-to-concrete" },
-      targetTags: { [item.service_key]: "-bad" },
+      choices: { [item.target_id]: "switch-to-concrete" },
+      targetTags: { [item.target_id]: "-bad" },
     });
     const switchInput = wrapper.find<HTMLInputElement>(
       'input[value="switch-to-concrete"]',

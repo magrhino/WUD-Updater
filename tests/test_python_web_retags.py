@@ -20,9 +20,11 @@ from tests.web_test_helpers import (
     _make_fake_stack,
     _wait_apply_job,
 )
+from wudup.compose import ComposeStack, ServiceImage
 from wudup.db import init_db, open_db, upsert_known_image
 from wudup.digest_verifier import DigestResolveResult
 from wudup.digest_provenance import DigestTagProvenance
+from wudup.release_notes import ReleaseNoteInfo
 from wudup import web_database
 from wudup import web_retags as web_retags_module
 from wudup.web_models import WebApplyJob
@@ -678,6 +680,54 @@ def test_retag_github_latest_fallback_keys_duplicate_services_by_target_id(
         ("ghcr.io/acme/worker:latest", "v3.4.0", worker_digest),
     }
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_retag_github_latest_fallback_requires_matching_cache_info_count(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    settings = client.app.state.web_settings
+    with open_db(settings.config.db_path) as conn:
+        init_db(conn)
+    stack = ComposeStack(
+        index=0,
+        directory=tmp_path / "docker",
+        file="docker-compose.yml",
+        name="stack",
+        images=("ghcr.io/acme/app:latest", "ghcr.io/acme/worker:latest"),
+        service_images=(
+            ServiceImage(service="app", image="ghcr.io/acme/app:latest"),
+            ServiceImage(service="worker", image="ghcr.io/acme/worker:latest"),
+        ),
+    )
+
+    def fake_cached_release_notes(
+        *_args: object,
+        **_kwargs: object,
+    ) -> list[ReleaseNoteInfo]:
+        return [
+            ReleaseNoteInfo(
+                line_no=0,
+                status="ready",
+                provider="github",
+                image_repo="ghcr.io/acme/app",
+                upstream_repo="acme/app",
+            )
+        ]
+
+    monkeypatch.setattr(
+        web_retags_module,
+        "cached_release_notes",
+        fake_cached_release_notes,
+    )
+
+    with pytest.raises(ValueError, match="zip\\(\\) argument 2 is shorter"):
+        web_retags_module._cached_github_latest_fallback_by_target(
+            settings,
+            [stack],
+            {},
+        )
 
 
 def test_retag_preview_refreshes_github_latest_before_building_plan(

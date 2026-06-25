@@ -333,15 +333,7 @@ function onRetagChoiceUpdate(
 }
 
 function onRetagOnly(item: RetagTargetItem): void {
-  const selectedTargetId = retagTargetIdentity(item);
-  for (const row of rows.value) {
-    updates.setRetagChoice(
-      retagTargetIdentity(row),
-      retagTargetIdentity(row) === selectedTargetId
-        ? "switch-to-concrete"
-        : "keep-current",
-    );
-  }
+  updates.setRetagOnlyChoice(item);
 }
 
 function onRetagTargetTagUpdate(item: RetagTargetItem, tag: string): void {
