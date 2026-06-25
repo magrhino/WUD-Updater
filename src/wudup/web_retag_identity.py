@@ -5,6 +5,12 @@ from __future__ import annotations
 import hashlib
 
 
+def _identity_field(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
 def retag_target_id(
     directory: object,
     compose_file: object,
@@ -13,7 +19,7 @@ def retag_target_id(
     service: object,
 ) -> str:
     raw = "\0".join(
-        str(field)
+        _identity_field(field)
         for field in (
             directory,
             compose_file,

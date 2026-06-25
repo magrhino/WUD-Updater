@@ -1187,7 +1187,7 @@ def _retag_target_id(stack: ComposeStack, service_image: ServiceImage) -> str:
     return _retag_target_id_from_values(
         stack.directory,
         stack.file,
-        "" if stack.project_directory is None else stack.project_directory,
+        stack.project_directory,
         stack.name,
         service_image.service,
     )

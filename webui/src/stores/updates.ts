@@ -233,8 +233,11 @@ export const useUpdatesStore = defineStore("updates", () => {
     retagPreviewPoller.reset();
   }
 
-  function setRetagOnlyChoice(selectedItem: RetagTargetItem): void {
-    const selectedTargetId = retagTargetIdentity(selectedItem);
+  function setRetagOnlyChoice(targetKey: string): void {
+    const selectedItem = findRetagTarget(targetKey);
+    const selectedTargetId = selectedItem
+      ? retagTargetIdentity(selectedItem)
+      : targetKey;
     const nextChoices = { ...retagChoices.value };
     for (const item of retagTargets.value?.items ?? []) {
       const targetId = retagTargetIdentity(item);

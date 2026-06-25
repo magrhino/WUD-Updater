@@ -1860,13 +1860,10 @@ def _normalize_demo_retag_target_ids(value: Any) -> Any:
 
 
 def _demo_retag_target_id(item: dict[str, Any]) -> str:
-    project_directory = item.get("project_directory")
-    if project_directory is None:
-        project_directory = ""
     return retag_target_id(
         item.get("directory", ""),
         item.get("compose_file", ""),
-        project_directory,
+        item.get("project_directory", ""),
         item.get("stack", ""),
         item.get("service", ""),
     )

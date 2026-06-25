@@ -5,6 +5,7 @@ import {
   canEnableRetagTargetChoice,
   emitRetagChoice,
   retagChoice,
+  retagTargetIdentity,
   retagTargetTagValidationError,
   retagTargetTagValue,
 } from "../src/components/retags/retagChoices";
@@ -112,6 +113,27 @@ describe("retag choice helpers", () => {
     expect(retagTargetTagValidationError(item, targetTags)).toBe("");
   });
 
+  it("resolves legacy target state by service key when target_id is absent", () => {
+    const item = retagTarget({
+      proposed_tag: "",
+      retag_available: false,
+      retag_reason: "not-latest-tracking",
+      choices: ["keep-current"],
+      digest_provenance: null,
+    });
+    delete item.target_id;
+    const targetTags = { [item.service_key]: "2.0" };
+
+    expect(retagTargetIdentity(item)).toBe(item.service_key);
+    expect(retagTargetTagValue(item, targetTags)).toBe("2.0");
+    expect(canChooseRetagTarget(item, targetTags)).toBe(true);
+    expect(
+      retagChoice(item, {
+        [item.service_key]: "switch-to-concrete",
+      }, targetTags),
+    ).toBe("switch-to-concrete");
+  });
+
   it("keeps invalid manual targets from enabling retag selection", () => {
     const item = retagTarget({
       proposed_tag: "",
@@ -127,5 +149,13 @@ describe("retag choice helpers", () => {
     expect(retagTargetTagValidationError(item, targetTags)).toContain(
       "invalid target tag",
     );
+  });
+
+  it("derives fixture target identity from resolved service key parts", () => {
+    const item = retagTarget({ service_key: "data/postgres" });
+
+    expect(item.stack).toBe("data");
+    expect(item.service).toBe("postgres");
+    expect(item.target_id ?? "").toContain("|data|postgres");
   });
 });

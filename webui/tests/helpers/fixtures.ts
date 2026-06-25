@@ -697,9 +697,12 @@ export function retagTarget(
   overrides: Partial<RetagTargetItem> = {},
 ): RetagTargetItem {
   const { target_id: targetIdOverride, ...itemOverrides } = overrides;
-  const serviceKey = itemOverrides.service_key ?? "media/app";
-  const stack = itemOverrides.stack ?? "media";
-  const service = itemOverrides.service ?? "app";
+  const serviceKeyOverride = itemOverrides.service_key;
+  const [serviceKeyStack, serviceKeyService] =
+    serviceKeyOverride?.split("/", 2) ?? [];
+  const stack = itemOverrides.stack ?? serviceKeyStack ?? "media";
+  const service = itemOverrides.service ?? serviceKeyService ?? "app";
+  const serviceKey = serviceKeyOverride ?? `${stack}/${service}`;
   const directory = itemOverrides.directory ?? "/docker/media";
   const composeFile = itemOverrides.compose_file ?? "docker-compose.yml";
   const projectDirectory = itemOverrides.project_directory ?? "/docker/media";
@@ -714,9 +717,6 @@ export function retagTarget(
         stack,
         service,
       ].join("|"),
-    service_key: serviceKey,
-    stack,
-    service,
     image: "repo/app:latest",
     image_repo: "repo/app",
     current_tag: "latest",
@@ -733,9 +733,6 @@ export function retagTarget(
     choices: ["keep-current", "switch-to-concrete"],
     label_key: "wud.tag.include",
     label_value: "latest",
-    directory,
-    compose_file: composeFile,
-    project_directory: projectDirectory,
     digest_provenance: {
       source_image: "repo/app:latest",
       resolved_tag: "1.1",
@@ -746,6 +743,12 @@ export function retagTarget(
       provenance_confidence: "high",
     },
     ...itemOverrides,
+    service_key: serviceKey,
+    stack,
+    service,
+    directory,
+    compose_file: composeFile,
+    project_directory: projectDirectory,
   };
 }
 

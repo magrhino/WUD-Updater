@@ -78,6 +78,24 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
             ),
         )
 
+    def test_retag_target_id_canonicalizes_empty_values(self) -> None:
+        self.assertEqual(
+            retag_target_id(
+                "/docker/media",
+                "docker-compose.yml",
+                None,
+                "media",
+                "app",
+            ),
+            retag_target_id(
+                "/docker/media",
+                "docker-compose.yml",
+                "",
+                "media",
+                "app",
+            ),
+        )
+
     def _validate_core_responses(self, data: dict[str, object]) -> None:
         AuthSessionResponse.model_validate(data["auth"]["session"])
         SetupStatusResponse.model_validate(data["auth"]["setupStatus"])

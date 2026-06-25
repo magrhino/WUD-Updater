@@ -170,7 +170,7 @@ describe("RetagsView", () => {
 
     expect(setRetagChoice).not.toHaveBeenCalled();
     expect(setRetagOnlyChoice).toHaveBeenCalledTimes(1);
-    expect(setRetagOnlyChoice).toHaveBeenCalledWith(radarrTarget);
+    expect(setRetagOnlyChoice).toHaveBeenCalledWith(radarrTarget.target_id);
     expect(updates.retagChoices[appTarget.target_id]).toBe("keep-current");
     expect(updates.retagChoices[radarrTarget.target_id]).toBe("switch-to-concrete");
     expect(createRetagPlan).not.toHaveBeenCalled();

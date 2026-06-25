@@ -333,7 +333,7 @@ function onRetagChoiceUpdate(
 }
 
 function onRetagOnly(item: RetagTargetItem): void {
-  updates.setRetagOnlyChoice(item);
+  updates.setRetagOnlyChoice(retagTargetIdentity(item));
 }
 
 function onRetagTargetTagUpdate(item: RetagTargetItem, tag: string): void {
