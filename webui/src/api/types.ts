@@ -265,6 +265,7 @@ export type RetagTargetsStatus = "ready" | "unavailable";
 export type RetagTargetChoice = "keep-current" | "switch-to-concrete";
 
 export interface RetagTargetItem {
+  target_id?: string;
   service_key: string;
   stack: string;
   service: string;
@@ -301,6 +302,7 @@ export type RetagPlanStatus = "ready" | "empty" | "blocked" | "unavailable";
 
 export interface RetagChoiceRequest {
   service_key: string;
+  target_id?: string;
   choice: RetagTargetChoice;
   target_tag?: string;
 }

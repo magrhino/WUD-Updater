@@ -50,6 +50,7 @@ def test_retag_targets_endpoint_returns_eligible_digest_pinned_service(
     assert body["count"] == 1
     assert body["warnings"] == []
     item = body["items"][0]
+    assert item["target_id"]
     assert item["service_key"] == "stack/app"
     assert item["image"] == "repo/app@sha256:old"
     assert item["current_tag"] == ""
@@ -226,6 +227,91 @@ def test_retag_targets_endpoint_includes_service_without_pending_line(
     assert body["items"][0]["tracking_tag"] == "latest"
     assert body["items"][0]["retag_reason"] == "missing-provenance"
     assert not (tmp_path / "state" / "images.todo").exists()
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_retag_plan_accepts_duplicate_service_keys_with_target_ids(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    first_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app@sha256:old", "cid-app-one")],
+        parent=tmp_path / "docker" / "one",
+    )
+    second_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app@sha256:old", "cid-app-two")],
+        parent=tmp_path / "docker" / "two",
+    )
+    _write_compose(
+        first_dir,
+        "app",
+        "repo/app@sha256:old",
+        label_value="^latest$$",
+    )
+    _write_compose(
+        second_dir,
+        "app",
+        "repo/app@sha256:old",
+        label_value="^latest$$",
+    )
+    _seed_known_image(
+        tmp_path,
+        service_key="stack/app",
+        image="repo/app@sha256:old",
+        source_image="repo/app:latest",
+        resolved_tag="2.0",
+        watch_tag="latest",
+        target_digest="sha256:old",
+        final_image="repo/app@sha256:old",
+    )
+    targets_response = client.get("/api/v1/retag-targets")
+
+    assert targets_response.status_code == 200
+    items = targets_response.json()["items"]
+    assert [item["service_key"] for item in items] == ["stack/app", "stack/app"]
+    assert len({item["target_id"] for item in items}) == 2
+    headers = _csrf_headers(client)
+
+    ambiguous_response = client.post(
+        "/api/v1/retag-plans",
+        json={
+            "choices": [
+                {"service_key": "stack/app", "choice": "switch-to-concrete"},
+                {"service_key": "stack/app", "choice": "switch-to-concrete"},
+            ]
+        },
+        headers=headers,
+    )
+
+    assert ambiguous_response.status_code == 422
+    assert "target_id" in ambiguous_response.json()["detail"]
+
+    plan_response = client.post(
+        "/api/v1/retag-plans",
+        json={
+            "choices": [
+                _switch_choice(
+                    service_key=item["service_key"],
+                    target_id=item["target_id"],
+                )
+                for item in items
+            ]
+        },
+        headers=headers,
+    )
+
+    assert plan_response.status_code == 200
+    plan = plan_response.json()
+    assert plan["status"] == "ready"
+    assert plan["selected_count"] == 2
+    assert len(plan["stacks"]) == 2
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
@@ -1889,8 +1975,15 @@ def _make_retag_fixture(
     return _RetagFixture(client=client, compose_dir=compose_dir, fake_root=fake_root)
 
 
-def _switch_choice(service_key: str = "stack/app") -> dict[str, str]:
-    return {"service_key": service_key, "choice": "switch-to-concrete"}
+def _switch_choice(
+    service_key: str = "stack/app",
+    *,
+    target_id: str | None = None,
+) -> dict[str, str]:
+    choice = {"service_key": service_key, "choice": "switch-to-concrete"}
+    if target_id is not None:
+        choice["target_id"] = target_id
+    return choice
 
 
 def _create_retag_plan(

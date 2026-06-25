@@ -4,6 +4,10 @@ const DEFAULT_RETAG_CHOICE: RetagTargetChoice = "keep-current";
 // Keep this aligned with src/wudup/images.py tag_value_valid.
 const tagValuePattern = /^\w[\w.-]{0,127}$/;
 
+export function retagTargetIdentity(item: RetagTargetItem): string {
+  return item.target_id || item.service_key;
+}
+
 export function canSwitchToConcrete(item: RetagTargetItem): boolean {
   return item.retag_available && item.choices.includes("switch-to-concrete");
 }
@@ -12,7 +16,7 @@ export function retagTargetTagValue(
   item: RetagTargetItem,
   targetTags: Record<string, string>,
 ): string {
-  const targetTag = targetTags[item.service_key];
+  const targetTag = targetTags[retagTargetIdentity(item)];
   if (targetTag?.trim()) {
     return targetTag;
   }
@@ -76,5 +80,9 @@ export function retagChoice(
   choices: Record<string, RetagTargetChoice>,
   targetTags: Record<string, string> = {},
 ): RetagTargetChoice {
-  return normalizeRetagChoice(item, choices[item.service_key], targetTags);
+  return normalizeRetagChoice(
+    item,
+    choices[retagTargetIdentity(item)],
+    targetTags,
+  );
 }

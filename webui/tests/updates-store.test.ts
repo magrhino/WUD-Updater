@@ -440,6 +440,67 @@ describe("updates store", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-targets");
   });
 
+  it("bulk selects only retag targets with valid concrete tags", async () => {
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse([
+      retagTarget(),
+      retagTarget({
+        service_key: "media/radarr",
+        service: "radarr",
+        image: "repo/radarr:5.21.1",
+        image_repo: "repo/radarr",
+        current_tag: "5.21.1",
+        tracking_tag: "5.21.1",
+        tracking_tag_source: "image",
+        proposed_tag: "",
+        final_image: "",
+        retag_available: false,
+        retag_reason: "not-latest-tracking",
+        choices: ["keep-current"],
+        digest_provenance: null,
+      }),
+      retagTarget({
+        service_key: "media/bad",
+        service: "bad",
+        image: "repo/bad:latest",
+        image_repo: "repo/bad",
+        proposed_tag: "",
+        final_image: "",
+        retag_available: false,
+        retag_reason: "not-latest-tracking",
+        choices: ["keep-current"],
+        digest_provenance: null,
+      }),
+    ]);
+    updates.retagTargetTags = {
+      "media/radarr": "5.22.4",
+      "media/bad": "-bad",
+    };
+    updates.retagChoices = { "media/bad": "switch-to-concrete" };
+    updates.retagPlan = retagPlanResponse();
+
+    updates.setRetagChoicesForItems(
+      updates.retagTargets.items,
+      "switch-to-concrete",
+    );
+
+    expect(updates.retagPlan).toBeNull();
+    expect(updates.retagChoices).toMatchObject({
+      "media/app": "switch-to-concrete",
+      "media/radarr": "switch-to-concrete",
+      "media/bad": "keep-current",
+    });
+    expect(updates.retagChoiceRequests()).toEqual([
+      { service_key: "media/app", choice: "switch-to-concrete" },
+      { service_key: "media/bad", choice: "keep-current" },
+      {
+        service_key: "media/radarr",
+        choice: "switch-to-concrete",
+        target_tag: "5.22.4",
+      },
+    ]);
+  });
+
   it("refreshes retag GitHub latest fallback candidates", async () => {
     const fetchMock = mockFetch(retagTargetsResponse([
       retagTarget({
@@ -522,6 +583,37 @@ describe("updates store", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("keeps duplicate retag service keys separate by target id", async () => {
+    const fetchMock = mockFetch(retagPreviewJobResponse());
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse([
+      retagTarget({ target_id: "target-a", service_key: "media/app" }),
+      retagTarget({ target_id: "target-b", service_key: "media/app" }),
+    ]);
+    updates.resetRetagChoices();
+
+    updates.setRetagChoice("target-b", "switch-to-concrete");
+    await updates.createRetagPlan();
+
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      choices: [
+        {
+          service_key: "media/app",
+          target_id: "target-a",
+          choice: "keep-current",
+        },
+        {
+          service_key: "media/app",
+          target_id: "target-b",
+          choice: "switch-to-concrete",
+        },
+      ],
+      github_latest_fallback: false,
+    });
   });
 
   it("sends retag fallback state when previewing", async () => {

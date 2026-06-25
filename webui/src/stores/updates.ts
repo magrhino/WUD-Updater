@@ -21,6 +21,7 @@ import {
   type RetagPlanResponse,
   type RetagPreviewJobResponse,
   type RetagTargetChoice,
+  type RetagTargetItem,
   type RetagTargetsResponse,
   type SelfUpdateApplyResponse,
   type SelfUpdatePlanResponse,
@@ -34,8 +35,10 @@ import { usePolledJob } from "../composables/usePolledJob";
 import { useAuthStore } from "./auth";
 import { errorMessage, runWithStoreState } from "./storeState";
 import {
+  canEnableRetagTargetChoice,
   normalizeRetagChoice,
   retagChoice as selectedRetagChoice,
+  retagTargetIdentity,
   retagTargetTagValue,
 } from "../utils/retagChoices";
 import {
@@ -168,28 +171,35 @@ export const useUpdatesStore = defineStore("updates", () => {
     const items = retagTargets.value?.items ?? [];
     retagChoices.value = Object.fromEntries(
       items.map((item) => [
-        item.service_key,
+        retagTargetIdentity(item),
         "keep-current" satisfies RetagTargetChoice,
       ]),
     );
     retagTargetTags.value = Object.fromEntries(
       items.map((item) => [
-        item.service_key,
+        retagTargetIdentity(item),
         item.retag_available ? item.proposed_tag : "",
       ]),
     );
   }
 
+  function findRetagTarget(targetKey: string): RetagTargetItem | undefined {
+    return retagTargets.value?.items.find(
+      (target) =>
+        retagTargetIdentity(target) === targetKey ||
+        target.service_key === targetKey,
+    );
+  }
+
   function setRetagChoice(
-    serviceKey: string,
+    targetKey: string,
     choice: RetagTargetChoice,
   ): void {
-    const item = retagTargets.value?.items.find(
-      (target) => target.service_key === serviceKey,
-    );
+    const item = findRetagTarget(targetKey);
+    const choiceKey = item ? retagTargetIdentity(item) : targetKey;
     retagChoices.value = {
       ...retagChoices.value,
-      [serviceKey]: item
+      [choiceKey]: item
         ? normalizeRetagChoice(item, choice, retagTargetTags.value)
         : choice,
     };
@@ -197,18 +207,44 @@ export const useUpdatesStore = defineStore("updates", () => {
     retagPreviewPoller.reset();
   }
 
-  function setRetagTargetTag(serviceKey: string, tag: string): void {
-    const item = retagTargets.value?.items.find(
-      (target) => target.service_key === serviceKey,
+  function setRetagChoicesForItems(
+    items: RetagTargetItem[],
+    choice: RetagTargetChoice,
+  ): void {
+    const currentItems = new Map(
+      (retagTargets.value?.items ?? []).map((item) => [
+        retagTargetIdentity(item),
+        item,
+      ]),
     );
+    const nextChoices = { ...retagChoices.value };
+    for (const requestedItem of items) {
+      const item = currentItems.get(retagTargetIdentity(requestedItem));
+      if (!item) {
+        continue;
+      }
+      nextChoices[retagTargetIdentity(item)] =
+        choice === "switch-to-concrete" &&
+        canEnableRetagTargetChoice(item, retagTargetTags.value)
+          ? "switch-to-concrete"
+          : "keep-current";
+    }
+    retagChoices.value = nextChoices;
+    retagPlan.value = null;
+    retagPreviewPoller.reset();
+  }
+
+  function setRetagTargetTag(targetKey: string, tag: string): void {
+    const item = findRetagTarget(targetKey);
+    const choiceKey = item ? retagTargetIdentity(item) : targetKey;
     retagTargetTags.value = {
       ...retagTargetTags.value,
-      [serviceKey]: tag,
+      [choiceKey]: tag,
     };
     if (item && tag.trim()) {
       retagChoices.value = {
         ...retagChoices.value,
-        [serviceKey]: "switch-to-concrete",
+        [choiceKey]: "switch-to-concrete",
       };
     }
     retagPlan.value = null;
@@ -228,6 +264,10 @@ export const useUpdatesStore = defineStore("updates", () => {
           service_key: item.service_key,
           choice,
         };
+        const targetId = retagTargetIdentity(item);
+        if (targetId !== item.service_key) {
+          request.target_id = targetId;
+        }
         if (choice === "switch-to-concrete") {
           const tag = retagTargetTagValue(item, retagTargetTags.value).trim();
           if (tag && (!item.retag_available || tag !== item.proposed_tag)) {
@@ -236,7 +276,11 @@ export const useUpdatesStore = defineStore("updates", () => {
         }
         return request;
       })
-      .sort((left, right) => left.service_key.localeCompare(right.service_key));
+      .sort(
+        (left, right) =>
+          left.service_key.localeCompare(right.service_key) ||
+          (left.target_id ?? "").localeCompare(right.target_id ?? ""),
+      );
   }
 
   async function createRetagPlan(): Promise<RetagPlanResponse> {
@@ -791,6 +835,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     refreshRetagGithubLatest,
     resetRetagChoices,
     setRetagChoice,
+    setRetagChoicesForItems,
     setRetagTargetTag,
     retagChoiceRequests,
     createRetagPlan,

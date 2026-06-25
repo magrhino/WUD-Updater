@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import secrets
 import shutil
 import sqlite3
 import time
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
@@ -570,20 +572,19 @@ def build_retag_plan(
         plan.plan_id = _retag_plan_id(plan, updates=(), compose_hashes={})
         return _RetagPlanBuild(response=plan, updates=())
 
-    choices = _validated_choice_map(payload.choices)
-    records_by_key = {record.item.service_key: record for record in records_or_response}
-    unknown = sorted(set(choices) - set(records_by_key))
-    if unknown:
-        values = ", ".join(unknown)
-        raise HTTPException(
-            status_code=422,
-            detail=f"retag choices reference unknown service(s): {values}",
-        )
+    choices = _validated_choice_map(payload.choices, records_or_response)
+    records_by_target_id = {
+        record.item.target_id: record for record in records_or_response
+    }
 
     keep_current_count = sum(
         1 for choice in choices.values() if choice.choice == KEEP_CURRENT_CHOICE
     )
-    selected, issues = _selected_retag_plan_updates(settings, choices, records_by_key)
+    selected, issues = _selected_retag_plan_updates(
+        settings,
+        choices,
+        records_by_target_id,
+    )
 
     selected, preview_issues = _preview_retag_updates(settings, selected)
     issues.extend(preview_issues)
@@ -607,17 +608,19 @@ def build_retag_plan(
 def _selected_retag_plan_updates(
     settings: WebSettings,
     choices: Mapping[str, RetagChoiceRequest],
-    records_by_key: Mapping[str, _RetagTargetRecord],
+    records_by_target_id: Mapping[str, _RetagTargetRecord],
 ) -> tuple[list[_RetagPlanUpdate], list[RetagPlanIssue]]:
     selected: list[_RetagPlanUpdate] = []
     issues: list[RetagPlanIssue] = []
-    for service_key, choice in sorted(choices.items()):
+    for target_id, choice in sorted(choices.items()):
         if choice.choice == KEEP_CURRENT_CHOICE:
             continue
+        record = records_by_target_id[target_id]
+        service_key = record.item.service_key
         update, issue = _retag_plan_update_for_choice(
             settings,
             service_key,
-            records_by_key[service_key],
+            record,
             target_tag=choice.target_tag,
         )
         if issue is not None:
@@ -1088,6 +1091,19 @@ def _retag_service_key(stack_name: str, service_name: str) -> str:
     return f"{stack_name}/{service_name}"
 
 
+def _retag_target_id(stack: ComposeStack, service_image: ServiceImage) -> str:
+    raw = "\0".join(
+        (
+            str(stack.directory),
+            stack.file,
+            "" if stack.project_directory is None else str(stack.project_directory),
+            stack.name,
+            service_image.service,
+        )
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def _retag_target_record(
     stack: ComposeStack,
     service_image: ServiceImage,
@@ -1107,6 +1123,7 @@ def _retag_target_record(
         provenance = github_latest.provenance
     known_image = "" if known is None else known.image
     item = _retag_target_item(
+        target_id=_retag_target_id(stack, service_image),
         service_key=service_key,
         stack=stack.name,
         service_image=service_image,
@@ -1132,19 +1149,82 @@ def _retag_target_record(
 
 def _validated_choice_map(
     choices: Sequence[RetagChoiceRequest],
+    records: Sequence[_RetagTargetRecord],
 ) -> dict[str, RetagChoiceRequest]:
+    records_by_target_id = {record.item.target_id: record for record in records}
+    service_counts = Counter(record.item.service_key for record in records)
+    unique_target_id_by_service = {
+        record.item.service_key: record.item.target_id
+        for record in records
+        if service_counts[record.item.service_key] == 1
+    }
+    duplicate_service_keys = {
+        service_key for service_key, count in service_counts.items() if count > 1
+    }
     values: dict[str, RetagChoiceRequest] = {}
     duplicates: list[str] = []
+    unknown_services: list[str] = []
+    unknown_targets: list[str] = []
+    target_id_required: list[str] = []
+    mismatches: list[str] = []
     for item in choices:
-        if item.service_key in values:
-            duplicates.append(item.service_key)
+        target_id = item.target_id or ""
+        if target_id:
+            record = records_by_target_id.get(target_id)
+            if record is None:
+                unknown_targets.append(target_id)
+                continue
+            if record.item.service_key != item.service_key:
+                mismatches.append(f"{item.service_key} ({target_id})")
+                continue
+            choice_key = target_id
+            duplicate_label = f"{record.item.service_key} ({target_id})"
+        elif item.service_key in duplicate_service_keys:
+            target_id_required.append(item.service_key)
             continue
-        values[item.service_key] = item
+        else:
+            choice_key = unique_target_id_by_service.get(item.service_key)
+            if choice_key is None:
+                unknown_services.append(item.service_key)
+                continue
+            duplicate_label = item.service_key
+
+        if choice_key in values:
+            duplicates.append(duplicate_label)
+            continue
+        values[choice_key] = item
+    if target_id_required:
+        duplicate_list = ", ".join(sorted(set(target_id_required)))
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "retag choices for duplicate service(s) must include target_id: "
+                f"{duplicate_list}"
+            ),
+        )
+    if unknown_services:
+        values_list = ", ".join(sorted(set(unknown_services)))
+        raise HTTPException(
+            status_code=422,
+            detail=f"retag choices reference unknown service(s): {values_list}",
+        )
+    if unknown_targets:
+        values_list = ", ".join(sorted(set(unknown_targets)))
+        raise HTTPException(
+            status_code=422,
+            detail=f"retag choices reference unknown target(s): {values_list}",
+        )
+    if mismatches:
+        values_list = ", ".join(sorted(set(mismatches)))
+        raise HTTPException(
+            status_code=422,
+            detail=f"retag choice target_id does not match service_key: {values_list}",
+        )
     if duplicates:
         duplicate_list = ", ".join(sorted(set(duplicates)))
         raise HTTPException(
             status_code=422,
-            detail=f"retag choices contain duplicate service(s): {duplicate_list}",
+            detail=f"retag choices contain duplicate target(s): {duplicate_list}",
         )
     return values
 
@@ -1154,15 +1234,15 @@ def _preview_retag_updates(
     selected: Sequence[_RetagPlanUpdate],
 ) -> tuple[tuple[_RetagPlanUpdate, ...], list[RetagPlanIssue]]:
     issues: list[RetagPlanIssue] = []
-    updated_by_key = {item.service_key: item for item in selected}
+    updated_by_key = {_retag_update_identity(item): item for item in selected}
     for stack in _ordered_retag_stacks(selected):
         stack_updates = [item for item in selected if item.stack.index == stack.index]
         updated, stack_issues = _preview_retag_stack(settings, stack, stack_updates)
         issues.extend(stack_issues)
         for item in updated:
-            updated_by_key[item.service_key] = item
+            updated_by_key[_retag_update_identity(item)] = item
     return (
-        tuple(updated_by_key[item.service_key] for item in selected),
+        tuple(updated_by_key[_retag_update_identity(item)] for item in selected),
         issues,
     )
 
@@ -1257,6 +1337,10 @@ def _retag_update_with_label_rewrites(
             for rewrite in applied_item.label_rewrites
         ),
     )
+
+
+def _retag_update_identity(item: _RetagPlanUpdate) -> tuple[int, str]:
+    return (item.stack.index, item.service_key)
 
 
 def _submit_retag_apply_job(
@@ -1783,14 +1867,17 @@ def _finish_retag_audit_run(
     successful_updates: Sequence[_RetagPlanUpdate] = (),
 ) -> None:
     metadata = _retag_audit_metadata(build, status=status, error=error)
-    successful_service_keys = {item.service_key for item in successful_updates}
+    successful_update_ids = {
+        _retag_update_identity(item) for item in successful_updates
+    }
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
         now = utc_timestamp()
         for item in build.updates:
             item_status = (
                 "success"
-                if status == "success" or item.service_key in successful_service_keys
+                if status == "success"
+                or _retag_update_identity(item) in successful_update_ids
                 else "failure"
             )
             insert_update_event(
@@ -1943,6 +2030,7 @@ def _effective_config(settings: WebSettings) -> UpdaterConfig:
 
 def _retag_target_item(
     *,
+    target_id: str,
     service_key: str,
     stack: str,
     service_image: ServiceImage,
@@ -1999,6 +2087,7 @@ def _retag_target_item(
             service_image.image
         )
     return RetagTargetItem(
+        target_id=target_id,
         service_key=service_key,
         stack=stack,
         service=service_image.service,

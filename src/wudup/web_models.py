@@ -571,6 +571,7 @@ RetagTargetsStatus = Literal["ready", "unavailable"]
 RetagPlanStatus = Literal["ready", "empty", "blocked", "unavailable"]
 
 class RetagTargetItem(BaseModel):
+    target_id: str
     service_key: str
     stack: str
     service: str
@@ -603,6 +604,7 @@ class RetagTargetsResponse(BaseModel):
 
 class RetagChoiceRequest(BaseModel):
     service_key: str = Field(min_length=1, max_length=512)
+    target_id: str | None = Field(default=None, min_length=1, max_length=128)
     choice: Literal["keep-current", "switch-to-concrete"]
     target_tag: str | None = Field(default=None, max_length=128)
 

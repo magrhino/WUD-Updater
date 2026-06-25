@@ -696,8 +696,10 @@ export function updateTargetsResponse(
 export function retagTarget(
   overrides: Partial<RetagTargetItem> = {},
 ): RetagTargetItem {
+  const serviceKey = overrides.service_key ?? "media/app";
   return {
-    service_key: "media/app",
+    target_id: serviceKey,
+    service_key: serviceKey,
     stack: "media",
     service: "app",
     image: "repo/app:latest",
