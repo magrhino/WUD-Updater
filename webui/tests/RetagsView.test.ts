@@ -112,6 +112,149 @@ describe("RetagsView", () => {
     expect(applyButton?.attributes("disabled")).toBeUndefined();
   });
 
+  it("selects one service from the per-row retag action without previewing", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse([
+      retagTarget(),
+      retagTarget({
+        service_key: "media/radarr",
+        service: "radarr",
+        image: "repo/radarr:latest",
+        image_repo: "repo/radarr",
+        proposed_tag: "5.22.4",
+        final_image: "repo/radarr@sha256:def456",
+        digest_provenance: {
+          source_image: "repo/radarr:latest",
+          resolved_tag: "5.22.4",
+          watch_tag: "latest",
+          target_digest: "sha256:def456",
+          final_image: "repo/radarr@sha256:def456",
+          provenance_source: "test",
+          provenance_confidence: "high",
+        },
+      }),
+    ]);
+    updates.setRetagChoice("media/app", "switch-to-concrete");
+    updates.setRetagChoice("media/radarr", "switch-to-concrete");
+    vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    const createRetagPlan = vi.spyOn(updates, "createRetagPlan").mockResolvedValue(
+      retagPlanResponse(),
+    );
+
+    const wrapper = mountWithApp(RetagsView, { pinia });
+    await flushPromises();
+
+    await wrapper
+      .get('button[aria-label="Retag only media/radarr"]')
+      .trigger("click");
+    await flushPromises();
+
+    expect(updates.retagChoices["media/app"]).toBe("keep-current");
+    expect(updates.retagChoices["media/radarr"]).toBe("switch-to-concrete");
+    expect(createRetagPlan).not.toHaveBeenCalled();
+    expect(wrapper.text()).not.toContain("Review retag preview");
+  });
+
+  it("bulk selects all eligible, filtered eligible, and keep-all retag choices", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse([
+      retagTarget(),
+      retagTarget({
+        service_key: "data/postgres",
+        stack: "data",
+        service: "postgres",
+        image: "postgres:16",
+        image_repo: "postgres",
+        current_tag: "16",
+        tracking_tag: "16",
+        proposed_tag: "16.1",
+        final_image: "postgres@sha256:feed",
+      }),
+      retagTarget({
+        service_key: "media/radarr",
+        service: "radarr",
+        image: "repo/radarr:5.21.1",
+        image_repo: "repo/radarr",
+        current_tag: "5.21.1",
+        tracking_tag: "5.21.1",
+        tracking_tag_source: "image",
+        proposed_tag: "",
+        final_image: "",
+        retag_available: false,
+        retag_reason: "not-latest-tracking",
+        choices: ["keep-current"],
+        digest_provenance: null,
+      }),
+    ]);
+    updates.retagPlan = retagPlanResponse();
+    vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    const createRetagPlan = vi.spyOn(updates, "createRetagPlan").mockResolvedValue(
+      retagPlanResponse(),
+    );
+    const applyRetagPlan = vi.spyOn(updates, "applyRetagPlan").mockResolvedValue(
+      applyJobResponse({ job_id: "bulk-retag-job" }),
+    );
+
+    const wrapper = mountWithApp(RetagsView, { pinia });
+    await flushPromises();
+    const buttonByText = (text: string) =>
+      wrapper.findAll("button").find((button) => button.text().includes(text));
+
+    await wrapper
+      .find('input[aria-label="Search retag targets"]')
+      .setValue("postgres");
+    await buttonByText("Retag filtered eligible")?.trigger("click");
+    await flushPromises();
+
+    expect(updates.retagPlan).toBeNull();
+    expect(updates.retagChoices).toMatchObject({
+      "data/postgres": "switch-to-concrete",
+    });
+    expect(updates.retagChoices["media/app"]).toBeUndefined();
+    expect(wrapper.find(".retag-summary-strip").text()).toContain(
+      "Selected switches1",
+    );
+    expect(createRetagPlan).not.toHaveBeenCalled();
+    expect(applyRetagPlan).not.toHaveBeenCalled();
+
+    updates.retagPlan = retagPlanResponse();
+    await wrapper.find('input[aria-label="Search retag targets"]').setValue("");
+    await buttonByText("Retag all eligible")?.trigger("click");
+    await flushPromises();
+
+    expect(updates.retagPlan).toBeNull();
+    expect(updates.retagChoices).toMatchObject({
+      "media/app": "switch-to-concrete",
+      "data/postgres": "switch-to-concrete",
+      "media/radarr": "keep-current",
+    });
+    expect(wrapper.find(".retag-summary-strip").text()).toContain(
+      "Selected switches2",
+    );
+
+    await buttonByText("Keep all")?.trigger("click");
+    await flushPromises();
+
+    expect(updates.retagChoices).toMatchObject({
+      "media/app": "keep-current",
+      "data/postgres": "keep-current",
+      "media/radarr": "keep-current",
+    });
+    expect(wrapper.find(".retag-summary-strip").text()).toContain(
+      "Selected switches0",
+    );
+    expect(createRetagPlan).not.toHaveBeenCalled();
+    expect(applyRetagPlan).not.toHaveBeenCalled();
+  });
+
   it("shows preview start failures in the review modal", async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
@@ -144,6 +287,60 @@ describe("RetagsView", () => {
       .find((button) => button.text().includes("Apply selected retags"));
     expect(applyButton?.attributes("disabled")).toBeDefined();
   });
+
+  it.each([
+    [
+      "duplicate service choices",
+      "422: retag choices contain duplicate service(s): media/app",
+    ],
+    [
+      "missing target identity",
+      "422: retag choices for duplicate service(s) must include target_id: media/app",
+    ],
+  ])(
+    "shows duplicate retag service recovery guidance with affected rows for %s",
+    async (_label, previewError) => {
+      const pinia = createPinia();
+      setActivePinia(pinia);
+      const auth = useAuthStore();
+      auth.session = authSession({ mutations_enabled: true });
+      const updates = useUpdatesStore();
+      updates.retagTargets = retagTargetsResponse([
+        retagTarget(),
+        retagTarget({
+          image: "repo/app:latest-staging",
+          directory: "/docker/media-staging",
+          project_directory: "/docker/media-staging",
+        }),
+      ]);
+      vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+      vi.spyOn(updates, "createRetagPlan").mockImplementation(async () => {
+        updates.error = previewError;
+        throw new Error(updates.error);
+      });
+
+      const wrapper = mountWithApp(RetagsView, { pinia });
+      await flushPromises();
+
+      await wrapper
+        .findAll("button")
+        .find((button) => button.text().includes("Preview retag changes"))
+        ?.trigger("click");
+      await flushPromises();
+
+      const text = wrapper.text();
+      expect(text).toContain("Duplicate service key: media/app.");
+      expect(text).toContain(
+        "Retag preview stopped because 2 discovered targets share this Compose project/service identity.",
+      );
+      expect(text).toContain(
+        "Keep only one target for this key, or update Compose so each project/service pair is unique",
+      );
+      expect(text).toContain("/docker/media/docker-compose.yml");
+      expect(text).toContain("/docker/media-staging/docker-compose.yml");
+      expect(text).toContain("repo/app:latest-staging");
+    },
+  );
 
   it("lets fallback rows retag with a manually entered target tag", async () => {
     const pinia = createPinia();
@@ -219,6 +416,7 @@ describe("RetagsView", () => {
     updates.retagTargets = retagTargetsResponse();
     updates.retagPlan = retagPlanResponse();
     vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    const setRetagChoicesForItems = vi.spyOn(updates, "setRetagChoicesForItems");
     const applyRetagPlan = vi.spyOn(updates, "applyRetagPlan").mockResolvedValue(
       applyJobResponse({ job_id: "blocked-retag-job" }),
     );
@@ -233,6 +431,23 @@ describe("RetagsView", () => {
     const applyButton = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Apply selected retags"));
+    const retagAllButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Retag all eligible"));
+    const retagFilteredButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Retag filtered eligible"));
+    const keepAllButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Keep all"));
+    expect(retagAllButton?.attributes("disabled")).toBeDefined();
+    expect(retagFilteredButton?.attributes("disabled")).toBeDefined();
+    expect(keepAllButton?.attributes("disabled")).toBeDefined();
+    await retagAllButton?.trigger("click");
+    await retagFilteredButton?.trigger("click");
+    await keepAllButton?.trigger("click");
+    await flushPromises();
+    expect(setRetagChoicesForItems).not.toHaveBeenCalled();
     expect(applyButton).toBeDefined();
     expect(applyButton?.attributes("disabled")).toBeDefined();
     await applyButton?.trigger("click");

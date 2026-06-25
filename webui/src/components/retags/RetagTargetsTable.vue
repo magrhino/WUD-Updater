@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, h } from "vue";
 import {
+  NButton,
   NDataTable,
   NInput,
   NRadioButton,
@@ -15,11 +16,16 @@ import {
   displayDigest,
 } from "../../utils/digestProvenance";
 import {
-  canChooseRetagTarget,
   canEnableRetagTargetChoice,
+  canShowRetagOnlyAction,
   canSwitchToConcrete,
   emitRetagChoice,
+  emitRetagOnly,
   retagChoice,
+  retagOnlyActionDisabled,
+  retagOnlyActionTitle,
+  retagTargetIdentity,
+  retagTargetChoiceTitle,
   retagTargetTagValidationError,
   retagTargetTagValue,
 } from "./retagChoices";
@@ -44,6 +50,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   "choice-update": [item: RetagTargetItem, choice: RetagTargetChoice];
+  "retag-only": [item: RetagTargetItem];
   "target-tag-update": [item: RetagTargetItem, tag: string];
 }>();
 
@@ -57,6 +64,87 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
         h("strong", row.service_key),
         h("span", `${row.stack} / ${row.service}`),
       ]),
+  },
+  {
+    title: "Choice",
+    key: "choices",
+    minWidth: 190,
+    render: (row) => {
+      return h("div", { class: "retag-choice-cell retag-choice-action-cell" }, [
+        canShowRetagOnlyAction(row, props.targetTags)
+          ? h(
+              NButton,
+              {
+                class: "retag-one-service-button",
+                size: "small",
+                secondary: true,
+                type: "primary",
+                disabled: retagOnlyActionDisabled(
+                  row,
+                  props.targetTags,
+                  props.mutationDisabled,
+                ),
+                title: retagOnlyActionTitle(
+                  row,
+                  props.targetTags,
+                  props.mutationDisabled,
+                  props.mutationNotice,
+                ),
+                "aria-label": `Retag only ${row.service_key}`,
+                onClick: () =>
+                  emitRetagOnly(
+                    emit,
+                    row,
+                    props.targetTags,
+                    props.mutationDisabled,
+                  ),
+              },
+              { default: () => "Retag this service" },
+            )
+          : null,
+        h(
+          NRadioGroup,
+          {
+            value: retagChoice(row, props.choices, props.targetTags),
+            size: "small",
+            "aria-label": `Retag choice for ${row.service_key}`,
+            onUpdateValue: (value: string) =>
+              emitRetagChoice(emit, row, value, props.targetTags),
+          },
+          {
+            default: () => [
+              h(
+                NRadioButton,
+                { value: "keep-current" },
+                { default: () => "Keep" },
+              ),
+              h(
+                NRadioButton,
+                {
+                  value: "switch-to-concrete",
+                  disabled:
+                    !canEnableRetagTargetChoice(row, props.targetTags) ||
+                    props.mutationDisabled,
+                  title: retagTargetChoiceTitle(
+                    row,
+                    props.targetTags,
+                    props.mutationNotice,
+                  ),
+                },
+                { default: () => "Retag" },
+              ),
+            ],
+          },
+        ),
+        canSwitchToConcrete(row)
+          ? h(
+              NTag,
+              { size: "small", type: "info", bordered: false },
+              { default: () => "Automatch ready" },
+            )
+          : null,
+      ]);
+    },
   },
   {
     title: "Current image",
@@ -164,63 +252,10 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
       ]);
     },
   },
-  {
-    title: "Choice",
-    key: "choices",
-    minWidth: 230,
-    render: (row) => {
-      const canChooseTarget = canChooseRetagTarget(row, props.targetTags);
-      const targetError = canChooseTarget
-        ? retagTargetTagValidationError(row, props.targetTags)
-        : "";
-      return h("div", { class: "retag-choice-cell" }, [
-        h(
-          NRadioGroup,
-          {
-            value: retagChoice(row, props.choices, props.targetTags),
-            size: "small",
-            onUpdateValue: (value: string) =>
-              emitRetagChoice(emit, row, value, props.targetTags),
-          },
-          {
-            default: () => [
-              h(
-                NRadioButton,
-                { value: "keep-current" },
-                { default: () => "Keep" },
-              ),
-              h(
-                NRadioButton,
-                {
-                  value: "switch-to-concrete",
-                  disabled:
-                    !canEnableRetagTargetChoice(row, props.targetTags) ||
-                    props.mutationDisabled,
-                  title: targetError
-                    ? targetError
-                    : canChooseTarget
-                      ? props.mutationNotice
-                      : "Enter a target tag before retagging.",
-                },
-                { default: () => "Retag" },
-              ),
-            ],
-          },
-        ),
-        canSwitchToConcrete(row)
-          ? h(
-              NTag,
-              { size: "small", type: "info", bordered: false },
-              { default: () => "Automatch ready" },
-            )
-          : null,
-      ]);
-    },
-  },
 ]);
 
 function rowKey(row: RetagTargetItem): string {
-  return row.service_key;
+  return retagTargetIdentity(row);
 }
 </script>
 
@@ -244,6 +279,16 @@ function rowKey(row: RetagTargetItem): string {
 
 .retag-target-tag-cell {
   align-items: stretch;
+}
+
+.retag-choice-action-cell {
+  align-items: flex-start;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.retag-one-service-button {
+  max-width: 100%;
 }
 
 .retag-input-error {

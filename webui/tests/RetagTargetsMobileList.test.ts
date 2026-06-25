@@ -71,6 +71,17 @@ describe("RetagTargetsMobileList", () => {
         .element.value,
     ).toBe("1.1");
 
+    const retagOnlyButton = wrapper.get(
+      'button[aria-label="Retag only media/app"]',
+    );
+    expect(retagOnlyButton.text()).toBe("Retag this service");
+    expect(retagOnlyButton.attributes("disabled")).toBeUndefined();
+    expect(retagOnlyButton.attributes("title")).toBe(
+      "Select only media/app for retag preview.",
+    );
+    await retagOnlyButton.trigger("click");
+    expect(wrapper.emitted("retag-only")).toEqual([[item]]);
+
     await switchInput.setValue();
 
     expect(wrapper.emitted("choice-update")).toEqual([
@@ -117,7 +128,14 @@ describe("RetagTargetsMobileList", () => {
     expect(switchInputs[1].attributes("title")).toBe(
       "Enter a target tag before retagging.",
     );
+    const retagOnlyButtons = wrapper.findAll("button");
+    expect(retagOnlyButtons).toHaveLength(1);
+    expect(retagOnlyButtons[0].attributes("disabled")).toBeDefined();
+    expect(retagOnlyButtons[0].attributes("title")).toBe(
+      "Read-only mode keeps retag switch/apply disabled.",
+    );
     expect(wrapper.emitted("choice-update")).toBeUndefined();
+    expect(wrapper.emitted("retag-only")).toBeUndefined();
   });
 
   it("enables manual fallback rows after a target tag is supplied", async () => {
@@ -185,6 +203,11 @@ describe("RetagTargetsMobileList", () => {
     );
     expect(switchInput.attributes("disabled")).toBeDefined();
     expect(switchInput.attributes("title")).toContain("invalid target tag");
+    const retagOnlyButton = wrapper.get(
+      'button[aria-label="Retag only media/radarr"]',
+    );
+    expect(retagOnlyButton.attributes("disabled")).toBeDefined();
+    expect(retagOnlyButton.attributes("title")).toContain("invalid target tag");
     expect(wrapper.text()).toContain("media/radarr has an invalid target tag");
   });
 });
