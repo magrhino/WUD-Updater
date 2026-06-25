@@ -305,6 +305,10 @@ describe("RetagsView", () => {
       "missing target identity",
       "422: retag choices for duplicate service(s) must include target_id: media/app",
     ],
+    [
+      "duplicate target choices",
+      "422: retag choices contain duplicate target(s): media/app (media/app)",
+    ],
   ])(
     "shows duplicate retag service recovery guidance with affected rows for %s",
     async (_label, previewError) => {

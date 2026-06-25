@@ -56,6 +56,7 @@ type RetagDuplicateServiceConflict = {
 
 const DUPLICATE_RETAG_CHOICES_PREFIXES = [
   "retag choices contain duplicate service(s):",
+  "retag choices contain duplicate target(s):",
   "retag choices for duplicate service(s) must include target_id:",
 ];
 
@@ -320,6 +321,7 @@ function duplicateServiceKeysFromError(error: string): string[] {
     .slice(match.index + match.prefix.length)
     .split(",")
     .map((serviceKey) => serviceKey.trim())
+    .map((serviceKey) => serviceKey.replace(/\s+\([^)]+\)$/, ""))
     .filter(Boolean);
 }
 
