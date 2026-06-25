@@ -1009,9 +1009,15 @@ def _github_latest_fallback_target_labels(
     stacks: Sequence[ComposeStack],
     known_by_service: Mapping[str, web_database.KnownDigestState],
 ) -> dict[str, str]:
+    rows = _github_latest_fallback_targets(stacks, known_by_service)
+    service_counts = Counter(row.service_key for row in rows)
     return {
-        row.target_id: row.service_key
-        for row in _github_latest_fallback_targets(stacks, known_by_service)
+        row.target_id: (
+            row.service_key
+            if service_counts[row.service_key] == 1
+            else f"{row.service_key} ({row.target_id})"
+        )
+        for row in rows
     }
 
 
@@ -2045,7 +2051,7 @@ def _finish_retag_audit_run(
                     and not item.known_image_service_key_ambiguous
                 ),
             }
-            if item.known_image_service_key_ambiguous:
+            if item_status == "success" and item.known_image_service_key_ambiguous:
                 event_metadata["known_image_skip_reason"] = (
                     "duplicate service_key"
                 )

@@ -21,13 +21,16 @@ from tests.web_test_helpers import (
     _wait_apply_job,
 )
 from wudup.compose import ComposeStack, ServiceImage
+from wudup.config import UpdaterConfig
 from wudup.db import init_db, open_db, upsert_known_image
 from wudup.digest_verifier import DigestResolveResult
 from wudup.digest_provenance import DigestTagProvenance
 from wudup.release_notes import ReleaseNoteInfo
+from wudup.updater_digest_pin import digest_pin_update_from_values
 from wudup import web_database
 from wudup import web_retags as web_retags_module
-from wudup.web_models import WebApplyJob
+from wudup.web_models import RetagPlanResponse, WebApplyJob, WebSettings
+from wudup.web_retag_plans import RetagPlanBuild, RetagPlanUpdate
 
 
 @dataclass(frozen=True)
@@ -680,6 +683,63 @@ def test_retag_github_latest_fallback_keys_duplicate_services_by_target_id(
         ("ghcr.io/acme/worker:latest", "v3.4.0", worker_digest),
     }
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_retag_github_latest_fallback_labels_duplicate_services_by_target_id(
+    tmp_path: Path,
+) -> None:
+    first_dir = tmp_path / "docker" / "one" / "stack"
+    second_dir = tmp_path / "docker" / "two" / "stack"
+    stacks = [
+        ComposeStack(
+            index=1,
+            directory=first_dir,
+            file="docker-compose.yml",
+            name="stack",
+            images=("ghcr.io/acme/app:latest",),
+            service_images=(
+                ServiceImage("app", "ghcr.io/acme/app:latest"),
+            ),
+        ),
+        ComposeStack(
+            index=2,
+            directory=second_dir,
+            file="docker-compose.yml",
+            name="stack",
+            images=("ghcr.io/acme/worker:latest",),
+            service_images=(
+                ServiceImage("app", "ghcr.io/acme/worker:latest"),
+            ),
+        ),
+        ComposeStack(
+            index=3,
+            directory=tmp_path / "docker" / "solo",
+            file="docker-compose.yml",
+            name="solo",
+            images=("ghcr.io/acme/solo:latest",),
+            service_images=(
+                ServiceImage("app", "ghcr.io/acme/solo:latest"),
+            ),
+        ),
+    ]
+
+    labels = web_retags_module._github_latest_fallback_target_labels(stacks, {})
+    first_target_id = web_retags_module._retag_target_id(
+        stacks[0],
+        stacks[0].service_images[0],
+    )
+    second_target_id = web_retags_module._retag_target_id(
+        stacks[1],
+        stacks[1].service_images[0],
+    )
+    solo_target_id = web_retags_module._retag_target_id(
+        stacks[2],
+        stacks[2].service_images[0],
+    )
+
+    assert labels[first_target_id] == f"stack/app ({first_target_id})"
+    assert labels[second_target_id] == f"stack/app ({second_target_id})"
+    assert labels[solo_target_id] == "solo/app"
 
 
 def test_retag_github_latest_fallback_requires_matching_cache_info_count(
@@ -2031,6 +2091,81 @@ def test_retag_apply_records_partial_stack_success_when_later_stack_fails(
     ]
 
 
+def test_retag_failure_audit_keeps_ambiguous_known_image_skip_reason_off_failures(
+    tmp_path: Path,
+) -> None:
+    settings = _audit_settings(tmp_path)
+    stack = ComposeStack(
+        index=1,
+        directory=tmp_path / "docker" / "stack",
+        file="docker-compose.yml",
+        name="stack",
+        images=("repo/app@sha256:old",),
+        service_images=(
+            ServiceImage("app", "repo/app@sha256:old"),
+        ),
+    )
+    provenance = DigestTagProvenance(
+        source_image="repo/app:latest",
+        resolved_tag="2.0",
+        watch_tag="latest",
+        target_digest="sha256:old",
+        final_image="repo/app@sha256:old",
+        provenance_source="apply",
+        provenance_confidence="verified",
+    )
+    update = RetagPlanUpdate(
+        target_id="target-one",
+        service_key="stack/app",
+        stack=stack,
+        update=digest_pin_update_from_values(
+            old_image="repo/app@sha256:old",
+            resolved_tag="2.0",
+            planned_digest="sha256:old",
+            services=("app",),
+        ),
+        provenance=provenance,
+        known_image_service_key_ambiguous=True,
+    )
+    build = RetagPlanBuild(
+        response=RetagPlanResponse(
+            plan_id="plan-one",
+            status="ready",
+            can_apply=True,
+            selected_count=1,
+        ),
+        updates=(update,),
+    )
+    run_id = web_retags_module._insert_retag_audit_run(
+        settings,
+        build,
+        status="running",
+    )
+
+    web_retags_module._finish_retag_audit_run(
+        settings,
+        run_id,
+        build,
+        status="failure",
+        error="pull failed",
+    )
+
+    with open_db(settings.config.db_path) as conn:
+        event = conn.execute(
+            """
+            SELECT status, metadata_json
+            FROM update_events
+            WHERE run_id = ?
+            """,
+            (run_id,),
+        ).fetchone()
+
+    assert event["status"] == "failure"
+    metadata = json.loads(event["metadata_json"])
+    assert metadata["known_image_recorded"] is False
+    assert "known_image_skip_reason" not in metadata
+
+
 def test_retag_apply_redacts_rollback_failure_paths(tmp_path: Path) -> None:
     fixture = _make_retag_fixture(
         tmp_path,
@@ -2276,6 +2411,29 @@ def _make_retag_fixture(
         final_image="repo/app@sha256:old",
     )
     return _RetagFixture(client=client, compose_dir=compose_dir, fake_root=fake_root)
+
+
+def _audit_settings(tmp_path: Path) -> WebSettings:
+    root = tmp_path / "state"
+    root.mkdir(exist_ok=True)
+    return WebSettings(
+        config=UpdaterConfig(
+            docker_base=tmp_path / "docker",
+            wud_out_file=root / "images.todo",
+            log_dir=root / "logs",
+            db_path=root / "wud.sqlite",
+            update_mode="live",
+            max_wait=0,
+            lock_timeout=0,
+            timezone_name="UTC",
+            compose_ignore_paths=(),
+            digest_pin_updates=False,
+            out_uid=None,
+            out_gid=None,
+        ),
+        auth_token="",
+        mutations_enabled=True,
+    )
 
 
 def _switch_choice(

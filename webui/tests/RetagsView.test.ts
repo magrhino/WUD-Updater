@@ -148,11 +148,11 @@ describe("RetagsView", () => {
         },
       }),
     ];
-    updates.retagTargets = retagTargetsResponse(retagItems);
-    updates.setRetagChoice("media/app", "switch-to-concrete");
-    updates.setRetagChoice("media/radarr", "switch-to-concrete");
     const appTarget = retagItems[0];
     const radarrTarget = retagItems[1];
+    updates.retagTargets = retagTargetsResponse(retagItems);
+    updates.setRetagChoice(appTarget.target_id, "switch-to-concrete");
+    updates.setRetagChoice(radarrTarget.target_id, "switch-to-concrete");
     vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
     const setRetagChoice = vi.spyOn(updates, "setRetagChoice");
     const setRetagOnlyChoice = vi.spyOn(updates, "setRetagOnlyChoice");
@@ -443,6 +443,10 @@ describe("RetagsView", () => {
     updates.retagTargets = retagTargetsResponse();
     updates.retagPlan = retagPlanResponse();
     vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    const setRetagGithubLatestFallback = vi.spyOn(
+      updates,
+      "setRetagGithubLatestFallback",
+    );
     const setRetagChoicesForItems = vi.spyOn(updates, "setRetagChoicesForItems");
     const applyRetagPlan = vi.spyOn(updates, "applyRetagPlan").mockResolvedValue(
       applyJobResponse({ job_id: "blocked-retag-job" }),
@@ -470,14 +474,20 @@ describe("RetagsView", () => {
     const refreshButton = wrapper.get(
       'button[aria-label="Refresh GitHub latest candidates"]',
     );
+    const githubLatestFallbackSwitch = wrapper.get(
+      'input[aria-label="Use cached GitHub latest fallback"]',
+    );
     expect(retagAllButton?.attributes("disabled")).toBeDefined();
     expect(retagFilteredButton?.attributes("disabled")).toBeDefined();
     expect(keepAllButton?.attributes("disabled")).toBeDefined();
     expect(refreshButton.attributes("disabled")).toBeDefined();
+    expect(githubLatestFallbackSwitch.attributes("disabled")).toBeDefined();
+    await githubLatestFallbackSwitch.setValue(true);
     await retagAllButton?.trigger("click");
     await retagFilteredButton?.trigger("click");
     await keepAllButton?.trigger("click");
     await flushPromises();
+    expect(setRetagGithubLatestFallback).not.toHaveBeenCalled();
     expect(setRetagChoicesForItems).not.toHaveBeenCalled();
     expect(applyButton).toBeDefined();
     expect(applyButton?.attributes("disabled")).toBeDefined();

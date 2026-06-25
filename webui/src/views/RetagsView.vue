@@ -370,6 +370,9 @@ async function previewRetagChanges(): Promise<void> {
 }
 
 async function onGithubLatestFallbackUpdate(enabled: boolean): Promise<void> {
+  if (updates.loading || retagMutationDisabled.value) {
+    return;
+  }
   await updates.setRetagGithubLatestFallback(enabled).catch(() => undefined);
 }
 
@@ -573,7 +576,7 @@ onMounted(() => {
             <n-switch
               id="github-latest-fallback-switch"
               :value="updates.retagGithubLatestFallback"
-              :disabled="updates.loading"
+              :disabled="updates.loading || retagMutationDisabled"
               aria-label="Use cached GitHub latest fallback"
               @update:value="onGithubLatestFallbackUpdate"
             />
