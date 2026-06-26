@@ -1243,6 +1243,27 @@ describe("connection store focused coverage", () => {
     expect(updates.releaseNotificationError).toBe("");
   });
 
+  it("clears stale release notification previews when preview fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ detail: "preview failed" }, 503)),
+    );
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-release");
+    const updates = useUpdatesStore();
+    updates.releaseNotification = releaseNotificationResponse({ sendable_count: 2 });
+
+    await expect(
+      updates.previewReleaseNotifications({ line_numbers: [1] }),
+    ).rejects.toMatchObject({
+      message: "preview failed",
+    });
+
+    expect(updates.releaseNotification).toBeNull();
+    expect(updates.releaseNotificationError).toBe("preview failed");
+    expect(updates.releaseNotificationLoading).toBe(false);
+  });
+
   it("surfaces release note errors without changing main loading state", async () => {
     vi.stubGlobal(
       "fetch",

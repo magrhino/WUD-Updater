@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import urllib.error
 import urllib.request
@@ -45,6 +46,7 @@ DISCORD_EMBED_DESCRIPTION_LIMIT = 4096
 DISCORD_WEBHOOK_TIMEOUT_SECONDS = 10.0
 DISCORD_WEBHOOK_USER_AGENT = "wudup-webui-release-notifications/1.0"
 DISCORD_COLOR = 0x57F287
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -79,42 +81,69 @@ def api_send_release_notifications(
     settings = _settings(request)
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
-    response = _notification_response(settings, payload, sent=False)
-    if not response.enabled:
+    if not effective_release_notes_enabled(settings):
         raise HTTPException(
             status_code=403,
             detail="release-note notifications are disabled",
         )
-    if not response.destination.configured:
+    webhook = _discord_webhook(settings)
+    if not webhook.value:
         raise HTTPException(
             status_code=422,
             detail="Discord release-note webhook is not configured",
         )
+
+    response = _notification_response(settings, payload, sent=False)
     if response.sendable_count <= 0:
         raise HTTPException(
             status_code=422,
             detail="no release-note notifications are available to send",
         )
 
-    webhook = _discord_webhook(settings)
-    assert webhook.value
+    audit_run_id = 0
+    sent_batch_count = 0
+    sent_count = 0
     try:
-        for batch in response.batches:
-            _post_discord_payload(webhook.value, batch["payload"])
-        audit_run_id = _insert_release_notification_audit(
+        audit_run_id = _insert_release_notification_audit_start(
             settings,
             request,
             payload,
             response,
         )
+        for batch in response.batches:
+            _post_discord_payload(webhook.value, batch["payload"])
+            sent_batch_count += 1
+            sent_count += int(batch.get("count") or 0)
+        _finish_release_notification_audit(
+            settings,
+            audit_run_id,
+            response,
+            request=request,
+            payload=payload,
+            status="success",
+            sent_count=sent_count,
+            sent_batch_count=sent_batch_count,
+        )
     except (OSError, urllib.error.HTTPError, sqlite3.Error, DatabaseError) as exc:
+        detail = _safe_exception_detail(
+            settings,
+            "could not send Discord release-note notifications",
+            exc,
+        )
+        if audit_run_id:
+            _safe_finish_release_notification_audit_failure(
+                settings,
+                audit_run_id,
+                response,
+                request=request,
+                payload=payload,
+                error=detail,
+                sent_count=sent_count,
+                sent_batch_count=sent_batch_count,
+            )
         raise HTTPException(
             status_code=500,
-            detail=_safe_exception_detail(
-                settings,
-                "could not send Discord release-note notifications",
-                exc,
-            ),
+            detail=detail,
         ) from exc
     return response.model_copy(update={"sent": True, "audit_run_id": audit_run_id})
 
@@ -253,6 +282,7 @@ def _run_notification_source(settings: WebSettings, run_id: int) -> _Notificatio
                 SELECT *
                 FROM pending_updates
                 WHERE run_id = ?
+                  AND status = 'resolved'
                 ORDER BY line_no, id
                 """,
                 (run_id,),
@@ -365,7 +395,7 @@ def _notification_items(
                     f"Line {target.target.line_no} WUD triggers unavailable: "
                     f"{trigger_warning}"
                 )
-        title, description = _notification_copy(target, note, triggers)
+        title, description = _notification_copy(settings, target, note, triggers)
         items.append(
             ReleaseNotificationItem(
                 line_no=target.target.line_no,
@@ -395,6 +425,7 @@ def _release_note_links(note: ReleaseNoteInfo) -> list[ReleaseNoteLink]:
 
 
 def _notification_copy(
+    settings: WebSettings,
     target: _NotificationTarget,
     note: ReleaseNoteInfo,
     triggers: Sequence[ReleaseNotificationTrigger],
@@ -418,7 +449,8 @@ def _notification_copy(
     elif note.status == "missing":
         lines.append("Release metadata was not cached before this notification.")
     elif note.error:
-        lines.append(f"Release-note status: {note.error}")
+        error = _redact_sensitive_text(settings, note.error)
+        lines.append(f"Release-note status: {error or note.status}")
     else:
         lines.append(f"Release-note status: {note.status}")
     if note.breaking:
@@ -546,33 +578,22 @@ def _post_discord_payload(webhook_url: str, payload: Mapping[str, object]) -> No
             )
 
 
-def _insert_release_notification_audit(
+def _insert_release_notification_audit_start(
     settings: WebSettings,
     request: Request,
     payload: ReleaseNotificationPreviewRequest,
     response: ReleaseNotificationResponse,
 ) -> int:
     now = utc_timestamp()
-    target: dict[str, object] = {}
-    if payload.run_id is not None:
-        target["run_id"] = payload.run_id
-    else:
-        target["line_numbers"] = list(payload.line_numbers)
-    metadata = {
-        "source": "webui",
-        "operation": "send_release_notifications",
-        "actor_type": _request_actor_type(settings, request),
-        "resource_type": "release_notifications",
-        "resource_id": "discord",
-        "target": target,
-        "destination": {
-            "type": response.destination.type,
-            "source": response.destination.source,
-        },
-        "sent_count": response.sendable_count,
-        "skipped_count": response.skipped_count,
-        "batch_count": len(response.batches),
-    }
+    metadata = _release_notification_audit_metadata(
+        settings,
+        request,
+        payload,
+        response,
+        status="running",
+        sent_count=0,
+        sent_batch_count=0,
+    )
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
         with conn:
@@ -588,16 +609,54 @@ def _insert_release_notification_audit(
                     log_file,
                     metadata_json
                 )
-                VALUES (?, ?, 'success', 0, 'web-release-notifications', ?, '', ?)
+                VALUES (?, NULL, 'running', 0, 'web-release-notifications', ?, '', ?)
                 """,
                 (
-                    now,
                     now,
                     response.source_file or str(settings.config.wud_out_file),
                     json_object(metadata),
                 ),
             )
-            run_id = int(cursor.lastrowid)
+            return int(cursor.lastrowid)
+
+
+def _finish_release_notification_audit(
+    settings: WebSettings,
+    run_id: int,
+    response: ReleaseNotificationResponse,
+    *,
+    request: Request,
+    payload: ReleaseNotificationPreviewRequest,
+    status: str,
+    sent_count: int,
+    sent_batch_count: int,
+    error: str = "",
+) -> None:
+    now = utc_timestamp()
+    metadata = _release_notification_audit_metadata(
+        settings,
+        request,
+        payload,
+        response,
+        status=status,
+        sent_count=sent_count,
+        sent_batch_count=sent_batch_count,
+        error=error,
+    )
+    with open_db(settings.config.db_path) as conn:
+        init_db(conn)
+        with conn:
+            conn.execute(
+                """
+                UPDATE update_runs
+                SET finished_at = ?,
+                    status = ?,
+                    metadata_json = ?
+                WHERE id = ?
+                  AND mode = 'web-release-notifications'
+                """,
+                (now, status, json_object(metadata), run_id),
+            )
             conn.execute(
                 """
                 INSERT INTO update_events (
@@ -610,15 +669,80 @@ def _insert_release_notification_audit(
                     status,
                     metadata_json
                 )
-                VALUES (?, ?, 'release-notes', 'webui', 'discord', 'discord', 'success', ?)
+                VALUES (?, ?, 'release-notes', 'webui', 'discord', 'discord', ?, ?)
                 """,
                 (
                     run_id,
                     now,
+                    status,
                     json_object({**metadata, "items": _audit_items(response.items)}),
                 ),
             )
-    return run_id
+
+
+def _safe_finish_release_notification_audit_failure(
+    settings: WebSettings,
+    run_id: int,
+    response: ReleaseNotificationResponse,
+    *,
+    request: Request,
+    payload: ReleaseNotificationPreviewRequest,
+    error: str,
+    sent_count: int,
+    sent_batch_count: int,
+) -> None:
+    try:
+        _finish_release_notification_audit(
+            settings,
+            run_id,
+            response,
+            request=request,
+            payload=payload,
+            status="failure",
+            sent_count=sent_count,
+            sent_batch_count=sent_batch_count,
+            error=error,
+        )
+    except (OSError, sqlite3.Error, DatabaseError):
+        LOGGER.exception("failed to finalize Discord release-note notification audit")
+
+
+def _release_notification_audit_metadata(
+    settings: WebSettings,
+    request: Request,
+    payload: ReleaseNotificationPreviewRequest,
+    response: ReleaseNotificationResponse,
+    *,
+    status: str,
+    sent_count: int,
+    sent_batch_count: int,
+    error: str = "",
+) -> dict[str, object]:
+    target: dict[str, object] = {}
+    if payload.run_id is not None:
+        target["run_id"] = payload.run_id
+    else:
+        target["line_numbers"] = list(payload.line_numbers)
+    metadata: dict[str, object] = {
+        "source": "webui",
+        "operation": "send_release_notifications",
+        "actor_type": _request_actor_type(settings, request),
+        "resource_type": "release_notifications",
+        "resource_id": "discord",
+        "status": status,
+        "target": target,
+        "destination": {
+            "type": response.destination.type,
+            "source": response.destination.source,
+        },
+        "sent_count": sent_count,
+        "skipped_count": response.skipped_count,
+        "batch_count": len(response.batches),
+        "sent_batch_count": sent_batch_count,
+    }
+    if error:
+        metadata["error"] = error
+    return metadata
 
 
 def _audit_items(items: Sequence[ReleaseNotificationItem]) -> list[dict[str, object]]:

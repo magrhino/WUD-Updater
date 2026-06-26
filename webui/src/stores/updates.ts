@@ -393,6 +393,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     const auth = useAuthStore();
     releaseNotificationLoading.value = true;
     releaseNotificationError.value = "";
+    releaseNotification.value = null;
     try {
       releaseNotification.value = await webApi.previewReleaseNotifications(
         source,

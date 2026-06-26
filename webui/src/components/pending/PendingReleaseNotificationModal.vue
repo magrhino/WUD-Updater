@@ -6,6 +6,7 @@ import type { ReleaseNotificationResponse } from "../../api/client";
 import { pluralize } from "../../views/pending/utils";
 
 defineProps<{
+  error: string;
   loading: boolean;
   response: ReleaseNotificationResponse | null;
   sendDisabled: boolean;
@@ -58,14 +59,28 @@ function handleModalShowUpdate(value: boolean): void {
         Release-note notifications sent. Audit run #{{ response.audit_run_id }}.
       </n-alert>
       <n-alert
-        v-if="!response?.enabled"
+        v-if="error"
+        class="preflight-block"
+        type="warning"
+      >
+        Release-note notification is unavailable: {{ error }}
+      </n-alert>
+      <n-alert
+        v-if="!response && loading"
+        class="preflight-block"
+        type="info"
+      >
+        Preparing release-note notification preview.
+      </n-alert>
+      <n-alert
+        v-if="response && !response.enabled"
         class="preflight-block"
         type="warning"
       >
         Release-note notifications are disabled.
       </n-alert>
       <n-alert
-        v-else-if="!response?.destination.configured"
+        v-else-if="response && !response.destination.configured"
         class="preflight-block"
         type="warning"
       >
@@ -90,15 +105,32 @@ function handleModalShowUpdate(value: boolean): void {
       <section class="preflight-impact preflight-block" aria-labelledby="release-destination-title">
         <div class="preflight-impact-heading">
           <strong id="release-destination-title">Destination</strong>
-          <n-tag size="small" :type="response?.destination.configured ? 'success' : 'warning'">
-            {{ response?.destination.configured ? "Configured" : "Missing" }}
+          <n-tag
+            size="small"
+            :type="
+              response
+                ? (response.destination.configured ? 'success' : 'warning')
+                : 'default'
+            "
+          >
+            {{
+              response
+                ? (response.destination.configured ? "Configured" : "Missing")
+                : "Preview pending"
+            }}
           </n-tag>
         </div>
         <div class="compact-list">
           <div class="list-row">
             <span>Discord</span>
-            <strong>{{ response?.destination.source || "Webhook not configured" }}</strong>
-            <em>{{ response?.batches.length ?? 0 }} Discord message batch(es)</em>
+            <strong>
+              {{
+                response
+                  ? (response.destination.source || "Webhook not configured")
+                  : "Preview not loaded"
+              }}
+            </strong>
+            <em>{{ response ? response.batches.length : 0 }} Discord message batch(es)</em>
           </div>
         </div>
       </section>

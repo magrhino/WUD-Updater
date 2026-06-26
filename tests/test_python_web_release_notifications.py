@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import urllib.error
 from pathlib import Path
 
 from wudup import web_release_notifications as notifications_module
@@ -215,7 +216,10 @@ def test_release_notification_send_requires_webhook(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _fake_release_refresh(monkeypatch)
+    def fail_refresh(*_args, **_kwargs):
+        raise AssertionError("release metadata should not refresh without webhook")
+
+    monkeypatch.setattr(notifications_module, "refresh_release_notes", fail_refresh)
     client = _client(
         tmp_path,
         {
@@ -271,7 +275,27 @@ def test_release_notification_preview_uses_completed_run_source(
             image="ghcr.io/acme/app:1.0.0",
             desired_tag="2.0.0",
             service_key="media/app",
-            status="success",
+            status="resolved",
+        )
+        insert_pending_update(
+            conn,
+            run_id=run_id,
+            line_no=8,
+            raw="ghcr.io/acme/failed:1.0.0 tag=2.0.0",
+            image="ghcr.io/acme/failed:1.0.0",
+            desired_tag="2.0.0",
+            service_key="media/failed",
+            status="failed",
+        )
+        insert_pending_update(
+            conn,
+            run_id=run_id,
+            line_no=9,
+            raw="ghcr.io/acme/pending:1.0.0 tag=2.0.0",
+            image="ghcr.io/acme/pending:1.0.0",
+            desired_tag="2.0.0",
+            service_key="media/pending",
+            status="pending",
         )
 
     response = client.post(
@@ -283,8 +307,77 @@ def test_release_notification_preview_uses_completed_run_source(
     assert response.status_code == 200
     body = response.json()
     assert body["source_file"] == f"Run #{run_id}"
-    assert body["items"][0]["line_no"] == 7
+    assert [item["line_no"] for item in body["items"]] == [7]
     assert body["items"][0]["service_key"] == "media/app"
+
+
+def test_release_notification_preview_and_send_redact_cached_errors(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def fake_refresh_release_notes(
+        _conn,
+        targets,
+        _environ,
+        **_kwargs,
+    ):
+        return [
+            ReleaseNoteData(
+                line_no=target.line_no,
+                status="error",
+                provider="github",
+                image_repo="acme/app",
+                upstream_repo="acme/app",
+                error="GitHub lookup failed for https://discord.test/webhook-secret",
+            )
+            for target in targets
+        ]
+
+    posted: list[tuple[str, object]] = []
+
+    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
+        posted.append((webhook_url, payload))
+
+    monkeypatch.setattr(
+        notifications_module,
+        "refresh_release_notes",
+        fake_refresh_release_notes,
+    )
+    monkeypatch.setattr(
+        notifications_module,
+        "_post_discord_payload",
+        fake_post_discord_payload,
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_RELEASE_NOTES_ENABLED": "true",
+            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
+        },
+    )
+    (tmp_path / "state" / "images.todo").write_text(
+        "ghcr.io/acme/app:1.0.0 tag=2.0.0\n",
+        encoding="utf-8",
+    )
+
+    preview = client.post(
+        "/api/v1/release-notifications/preview",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    )
+    send = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "confirmation": "send-release-notes"},
+        headers=_csrf_headers(client),
+    )
+
+    assert preview.status_code == 200
+    assert send.status_code == 200
+    assert "Release-note status:" in preview.json()["items"][0]["description"]
+    assert "webhook-secret" not in preview.text
+    assert "webhook-secret" not in json.dumps([payload for _url, payload in posted])
 
 
 def test_release_notification_send_posts_discord_payload_and_audits(
@@ -400,3 +493,82 @@ def test_release_notification_send_batches_discord_embeds(
     assert body["sendable_count"] == 11
     assert [batch["count"] for batch in body["batches"]] == [10, 1]
     assert [len(payload["embeds"]) for _url, payload in posted] == [10, 1]
+
+
+def test_release_notification_send_audits_partial_discord_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _fake_release_refresh(monkeypatch)
+    posted: list[tuple[str, object]] = []
+
+    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
+        posted.append((webhook_url, payload))
+        if len(posted) == 2:
+            raise urllib.error.HTTPError(
+                webhook_url,
+                500,
+                "Discord webhook request failed webhook-secret",
+                {},
+                None,
+            )
+
+    monkeypatch.setattr(
+        notifications_module,
+        "_post_discord_payload",
+        fake_post_discord_payload,
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_RELEASE_NOTES_ENABLED": "true",
+            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
+        },
+    )
+    lines = [
+        f"ghcr.io/acme/app{i}:1.0.0 tag=2.0.0"
+        for i in range(1, 12)
+    ]
+    (tmp_path / "state" / "images.todo").write_text(
+        "\n".join(lines) + "\n",
+        encoding="utf-8",
+    )
+
+    response = client.post(
+        "/api/v1/release-notifications/send",
+        json={
+            "line_numbers": list(range(1, 12)),
+            "confirmation": "send-release-notes",
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 500
+    assert len(posted) == 2
+    assert "webhook-secret" not in response.text
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        run = conn.execute(
+            """
+            SELECT *
+            FROM update_runs
+            WHERE mode = 'web-release-notifications'
+            """,
+        ).fetchone()
+        event = conn.execute(
+            "SELECT * FROM update_events WHERE run_id = ?",
+            (run["id"],),
+        ).fetchone()
+
+    run_metadata = json.loads(run["metadata_json"])
+    event_metadata = json.loads(event["metadata_json"])
+    assert run["status"] == "failure"
+    assert event["status"] == "failure"
+    assert run_metadata["sent_count"] == 10
+    assert run_metadata["sent_batch_count"] == 1
+    assert run_metadata["batch_count"] == 2
+    assert event_metadata["items"][0]["line_no"] == 1
+    serialized = json.dumps({"run": run_metadata, "event": event_metadata})
+    assert "webhook-secret" not in serialized

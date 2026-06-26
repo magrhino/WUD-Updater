@@ -281,7 +281,9 @@ const applyJobReleaseNotificationsDisabled = computed(
 const releaseNotificationSendDisabledMessage = computed(() => {
   const response = updates.releaseNotification;
   if (!response) {
-    return "";
+    return updates.releaseNotificationLoading
+      ? ""
+      : "Preview release-note notifications before sending.";
   }
   if (response.sent) {
     return "Release-note notifications were sent.";
@@ -927,6 +929,7 @@ onMounted(() => {
     <PendingReleaseNotificationModal
       :show="showReleaseNotificationModal"
       :response="updates.releaseNotification"
+      :error="updates.releaseNotificationError"
       :loading="updates.releaseNotificationLoading"
       :send-disabled="releaseNotificationSendDisabled"
       :send-disabled-message="releaseNotificationSendDisabledMessage"
