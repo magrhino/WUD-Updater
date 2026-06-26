@@ -21,6 +21,7 @@ import type {
   PendingRescanResponse,
   PendingRescanScope,
   PlanResponse,
+  ReleaseNotificationSource,
   ReleaseNotificationResponse,
   ReleaseNotesResponse,
   RetagChoiceRequest,
@@ -700,7 +701,7 @@ export class DemoApiState {
   }
 
   releaseNotifications(
-    source: { line_numbers: number[] } | { run_id: number },
+    source: ReleaseNotificationSource,
     sent: boolean,
   ): ReleaseNotificationResponse {
     const releaseNotes = this.releaseNotes();

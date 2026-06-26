@@ -58,6 +58,7 @@ export type {
   ReleaseNotificationDestination,
   ReleaseNotificationTrigger,
   ReleaseNotificationItem,
+  ReleaseNotificationSource,
   ReleaseNotificationResponse,
   // Plans
   PlanStatus,
@@ -183,6 +184,7 @@ import type {
   PendingRescanResponse,
   PendingRemovalPlanResponse,
   ReleaseNotesResponse,
+  ReleaseNotificationSource,
   ReleaseNotificationResponse,
   ServicePolicyRecord,
   SnoozeState,
@@ -541,7 +543,7 @@ const updatesApi = {
       headers: { "x-wud-csrf-token": csrfToken },
     }),
   previewReleaseNotifications: (
-    source: { line_numbers: number[] } | { run_id: number },
+    source: ReleaseNotificationSource,
     csrfToken: string,
   ) =>
     apiRequest<ReleaseNotificationResponse>("/release-notifications/preview", {
@@ -550,7 +552,7 @@ const updatesApi = {
       body: JSON.stringify(source),
     }),
   sendReleaseNotifications: (
-    source: { line_numbers: number[] } | { run_id: number },
+    source: ReleaseNotificationSource,
     csrfToken: string,
   ) =>
     apiRequest<ReleaseNotificationResponse>("/release-notifications/send", {

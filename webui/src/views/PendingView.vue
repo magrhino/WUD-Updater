@@ -8,7 +8,7 @@ import {
   NTag,
 } from "naive-ui";
 
-import type { ReleaseNoteInfo } from "../api/client";
+import type { ReleaseNoteInfo, ReleaseNotificationSource } from "../api/client";
 import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
 import { useRouteRefresh } from "../components/app/routeRefresh";
 import PendingApplyJobPanel from "../components/pending/PendingApplyJobPanel.vue";
@@ -106,7 +106,6 @@ const {
 
 let clearPreflightHandler: () => void = () => undefined;
 let loadPendingAndReleaseNotesHandler: () => Promise<void> = async () => undefined;
-type ReleaseNotificationSource = { line_numbers: number[] } | { run_id: number };
 const showReleaseNotificationModal = ref(false);
 const releaseNotificationSource = ref<ReleaseNotificationSource | null>(null);
 

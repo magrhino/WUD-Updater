@@ -8,6 +8,7 @@ import type {
   PendingCleanupLine,
   PendingRescanLine,
   PendingRescanScope,
+  ReleaseNotificationSource,
   RetagChoiceRequest,
   SelfUpdateApplyResponse,
   SelfUpdatePlanResponse,
@@ -103,11 +104,11 @@ export function createDemoWebApi(): WebApi {
     releaseNotes: async () => state.releaseNotes(),
     refreshReleaseNotes: async (_csrfToken: string) => state.releaseNotes(),
     previewReleaseNotifications: async (
-      source: { line_numbers: number[] } | { run_id: number },
+      source: ReleaseNotificationSource,
       _csrfToken: string,
     ) => state.releaseNotifications(source, false),
     sendReleaseNotifications: async (
-      source: { line_numbers: number[] } | { run_id: number },
+      source: ReleaseNotificationSource,
       _csrfToken: string,
     ) => state.releaseNotifications(source, true),
     selfUpdate: async () => state.selfUpdate(),

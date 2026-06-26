@@ -443,6 +443,10 @@ export interface ReleaseNotificationItem {
   skipped_reason: string;
 }
 
+export type ReleaseNotificationSource =
+  | { line_numbers: number[] }
+  | { run_id: number };
+
 export interface ReleaseNotificationResponse {
   enabled: boolean;
   destination: ReleaseNotificationDestination;

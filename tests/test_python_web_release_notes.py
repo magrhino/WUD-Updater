@@ -46,8 +46,10 @@ def test_release_notes_get_is_disabled_by_default_without_creating_database(
     body = response.json()
     assert body["enabled"] is False
     assert body["disabled_reason"] == "Release-note notifications are disabled."
+    assert body["source"]["detail"] == "Release-note notifications are disabled."
     assert body["count"] == 0
     assert body["items"] == []
+    assert body["wud_api"]["detail"] == "Release-note notifications are disabled."
     assert not db_path.exists()
 
 

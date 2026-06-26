@@ -54,6 +54,7 @@ from .wud_file import WudTarget
 
 LOGGER = logging.getLogger(__name__)
 DOCKER_STDERR_LOG_LIMIT = 500
+RELEASE_NOTES_DISABLED_DETAIL = "Release-note notifications are disabled."
 SourceLabelReader = Callable[[str], tuple[str, CommandError | None]]
 
 
@@ -65,6 +66,13 @@ class _ReleaseNotesRequestContext:
     source: web_pending_sources.PendingSourceResult
     source_resolver: ReleaseNoteSourceResolver
     target_tag_resolver: ReleaseNoteTargetTagResolver
+
+
+@dataclass(frozen=True)
+class ReleaseNotesDisabledState:
+    reason: str
+    source: PendingSourceInfo
+    wud_api: WudApiStatus
 
 
 def api_release_notes(request: Request) -> ReleaseNotesResponse:
@@ -222,28 +230,37 @@ def _wud_api_status(source: web_pending_sources.PendingSourceResult) -> WudApiSt
 
 
 def release_notes_disabled_response(settings: WebSettings) -> ReleaseNotesResponse:
+    disabled = release_notes_disabled_state(settings)
     return ReleaseNotesResponse(
         source_file=str(settings.config.wud_out_file),
+        source=disabled.source,
+        count=0,
+        items=[],
+        enabled=False,
+        disabled_reason=disabled.reason,
+        wud_api=disabled.wud_api,
+        warnings=[],
+    )
+
+
+def release_notes_disabled_state(settings: WebSettings) -> ReleaseNotesDisabledState:
+    return ReleaseNotesDisabledState(
+        reason=RELEASE_NOTES_DISABLED_DETAIL,
         source=PendingSourceInfo(
             configured=settings.pending_source,
             active="file",
             label="Release notes disabled",
             fresh=True,
             degraded=False,
-            detail="Release-note notifications are disabled.",
+            detail=RELEASE_NOTES_DISABLED_DETAIL,
         ),
-        count=0,
-        items=[],
-        enabled=False,
-        disabled_reason="Release-note notifications are disabled.",
         wud_api=WudApiStatus(
             state="unavailable",
             available=False,
             metadata_available=False,
             last_checked_at="",
-            detail="Release-note notifications are disabled.",
+            detail=RELEASE_NOTES_DISABLED_DETAIL,
         ),
-        warnings=[],
     )
 
 

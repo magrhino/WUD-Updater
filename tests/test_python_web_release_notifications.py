@@ -210,6 +210,9 @@ def test_release_notification_preview_disabled_does_not_refresh_metadata(
     assert body["enabled"] is False
     assert body["count"] == 0
     assert body["wud_api"]["available"] is False
+    assert body["source"]["detail"] == "Release-note notifications are disabled."
+    assert body["wud_api"]["detail"] == "Release-note notifications are disabled."
+    assert body["warnings"] == ["Release-note notifications are disabled."]
 
 
 def test_release_notification_send_requires_webhook(

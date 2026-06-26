@@ -18,6 +18,7 @@ import {
   type ReleaseNoteInfo,
   type ReleaseNotesResponse,
   type ReleaseNotificationResponse,
+  type ReleaseNotificationSource,
   type RetagChoiceRequest,
   type RetagPlanResponse,
   type RetagPreviewJobResponse,
@@ -66,8 +67,6 @@ const TERMINAL_RETAG_PREVIEW_STATUSES = new Set<RetagPreviewJobResponse["status"
   "success",
   "failure",
 ]);
-
-type ReleaseNotificationSource = { line_numbers: number[] } | { run_id: number };
 
 export const useUpdatesStore = defineStore("updates", () => {
   const pending = ref<PendingResponse | null>(null);

@@ -38,7 +38,7 @@ from .web_models import (
     WebSettings,
     WudApiStatus,
 )
-from .web_release_notes import release_note_source_resolver
+from .web_release_notes import release_note_source_resolver, release_notes_disabled_state
 from .web_settings import effective_release_notes_enabled
 from .wud_file import WudTarget, parse_wud_text
 
@@ -159,20 +159,14 @@ def _notification_response(
     enabled = effective_release_notes_enabled(settings)
     destination = _release_notification_destination(settings)
     if not enabled:
+        disabled = release_notes_disabled_state(settings)
         return ReleaseNotificationResponse(
             enabled=False,
             destination=destination,
             source_file=str(settings.config.wud_out_file),
-            source=PendingSourceInfo(
-                configured=settings.pending_source,
-                active="file",
-                label="Release notes disabled",
-                fresh=True,
-                degraded=False,
-                detail="Release-note notifications are disabled.",
-            ),
-            wud_api=_disabled_wud_api_status(),
-            warnings=["Release-note notifications are disabled."],
+            source=disabled.source,
+            wud_api=disabled.wud_api,
+            warnings=[disabled.reason],
             sent=sent,
         )
 
