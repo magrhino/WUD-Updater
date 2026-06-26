@@ -207,7 +207,7 @@ function snapshotLineScope(
 
     <section
       v-if="releaseNotificationsVisible"
-      class="apply-job-latest-log"
+      class="apply-job-release-notes"
       aria-labelledby="apply-job-release-notes-title"
     >
       <span id="apply-job-release-notes-title">Release notes</span>
@@ -516,7 +516,8 @@ function snapshotLineScope(
   line-height: 1.35;
 }
 
-.apply-job-latest-log {
+.apply-job-latest-log,
+.apply-job-release-notes {
   display: grid;
   gap: 5px;
   min-width: 0;
@@ -526,13 +527,15 @@ function snapshotLineScope(
   background: var(--color-surface);
 }
 
-.apply-job-latest-log span {
+.apply-job-latest-log span,
+.apply-job-release-notes span {
   color: var(--color-muted-text);
   font-size: 0.78rem;
   font-weight: 700;
 }
 
-.apply-job-latest-log code {
+.apply-job-latest-log code,
+.apply-job-release-notes code {
   color: var(--color-code-text);
   font-size: 0.82rem;
   line-height: 1.45;
