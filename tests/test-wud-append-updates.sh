@@ -92,8 +92,8 @@ test_image_tag_ignores_result_digest(){
 
 test_tag_update_writes_proposed_tag(){
   setup_case
-  run_script update_available=true image_name=linuxserver/qbittorrent image_tag_value=5.1.4 update_kind_kind=tag update_kind_remote_value=5.2.0
-  assert_file_equals 'linuxserver/qbittorrent:5.1.4 tag=5.2.0'
+  run_script update_available=true image_name=linuxserver/qbittorrent image_tag_value=5.1.4 update_kind_kind=tag update_kind_remote_value=5.2.0 result_digest="$(hex_digest)"
+  assert_file_equals "linuxserver/qbittorrent:5.1.4 tag=5.2.0 sha256=sha256:$(hex_digest)"
   teardown_case
 }
 
@@ -115,6 +115,34 @@ test_tag_update_uses_result_tag_fallback(){
   setup_case
   run_script update_available=true image_name=repo/app image_tag_value=1.0 update_kind_kind=tag result_tag=2.0
   assert_file_equals 'repo/app:1.0 tag=2.0'
+  teardown_case
+}
+
+test_tag_update_omits_digest_when_tag_is_invalid(){
+  setup_case
+  run_script update_available=true image_name=repo/app image_tag_value=1.0 update_kind_kind=tag update_kind_remote_value='bad tag' result_digest="$(hex_digest)"
+  assert_file_equals 'repo/app:1.0'
+  teardown_case
+}
+
+test_platform_metadata_is_appended(){
+  setup_case
+  run_script update_available=true image_name=repo/app image_tag_value=1.0 image_os=linux image_architecture=amd64
+  assert_file_equals 'repo/app:1.0 platform=linux/amd64'
+  teardown_case
+}
+
+test_platform_variant_metadata_is_appended(){
+  setup_case
+  run_script update_available=true image_name=repo/app image_tag_value=1.0 update_kind_kind=tag result_tag=2.0 result_digest="$(hex_digest)" image_os=linux image_architecture=arm image_variant=v7
+  assert_file_equals "repo/app:1.0 tag=2.0 platform=linux/arm/v7 sha256=sha256:$(hex_digest)"
+  teardown_case
+}
+
+test_invalid_platform_metadata_is_omitted(){
+  setup_case
+  run_script update_available=true image_name=repo/app image_tag_value=1.0 image_os=linux image_architecture='bad/value'
+  assert_file_equals 'repo/app:1.0'
   teardown_case
 }
 
@@ -401,6 +429,10 @@ main(){
   run_test test_tag_update_accepts_image_remote_value
   run_test test_tag_update_accepts_single_component_image_remote_value
   run_test test_tag_update_uses_result_tag_fallback
+  run_test test_tag_update_omits_digest_when_tag_is_invalid
+  run_test test_platform_metadata_is_appended
+  run_test test_platform_variant_metadata_is_appended
+  run_test test_invalid_platform_metadata_is_omitted
   run_test test_container_name_fallback
   run_test test_digest_update_kind_fallback
   run_test test_tag_dedupe_replaces_existing_image_line

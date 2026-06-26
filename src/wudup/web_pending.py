@@ -335,6 +335,14 @@ def pending_response(
             allow_repo=target.allow_repo,
             digest=target.digest,
             desired_tag=target.desired_tag,
+            platform=target.platform_value,
+            platform_os=target.platform.os if target.platform is not None else "",
+            platform_architecture=(
+                target.platform.architecture if target.platform is not None else ""
+            ),
+            platform_variant=(
+                target.platform.variant if target.platform is not None else ""
+            ),
             digest_provenance=provenance_by_line.get(target.line_no),
             wud_metadata=wud_metadata_by_line.get(target.line_no),
             source=source.active,
@@ -558,6 +566,10 @@ def _pending_grouped_item(
         allow_repo=item.allow_repo,
         digest=item.digest,
         desired_tag=item.desired_tag,
+        platform=item.platform,
+        platform_os=item.platform_os,
+        platform_architecture=item.platform_architecture,
+        platform_variant=item.platform_variant,
         resolved_image=item.resolved_image,
         target_image=item.target_image,
         compose_images=list(item.compose_images),

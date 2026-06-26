@@ -17,6 +17,7 @@ from wudup.images import (
     trim,
 )
 from wudup.locks import DirectoryLock
+from wudup.platforms import ImagePlatform, parse_platform, platform_value
 
 
 _SHELL_SPACE_RE = re.compile(r"[ \t\n\r\v\f]")
@@ -41,6 +42,11 @@ class WudTarget:
     digest: str
     desired_tag: str
     tag_token: str = ""
+    platform: ImagePlatform | None = None
+
+    @property
+    def platform_value(self) -> str:
+        return platform_value(self.platform)
 
 
 @dataclass(frozen=True)
@@ -306,11 +312,18 @@ def _parse_target(
 
     desired_tag = ""
     tag_token = ""
+    platform: ImagePlatform | None = None
     for token in _rest_tokens(rest):
         if token.startswith("tag="):
             desired_tag = token.removeprefix("tag=")
             if tag_value_valid(desired_tag):
                 tag_token = desired_tag
+        elif token.startswith("sha256="):
+            digest_token = token.removeprefix("sha256=")
+            if digest_token:
+                digest = normalize_digest(digest_token)
+        elif token.startswith("platform="):
+            platform = parse_platform(token.removeprefix("platform="))
 
     warnings: list[str] = []
     if desired_tag != "":
@@ -325,6 +338,13 @@ def _parse_target(
                 f"{line_no}: {first}"
             )
             desired_tag = ""
+
+    for token in _rest_tokens(rest):
+        if token.startswith("platform=") and platform is None:
+            warnings.append(
+                f"Ignoring invalid platform on WUD line {line_no}: "
+                f"{token.removeprefix('platform=')}"
+            )
 
     has_tag = image_has_tag(first)
     allow_repo = not has_tag
@@ -341,6 +361,7 @@ def _parse_target(
             digest=digest,
             desired_tag=desired_tag,
             tag_token=tag_token,
+            platform=platform,
         ),
         warnings,
     )

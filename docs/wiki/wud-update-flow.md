@@ -27,6 +27,7 @@ with an image or container target:
 repo/app:latest
 repo/app@sha256:abc123
 repo/app:1.0 tag=2.0
+repo/app:1.0 tag=2.0 platform=linux/amd64 sha256=abc123
 ```
 
 Digest-pinned references use the `image@sha256:...` form. The updater validates
@@ -36,6 +37,12 @@ trust behavior and live verification notes.
 
 Tag updates use a `tag=<new-tag>` token after a tagged source image. They stay
 pending unless the updater is run with `--allow-tag-updates`.
+
+Optional trailing metadata can include `platform=<os>/<arch>[/variant]` and
+`sha256=<digest>`. WUDup preserves these tokens when rewriting the todo file.
+The security scan prototype uses them to resolve a candidate image to an exact
+platform manifest digest before scanning. Unknown trailing tokens are preserved
+as raw line metadata for compatibility.
 
 Manual tag overrides can be supplied for a single updater run with
 `--tag-override LINE=TAG`, where `LINE` is the original WUD file line number.
@@ -62,10 +69,6 @@ and final digest writes happen only during apply. Lines without a safe resolved
 tag, custom compound `wud.tag.include` regexes, YAML anchors/aliases,
 interpolation, and inherited image values fail closed.
 
-Older lines with a trailing `sha256=...` token are preserved as raw file lines
-when cleanup rewrites the todo file. The display wrappers hide that suffix when
-showing pending entries.
-
 ## Appends And Locking
 
 `append-updates.sh` writes only when WUD sets `update_available=true`. It uses a
@@ -78,6 +81,8 @@ and `OUT_GID` are set.
 
 For tag updates, WUD values such as `update_kind_remote_value` or `result_tag`
 are converted into `tag=<new-tag>` when the tag value is safe.
+When WUD also supplies a valid candidate digest and platform fields, the script
+adds `sha256=<digest>` and `platform=<os>/<arch>[/variant]` metadata.
 
 ## Applying Updates
 

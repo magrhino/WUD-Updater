@@ -22,6 +22,7 @@ from wudup.compose import (
     _service_runtime_port_issues_from_config_json,
 )
 from wudup.docker_cli import ContainerImage, DockerCli
+from wudup.platforms import ImagePlatform
 
 
 class CommandHelperTests(unittest.TestCase):
@@ -473,6 +474,34 @@ class ComposeCliTests(FakeDockerCase):
                     service="app",
                     image="repo/app@sha256:old",
                     labels=(("wud.tag.include", "^latest$$"),),
+                ),
+            ),
+        )
+
+    def test_service_image_pairs_reads_platform(self) -> None:
+        stack = self.base / "media"
+        stack.mkdir()
+        (stack / ".fake-docker-id").write_text("media\n", encoding="utf-8")
+        (stack / "docker-compose.yml").write_text(
+            "\n".join(
+                [
+                    "services:",
+                    "  app:",
+                    "    image: repo/app:1.0",
+                    "    platform: linux/arm64/v8",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        self.assertEqual(
+            self.compose.service_image_pairs(stack, "docker-compose.yml"),
+            (
+                ServiceImage(
+                    service="app",
+                    image="repo/app:1.0",
+                    platform=ImagePlatform("linux", "arm64", "v8"),
                 ),
             ),
         )

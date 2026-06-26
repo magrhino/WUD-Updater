@@ -1003,6 +1003,12 @@ def _pending_grouping_item(
         compose_images=tuple(compose_images),
         services=tuple(services),
         action=action,
+        platform=target.platform_value,
+        platform_os=target.platform.os if target.platform is not None else "",
+        platform_architecture=(
+            target.platform.architecture if target.platform is not None else ""
+        ),
+        platform_variant=target.platform.variant if target.platform is not None else "",
         diagnostic=diagnostic,
         digest_provenance=digest_provenance,
     )

@@ -210,6 +210,9 @@ digest_from_remote() {
       ;;
     sha256:*)
       ;;
+    [0-9A-Fa-f][0-9A-Fa-f]*)
+      remote_digest="sha256:${remote_digest}"
+      ;;
     *)
       return 1
       ;;
@@ -229,6 +232,38 @@ digest_from_remote() {
   return $?
 }
 
+platform_component_valid() {
+  value="$1"
+  [ -n "$value" ] || return 1
+  case "$value" in
+    *[!A-Za-z0-9_.-]*)
+      return 1
+      ;;
+    unknown)
+      return 1
+      ;;
+    *)
+      ;;
+  esac
+  return 0
+}
+
+platform_from_env() {
+  platform_os="${image_os:-}"
+  platform_arch="${image_architecture:-}"
+  platform_variant="${image_variant:-}"
+
+  platform_component_valid "$platform_os" || return 1
+  platform_component_valid "$platform_arch" || return 1
+  if [ -n "$platform_variant" ]; then
+    platform_component_valid "$platform_variant" || return 1
+    printf '%s/%s/%s' "$platform_os" "$platform_arch" "$platform_variant"
+    return $?
+  fi
+  printf '%s/%s' "$platform_os" "$platform_arch"
+  return $?
+}
+
 # Only act when there is an update (true)
 if [ "${update_available:-}" = "true" ]; then
   OUT_DIR="$(dirname "$OUT_FILE")"
@@ -241,12 +276,14 @@ if [ "${update_available:-}" = "true" ]; then
   [ -n "$IMAGE" ] || exit 0
 
   LINE="${IMAGE}"
+  TAG_METADATA_ELIGIBLE=false
   case "${update_kind_kind:-}" in
     tag)
       REMOTE_TAG_SOURCE="${update_kind_remote_value:-}"
       [ -n "$REMOTE_TAG_SOURCE" ] || REMOTE_TAG_SOURCE="${result_tag:-}"
       if REMOTE_TAG="$(tag_from_remote "$REMOTE_TAG_SOURCE")"; then
         LINE="${IMAGE} tag=${REMOTE_TAG}"
+        TAG_METADATA_ELIGIBLE=true
       fi
       ;;
     digest)
@@ -258,6 +295,15 @@ if [ "${update_available:-}" = "true" ]; then
     *)
       ;;
   esac
+  if PLATFORM="$(platform_from_env)"; then
+    LINE="${LINE} platform=${PLATFORM}"
+  fi
+  if [ "$TAG_METADATA_ELIGIBLE" = "true" ]; then
+    REMOTE_DIGEST_SOURCE="${result_digest:-}"
+    if REMOTE_DIGEST="$(digest_from_remote "$REMOTE_DIGEST_SOURCE")"; then
+      LINE="${LINE} sha256=${REMOTE_DIGEST}"
+    fi
+  fi
 
   umask 077
   acquire_lock || exit $?

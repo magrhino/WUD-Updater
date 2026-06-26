@@ -218,6 +218,43 @@ class WudFileParsingTests(unittest.TestCase):
             ),
         )
 
+    def test_platform_and_trailing_digest_parsing(self) -> None:
+        parsed = parse_wud_text(
+            "repo/app:1.0 platform=linux/amd64/v7 "
+            "sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+        )
+        target = parsed.targets[0]
+
+        self.assertEqual(
+            target.digest,
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        )
+        self.assertEqual(target.platform_value, "linux/amd64/v7")
+        self.assertIsNotNone(target.platform)
+        assert target.platform is not None
+        self.assertEqual(target.platform.os, "linux")
+        self.assertEqual(target.platform.architecture, "amd64")
+        self.assertEqual(target.platform.variant, "v7")
+        self.assertEqual(parsed.warnings, ())
+
+    def test_invalid_platform_is_warned_and_ignored(self) -> None:
+        parsed = parse_wud_text("repo/app:1.0 platform=linux\n")
+
+        self.assertIsNone(parsed.targets[0].platform)
+        self.assertEqual(
+            parsed.warnings,
+            ("Ignoring invalid platform on WUD line 1: linux",),
+        )
+
+    def test_trailing_platform_separator_is_warned_and_ignored(self) -> None:
+        parsed = parse_wud_text("repo/app:1.0 platform=linux/amd64/\n")
+
+        self.assertIsNone(parsed.targets[0].platform)
+        self.assertEqual(
+            parsed.warnings,
+            ("Ignoring invalid platform on WUD line 1: linux/amd64/",),
+        )
+
     def test_last_desired_tag_token_wins(self) -> None:
         parsed = parse_wud_text("repo/app:1.0 tag=2.0 note=ignored tag=3.0\n")
 

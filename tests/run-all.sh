@@ -74,6 +74,7 @@ EOF
     src/wudup/plan_matching.py \
     src/wudup/plan_models.py \
     src/wudup/plans.py \
+    src/wudup/platforms.py \
     src/wudup/release_notes.py \
     src/wudup/self_update.py \
     src/wudup/terminal.py \

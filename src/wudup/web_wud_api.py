@@ -28,6 +28,7 @@ from .images import (
     tag_value_valid,
 )
 from .release_notes import OCI_SOURCE_LABEL, github_repo_from_source
+from .platforms import ImagePlatform, parse_platform, platform_from_parts
 from .web_auth import (
     WebConfigError,
     _redact_sensitive_text,
@@ -91,8 +92,10 @@ class WudApiContainer:
     link: str
     error: str
     labels: Mapping[str, str] = field(default_factory=dict)
+    platform: ImagePlatform | None = None
 
     def response(self) -> WudContainerMetadata:
+        platform = self.platform
         return WudContainerMetadata(
             id=self.id,
             name=self.name,
@@ -107,6 +110,10 @@ class WudApiContainer:
             semver_diff=self.semver_diff,
             link=self.link,
             error=self.error,
+            platform=platform.value if platform is not None else "",
+            platform_os=platform.os if platform is not None else "",
+            platform_architecture=platform.architecture if platform is not None else "",
+            platform_variant=platform.variant if platform is not None else "",
         )
 
 
@@ -977,7 +984,45 @@ def _parse_container(
         link=_string(result.get("link") or raw.get("link")),
         error=_sanitize_detail(settings, _error_message(raw.get("error"))),
         labels=labels,
+        platform=_container_platform(raw, image),
     )
+
+
+def _container_platform(
+    raw: Mapping[str, object],
+    image: Mapping[str, object],
+) -> ImagePlatform | None:
+    for value in (
+        _string(image.get("platform")),
+        _string(raw.get("platform")),
+        _string(raw.get("image_platform")),
+        _string(raw.get("imagePlatform")),
+    ):
+        platform = parse_platform(value) if value else None
+        if platform is not None:
+            return platform
+
+    for source in (
+        _object(image.get("platform")),
+        _object(raw.get("platform")),
+        image,
+        raw,
+        _object(raw.get("container_json")),
+        _object(raw.get("containerJson")),
+    ):
+        platform = platform_from_parts(
+            _string(source.get("os") or source.get("image_os") or source.get("imageOs")),
+            _string(
+                source.get("architecture")
+                or source.get("arch")
+                or source.get("image_architecture")
+                or source.get("imageArchitecture")
+            ),
+            _string(source.get("variant") or source.get("image_variant") or source.get("imageVariant")),
+        )
+        if platform is not None:
+            return platform
+    return None
 
 
 def _match_container(
