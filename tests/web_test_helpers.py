@@ -6,9 +6,9 @@ import re
 import time
 import urllib.error
 import urllib.parse
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypeVar
 
 from fastapi.testclient import TestClient
 
@@ -28,6 +28,26 @@ WUD_API_AUTH_CONFIG_KEY = "".join(("au", "th"))
 WUD_API_AUTHORIZATION_HEADER = "".join(("Author", "ization"))
 WUD_API_ACCESS_KEY_ID = "".join(("access", "keyid"))
 WUD_API_SECRET_ACCESS_KEY = "".join(("se", "cret", "access", "key"))
+_PollResult = TypeVar("_PollResult")
+_POLL_TIMEOUT_SECONDS = 5.0
+_POLL_INTERVAL_SECONDS = 0.02
+
+
+def _poll_until(
+    probe: Callable[[], _PollResult | None],
+    *,
+    timeout_message: str | Callable[[], str],
+    timeout_seconds: float = _POLL_TIMEOUT_SECONDS,
+    interval_seconds: float = _POLL_INTERVAL_SECONDS,
+) -> _PollResult:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        result = probe()
+        if result is not None:
+            return result
+        time.sleep(interval_seconds)
+    message = timeout_message() if callable(timeout_message) else timeout_message
+    raise AssertionError(message)
 
 
 def _web_env(
@@ -514,15 +534,18 @@ def _manifest_index_digest(digest: str, *children: str) -> dict[str, object]:
 
 
 def _wait_apply_job(client: TestClient, job_id: str) -> dict[str, object]:
-    deadline = time.time() + 5
-    while time.time() < deadline:
+    def fetch_job() -> dict[str, object] | None:
         response = client.get(f"/api/v1/jobs/{job_id}")
         assert response.status_code == 200
         body = response.json()
         if body["status"] not in {"queued", "running"}:
             return body
-        time.sleep(0.02)
-    raise AssertionError(f"apply job {job_id} did not finish")
+        return None
+
+    return _poll_until(
+        fetch_job,
+        timeout_message=f"apply job {job_id} did not finish",
+    )
 
 
 def _sse_events(content: str, expected_name: str) -> list[dict[str, object]]:

@@ -117,6 +117,7 @@ EOF
     src/wudup/web_pending_sources.py \
     src/wudup/web_plans.py \
     src/wudup/web_release_notes.py \
+    src/wudup/web_retag_choices.py \
     src/wudup/web_retag_identity.py \
     src/wudup/web_retag_plans.py \
     src/wudup/web_retags.py \
@@ -169,6 +170,9 @@ EOF
     tests/test_python_web_onboarding.py \
     tests/test_python_web_release_notes.py \
     tests/test_python_web_release_notes_live.py \
+    tests/test_python_web_retag_apply.py \
+    tests/test_python_web_retag_choice_validation.py \
+    tests/test_python_web_retag_github_latest.py \
     tests/test_python_web_retag_plans.py \
     tests/test_python_web_retags.py \
     tests/test_python_web_runs.py \
@@ -223,6 +227,7 @@ EOF
     tests/test_python_web_wud_api.py \
     tests/update_from_wud_helpers.py \
     tests/updates_wrapper_helpers.py \
+    tests/web_retag_test_helpers.py \
     tests/web_wud_rescan_helpers.py \
     tests/web_plan_test_helpers.py \
     tests/web_scheduler_test_helpers.py \
