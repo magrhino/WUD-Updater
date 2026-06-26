@@ -126,7 +126,7 @@ def api_send_release_notifications(
             sent_count=sent_count,
             sent_batch_count=sent_batch_count,
         )
-    except (OSError, urllib.error.HTTPError, sqlite3.Error, DatabaseError) as exc:
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
         detail = _safe_exception_detail(
             settings,
             "could not send Discord release-note notifications",

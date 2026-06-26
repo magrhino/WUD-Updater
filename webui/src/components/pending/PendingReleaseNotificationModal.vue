@@ -32,10 +32,9 @@ function handleModalShowUpdate(value: boolean): void {
     :mask-closable="false"
     @update:show="handleModalShowUpdate"
   >
-    <section
+    <dialog
+      open
       class="preflight-modal"
-      role="dialog"
-      aria-modal="true"
       aria-labelledby="release-notification-modal-title"
     >
       <div class="section-heading">
@@ -180,6 +179,6 @@ function handleModalShowUpdate(value: boolean): void {
           Send to Discord
         </n-button>
       </n-flex>
-    </section>
+    </dialog>
   </n-modal>
 </template>

@@ -226,7 +226,7 @@ describe("pending view apply jobs", () => {
       ?.trigger("click");
     await flushPromises();
     expect(previewReleaseNotifications).toHaveBeenCalledWith({ run_id: 10 });
-    expect(wrapper.find('[role="dialog"]').text()).toContain(
+    expect(wrapper.find("dialog").text()).toContain(
       "Send Discord notifications",
     );
     expect(wrapper.find(".apply-job-details").attributes("open")).toBe("");

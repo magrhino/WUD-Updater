@@ -357,19 +357,19 @@ describe("pending view selection actions", () => {
     await flushPromises();
 
     expect(previewReleaseNotifications).toHaveBeenCalledWith({ line_numbers: [1] });
-    expect(wrapper.find('[role="dialog"]').text()).toContain(
+    expect(wrapper.find("dialog").text()).toContain(
       "Send Discord notifications",
     );
 
     await wrapper
-      .find('[role="dialog"]')
+      .find("dialog")
       .findAll("button")
       .find((button) => button.text().includes("Send to Discord"))
       ?.trigger("click");
     await flushPromises();
 
     expect(sendReleaseNotifications).toHaveBeenCalledWith({ line_numbers: [1] });
-    expect(wrapper.find('[role="dialog"]').text()).toContain(
+    expect(wrapper.find("dialog").text()).toContain(
       "Release-note notifications sent. Audit run #79.",
     );
   });
@@ -399,7 +399,7 @@ describe("pending view selection actions", () => {
       ?.trigger("click");
     await flushPromises();
 
-    const dialog = wrapper.find('[role="dialog"]');
+    const dialog = wrapper.find("dialog");
     expect(previewReleaseNotifications).toHaveBeenCalledWith({ line_numbers: [1] });
     expect(dialog.text()).toContain(
       "Release-note notification is unavailable: preview failed",

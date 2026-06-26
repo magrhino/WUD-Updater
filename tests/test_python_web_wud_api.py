@@ -132,6 +132,34 @@ def test_wud_api_snapshot_reads_update_metadata(tmp_path: Path, monkeypatch) -> 
     assert container.semver_diff == "minor"
 
 
+def test_container_triggers_ignores_non_object_entries(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def request_json(_url: str, _client_config=None) -> object:
+        return [
+            {
+                "id": "discord.release",
+                "type": "discord",
+                "name": "release",
+            },
+            "not-a-trigger",
+            None,
+        ]
+
+    monkeypatch.setattr(web_wud_api, "_request_json", request_json)
+
+    triggers, warning = web_wud_api.container_triggers(
+        _settings(tmp_path, "https://wud.triggers.test:3000"),
+        "docker.local.app",
+    )
+
+    assert warning == ""
+    assert [trigger.model_dump() for trigger in triggers] == [
+        {"id": "discord.release", "type": "discord", "name": "release"}
+    ]
+
+
 def test_wud_api_configuration_diagnostics_reads_endpoint_payloads(
     tmp_path: Path,
     monkeypatch,

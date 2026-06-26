@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
+from typing import cast
 
 from . import web_wud_config
 from .web_wud_config import _auth_required_detail
@@ -501,7 +502,12 @@ def container_triggers(
         )
     if not isinstance(payload, list):
         return [], "WUD API trigger metadata payload was not a list"
-    return [_parse_trigger(raw) for raw in payload if isinstance(raw, dict)], ""
+    trigger_payloads = cast(list[object], payload)
+    return [
+        _parse_trigger(raw)
+        for raw in trigger_payloads
+        if isinstance(raw, Mapping)
+    ], ""
 
 
 def _refresh_snapshot(
