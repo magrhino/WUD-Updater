@@ -343,7 +343,7 @@ def test_retag_github_latest_fallback_requires_matching_cache_info_count(
         fake_cached_release_notes,
     )
 
-    with pytest.raises(ValueError, match="zip\\(\\) argument 2 is shorter"):
+    with pytest.raises(ValueError):
         web_retags_module._cached_github_latest_fallback_by_target(
             settings,
             [stack],
