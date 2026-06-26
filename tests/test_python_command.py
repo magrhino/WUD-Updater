@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -101,6 +102,24 @@ class CommandRunnerTests(unittest.TestCase):
         result = runner.capture(["/root/secret"], check=False)
 
         self.assertEqual(result.returncode, 126)
+
+    @mock.patch("wudup.command.subprocess.run")
+    def test_capture_timeout_returns_timeout_result(self, run_mock: mock.Mock) -> None:
+        run_mock.side_effect = subprocess.TimeoutExpired(
+            cmd=("slow",),
+            timeout=2,
+            output="partial out",
+            stderr="partial err",
+        )
+        runner = CommandRunner()
+
+        result = runner.capture(["slow"], check=False, timeout_seconds=2)
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.returncode, 124)
+        self.assertEqual(result.stdout, "partial out")
+        self.assertEqual(result.stderr, "partial err")
+        self.assertEqual(run_mock.call_args.kwargs["timeout"], 2)
 
     @mock.patch("wudup.command.subprocess.run")
     def test_capture_lines(self, run_mock: mock.Mock) -> None:

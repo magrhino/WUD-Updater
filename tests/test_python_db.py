@@ -123,6 +123,7 @@ class DatabaseTests(unittest.TestCase):
                     "known_images",
                     "pending_updates",
                     "release_note_cache",
+                    "security_scan_cache",
                     "tag_exclusion_rules",
                     "web_users",
                     "web_sessions",
@@ -169,7 +170,10 @@ class DatabaseTests(unittest.TestCase):
                 """
             ).fetchall()
 
-        self.assertEqual([row[0] for row in rows], [1, 2, 3, 4, 5, 6, 7, 8])
+        self.assertEqual(
+            [row[0] for row in rows],
+            [1, 2, 3, 4, 5, 6, 7, 8, 9],
+        )
 
     def test_migration_registries_cover_supported_versions(self) -> None:
         self.assertEqual(
@@ -280,7 +284,7 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(version, SCHEMA_VERSION)
         self.assertEqual(run[0], "success")
-        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6, 7, 8])
+        self.assertEqual(migration_versions, list(range(1, SCHEMA_VERSION + 1)))
 
     def test_init_db_migrates_v5_schema_and_preserves_policy_rows(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -344,7 +348,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(policy["auto_update"], 0)
         self.assertIsNone(policy["auto_update_time"])
         self.assertEqual(policy["auto_update_days_json"], "[]")
-        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6, 7, 8])
+        self.assertEqual(migration_versions, list(range(1, SCHEMA_VERSION + 1)))
 
     def test_init_db_migrates_v6_schema_and_preserves_digestless_rows(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -437,7 +441,7 @@ class DatabaseTests(unittest.TestCase):
             self.assertEqual(row["digest_final_image"], "")
             self.assertEqual(row["digest_provenance_source"], "")
             self.assertEqual(row["digest_provenance_confidence"], "")
-        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6, 7, 8])
+        self.assertEqual(migration_versions, list(range(1, SCHEMA_VERSION + 1)))
 
     def test_init_db_rejects_malformed_existing_pending_updates(self) -> None:
         with sqlite3.connect(":memory:") as conn:

@@ -1,0 +1,258 @@
+"""Resolve pending update candidates into security scan subjects."""
+
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING
+
+from .command import CommandRunner
+from .compose import ComposeCli, ComposeDiscoveryError, ServiceImage
+from .digest_verifier import DigestVerifier, ResolvedImageSubject
+from .docker_cli import DockerCli
+from .images import image_with_tag
+from .plan_matching import _match_targets
+from .platforms import ImagePlatform
+from .web_pending_sources import PendingSourceResult, resolve_pending_source
+from .wud_file import WudTarget
+
+if TYPE_CHECKING:
+    from .web_models import WebSettings
+
+
+@dataclass(frozen=True)
+class PendingSecurityRequest:
+    line_no: int
+    raw: str
+    image: str
+    candidate_image: str
+    reported_digest: str
+    platform: ImagePlatform | None
+    platform_source: str
+    identity_status: str = "pending"
+    warnings: tuple[str, ...] = ()
+    error: str = ""
+
+    @property
+    def request_key(self) -> str:
+        return _hash_key(
+            "security-request",
+            str(self.line_no),
+            self.raw,
+            self.candidate_image,
+            self.reported_digest,
+        )
+
+
+@dataclass(frozen=True)
+class PendingSecurityContext:
+    source: PendingSourceResult
+    requests: tuple[PendingSecurityRequest, ...]
+    warnings: tuple[str, ...] = ()
+
+
+def pending_security_context(
+    settings: "WebSettings",
+    *,
+    include_compose: bool = True,
+    include_wud_metadata: bool = True,
+) -> PendingSecurityContext:
+    source = resolve_pending_source(
+        settings,
+        include_wud_metadata=include_wud_metadata,
+    )
+    platform_by_line: dict[int, ImagePlatform] = {}
+    platform_conflicts: set[int] = set()
+    warnings: tuple[str, ...] = ()
+    if include_compose:
+        platform_by_line, platform_conflicts, warnings = _compose_platforms_by_line(
+            settings,
+            source,
+        )
+    requests = tuple(
+        _request_for_target(
+            target,
+            compose_platform=platform_by_line.get(target.line_no),
+            compose_platform_conflict=target.line_no in platform_conflicts,
+            wud_platform=_wud_platform(source, target),
+        )
+        for target in source.parsed.targets
+    )
+    return PendingSecurityContext(source=source, requests=requests, warnings=warnings)
+
+
+def resolve_security_subject(
+    request: PendingSecurityRequest,
+    verifier: DigestVerifier,
+) -> ResolvedImageSubject:
+    if request.identity_status != "pending":
+        return _unresolved_subject(request)
+    subject = verifier.resolve_subject(
+        request.candidate_image,
+        request.reported_digest,
+        request.platform,
+        platform_source=request.platform_source,
+    )
+    return replace(
+        subject,
+        warnings=(*request.warnings, *subject.warnings),
+    )
+
+
+def subject_id(subject: ResolvedImageSubject) -> str:
+    if subject.identity_status != "exact":
+        return ""
+    return _hash_key(
+        "security-subject",
+        subject.canonical_registry,
+        subject.canonical_repository,
+        subject.manifest_digest,
+        subject.platform,
+    )
+
+
+def default_digest_verifier(settings: "WebSettings") -> DigestVerifier:
+    runner = CommandRunner(env=settings.command_env)
+    return DigestVerifier(DockerCli(runner=runner))
+
+
+def _request_for_target(
+    target: WudTarget,
+    *,
+    compose_platform: ImagePlatform | None,
+    compose_platform_conflict: bool = False,
+    wud_platform: ImagePlatform | None,
+) -> PendingSecurityRequest:
+    candidate_image = (
+        image_with_tag(target.first, target.desired_tag)
+        if target.desired_tag
+        else target.first
+    )
+    platform = compose_platform or wud_platform
+    platform_source = "compose" if compose_platform is not None else "wud"
+    if compose_platform is None and wud_platform is None:
+        platform_source = ""
+    warnings: list[str] = []
+    identity_status = "pending"
+    error = ""
+    if compose_platform_conflict:
+        identity_status = "mismatch"
+        error = "Multiple Compose platforms matched WUD line"
+    elif compose_platform is not None and wud_platform is not None:
+        if compose_platform != wud_platform:
+            identity_status = "mismatch"
+            error = "Compose platform conflicts with WUD platform"
+    if not target.digest:
+        identity_status = "unsupported"
+        error = "reported digest is required"
+    if platform is None and identity_status == "pending":
+        identity_status = "unsupported"
+        error = "platform is required"
+    return PendingSecurityRequest(
+        line_no=target.line_no,
+        raw=target.raw,
+        image=target.first,
+        candidate_image=candidate_image,
+        reported_digest=target.digest,
+        platform=platform,
+        platform_source=platform_source,
+        identity_status=identity_status,
+        warnings=tuple(warnings),
+        error=error,
+    )
+
+
+def _wud_platform(
+    source: PendingSourceResult,
+    target: WudTarget,
+) -> ImagePlatform | None:
+    if target.platform is not None:
+        return target.platform
+    metadata = (source.metadata_by_line or {}).get(target.line_no)
+    if metadata is not None:
+        return metadata.platform
+    return None
+
+
+def _compose_platforms_by_line(
+    settings: "WebSettings",
+    source: PendingSourceResult,
+) -> tuple[dict[int, ImagePlatform], set[int], tuple[str, ...]]:
+    runner = CommandRunner(env=settings.command_env)
+    compose = ComposeCli(runner=runner)
+    docker = DockerCli(runner=runner)
+    try:
+        stacks = compose.discover_stacks(
+            settings.config.docker_base,
+            project_base=settings.host_docker_base,
+            ignore_paths=settings.config.compose_ignore_paths,
+        )
+    except ComposeDiscoveryError as exc:
+        return {}, set(), (str(exc),)
+    matches, _skipped = _match_targets(
+        source.parsed,
+        stacks,
+        docker,
+        allow_tag_updates=True,
+        allow_digest_pin_rematch=settings.config.digest_pin_updates,
+    )
+    platforms: dict[int, ImagePlatform] = {}
+    conflicts: set[int] = set()
+    warnings: list[str] = []
+    for match in matches:
+        line_no = match.target.line_no
+        if line_no in conflicts:
+            continue
+        platform = _platform_for_match(
+            match.stack.service_images,
+            match.service,
+            match.compose_image,
+        )
+        if platform is None:
+            continue
+        existing = platforms.get(line_no)
+        if existing is not None and existing != platform:
+            platforms.pop(line_no, None)
+            conflicts.add(line_no)
+            warnings.append(
+                f"Multiple Compose platforms matched WUD line {line_no}"
+            )
+            continue
+        platforms[line_no] = platform
+    return platforms, conflicts, tuple(warnings)
+
+
+def _platform_for_match(
+    service_images: tuple[ServiceImage, ...],
+    service: str,
+    image: str,
+) -> ImagePlatform | None:
+    for item in service_images:
+        if service and item.service != service:
+            continue
+        if item.image == image:
+            return item.platform
+    return None
+
+
+def _unresolved_subject(request: PendingSecurityRequest) -> ResolvedImageSubject:
+    platform = request.platform
+    return ResolvedImageSubject(
+        requested_ref=request.candidate_image,
+        reported_digest=request.reported_digest,
+        os=platform.os if platform is not None else "",
+        architecture=platform.architecture if platform is not None else "",
+        variant=platform.variant if platform is not None else "",
+        platform_source=request.platform_source,
+        identity_status=request.identity_status,
+        warnings=request.warnings,
+        error=request.error,
+    )
+
+
+def _hash_key(*parts: str) -> str:
+    digest = hashlib.sha256()
+    for part in parts:
+        digest.update(part.encode("utf-8"))
+        digest.update(b"\0")
+    return digest.hexdigest()

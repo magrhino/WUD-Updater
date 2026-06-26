@@ -1,0 +1,655 @@
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+from threading import Lock
+from types import SimpleNamespace
+
+from wudup.db import init_db, utc_timestamp
+from wudup.digest_verifier import ResolvedImageSubject
+from wudup.platforms import ImagePlatform
+from wudup.security_scanner import SecurityScanResult
+from wudup.security_store import cached_scan_by_request, row_to_scan_info, upsert_scan_result
+from wudup.security_subjects import PendingSecurityContext, PendingSecurityRequest
+from wudup import web_jobs
+from wudup.web_pending_sources import PendingSourceResult
+from wudup.wud_file import parse_wud_text
+
+from tests.web_test_helpers import (
+    WEB_DB_NAME,
+    _client,
+    _csrf_headers,
+    _poll_until,
+)
+
+
+VALID_DIGEST = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+
+def test_security_scans_get_is_disabled_and_cache_only_by_default(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text(
+        f"repo/app:1.0 platform=linux/amd64 sha256={VALID_DIGEST}\n",
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/v1/security-scans")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["scanning_enabled"] is False
+    assert body["scanner"] == "trivy"
+    assert body["scan_mode"] == "registry"
+    assert body["count"] == 1
+    assert body["items"][0]["state"] == "disabled"
+    assert body["items"][0]["subject"]["platform"] == "linux/amd64"
+    assert not (tmp_path / "state" / WEB_DB_NAME).exists()
+
+
+def test_security_scans_get_uses_cache_only_context(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls: list[tuple[bool, bool]] = []
+
+    def fake_context(
+        _settings,
+        *,
+        include_compose: bool = True,
+        include_wud_metadata: bool = True,
+    ) -> PendingSecurityContext:
+        calls.append((include_compose, include_wud_metadata))
+        return _empty_security_context(tmp_path)
+
+    monkeypatch.setattr("wudup.web_security.pending_security_context", fake_context)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+
+    response = client.get("/api/v1/security-scans")
+
+    assert response.status_code == 200
+    assert calls == [(False, False)]
+
+
+def test_security_scan_refresh_enforces_csrf_disabled_and_read_only(
+    tmp_path: Path,
+) -> None:
+    disabled = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    missing_csrf = disabled.post("/api/v1/security-scans/refresh")
+    disabled_response = disabled.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(disabled),
+    )
+
+    read_only_root = tmp_path / "read-only"
+    read_only_root.mkdir()
+    read_only = _client(
+        read_only_root,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+    read_only_response = read_only.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(read_only),
+    )
+
+    assert missing_csrf.status_code == 403
+    assert missing_csrf.json()["detail"] == "origin header is required"
+    assert disabled_response.status_code == 403
+    assert disabled_response.json()["detail"] == "security scanning is disabled"
+    assert read_only_response.status_code == 403
+    assert read_only_response.json()["detail"] == "mutations are disabled"
+
+
+def test_security_scan_refresh_rejects_concurrent_jobs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "wudup.web_security.pending_security_context",
+        lambda _settings: _empty_security_context(tmp_path),
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+    executor = QueuedExecutor()
+    client.app.state.web_security_scan_executor = executor
+
+    first = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+    second = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert first.status_code == 200
+    assert (
+        web_jobs._active_mutation_error_in_state(client.app.state)
+        == "security scan refresh is already running"
+    )
+    assert second.status_code == 409
+    assert second.json()["detail"] == "security scan refresh is already running"
+    assert len(executor.calls) == 1
+
+
+def test_active_mutation_error_checks_security_jobs_under_scan_lock() -> None:
+    security_scan_lock = TrackingLock()
+    state = SimpleNamespace(
+        web_apply_lock=Lock(),
+        web_apply_jobs={},
+        web_self_update_running=False,
+        web_security_scan_lock=security_scan_lock,
+        web_security_scan_jobs=GuardedSecurityScanJobs(
+            security_scan_lock,
+            {"scan": SimpleNamespace(status="running")},
+        ),
+    )
+
+    assert (
+        web_jobs._active_mutation_error_in_state(state)
+        == "security scan refresh is already running"
+    )
+
+
+def test_security_scan_refresh_allows_configured_concurrent_jobs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    context = _empty_security_context(tmp_path)
+    monkeypatch.setattr(
+        "wudup.web_security.pending_security_context",
+        lambda _settings: context,
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+            "WUD_SECURITY_SCAN_MAX_CONCURRENCY": "2",
+        },
+    )
+    executor = QueuedExecutor()
+    client.app.state.web_security_scan_executor = executor
+
+    first = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+    second = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+    third = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert third.status_code == 409
+    assert third.json()["detail"] == "security scan refresh is already running"
+    assert len(executor.calls) == 2
+
+
+def test_security_scan_refresh_queues_server_resolved_job(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    context = _empty_security_context(tmp_path)
+    monkeypatch.setattr(
+        "wudup.web_security.pending_security_context",
+        lambda _settings: context,
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+
+    queued = client.post(
+        "/api/v1/security-scans/refresh",
+        json={"image": "ghcr.io/attacker/injected:latest"},
+        headers=_csrf_headers(client),
+    )
+
+    assert queued.status_code == 200
+    job_id = queued.json()["job_id"]
+    result = _poll_until(
+        lambda: _completed_security_job(client, job_id),
+        timeout_message="security scan job did not complete",
+    )
+    assert result["status"] == "success"
+    assert result["total_count"] == 0
+    assert result["completed_count"] == 0
+    assert result["result"]["count"] == 0
+    assert result["result"]["source_file"] == str(tmp_path / "state" / "images.todo")
+    assert (tmp_path / "state" / WEB_DB_NAME).exists()
+
+
+def test_security_scan_refresh_scans_caches_and_reads_back_result(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    context = _single_security_context(tmp_path)
+    monkeypatch.setattr(
+        "wudup.web_security.pending_security_context",
+        lambda _settings, **_kwargs: context,
+    )
+    monkeypatch.setattr(
+        "wudup.web_security.default_digest_verifier",
+        lambda _settings: FakeVerifier(),
+    )
+    monkeypatch.setattr("wudup.web_security.TrivyScanner", FakeScanner)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+
+    queued = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert queued.status_code == 200
+    job_id = queued.json()["job_id"]
+    result = _poll_until(
+        lambda: _completed_security_job(client, job_id),
+        timeout_message="security scan job did not complete",
+    )
+    item = result["result"]["items"][0]
+    assert item["state"] == "complete"
+    assert item["verdict"] == "findings"
+    assert item["severity_counts"]["high"] == 1
+    assert item["subject"]["manifest_digest"] == "sha256:child"
+    assert item["subject"]["warnings"] == ["subject warning"]
+
+    cached = client.get("/api/v1/security-scans")
+
+    assert cached.status_code == 200
+    cached_item = cached.json()["items"][0]
+    assert cached_item["state"] == "complete"
+    assert cached_item["verdict"] == "findings"
+    assert cached_item["severity_counts"]["high"] == 1
+    assert cached_item["subject"]["warnings"] == ["subject warning"]
+
+
+def test_security_scan_cache_readback_uses_platform_independent_request_key(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    refresh_context = _single_security_context(
+        tmp_path,
+        raw=f"ghcr.io/acme/app:1.0 sha256={VALID_DIGEST}",
+        platform=ImagePlatform("linux", "amd64"),
+    )
+    get_context = _single_security_context(
+        tmp_path,
+        raw=f"ghcr.io/acme/app:1.0 sha256={VALID_DIGEST}",
+        platform=None,
+    )
+
+    def fake_context(_settings, **kwargs) -> PendingSecurityContext:
+        if kwargs.get("include_compose") is False:
+            return get_context
+        return refresh_context
+
+    monkeypatch.setattr("wudup.web_security.pending_security_context", fake_context)
+    monkeypatch.setattr(
+        "wudup.web_security.default_digest_verifier",
+        lambda _settings: FakeVerifier(),
+    )
+    monkeypatch.setattr("wudup.web_security.TrivyScanner", FakeScanner)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+
+    queued = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+    assert queued.status_code == 200
+    result = _poll_until(
+        lambda: _completed_security_job(client, queued.json()["job_id"]),
+        timeout_message="security scan job did not complete",
+    )
+    assert result["status"] == "success"
+
+    cached = client.get("/api/v1/security-scans")
+
+    assert cached.status_code == 200
+    item = cached.json()["items"][0]
+    assert item["state"] == "complete"
+    assert item["subject"]["platform"] == "linux/amd64"
+
+
+def test_security_scan_refresh_persists_non_exact_resolution(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    context = _single_security_context(tmp_path)
+    monkeypatch.setattr(
+        "wudup.web_security.pending_security_context",
+        lambda _settings, **_kwargs: context,
+    )
+    monkeypatch.setattr(
+        "wudup.web_security.default_digest_verifier",
+        lambda _settings: StaleVerifier(),
+    )
+    monkeypatch.setattr("wudup.web_security.TrivyScanner", FailingScanner)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+
+    queued = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+    assert queued.status_code == 200
+    result = _poll_until(
+        lambda: _completed_security_job(client, queued.json()["job_id"]),
+        timeout_message="security scan job did not complete",
+    )
+    item = result["result"]["items"][0]
+    assert item["state"] == "stale"
+    assert item["error_code"] == "stale"
+
+    cached = client.get("/api/v1/security-scans")
+
+    assert cached.status_code == 200
+    cached_item = cached.json()["items"][0]
+    assert cached_item["state"] == "stale"
+    assert cached_item["error_code"] == "stale"
+    assert cached_item["error_message"] == "reported digest is not current"
+
+
+def test_security_scan_cache_corrupt_counts_degrade_to_zero() -> None:
+    request = _single_security_request()
+    subject = _exact_subject()
+    result = SecurityScanResult(
+        state="complete",
+        verdict="findings",
+        severity_counts={"high": 1},
+        fixable_counts={"high": 1},
+        warnings=("scan warning",),
+    )
+    with sqlite3.connect(":memory:") as conn:
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        upsert_scan_result(
+            conn,
+            request,
+            subject,
+            result,
+            timestamp=utc_timestamp(),
+        )
+        conn.execute(
+            """
+            UPDATE security_scan_cache
+            SET severity_counts_json = ?,
+                fixable_counts_json = ?,
+                unfixed_count = ?,
+                metadata_json = ?
+            """,
+            ('{"high":"not-a-number"}', "[]", "not-a-number", "{}"),
+        )
+        row = conn.execute("SELECT * FROM security_scan_cache").fetchone()
+
+    info = row_to_scan_info(row, request)
+
+    assert info.severity_counts.high == 0
+    assert info.fixable_counts.high == 0
+    assert info.unfixed_count == 0
+    assert info.warnings == ["subject warning", "scan warning"]
+    assert info.subject.warnings == []
+
+
+def test_security_scan_cache_uses_newest_same_second_row_and_prunes() -> None:
+    request = _single_security_request()
+    subject = _exact_subject()
+    timestamp = "2026-06-26T00:00:00+00:00"
+    with sqlite3.connect(":memory:") as conn:
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        for index in range(7):
+            upsert_scan_result(
+                conn,
+                request,
+                subject,
+                SecurityScanResult(
+                    state="complete",
+                    verdict="findings" if index == 6 else "unknown",
+                    scanner_schema=str(index),
+                    db_revision=str(index),
+                    severity_counts={"high": index},
+                    raw_json='{"large":"payload"}',
+                ),
+                timestamp=timestamp,
+            )
+        cached = cached_scan_by_request(conn, request)
+        rows = conn.execute(
+            """
+            SELECT raw_json
+            FROM security_scan_cache
+            WHERE request_key = ?
+            """,
+            (request.request_key,),
+        ).fetchall()
+
+    assert cached is not None
+    assert cached.db_revision == "6"
+    assert cached.severity_counts.high == 6
+    assert len(rows) == 5
+    assert {row["raw_json"] for row in rows} == {"{}"}
+
+
+def _completed_security_job(client, job_id: str) -> dict[str, object] | None:
+    response = client.get(f"/api/v1/security-scans/jobs/{job_id}")
+    assert response.status_code == 200
+    body = response.json()
+    return body if body["status"] in {"success", "failure"} else None
+
+
+def _empty_security_context(tmp_path: Path) -> PendingSecurityContext:
+    source_file = tmp_path / "state" / "images.todo"
+    return PendingSecurityContext(
+        source=PendingSourceResult(
+            configured="file",
+            active="file",
+            label="Pending file",
+            source_file=str(source_file),
+            exists=True,
+            parsed=parse_wud_text(""),
+            text="",
+            source_hash="empty",
+        ),
+        requests=(),
+    )
+
+
+def _single_security_context(
+    tmp_path: Path,
+    *,
+    raw: str | None = None,
+    platform: ImagePlatform | None = ImagePlatform("linux", "amd64"),
+) -> PendingSecurityContext:
+    source_file = tmp_path / "state" / "images.todo"
+    source_file.parent.mkdir(parents=True, exist_ok=True)
+    text = f"{raw or f'ghcr.io/acme/app:1.0 platform=linux/amd64 sha256={VALID_DIGEST}'}\n"
+    source_file.write_text(text, encoding="utf-8")
+    return PendingSecurityContext(
+        source=PendingSourceResult(
+            configured="file",
+            active="file",
+            label="Pending file",
+            source_file=str(source_file),
+            exists=True,
+            parsed=parse_wud_text(text),
+            text=text,
+            source_hash="single",
+        ),
+        requests=(_single_security_request(raw=raw, platform=platform),),
+    )
+
+
+def _single_security_request(
+    *,
+    raw: str | None = None,
+    platform: ImagePlatform | None = ImagePlatform("linux", "amd64"),
+) -> PendingSecurityRequest:
+    return PendingSecurityRequest(
+        line_no=1,
+        raw=raw or f"ghcr.io/acme/app:1.0 platform=linux/amd64 sha256={VALID_DIGEST}",
+        image="ghcr.io/acme/app:1.0",
+        candidate_image="ghcr.io/acme/app:1.0",
+        reported_digest=f"sha256:{VALID_DIGEST}",
+        platform=platform,
+        platform_source="wud" if platform is not None else "",
+    )
+
+
+def _exact_subject() -> ResolvedImageSubject:
+    return ResolvedImageSubject(
+        canonical_registry="ghcr.io",
+        canonical_repository="acme/app",
+        requested_ref="ghcr.io/acme/app:1.0",
+        reported_digest=f"sha256:{VALID_DIGEST}",
+        index_digest=f"sha256:{VALID_DIGEST}",
+        manifest_digest="sha256:child",
+        os="linux",
+        architecture="amd64",
+        platform_source="wud",
+        identity_status="exact",
+        warnings=("subject warning",),
+    )
+
+
+class FakeVerifier:
+    def resolve_subject(
+        self,
+        image: str,
+        reported_digest: str,
+        platform: ImagePlatform | None,
+        *,
+        platform_source: str = "",
+    ) -> ResolvedImageSubject:
+        assert image == "ghcr.io/acme/app:1.0"
+        assert reported_digest == f"sha256:{VALID_DIGEST}"
+        assert platform == ImagePlatform("linux", "amd64")
+        return _exact_subject()
+
+
+class StaleVerifier:
+    def resolve_subject(
+        self,
+        _image: str,
+        _reported_digest: str,
+        platform: ImagePlatform | None,
+        *,
+        platform_source: str = "",
+    ) -> ResolvedImageSubject:
+        assert platform == ImagePlatform("linux", "amd64")
+        return ResolvedImageSubject(
+            canonical_registry="ghcr.io",
+            canonical_repository="acme/app",
+            requested_ref="ghcr.io/acme/app:1.0",
+            reported_digest=f"sha256:{VALID_DIGEST}",
+            index_digest="sha256:current",
+            os="linux",
+            architecture="amd64",
+            platform_source=platform_source,
+            identity_status="stale",
+            error="reported digest is not current",
+        )
+
+
+class FakeScanner:
+    def __init__(self, *_args, **_kwargs) -> None:
+        pass
+
+    def scan(self, subject: ResolvedImageSubject) -> SecurityScanResult:
+        assert subject.identity_status == "exact"
+        return SecurityScanResult(
+            state="complete",
+            verdict="findings",
+            scanner_version="fake-trivy",
+            scanner_schema="2",
+            severity_counts={"high": 1},
+            fixable_counts={"high": 1},
+            raw_json='{"Results":[]}',
+        )
+
+
+class FailingScanner:
+    def __init__(self, *_args, **_kwargs) -> None:
+        pass
+
+    def scan(self, _subject: ResolvedImageSubject) -> SecurityScanResult:
+        raise AssertionError("non-exact subject should not be scanned")
+
+
+class QueuedExecutor:
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, ...]] = []
+
+    def submit(self, *args) -> None:
+        self.calls.append(args)
+
+    def shutdown(self, **_kwargs) -> None:
+        pass
+
+
+class TrackingLock:
+    def __init__(self) -> None:
+        self.entered = False
+
+    def __enter__(self) -> "TrackingLock":
+        self.entered = True
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.entered = False
+
+
+class GuardedSecurityScanJobs(dict[str, object]):
+    def __init__(self, lock: TrackingLock, *args: object) -> None:
+        super().__init__(*args)
+        self._lock = lock
+
+    def values(self):  # type: ignore[no-untyped-def]
+        assert self._lock.entered, "security scan jobs read without lock"
+        return super().values()

@@ -82,6 +82,7 @@ class CommandRunner:
         cwd: str | Path | None = None,
         env: Mapping[str, str] | None = None,
         check: bool = True,
+        timeout_seconds: float | None = None,
     ) -> CommandResult:
         """Run a command and capture stdout/stderr as text."""
 
@@ -97,6 +98,7 @@ class CommandRunner:
                 stderr=subprocess.PIPE,
                 text=True,
                 check=False,
+                timeout=timeout_seconds,
             )
             result = CommandResult(
                 args=argv,
@@ -104,6 +106,14 @@ class CommandRunner:
                 returncode=completed.returncode,
                 stdout=completed.stdout,
                 stderr=completed.stderr,
+            )
+        except subprocess.TimeoutExpired as exc:
+            result = CommandResult(
+                args=argv,
+                cwd=cwd_path,
+                returncode=124,
+                stdout=_decode_timeout_output(exc.stdout),
+                stderr=_decode_timeout_output(exc.stderr) or "command timed out",
             )
         except OSError as exc:
             result = _result_from_os_error(argv, cwd_path, exc)
@@ -432,6 +442,14 @@ def _result_from_os_error(
         returncode=_os_error_returncode(exc),
         stderr=str(exc),
     )
+
+
+def _decode_timeout_output(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", "replace")
+    return value
 
 
 def _os_error_returncode(exc: OSError) -> int:

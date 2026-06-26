@@ -40,6 +40,7 @@ from . import (
     web_retags,
     web_runs,
     web_scheduler,
+    web_security,
     web_self_update,
     web_settings,
     web_startup,
@@ -83,6 +84,7 @@ def create_app(
     app.state.web_settings = active_settings
     app.state.web_setup_claim = ""
     web_jobs.initialize_apply_job_state(app.state)
+    web_security.initialize_security_scan_state(app.state, active_settings)
     web_retags.initialize_retag_preview_state(app.state)
     app.state.web_login_throttle_lock = Lock()
     app.state.web_login_throttle = {}
@@ -108,6 +110,7 @@ def create_app(
     def shutdown_apply_executor() -> None:
         web_scheduler.shutdown_auto_update_scheduler_state(app.state)
         web_retags.shutdown_retag_preview_state(app.state)
+        web_security.shutdown_security_scan_state(app.state)
         web_jobs.shutdown_apply_job_state(app.state)
 
     router_shutdown = getattr(getattr(app, "router", None), "on_shutdown", None)
@@ -390,6 +393,29 @@ def create_app(
         methods=["GET"],
     )
     router.add_api_route(
+        "/security-scans",
+        web_security.api_security_scans,
+        methods=["GET"],
+        response_model=web_models.SecurityScansResponse,
+    )
+    router.add_api_route(
+        "/security-scans/refresh",
+        web_security.api_refresh_security_scans,
+        methods=["POST"],
+        response_model=web_models.SecurityScanJobResponse,
+    )
+    router.add_api_route(
+        "/security-scans/refresh",
+        api_post_only_method_not_allowed,
+        methods=["GET"],
+    )
+    router.add_api_route(
+        "/security-scans/jobs/{job_id}",
+        web_security.api_security_scan_job,
+        methods=["GET"],
+        response_model=web_models.SecurityScanJobResponse,
+    )
+    router.add_api_route(
         "/service-policies",
         web_state.api_service_policies,
         methods=["GET"],
@@ -568,6 +594,7 @@ def load_web_settings(
             if web_settings.RELEASE_NOTES_ENABLED_ENV in env
             else None
         ),
+        security_scan=web_security.configured_security_scan_config(env),
         command_env=dict(env),
     )
 

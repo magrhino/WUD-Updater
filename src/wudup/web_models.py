@@ -137,6 +137,14 @@ __all__ = (
     "RunVerificationStatus",
     "RunVerificationSummary",
     "RunVerificationWudStatus",
+    "SecurityScanConfig",
+    "SecurityScanInfo",
+    "SecurityScanJobResponse",
+    "SecurityScanSeverityCounts",
+    "SecurityScanState",
+    "SecurityScanSubjectInfo",
+    "SecurityScansResponse",
+    "SecurityScanVerdict",
     "SELF_UPDATE_RELEASE_NOTES_CAP",
     "SecretSettingStatus",
     "SelfUpdateApplyResponse",
@@ -273,6 +281,17 @@ class WudApiClientConfig:
 
 
 @dataclass(frozen=True)
+class SecurityScanConfig:
+    enabled: bool = False
+    scanner: str = "trivy"
+    mode: str = "registry"
+    executable: str = "trivy"
+    cache_dir: str = ""
+    timeout_seconds: int = 300
+    max_concurrency: int = 1
+
+
+@dataclass(frozen=True)
 class WebSettings:
     config: UpdaterConfig
     auth_token: str
@@ -293,6 +312,9 @@ class WebSettings:
     )
     pending_source: PendingSourceMode = "file"
     release_notes_enabled_env: bool | None = None
+    security_scan: SecurityScanConfig = dataclass_field(
+        default_factory=SecurityScanConfig
+    )
     command_env: Mapping[str, str] | None = None
 
     @property
@@ -1040,6 +1062,95 @@ RunVerificationWudStatus = Literal[
     "removed_before_run",
     "unknown",
 ]
+
+SecurityScanState = Literal[
+    "disabled",
+    "not_scanned",
+    "queued",
+    "running",
+    "complete",
+    "stale",
+    "partial",
+    "unsupported",
+    "unavailable_offline",
+    "auth_required",
+    "error",
+]
+
+SecurityScanVerdict = Literal["findings", "none_reported", "unknown"]
+
+
+class SecurityScanSubjectInfo(BaseModel):
+    subject_id: str = ""
+    line_no: int = 0
+    raw: str = ""
+    image: str = ""
+    candidate_image: str = ""
+    canonical_registry: str = ""
+    canonical_repository: str = ""
+    requested_ref: str = ""
+    reported_digest: str = ""
+    index_digest: str = ""
+    manifest_digest: str = ""
+    platform: str = ""
+    platform_os: str = ""
+    platform_architecture: str = ""
+    platform_variant: str = ""
+    platform_source: str = ""
+    identity_status: str = "unsupported"
+    warnings: list[str] = Field(default_factory=list)
+
+
+class SecurityScanSeverityCounts(BaseModel):
+    critical: int = 0
+    high: int = 0
+    medium: int = 0
+    low: int = 0
+    unknown: int = 0
+
+
+class SecurityScanInfo(BaseModel):
+    line_no: int
+    state: SecurityScanState
+    verdict: SecurityScanVerdict = "unknown"
+    scanner: str = ""
+    scanner_version: str = ""
+    scanner_schema: str = ""
+    scanned_at: str = ""
+    db_revision: str = ""
+    db_updated_at: str = ""
+    severity_counts: SecurityScanSeverityCounts = Field(
+        default_factory=SecurityScanSeverityCounts
+    )
+    fixable_counts: SecurityScanSeverityCounts = Field(
+        default_factory=SecurityScanSeverityCounts
+    )
+    unfixed_count: int = 0
+    warnings: list[str] = Field(default_factory=list)
+    error_code: str = ""
+    error_message: str = ""
+    subject: SecurityScanSubjectInfo = Field(default_factory=SecurityScanSubjectInfo)
+
+
+class SecurityScansResponse(BaseModel):
+    source_file: str
+    source: PendingSourceInfo = Field(default_factory=PendingSourceInfo)
+    source_hash: str = ""
+    scanning_enabled: bool = False
+    scanner: str = "trivy"
+    scan_mode: str = "registry"
+    count: int = 0
+    items: list[SecurityScanInfo] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class SecurityScanJobResponse(BaseModel):
+    job_id: str
+    status: Literal["queued", "running", "success", "failure"]
+    total_count: int = 0
+    completed_count: int = 0
+    result: SecurityScansResponse | None = None
+    error: str = ""
 
 
 class RunVerificationItem(BaseModel):
