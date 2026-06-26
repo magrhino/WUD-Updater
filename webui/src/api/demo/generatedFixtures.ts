@@ -1036,6 +1036,19 @@ export const generatedFixtures = {
           "restart_required": false,
           "source": "default",
           "value": "false"
+        },
+        {
+          "allowed_values": [
+            "false",
+            "true"
+          ],
+          "default_value": "false",
+          "disabled_reason": "",
+          "editable": true,
+          "key": "release_notes_enabled",
+          "restart_required": false,
+          "source": "configured",
+          "value": "true"
         }
       ],
       "secrets": [
@@ -1153,6 +1166,13 @@ export const generatedFixtures = {
           "name": "WUD_DIGEST_PIN_UPDATES",
           "source": "default",
           "value": "false"
+        },
+        {
+          "configured": true,
+          "default_value": "false",
+          "name": "WUD_RELEASE_NOTES_ENABLED",
+          "source": "configured",
+          "value": "true"
         }
       ],
       "webui": [
@@ -106834,6 +106854,8 @@ export const generatedFixtures = {
   ],
   "releaseNotes": {
     "count": 7,
+    "disabled_reason": "",
+    "enabled": true,
     "items": [
       {
         "breaking": false,
@@ -121757,6 +121779,19 @@ export const generatedFixtures = {
         "restart_required": false,
         "source": "default",
         "value": "false"
+      },
+      {
+        "allowed_values": [
+          "false",
+          "true"
+        ],
+        "default_value": "false",
+        "disabled_reason": "",
+        "editable": true,
+        "key": "release_notes_enabled",
+        "restart_required": false,
+        "source": "configured",
+        "value": "true"
       }
     ],
     "secrets": [
@@ -121874,6 +121909,13 @@ export const generatedFixtures = {
         "name": "WUD_DIGEST_PIN_UPDATES",
         "source": "default",
         "value": "false"
+      },
+      {
+        "configured": true,
+        "default_value": "false",
+        "name": "WUD_RELEASE_NOTES_ENABLED",
+        "source": "configured",
+        "value": "true"
       }
     ],
     "webui": [

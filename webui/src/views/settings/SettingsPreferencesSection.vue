@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RotateCcw, Save } from "@lucide/vue";
-import { NAlert, NButton, NFlex, NInput, NSelect } from "naive-ui";
+import { NAlert, NButton, NFlex, NInput, NSelect, NSwitch } from "naive-ui";
 
 import { useManagedPreferences } from "./useManagedPreferences";
 
@@ -14,16 +14,19 @@ const {
   onboardingChecklistEntry,
   composeIgnorePathsEntry,
   digestPinUpdatesEntry,
+  releaseNotesEnabledEntry,
   themePreferenceValue,
   onboardingChecklistValue,
   composeIgnorePathsValue,
   digestPinUpdatesValue,
+  releaseNotesEnabledValue,
   preferencesMessage,
   preferencesError,
   preferencesDisabledReason,
   preferenceControlsDisabled,
   composeIgnorePathsEditable,
   digestPinUpdatesEditable,
+  releaseNotesEnabledEditable,
   preferencesDirty,
   preferenceSaveDisabled,
   themePreferenceOptions,
@@ -169,6 +172,30 @@ const {
               class="settings-action-alert"
             >
               {{ digestPinUpdatesEntry.disabled_reason }}
+            </n-alert>
+          </div>
+        </div>
+        <div class="settings-preference-row">
+          <div>
+            <strong class="wrap-anywhere">Release-note notifications</strong>
+            <span class="wrap-anywhere">
+              Source:
+              {{ managedSourceLabel(releaseNotesEnabledEntry) }}
+            </span>
+          </div>
+          <div class="settings-preference-controls">
+            <n-switch
+              v-model:value="releaseNotesEnabledValue"
+              :disabled="preferenceControlsDisabled || !releaseNotesEnabledEditable"
+              aria-label="Release-note notifications"
+            />
+            <n-alert
+              v-if="releaseNotesEnabledEntry?.disabled_reason"
+              type="info"
+              :show-icon="false"
+              class="settings-action-alert"
+            >
+              {{ releaseNotesEnabledEntry.disabled_reason }}
             </n-alert>
           </div>
         </div>

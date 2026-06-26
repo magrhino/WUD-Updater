@@ -208,6 +208,10 @@ describe("webApi", () => {
       webApi.applySelfUpdate("csrf", selfUpdateStatus()),
       webApi.prepareSelfUpdate("csrf", selfUpdateStatus(), selfUpdatePlanStatus()),
       webApi.restartContainer("csrf"),
+      webApi.releaseNotes(),
+      webApi.refreshReleaseNotes("csrf"),
+      webApi.previewReleaseNotifications({ line_numbers: [1, 2] }, "csrf"),
+      webApi.sendReleaseNotifications({ run_id: 7 }, "csrf"),
       webApi.createPlan([1], true, [{ line_no: 1, tag: "1.1" }], [], "csrf"),
       webApi.createJob("plan", [1], true, [{ line_no: 1, tag: "1.1" }], [], "csrf"),
       webApi.applyPlan("plan", [1], true, [{ line_no: 1, tag: "1.1" }], [], "csrf"),
@@ -218,7 +222,7 @@ describe("webApi", () => {
       webApi.runLog(1),
     ]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(42);
+    expect(fetchMock).toHaveBeenCalledTimes(46);
     for (const call of fetchMock.mock.calls) {
       expect(requestInit(call).credentials).toBe("include");
     }
@@ -361,6 +365,9 @@ describe("webApi", () => {
       selfUpdatePlanStatus(),
     );
     await webApi.restartContainer("csrf-token");
+    await webApi.refreshReleaseNotes("csrf-token");
+    await webApi.previewReleaseNotifications({ line_numbers: [1] }, "csrf-token");
+    await webApi.sendReleaseNotifications({ run_id: 7 }, "csrf-token");
     await webApi.refreshRetagGithubLatest("csrf-token");
     await webApi.startRetagPreview(
       [{ service_key: "media/app", choice: "switch-to-concrete" }],
@@ -533,6 +540,33 @@ describe("webApi", () => {
         "x-wud-csrf-token",
       ),
     ).toBe("csrf");
+  });
+
+  it("serializes release notification preview and send payloads exactly", async () => {
+    const fetchMock = mockFetch({});
+
+    await webApi.previewReleaseNotifications({ line_numbers: [1, 2] }, "csrf");
+    await webApi.sendReleaseNotifications({ run_id: 9 }, "csrf");
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/v1/release-notifications/preview",
+    );
+    expect(requestInit(fetchMock.mock.calls[0]).method).toBe("POST");
+    expect(
+      (requestInit(fetchMock.mock.calls[0]).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf");
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      line_numbers: [1, 2],
+    });
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      "/api/v1/release-notifications/send",
+    );
+    expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual({
+      run_id: 9,
+      confirmation: "send-release-notes",
+    });
   });
 
   it("opens job streams with browser credentials", () => {

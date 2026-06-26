@@ -98,6 +98,17 @@ describe("demo web API", () => {
         }),
       ]),
     });
+    await expect(
+      api.updateManagedSettings({ release_notes_enabled: "true" }, "csrf"),
+    ).resolves.toMatchObject({
+      managed: expect.arrayContaining([
+        expect.objectContaining({
+          key: "release_notes_enabled",
+          value: "true",
+          source: "configured",
+        }),
+      ]),
+    });
     await expect(api.onboardingChecklist("csrf")).resolves.toMatchObject({
       visible: true,
       items: expect.arrayContaining([
@@ -929,6 +940,88 @@ describe("demo web API", () => {
     ]);
     const remainingReleaseNoteLines = (await api.releaseNotes()).items.map((item) => item.line_no);
     expect(remainingReleaseNoteLines.filter((lineNo) => selected.includes(lineNo))).toEqual([]);
+  });
+
+  it("previews and sends static demo release notifications without mutating pending state", async () => {
+    const api = createDemoWebApi();
+    const selected = [2, 4, 6];
+
+    const preview = await api.previewReleaseNotifications(
+      { line_numbers: selected },
+      "csrf",
+    );
+
+    expect(preview).toMatchObject({
+      enabled: true,
+      sent: false,
+      audit_run_id: 0,
+      source_file: "demo/out/images.todo",
+      count: 3,
+      sendable_count: 1,
+      skipped_count: 2,
+      destination: {
+        type: "discord",
+        configured: true,
+        source: "DISCORD_RELEASES_WEBHOOK",
+      },
+    });
+    expect(preview.items.map((item) => item.line_no)).toEqual(selected);
+    expect(preview.items[0]).toMatchObject({
+      line_no: 2,
+      image: "ghcr.io/home-assistant/home-assistant:2026.5.1",
+      service_key: "home-assistant/home-assistant:2026.5.1",
+      status: "ready",
+      skipped_reason: "",
+      triggers: [
+        {
+          id: "discord.releases",
+          type: "discord",
+          name: "releases",
+        },
+      ],
+    });
+    expect(preview.items[1]).toMatchObject({
+      line_no: 4,
+      status: "unsupported",
+      skipped_reason: "no supported GitHub release source found",
+    });
+    expect(preview.items[2]).toMatchObject({
+      line_no: 6,
+      status: "not_found",
+      skipped_reason: "not_found",
+    });
+    expect(preview.batches).toEqual([
+      {
+        embeds: [
+          {
+            title: "Home Assistant Core 2026.5.3",
+            description: "home-assistant/core",
+          },
+        ],
+      },
+    ]);
+
+    const sent = await api.sendReleaseNotifications(
+      { line_numbers: selected },
+      "csrf",
+    );
+
+    expect(sent).toMatchObject({
+      sent: true,
+      audit_run_id: 9004,
+      count: preview.count,
+      sendable_count: preview.sendable_count,
+      skipped_count: preview.skipped_count,
+    });
+    expect((await api.pending()).items.map((item) => item.line_no)).toEqual([
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+    ]);
   });
 
   it("materializes arbitrary tag overrides into plan, job log, and run detail", async () => {

@@ -32,6 +32,7 @@ import {
   pendingResponse,
   planResponse,
   releaseNoteInfo,
+  releaseNotificationResponse,
   releaseNotesResponse,
   runVerification,
   runSummary,
@@ -98,6 +99,11 @@ describe("pending view apply jobs", () => {
             verification: runVerification(),
           },
         };
+      });
+    const previewReleaseNotifications = vi
+      .spyOn(updates, "previewReleaseNotifications")
+      .mockImplementation(async () => {
+        updates.releaseNotification = releaseNotificationResponse();
       });
     vi.spyOn(updates, "createPlan").mockImplementation(async () => {
       updates.plan = planResponse();
@@ -213,6 +219,16 @@ describe("pending view apply jobs", () => {
     expect(wrapper.find(".apply-job-panel").text()).toContain("Verified");
     expect(wrapper.find(".apply-job-panel").text()).toContain("New image running");
     expect(wrapper.find(".apply-job-panel").text()).toContain("WUD line removed");
+    await wrapper
+      .find(".apply-job-panel")
+      .findAll("button")
+      .find((button) => button.text().includes("Preview release notes"))
+      ?.trigger("click");
+    await flushPromises();
+    expect(previewReleaseNotifications).toHaveBeenCalledWith({ run_id: 10 });
+    expect(wrapper.find("dialog").text()).toContain(
+      "Send Discord notifications",
+    );
     expect(wrapper.find(".apply-job-details").attributes("open")).toBe("");
     expect(wrapper.find(".apply-job-live-log-body").attributes("style")).toContain(
       "display: none",

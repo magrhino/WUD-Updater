@@ -141,6 +141,8 @@ function releaseNotesResponse() {
     source_file: "/out/images.todo",
     source: pendingSourceInfo(),
     count: 1,
+    enabled: true,
+    disabled_reason: "",
     warnings: [],
     wud_api: wudApiStatus(),
     items: [

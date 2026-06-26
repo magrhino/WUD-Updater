@@ -11,6 +11,8 @@ import {
   pendingRescanResponse,
   pendingSourceInfo,
   planResponse,
+  releaseNotificationResponse,
+  releaseNotesResponse,
   snooze,
   wudApiStatus,
   wudContainerMetadata,
@@ -322,6 +324,101 @@ describe("pending view selection actions", () => {
     await removalButton?.trigger("click");
 
     expect(createRemovalPlan).not.toHaveBeenCalled();
+  });
+
+  it("previews and sends Discord release notes for selected pending updates", async () => {
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = pendingResponse();
+    updates.releaseNotes = releaseNotesResponse();
+    mockPendingLifecycle(settings, updates);
+    const previewReleaseNotifications = vi
+      .spyOn(updates, "previewReleaseNotifications")
+      .mockImplementation(async () => {
+        updates.releaseNotification = releaseNotificationResponse();
+      });
+    const sendReleaseNotifications = vi
+      .spyOn(updates, "sendReleaseNotifications")
+      .mockImplementation(async () => {
+        updates.releaseNotification = releaseNotificationResponse({
+          sent: true,
+          audit_run_id: 79,
+        });
+      });
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview release notes"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(previewReleaseNotifications).toHaveBeenCalledWith({ line_numbers: [1] });
+    expect(wrapper.find("dialog").text()).toContain(
+      "Send Discord notifications",
+    );
+
+    await wrapper
+      .find("dialog")
+      .findAll("button")
+      .find((button) => button.text().includes("Send to Discord"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(sendReleaseNotifications).toHaveBeenCalledWith({ line_numbers: [1] });
+    expect(wrapper.find("dialog").text()).toContain(
+      "Release-note notifications sent. Audit run #79.",
+    );
+  });
+
+  it("keeps Discord release-note send disabled when preview fails", async () => {
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = pendingResponse();
+    updates.releaseNotes = releaseNotesResponse();
+    mockPendingLifecycle(settings, updates);
+    const previewReleaseNotifications = vi
+      .spyOn(updates, "previewReleaseNotifications")
+      .mockImplementation(async () => {
+        updates.releaseNotification = null;
+        updates.releaseNotificationError = "preview failed";
+        throw new Error("preview failed");
+      });
+    const sendReleaseNotifications = vi.spyOn(updates, "sendReleaseNotifications");
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview release notes"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const dialog = wrapper.find("dialog");
+    expect(previewReleaseNotifications).toHaveBeenCalledWith({ line_numbers: [1] });
+    expect(dialog.text()).toContain(
+      "Release-note notification is unavailable: preview failed",
+    );
+    expect(dialog.text()).toContain(
+      "Preview release-note notifications before sending.",
+    );
+    expect(dialog.text()).not.toContain("Release-note notifications are disabled.");
+    expect(dialog.text()).not.toContain("Discord release-note webhook is not configured.");
+    expect(dialog.text()).not.toContain("Missing");
+    const sendButton = dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Send to Discord"));
+    expect(sendButton?.attributes("disabled")).toBeDefined();
+
+    await sendButton?.trigger("click");
+    await flushPromises();
+
+    expect(sendReleaseNotifications).not.toHaveBeenCalled();
   });
 
   it("disables WUD rescan controls in read-only mode", async () => {

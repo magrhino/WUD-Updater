@@ -106,6 +106,12 @@ __all__ = (
     "ReadyResponse",
     "ReleaseNoteInfo",
     "ReleaseNoteLink",
+    "ReleaseNotificationDestination",
+    "ReleaseNotificationItem",
+    "ReleaseNotificationPreviewRequest",
+    "ReleaseNotificationResponse",
+    "ReleaseNotificationSendRequest",
+    "ReleaseNotificationTrigger",
     "ReleaseNotesResponse",
     "ResetAdminClaimRequest",
     "RetagApplyRequest",
@@ -286,6 +292,7 @@ class WebSettings:
         default_factory=WudApiClientConfig
     )
     pending_source: PendingSourceMode = "file"
+    release_notes_enabled_env: bool | None = None
     command_env: Mapping[str, str] | None = None
 
     @property
@@ -714,6 +721,8 @@ class ReleaseNotesResponse(BaseModel):
     source: PendingSourceInfo = Field(default_factory=PendingSourceInfo)
     count: int
     items: list[ReleaseNoteInfo] = Field(default_factory=list)
+    enabled: bool = True
+    disabled_reason: str = ""
     wud_api: WudApiStatus = Field(
         default_factory=lambda: WudApiStatus(
             state="unavailable",
@@ -723,6 +732,67 @@ class ReleaseNotesResponse(BaseModel):
         )
     )
     warnings: list[str] = Field(default_factory=list)
+
+class ReleaseNotificationPreviewRequest(BaseModel):
+    line_numbers: list[LineNumber] = Field(default_factory=list)
+    run_id: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def exactly_one_source(self) -> "ReleaseNotificationPreviewRequest":
+        if bool(self.line_numbers) == bool(self.run_id):
+            raise ValueError("provide exactly one of line_numbers or run_id")
+        return self
+
+class ReleaseNotificationSendRequest(ReleaseNotificationPreviewRequest):
+    confirmation: Literal["send-release-notes"]
+
+class ReleaseNotificationDestination(BaseModel):
+    type: Literal["discord"] = "discord"
+    configured: bool = False
+    source: str = ""
+
+class ReleaseNotificationTrigger(BaseModel):
+    id: str = ""
+    type: str = ""
+    name: str = ""
+
+class ReleaseNotificationItem(BaseModel):
+    line_no: int
+    image: str
+    service_key: str = ""
+    title: str
+    description: str
+    status: str
+    release_tag: str = ""
+    upstream_repo: str = ""
+    links: list[ReleaseNoteLink] = Field(default_factory=list)
+    triggers: list[ReleaseNotificationTrigger] = Field(default_factory=list)
+    skipped_reason: str = ""
+
+class ReleaseNotificationResponse(BaseModel):
+    enabled: bool
+    destination: ReleaseNotificationDestination = Field(
+        default_factory=ReleaseNotificationDestination
+    )
+    source: PendingSourceInfo = Field(default_factory=PendingSourceInfo)
+    source_file: str = ""
+    count: int = 0
+    sendable_count: int = 0
+    skipped_count: int = 0
+    batches: list[dict[str, Any]] = Field(default_factory=list)
+    items: list[ReleaseNotificationItem] = Field(default_factory=list)
+    wud_api: WudApiStatus = Field(
+        default_factory=lambda: WudApiStatus(
+            state="unavailable",
+            available=False,
+            metadata_available=False,
+            last_checked_at="",
+        )
+    )
+    warnings: list[str] = Field(default_factory=list)
+    sent: bool = False
+    audit_run_id: int = 0
+    error: str = ""
 
 class HealthResponse(BaseModel):
     ok: bool

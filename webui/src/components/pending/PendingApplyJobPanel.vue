@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { Check, CheckCircle2, ChevronDown, ChevronUp, Play, X } from "@lucide/vue";
+import { Check, CheckCircle2, ChevronDown, ChevronUp, Play, Send, X } from "@lucide/vue";
 import { NAlert, NButton, NFlex, NTag } from "naive-ui";
 
 import type {
@@ -17,7 +17,7 @@ import { pluralize } from "../../views/pending/utils";
 
 type TagType = "default" | "error" | "info" | "success" | "warning";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   active: boolean;
   alertType: TagType;
   impactLabel: string;
@@ -38,6 +38,10 @@ const props = defineProps<{
   panelStatusLabel: string;
   progressSteps: ApplyJobProgressStep[];
   progressSummary: string;
+  releaseNotificationsDisabled?: boolean;
+  releaseNotificationsDisabledMessage?: string;
+  releaseNotificationsLoading?: boolean;
+  releaseNotificationsVisible?: boolean;
   snapshot: ApplyJobPlanSnapshot | null;
   startedLabel: string;
   statusMessage: string;
@@ -46,10 +50,16 @@ const props = defineProps<{
   updateLabel: string;
   verification: RunVerificationSummary;
   job: ApplyJobResponse;
-}>();
+}>(), {
+  releaseNotificationsDisabled: true,
+  releaseNotificationsDisabledMessage: "",
+  releaseNotificationsLoading: false,
+  releaseNotificationsVisible: false,
+});
 
 const emit = defineEmits<{
   (event: "update:liveLogExpanded", value: boolean): void;
+  (event: "preview-release-notes"): void;
 }>();
 
 const applyJobPanelRef = ref<HTMLElement | null>(null);
@@ -194,6 +204,32 @@ function snapshotLineScope(
       :verification="verification"
       title="Verification"
     />
+
+    <section
+      v-if="releaseNotificationsVisible"
+      class="apply-job-release-notes"
+      aria-labelledby="apply-job-release-notes-title"
+    >
+      <span id="apply-job-release-notes-title">Release notes</span>
+      <code class="wrap-anywhere">
+        {{ releaseNotificationsDisabledMessage || "Preview and send Discord release-note notifications for this completed run." }}
+      </code>
+      <n-flex class="apply-job-run-links" align="center" :size="8">
+        <n-button
+          size="small"
+          secondary
+          :disabled="releaseNotificationsDisabled"
+          :loading="releaseNotificationsLoading"
+          :title="releaseNotificationsDisabledMessage"
+          @click="emit('preview-release-notes')"
+        >
+          <template #icon>
+            <Send :size="16" />
+          </template>
+          Preview release notes
+        </n-button>
+      </n-flex>
+    </section>
 
     <details class="apply-job-details" :open="!active">
       <summary class="disclosure-summary disclosure-summary-triangle">
@@ -480,7 +516,8 @@ function snapshotLineScope(
   line-height: 1.35;
 }
 
-.apply-job-latest-log {
+.apply-job-latest-log,
+.apply-job-release-notes {
   display: grid;
   gap: 5px;
   min-width: 0;
@@ -490,13 +527,15 @@ function snapshotLineScope(
   background: var(--color-surface);
 }
 
-.apply-job-latest-log span {
+.apply-job-latest-log span,
+.apply-job-release-notes span {
   color: var(--color-muted-text);
   font-size: 0.78rem;
   font-weight: 700;
 }
 
-.apply-job-latest-log code {
+.apply-job-latest-log code,
+.apply-job-release-notes code {
   color: var(--color-code-text);
   font-size: 0.82rem;
   line-height: 1.45;

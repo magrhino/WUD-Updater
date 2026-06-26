@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
+from typing import cast
 
 from . import web_wud_config
 from .web_wud_config import _auth_required_detail
@@ -33,6 +34,7 @@ from .web_auth import (
     _redact_unknown_absolute_paths,
 )
 from .web_models import (
+    ReleaseNotificationTrigger,
     WebSettings,
     WudApiClientConfig,
     WudApiAppDiagnostics as WudApiAppDiagnostics,
@@ -466,6 +468,48 @@ def target_tag_resolver_from_metadata(
     return resolve
 
 
+def container_triggers(
+    settings: WebSettings,
+    container_id: str,
+) -> tuple[list[ReleaseNotificationTrigger], str]:
+    if not container_id:
+        return [], ""
+    base_url = settings.wud_api_base_url or DEFAULT_WUD_API_BASE_URL
+    try:
+        normalized_base_url = _normalize_base_url(base_url)
+    except ValueError as exc:
+        return [], _sanitize_detail(settings, f"invalid WUD API base URL: {exc}")
+    path = f"/api/containers/{urllib.parse.quote(container_id, safe='')}/triggers"
+    try:
+        payload = _request_json(
+            _join_url(normalized_base_url, path),
+            settings.wud_api_client,
+        )
+    except urllib.error.HTTPError as exc:
+        if exc.code in {401, 403}:
+            return [], _auth_required_detail(
+                settings,
+                "WUD API trigger metadata requires authentication",
+            )
+        return [], _sanitize_detail(
+            settings,
+            f"WUD API trigger metadata returned HTTP {exc.code}",
+        )
+    except (OSError, ValueError) as exc:
+        return [], _sanitize_detail(
+            settings,
+            f"WUD API trigger metadata is unavailable: {exc}",
+        )
+    if not isinstance(payload, list):
+        return [], "WUD API trigger metadata payload was not a list"
+    trigger_payloads = cast(list[object], payload)
+    return [
+        _parse_trigger(raw)
+        for raw in trigger_payloads
+        if isinstance(raw, Mapping)
+    ], ""
+
+
 def _refresh_snapshot(
     settings: WebSettings,
     *,
@@ -625,6 +669,22 @@ def _refresh_snapshot(
     )
     _store_snapshot(_cache_key(settings, base_url), snapshot)
     return snapshot
+
+
+def _parse_trigger(raw: Mapping[str, object]) -> ReleaseNotificationTrigger:
+    trigger_type = _string(raw.get("type") or raw.get("kind"))
+    name = _string(raw.get("name"))
+    trigger_id = _string(raw.get("id"))
+    if not trigger_id:
+        if trigger_type and name:
+            trigger_id = f"{trigger_type}.{name}"
+        else:
+            trigger_id = name or trigger_type
+    return ReleaseNotificationTrigger(
+        id=trigger_id,
+        type=trigger_type,
+        name=name,
+    )
 
 
 def _refresh_configuration_diagnostics(

@@ -15,6 +15,7 @@ import type {
   PendingSourceInfo,
   PlanResponse,
   ReleaseNoteInfo,
+  ReleaseNotificationResponse,
   ReleaseNotesResponse,
   RetagPlanResponse,
   RetagPreviewJobResponse,
@@ -330,6 +331,15 @@ export function settingsResponse(
         source: "default",
         editable: true,
         allowed_values: ["visible", "dismissed"],
+        restart_required: false,
+      },
+      {
+        key: "release_notes_enabled",
+        value: "false",
+        default_value: "false",
+        source: "default",
+        editable: true,
+        allowed_values: ["false", "true"],
         restart_required: false,
       },
     ],
@@ -888,8 +898,65 @@ export function releaseNotesResponse(
     source: pendingSourceInfo(),
     count: items.length,
     items,
+    enabled: true,
+    disabled_reason: "",
     wud_api: wudApiStatus(),
     warnings: [],
+  };
+}
+
+export function releaseNotificationResponse(
+  overrides: Partial<ReleaseNotificationResponse> = {},
+): ReleaseNotificationResponse {
+  return {
+    enabled: true,
+    destination: {
+      type: "discord",
+      configured: true,
+      source: "DISCORD_RELEASES_WEBHOOK",
+    },
+    source: pendingSourceInfo(),
+    source_file: "/out/images.todo",
+    count: 1,
+    sendable_count: 1,
+    skipped_count: 0,
+    batches: [
+      {
+        embeds: [
+          {
+            title: "v2.0.0",
+            description: "acme/app",
+          },
+        ],
+      },
+    ],
+    items: [
+      {
+        line_no: 1,
+        image: "acme/app:2.0.0",
+        service_key: "demo/app",
+        title: "v2.0.0",
+        description: "acme/app",
+        status: "ready",
+        release_tag: "v2.0.0",
+        upstream_repo: "acme/app",
+        links: [],
+        triggers: [
+          {
+            id: "discord.releases",
+            type: "discord",
+            name: "releases",
+          },
+        ],
+        skipped_reason: "",
+      },
+    ],
+    wud_api: wudApiStatus(),
+    warnings: [],
+    sent: false,
+    audit_run_id: 0,
+    error: "",
+    ...overrides,
   };
 }
 

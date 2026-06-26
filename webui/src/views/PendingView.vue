@@ -8,7 +8,7 @@ import {
   NTag,
 } from "naive-ui";
 
-import type { ReleaseNoteInfo } from "../api/client";
+import type { ReleaseNoteInfo, ReleaseNotificationSource } from "../api/client";
 import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
 import { useRouteRefresh } from "../components/app/routeRefresh";
 import PendingApplyJobPanel from "../components/pending/PendingApplyJobPanel.vue";
@@ -16,6 +16,7 @@ import PendingCleanupModal from "../components/pending/PendingCleanupModal.vue";
 import PendingFallbackQueue from "../components/pending/PendingFallbackQueue.vue";
 import PendingPlanReviewModal from "../components/pending/PendingPlanReviewModal.vue";
 import PendingRemovalModal from "../components/pending/PendingRemovalModal.vue";
+import PendingReleaseNotificationModal from "../components/pending/PendingReleaseNotificationModal.vue";
 import PendingSearchEmptyState from "../components/pending/PendingSearchEmptyState.vue";
 import PendingSearchPanel from "../components/pending/PendingSearchPanel.vue";
 import PendingSelectionToolbar from "../components/pending/PendingSelectionToolbar.vue";
@@ -105,6 +106,8 @@ const {
 
 let clearPreflightHandler: () => void = () => undefined;
 let loadPendingAndReleaseNotesHandler: () => Promise<void> = async () => undefined;
+const showReleaseNotificationModal = ref(false);
+const releaseNotificationSource = ref<ReleaseNotificationSource | null>(null);
 
 const {
   clearSelection,
@@ -230,6 +233,80 @@ const pendingRescanMessage = computed(() => {
   }
   return `WUD rescan requested for ${watched}.`;
 });
+const releaseNotificationsDisabledReason = computed(() => {
+  if (updates.releaseNotes?.enabled === false) {
+    return (
+      updates.releaseNotes.disabled_reason ||
+      "Release-note notifications are disabled in Settings."
+    );
+  }
+  return "";
+});
+const selectedReleaseNotificationsDisabledMessage = computed(() => {
+  if (releaseNotificationsDisabledReason.value) {
+    return releaseNotificationsDisabledReason.value;
+  }
+  if (updates.releaseNotificationLoading) {
+    return "Release-note notification preview is loading.";
+  }
+  return "";
+});
+const selectedReleaseNotificationsDisabled = computed(
+  () =>
+    updates.releaseNotificationLoading ||
+    Boolean(selectedReleaseNotificationsDisabledMessage.value),
+);
+const applyJobReleaseNotificationsVisible = computed(
+  () => updates.applyJob?.status === "success" && Boolean(updates.applyJob.run_id),
+);
+const applyJobReleaseNotificationsDisabledMessage = computed(() => {
+  if (!applyJobReleaseNotificationsVisible.value) {
+    return "";
+  }
+  if (releaseNotificationsDisabledReason.value) {
+    return releaseNotificationsDisabledReason.value;
+  }
+  if (updates.releaseNotificationLoading) {
+    return "Release-note notification preview is loading.";
+  }
+  return "";
+});
+const applyJobReleaseNotificationsDisabled = computed(
+  () =>
+    !updates.applyJob?.run_id ||
+    updates.releaseNotificationLoading ||
+    Boolean(applyJobReleaseNotificationsDisabledMessage.value),
+);
+const releaseNotificationSendDisabledMessage = computed(() => {
+  const response = updates.releaseNotification;
+  if (!response) {
+    return updates.releaseNotificationLoading
+      ? ""
+      : "Preview release-note notifications before sending.";
+  }
+  if (response.sent) {
+    return "Release-note notifications were sent.";
+  }
+  if (!response.enabled) {
+    return "Release-note notifications are disabled in Settings.";
+  }
+  if (!response.destination.configured) {
+    return "Set DISCORD_RELEASES_WEBHOOK or DISCORD_WEBHOOK in the WebUI runtime environment.";
+  }
+  if (auth.session?.mutations_enabled === false) {
+    return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to send notifications.";
+  }
+  if (!response.sendable_count) {
+    return "No release-note notifications are available to send.";
+  }
+  return "";
+});
+const releaseNotificationSendDisabled = computed(
+  () =>
+    updates.releaseNotificationLoading ||
+    releaseNotificationSource.value === null ||
+    Boolean(releaseNotificationSendDisabledMessage.value),
+);
 
 const {
   actionCommand,
@@ -421,6 +498,44 @@ async function rescanSelectedPending(): Promise<void> {
   await updates.rescanPending("selected", selectedLineNumbers.value);
 }
 
+async function previewSelectedReleaseNotifications(): Promise<void> {
+  if (selectedReleaseNotificationsDisabled.value || !selectedLineNumbers.value.length) {
+    return;
+  }
+  await previewReleaseNotifications({
+    line_numbers: [...selectedLineNumbers.value],
+  });
+}
+
+async function previewApplyJobReleaseNotifications(): Promise<void> {
+  const runId = updates.applyJob?.run_id;
+  if (applyJobReleaseNotificationsDisabled.value || !runId) {
+    return;
+  }
+  await previewReleaseNotifications({ run_id: runId });
+}
+
+async function previewReleaseNotifications(
+  source: ReleaseNotificationSource,
+): Promise<void> {
+  releaseNotificationSource.value = source;
+  showReleaseNotificationModal.value = true;
+  await updates.previewReleaseNotifications(source).catch(() => undefined);
+}
+
+function closeReleaseNotificationModal(): void {
+  showReleaseNotificationModal.value = false;
+  releaseNotificationSource.value = null;
+  updates.clearReleaseNotification();
+}
+
+async function sendReleaseNotifications(): Promise<void> {
+  if (releaseNotificationSendDisabled.value || releaseNotificationSource.value === null) {
+    return;
+  }
+  await updates.sendReleaseNotifications(releaseNotificationSource.value).catch(() => undefined);
+}
+
 onMounted(() => {
   runInBackground(retryPendingLoad());
   runInBackground(settings.loadPendingSafetyCues());
@@ -441,6 +556,9 @@ onMounted(() => {
     </n-alert>
     <n-alert v-if="updates.releaseNotesError" type="warning">
       Release-note metadata is unavailable: {{ updates.releaseNotesError }}
+    </n-alert>
+    <n-alert v-if="updates.releaseNotificationError" type="warning">
+      Release-note notification is unavailable: {{ updates.releaseNotificationError }}
     </n-alert>
     <n-alert v-if="pendingRescanMessage" :type="pendingRescanAlertType">
       {{ pendingRescanMessage }}
@@ -518,6 +636,10 @@ onMounted(() => {
       :panel-status-label="applyJobPanelStatusLabel"
       :progress-steps="applyJobProgressSteps"
       :progress-summary="applyJobProgressSummary"
+      :release-notifications-disabled="applyJobReleaseNotificationsDisabled"
+      :release-notifications-disabled-message="applyJobReleaseNotificationsDisabledMessage"
+      :release-notifications-loading="updates.releaseNotificationLoading"
+      :release-notifications-visible="applyJobReleaseNotificationsVisible"
       :snapshot="applyJobSnapshot"
       :started-label="applyJobStartedLabel"
       :status-message="applyJobStatusMessage"
@@ -525,6 +647,7 @@ onMounted(() => {
       :title="applyJobTitle"
       :update-label="applyJobUpdateLabel"
       :verification="applyJobVerification"
+      @preview-release-notes="previewApplyJobReleaseNotifications"
     />
 
     <div class="section-heading pending-heading">
@@ -605,6 +728,8 @@ onMounted(() => {
       :removal-button-label="removalButtonLabel"
       :remove-selected-disabled="removeSelectedDisabled"
       :remove-selected-disabled-message="removeSelectedDisabledMessage"
+      :release-notifications-disabled="selectedReleaseNotificationsDisabled"
+      :release-notifications-disabled-message="selectedReleaseNotificationsDisabledMessage"
       :selectable-count="visibleSelectableLineNumbers.length"
       :select-all-label="visibleSelectAllLabel"
       :selected-count="selectedLineNumbers.length"
@@ -617,6 +742,7 @@ onMounted(() => {
       :unmatched-review-count-label="visibleUnmatchedReviewCountLabel"
       :update-selected-disabled="updateSelectedDisabled"
       @clear-selection="clearSelection"
+      @preview-release-notifications="previewSelectedReleaseNotifications"
       @rescan-all="rescanAllPending"
       @rescan-selected="rescanSelectedPending"
       @select-all="selectAllVisible"
@@ -797,6 +923,17 @@ onMounted(() => {
       :removal-line-label="removalLineLabel"
       @close="closeRemovalModal"
       @confirm="confirmSelectedRemoval"
+    />
+
+    <PendingReleaseNotificationModal
+      :show="showReleaseNotificationModal"
+      :response="updates.releaseNotification"
+      :error="updates.releaseNotificationError"
+      :loading="updates.releaseNotificationLoading"
+      :send-disabled="releaseNotificationSendDisabled"
+      :send-disabled-message="releaseNotificationSendDisabledMessage"
+      @close="closeReleaseNotificationModal"
+      @send="sendReleaseNotifications"
     />
   </section>
 </template>

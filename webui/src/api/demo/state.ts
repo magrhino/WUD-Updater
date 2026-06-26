@@ -21,6 +21,8 @@ import type {
   PendingRescanResponse,
   PendingRescanScope,
   PlanResponse,
+  ReleaseNotificationSource,
+  ReleaseNotificationResponse,
   ReleaseNotesResponse,
   RetagChoiceRequest,
   RetagPreviewJobResponse,
@@ -482,6 +484,11 @@ export class DemoApiState {
       (entry) => entry.key === "digest_pin_updates",
     )?.value ?? "false";
   digestPinUpdatesConfigured = false;
+  releaseNotesEnabled =
+    fixtures.settings.managed.find(
+      (entry) => entry.key === "release_notes_enabled",
+    )?.value ?? "false";
+  releaseNotesEnabledConfigured = false;
   coreUpdateTour: CoreUpdateTourResponse = {
     status: "not_started",
     step: "dashboard",
@@ -534,6 +541,12 @@ export class DemoApiState {
       "digest_pin_updates",
       this.digestPinUpdates,
       this.digestPinUpdatesConfigured,
+    );
+    this.updateManagedEntry(
+      settings,
+      "release_notes_enabled",
+      this.releaseNotesEnabled,
+      this.releaseNotesEnabledConfigured,
     );
     return settings;
   }
@@ -638,6 +651,13 @@ export class DemoApiState {
         this.digestPinUpdates = value;
         this.digestPinUpdatesConfigured = true;
         return;
+      case "release_notes_enabled":
+        if (!["false", "true"].includes(value)) {
+          throw new Error("release_notes_enabled must be false or true");
+        }
+        this.releaseNotesEnabled = value;
+        this.releaseNotesEnabledConfigured = true;
+        return;
       default:
         throw new Error(`managed setting is not editable: ${key}`);
     }
@@ -696,6 +716,72 @@ export class DemoApiState {
     response.items = response.items.filter((item) => activeLines.has(item.line_no));
     response.count = response.items.length;
     return response;
+  }
+
+  releaseNotifications(
+    source: ReleaseNotificationSource,
+    sent: boolean,
+  ): ReleaseNotificationResponse {
+    const releaseNotes = this.releaseNotes();
+    const selectedLines =
+      "line_numbers" in source
+        ? new Set(source.line_numbers)
+        : new Set(releaseNotes.items.map((item) => item.line_no));
+    const pendingByLine = new Map(
+      this.pendingResponse().items.map((item) => [item.line_no, item]),
+    );
+    const items = releaseNotes.items
+      .filter((item) => selectedLines.has(item.line_no))
+      .map((item) => {
+        const pending = pendingByLine.get(item.line_no);
+        const serviceKey = pending?.key ?? "";
+        return {
+          line_no: item.line_no,
+          image: pending?.image || item.image_repo,
+          service_key: serviceKey,
+          title: item.title || item.release_tag || item.image_repo,
+          description: item.upstream_repo || item.image_repo,
+          status: item.status,
+          release_tag: item.release_tag,
+          upstream_repo: item.upstream_repo,
+          links: item.links,
+          triggers: [
+            {
+              id: "discord.releases",
+              type: "discord",
+              name: "releases",
+            },
+          ],
+          skipped_reason: item.status === "ready" ? "" : item.error || item.status,
+        };
+      });
+    const sendableCount = items.filter((item) => !item.skipped_reason).length;
+    const embeds = items
+      .filter((item) => !item.skipped_reason)
+      .map((item) => ({
+        title: item.title,
+        description: item.description,
+      }));
+    return {
+      enabled: true,
+      destination: {
+        type: "discord",
+        configured: true,
+        source: "DISCORD_RELEASES_WEBHOOK",
+      },
+      source: releaseNotes.source,
+      source_file: releaseNotes.source_file,
+      count: items.length,
+      sendable_count: sendableCount,
+      skipped_count: items.length - sendableCount,
+      batches: embeds.length ? [{ embeds }] : [],
+      items,
+      wud_api: releaseNotes.wud_api,
+      warnings: releaseNotes.warnings,
+      sent,
+      audit_run_id: sent ? 9004 : 0,
+      error: "",
+    };
   }
 
   selfUpdate(): SelfUpdateResponse {

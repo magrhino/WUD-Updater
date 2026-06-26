@@ -498,6 +498,71 @@ describe("settings mutation views", () => {
     expect(wrapper.text()).toContain("Preferences saved. Audit run #77.");
   });
 
+  it("saves the release-note notification preference from settings", async () => {
+    const { pinia, settings } = setupStores(true);
+    settings.settings = settingsResponse({
+      webui: settingsResponse().webui.map((entry) =>
+        entry.name === "WUD_WEB_MUTATIONS_ENABLED"
+          ? { ...entry, value: "true", configured: true, source: "configured" as const }
+          : entry,
+      ),
+    });
+    settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    const updateManagedSettings = vi
+      .spyOn(settings, "updateManagedSettings")
+      .mockResolvedValue({
+        managed: settingsResponse({
+          managed: settingsResponse().managed.map((entry) =>
+            entry.key === "release_notes_enabled"
+              ? { ...entry, value: "true", source: "configured" as const }
+              : entry,
+          ),
+        }).managed,
+        audit_run_id: 78,
+      });
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+    await wrapper.find('input[role="switch"]').setValue(true);
+    const saveButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Save preferences"));
+    await saveButton?.trigger("click");
+    await flushPromises();
+
+    expect(updateManagedSettings).toHaveBeenCalledWith({
+      release_notes_enabled: "true",
+    });
+    expect(wrapper.text()).toContain("Preferences saved. Audit run #78.");
+  });
+
+  it("keeps release-note notification preference read-only when env configured", async () => {
+    const { pinia, settings } = setupStores(true);
+    settings.settings = settingsResponse({
+      managed: settingsResponse().managed.map((entry) =>
+        entry.key === "release_notes_enabled"
+          ? {
+              ...entry,
+              value: "true",
+              source: "configured" as const,
+              editable: false,
+              disabled_reason:
+                "Set by WUD_RELEASE_NOTES_ENABLED; remove it to manage this from the WebUI.",
+            }
+          : entry,
+      ),
+    });
+    settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+
+    expect(wrapper.find('input[role="switch"]').attributes("disabled")).toBeDefined();
+    expect(wrapper.text()).toContain("WUD_RELEASE_NOTES_ENABLED");
+  });
+
   it("relaunches the onboarding checklist from settings", async () => {
     const { pinia, settings } = setupStores(true);
     const visibleOnboardingEntry = settingsResponse().managed[1];

@@ -22,6 +22,7 @@ import {
   wudApiStatus,
   wudContainerMetadata,
   releaseNoteInfo,
+  releaseNotificationResponse,
   releaseNotesResponse,
   retagPlanResponse,
   retagPreviewJobResponse,
@@ -1206,6 +1207,61 @@ describe("connection store focused coverage", () => {
     expect(updates.releaseNotesLoading).toBe(false);
     expect(updates.releaseNotesError).toBe("");
     expect(updates.loading).toBe(false);
+  });
+
+  it("previews and sends release notifications with csrf", async () => {
+    const fetchMock = mockFetch(releaseNotificationResponse());
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-release");
+    const updates = useUpdatesStore();
+
+    await updates.previewReleaseNotifications({ line_numbers: [1, 2] });
+    await updates.sendReleaseNotifications({ run_id: 14 });
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/v1/release-notifications/preview",
+    );
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-release");
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      line_numbers: [1, 2],
+    });
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      "/api/v1/release-notifications/send",
+    );
+    expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual({
+      run_id: 14,
+      confirmation: "send-release-notes",
+    });
+    expect(updates.releaseNotification?.sendable_count).toBe(1);
+    expect(updates.releaseNotificationError).toBe("");
+  });
+
+  it("clears stale release notification previews when preview fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ detail: "preview failed" }, 503)),
+    );
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-release");
+    const updates = useUpdatesStore();
+    updates.releaseNotification = releaseNotificationResponse({ sendable_count: 2 });
+
+    await expect(
+      updates.previewReleaseNotifications({ line_numbers: [1] }),
+    ).rejects.toMatchObject({
+      message: "preview failed",
+    });
+
+    expect(updates.releaseNotification).toBeNull();
+    expect(updates.releaseNotificationError).toBe("preview failed");
+    expect(updates.releaseNotificationLoading).toBe(false);
   });
 
   it("surfaces release note errors without changing main loading state", async () => {
