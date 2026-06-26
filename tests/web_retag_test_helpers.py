@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sqlite3
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,7 +8,12 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
 
-from tests.web_test_helpers import _client, _fake_docker_env, _make_fake_stack
+from tests.web_test_helpers import (
+    _client,
+    _fake_docker_env,
+    _make_fake_stack,
+    _poll_until,
+)
 from wudup import web_retags as web_retags_module
 from wudup.config import UpdaterConfig
 from wudup.db import init_db, open_db, upsert_known_image
@@ -92,19 +96,24 @@ def _wait_retag_preview_job(
     client: TestClient,
     preview_job_id: str,
 ) -> dict[str, object]:
-    deadline = time.time() + 5
     last_status = None
-    while time.time() < deadline:
+
+    def fetch_job() -> dict[str, object] | None:
+        nonlocal last_status
         response = client.get(f"/api/v1/retag-plans/preview/{preview_job_id}")
         assert response.status_code == 200
         body = response.json()
         last_status = body["status"]
         if last_status in {"success", "failure"}:
             return body
-        time.sleep(0.02)
-    raise AssertionError(
-        f"retag preview job {preview_job_id} did not finish; "
-        f"last status was {last_status}"
+        return None
+
+    return _poll_until(
+        fetch_job,
+        timeout_message=lambda: (
+            f"retag preview job {preview_job_id} did not finish; "
+            f"last status was {last_status}"
+        ),
     )
 
 
@@ -219,9 +228,10 @@ def _wait_run_status(
     run_id: object,
     status: str,
 ) -> sqlite3.Row:
-    deadline = time.time() + 5
     last_status = None
-    while time.time() < deadline:
+
+    def fetch_run() -> sqlite3.Row | None:
+        nonlocal last_status
         with open_db(db_path) as conn:
             row = conn.execute(
                 "SELECT status FROM update_runs WHERE id = ?",
@@ -231,9 +241,14 @@ def _wait_run_status(
             last_status = row["status"]
             if last_status == status:
                 return row
-        time.sleep(0.02)
-    raise AssertionError(
-        f"run {run_id} did not reach status {status}; last status was {last_status}"
+        return None
+
+    return _poll_until(
+        fetch_run,
+        timeout_message=lambda: (
+            f"run {run_id} did not reach status {status}; "
+            f"last status was {last_status}"
+        ),
     )
 
 

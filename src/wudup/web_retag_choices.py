@@ -29,6 +29,20 @@ class _RetagChoiceValidationFailures:
     mismatches: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class _RetagChoiceValidationCase:
+    code: str
+    detail_prefix: str
+    values: Sequence[str]
+
+
+@dataclass(frozen=True)
+class _RetagChoiceValidationError:
+    code: str
+    detail: str
+    values: tuple[str, ...]
+
+
 def validated_retag_choice_map(
     choices: Sequence[RetagChoiceRequest],
     *,
@@ -112,36 +126,55 @@ def _retag_choice_identity_from_service_key(
 def _raise_retag_choice_validation_errors(
     failures: _RetagChoiceValidationFailures,
 ) -> None:
-    if failures.target_id_required:
-        duplicate_list = ", ".join(sorted(set(failures.target_id_required)))
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "retag choices for duplicate service(s) must include target_id: "
-                f"{duplicate_list}"
+    error = _retag_choice_validation_error(failures)
+    if error is not None:
+        raise HTTPException(status_code=422, detail=error.detail)
+
+
+def _retag_choice_validation_error(
+    failures: _RetagChoiceValidationFailures,
+) -> _RetagChoiceValidationError | None:
+    for case in _retag_choice_validation_cases(failures):
+        if not case.values:
+            continue
+        values = tuple(sorted(set(case.values)))
+        return _RetagChoiceValidationError(
+            code=case.code,
+            detail=f"{case.detail_prefix}: {', '.join(values)}",
+            values=values,
+        )
+    return None
+
+
+def _retag_choice_validation_cases(
+    failures: _RetagChoiceValidationFailures,
+) -> tuple[_RetagChoiceValidationCase, ...]:
+    return (
+        _RetagChoiceValidationCase(
+            code="duplicate-service-target-id-required",
+            detail_prefix=(
+                "retag choices for duplicate service(s) must include target_id"
             ),
-        )
-    if failures.unknown_services:
-        values_list = ", ".join(sorted(set(failures.unknown_services)))
-        raise HTTPException(
-            status_code=422,
-            detail=f"retag choices reference unknown service(s): {values_list}",
-        )
-    if failures.unknown_targets:
-        values_list = ", ".join(sorted(set(failures.unknown_targets)))
-        raise HTTPException(
-            status_code=422,
-            detail=f"retag choices reference unknown target(s): {values_list}",
-        )
-    if failures.mismatches:
-        values_list = ", ".join(sorted(set(failures.mismatches)))
-        raise HTTPException(
-            status_code=422,
-            detail=f"retag choice target_id does not match service_key: {values_list}",
-        )
-    if failures.duplicates:
-        duplicate_list = ", ".join(sorted(set(failures.duplicates)))
-        raise HTTPException(
-            status_code=422,
-            detail=f"retag choices contain duplicate target(s): {duplicate_list}",
-        )
+            values=failures.target_id_required,
+        ),
+        _RetagChoiceValidationCase(
+            code="unknown-service",
+            detail_prefix="retag choices reference unknown service(s)",
+            values=failures.unknown_services,
+        ),
+        _RetagChoiceValidationCase(
+            code="unknown-target",
+            detail_prefix="retag choices reference unknown target(s)",
+            values=failures.unknown_targets,
+        ),
+        _RetagChoiceValidationCase(
+            code="target-service-mismatch",
+            detail_prefix="retag choice target_id does not match service_key",
+            values=failures.mismatches,
+        ),
+        _RetagChoiceValidationCase(
+            code="duplicate-target",
+            detail_prefix="retag choices contain duplicate target(s)",
+            values=failures.duplicates,
+        ),
+    )
