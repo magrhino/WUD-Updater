@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from fastapi import HTTPException, Request
 
 from . import web_pending_sources, web_wud_api
+from .config import VALID_UPDATE_MODES
 from .db import DatabaseError, init_db, open_db, utc_timestamp
 from .release_notes import refresh_release_notes
 from .web_auth import (
@@ -46,6 +47,7 @@ DISCORD_EMBED_DESCRIPTION_LIMIT = 4096
 DISCORD_WEBHOOK_TIMEOUT_SECONDS = 10.0
 DISCORD_WEBHOOK_USER_AGENT = "wudup-webui-release-notifications/1.0"
 DISCORD_COLOR = 0x57F287
+RUN_NOTIFICATION_STATUS_REASON = "updated"
 LOGGER = logging.getLogger(__name__)
 
 
@@ -219,6 +221,7 @@ def _pending_notification_source(
     settings: WebSettings,
     line_numbers: Sequence[int],
 ) -> _NotificationSource:
+    selected_line_numbers = _unique_line_numbers(line_numbers)
     try:
         source = web_pending_sources.resolve_pending_source(
             settings,
@@ -229,12 +232,12 @@ def _pending_notification_source(
             status_code=500,
             detail=_safe_exception_detail(settings, "could not read pending source", exc),
         ) from exc
-    requested = set(line_numbers)
+    requested = set(selected_line_numbers)
     metadata_by_line = dict(source.metadata_by_line or {})
     targets_by_line = {target.line_no: target for target in source.parsed.targets}
     targets: list[_NotificationTarget] = []
     warnings = list(source.warnings)
-    for line_no in line_numbers:
+    for line_no in selected_line_numbers:
         target = targets_by_line.get(line_no)
         if target is None:
             warnings.append(f"Line {line_no} is not an actionable pending update.")
@@ -277,15 +280,21 @@ def _run_notification_source(settings: WebSettings, run_id: int) -> _Notificatio
                     status_code=422,
                     detail="release notifications require a successful run",
                 )
+            if int(run["dry_run"]) or str(run["mode"]) not in VALID_UPDATE_MODES:
+                raise HTTPException(
+                    status_code=422,
+                    detail="release notifications require a successful update run",
+                )
             rows = conn.execute(
                 """
                 SELECT *
                 FROM pending_updates
                 WHERE run_id = ?
                   AND status = 'resolved'
+                  AND status_reason = ?
                 ORDER BY line_no, id
                 """,
-                (run_id,),
+                (run_id, RUN_NOTIFICATION_STATUS_REASON),
             ).fetchall()
     except ReadOnlyDatabaseMissing as exc:
         raise HTTPException(status_code=404, detail="run not found") from exc
@@ -338,6 +347,20 @@ def _run_notification_source(settings: WebSettings, run_id: int) -> _Notificatio
         metadata_by_line={},
         warnings=tuple(warnings),
     )
+
+
+def _unique_line_numbers(line_numbers: Sequence[int]) -> tuple[int, ...]:
+    seen: set[int] = set()
+    selected: list[int] = []
+    for line_no in line_numbers:
+        if line_no in seen:
+            raise HTTPException(
+                status_code=422,
+                detail=f"line_numbers line {line_no} was provided more than once",
+            )
+        seen.add(line_no)
+        selected.append(line_no)
+    return tuple(selected)
 
 
 def _release_note_infos(

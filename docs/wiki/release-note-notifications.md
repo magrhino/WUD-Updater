@@ -10,7 +10,8 @@ for shell callbacks, or another host-local secret store.
 
 Release-note notifications default disabled. Enable them from Settings, or set
 `WUD_RELEASE_NOTES_ENABLED=true` in the WebUI runtime environment to force the
-value and make the Settings toggle read-only.
+value and make the Settings toggle read-only. Sending notifications is a WebUI
+mutation, so the server must also run with `WUD_WEB_MUTATIONS_ENABLED=true`.
 
 Configure `DISCORD_RELEASES_WEBHOOK` in the WUDup runtime environment, with
 `DISCORD_WEBHOOK` accepted as a fallback. Webhook URLs and GitHub tokens are not

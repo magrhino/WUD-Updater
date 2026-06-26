@@ -636,9 +636,10 @@ Do not put secrets in this repository or in SQLite.
 For the WebUI workflow, keep WUD's append-only callback or API pending source in
 place, enable release-note notifications from Settings or by setting
 `WUD_RELEASE_NOTES_ENABLED=true`, configure `DISCORD_RELEASES_WEBHOOK` in the
-WUDup runtime, then use **Preview release notes** from selected pending updates
-or from a successful apply job. The WebUI reads WUD trigger summaries through
-the WUD API when available, but it does not invoke WUD trigger POST endpoints.
+WUDup runtime, and set `WUD_WEB_MUTATIONS_ENABLED=true` before sending from the
+browser. Then use **Preview release notes** from selected pending updates or
+from a successful apply job. The WebUI reads WUD trigger summaries through the
+WUD API when available, but it does not invoke WUD trigger POST endpoints.
 
 Do not keep a legacy WUD shell release-note callback enabled unless you still
 want that separate path. Running both the shell helper and WebUI sender for the

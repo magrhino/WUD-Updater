@@ -243,6 +243,36 @@ def test_release_notification_send_requires_webhook(
     assert response.json()["detail"] == "Discord release-note webhook is not configured"
 
 
+def test_release_notification_preview_rejects_duplicate_pending_lines(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def fail_refresh(*_args, **_kwargs):
+        raise AssertionError("release metadata should not refresh for invalid input")
+
+    monkeypatch.setattr(notifications_module, "refresh_release_notes", fail_refresh)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_RELEASE_NOTES_ENABLED": "true",
+        },
+    )
+    (tmp_path / "state" / "images.todo").write_text(
+        "ghcr.io/acme/app:1.0.0 tag=2.0.0\n",
+        encoding="utf-8",
+    )
+
+    response = client.post(
+        "/api/v1/release-notifications/preview",
+        json={"line_numbers": [1, 1]},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "line_numbers line 1 was provided more than once"
+
+
 def test_release_notification_preview_uses_completed_run_source(
     tmp_path: Path,
     monkeypatch,
@@ -276,6 +306,7 @@ def test_release_notification_preview_uses_completed_run_source(
             desired_tag="2.0.0",
             service_key="media/app",
             status="resolved",
+            status_reason="updated",
         )
         insert_pending_update(
             conn,
@@ -286,6 +317,28 @@ def test_release_notification_preview_uses_completed_run_source(
             desired_tag="2.0.0",
             service_key="media/failed",
             status="failed",
+        )
+        insert_pending_update(
+            conn,
+            run_id=run_id,
+            line_no=10,
+            raw="ghcr.io/acme/removed:1.0.0 tag=2.0.0",
+            image="ghcr.io/acme/removed:1.0.0",
+            desired_tag="2.0.0",
+            service_key="media/removed",
+            status="resolved",
+            status_reason="removed-before-run",
+        )
+        insert_pending_update(
+            conn,
+            run_id=run_id,
+            line_no=11,
+            raw="ghcr.io/acme/excluded:1.0.0 tag=2.0.0",
+            image="ghcr.io/acme/excluded:1.0.0",
+            desired_tag="2.0.0",
+            service_key="media/excluded",
+            status="resolved",
+            status_reason="tag-excluded",
         )
         insert_pending_update(
             conn,
@@ -309,6 +362,57 @@ def test_release_notification_preview_uses_completed_run_source(
     assert body["source_file"] == f"Run #{run_id}"
     assert [item["line_no"] for item in body["items"]] == [7]
     assert body["items"][0]["service_key"] == "media/app"
+
+
+def test_release_notification_preview_rejects_non_update_run_source(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def fail_refresh(*_args, **_kwargs):
+        raise AssertionError("release metadata should not refresh for non-update runs")
+
+    monkeypatch.setattr(notifications_module, "refresh_release_notes", fail_refresh)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_RELEASE_NOTES_ENABLED": "true",
+        },
+    )
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        init_db(conn)
+        run_id = insert_update_run(
+            conn,
+            started_at="2026-05-27T12:00:00+00:00",
+            status="success",
+            dry_run=False,
+            mode="web-pending-cleanup",
+            wud_file="/out/images.todo",
+            metadata_json='{"source":"test"}',
+        )
+        insert_pending_update(
+            conn,
+            run_id=run_id,
+            line_no=7,
+            raw="ghcr.io/acme/app:1.0.0 tag=2.0.0",
+            image="ghcr.io/acme/app:1.0.0",
+            desired_tag="2.0.0",
+            service_key="media/app",
+            status="resolved",
+            status_reason="updated",
+        )
+
+    response = client.post(
+        "/api/v1/release-notifications/preview",
+        json={"run_id": run_id},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "release notifications require a successful update run"
+    )
 
 
 def test_release_notification_preview_and_send_redact_cached_errors(
