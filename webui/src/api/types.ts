@@ -224,6 +224,90 @@ export interface PendingRescanResponse {
   wud_api: WudApiStatus;
 }
 
+export type SecurityScanState =
+  | "disabled"
+  | "not_scanned"
+  | "queued"
+  | "running"
+  | "complete"
+  | "stale"
+  | "partial"
+  | "unsupported"
+  | "unavailable_offline"
+  | "auth_required"
+  | "error";
+
+export type SecurityScanVerdict = "findings" | "none_reported" | "unknown";
+
+export interface SecurityScanSubjectInfo {
+  subject_id: string;
+  line_no: number;
+  raw: string;
+  image: string;
+  candidate_image: string;
+  canonical_registry: string;
+  canonical_repository: string;
+  requested_ref: string;
+  reported_digest: string;
+  index_digest: string;
+  manifest_digest: string;
+  platform: string;
+  platform_os: string;
+  platform_architecture: string;
+  platform_variant: string;
+  platform_source: string;
+  identity_status: string;
+  warnings: string[];
+}
+
+export interface SecurityScanSeverityCounts {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  unknown: number;
+}
+
+export interface SecurityScanInfo {
+  line_no: number;
+  state: SecurityScanState;
+  verdict: SecurityScanVerdict;
+  scanner: string;
+  scanner_version: string;
+  scanner_schema: string;
+  scanned_at: string;
+  db_revision: string;
+  db_updated_at: string;
+  severity_counts: SecurityScanSeverityCounts;
+  fixable_counts: SecurityScanSeverityCounts;
+  unfixed_count: number;
+  warnings: string[];
+  error_code: string;
+  error_message: string;
+  subject: SecurityScanSubjectInfo;
+}
+
+export interface SecurityScansResponse {
+  source_file: string;
+  source: PendingSourceInfo;
+  source_hash: string;
+  scanning_enabled: boolean;
+  scanner: string;
+  scan_mode: string;
+  count: number;
+  items: SecurityScanInfo[];
+  warnings: string[];
+}
+
+export interface SecurityScanJobResponse {
+  job_id: string;
+  status: "queued" | "running" | "success" | "failure";
+  total_count: number;
+  completed_count: number;
+  result: SecurityScansResponse | null;
+  error: string;
+}
+
 export interface PendingRemovalPlanLine {
   line_no: number;
   raw: string;

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { ShieldCheck } from "@lucide/vue";
 import {
   NAlert,
   NButton,
@@ -307,6 +308,49 @@ const releaseNotificationSendDisabled = computed(
     releaseNotificationSource.value === null ||
     Boolean(releaseNotificationSendDisabledMessage.value),
 );
+const securityScanRefreshVisible = computed(
+  () => updates.securityScans?.scanning_enabled ?? false,
+);
+const securityScanRefreshDisabled = computed(
+  () => updates.securityScansLoading || auth.session?.mutations_enabled === false,
+);
+const securityScanRefreshDisabledMessage = computed(() => {
+  if (auth.session?.mutations_enabled === false) {
+    return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to refresh candidate security scans.";
+  }
+  return "";
+});
+const securityScanSummaryLabel = computed(() => {
+  if (!updates.securityScans) {
+    return "Security scans loading";
+  }
+  if (!updates.securityScans.scanning_enabled) {
+    return "Security scans off";
+  }
+  if (!updates.securityScansCurrent) {
+    return "Security scans stale";
+  }
+  const scans = updates.currentSecurityScanItems;
+  const findings = scans.filter((scan) => scan.verdict === "findings").length;
+  if (findings > 0) {
+    return pluralize(findings, "candidate with findings");
+  }
+  const complete = scans.filter((scan) => scan.state === "complete").length;
+  if (complete > 0) {
+    return `${pluralize(complete, "candidate")} scanned`;
+  }
+  return "No candidate scans yet";
+});
+const securityScanSummaryType = computed(() => {
+  if (!updates.securityScans?.scanning_enabled) {
+    return "default";
+  }
+  if (!updates.securityScansCurrent) {
+    return "warning";
+  }
+  const scans = updates.currentSecurityScanItems;
+  return scans.some((scan) => scan.verdict === "findings") ? "warning" : "info";
+});
 
 const {
   actionCommand,
@@ -536,6 +580,13 @@ async function sendReleaseNotifications(): Promise<void> {
   await updates.sendReleaseNotifications(releaseNotificationSource.value).catch(() => undefined);
 }
 
+async function refreshSecurityScans(): Promise<void> {
+  if (securityScanRefreshDisabled.value) {
+    return;
+  }
+  await updates.refreshSecurityScans();
+}
+
 onMounted(() => {
   runInBackground(retryPendingLoad());
   runInBackground(settings.loadPendingSafetyCues());
@@ -559,6 +610,9 @@ onMounted(() => {
     </n-alert>
     <n-alert v-if="updates.releaseNotificationError" type="warning">
       Release-note notification is unavailable: {{ updates.releaseNotificationError }}
+    </n-alert>
+    <n-alert v-if="updates.securityScansError" type="warning">
+      Candidate security scan metadata is unavailable: {{ updates.securityScansError }}
     </n-alert>
     <n-alert v-if="pendingRescanMessage" :type="pendingRescanAlertType">
       {{ pendingRescanMessage }}
@@ -657,7 +711,26 @@ onMounted(() => {
         </p>
         <h2>{{ pendingHeadingText }}</h2>
       </div>
-      <n-tag size="small" :type="mutationStateType">{{ mutationStateLabel }}</n-tag>
+      <n-flex align="center" :size="8">
+        <n-tag size="small" :type="securityScanSummaryType">
+          {{ securityScanSummaryLabel }}
+        </n-tag>
+        <n-button
+          v-if="securityScanRefreshVisible"
+          size="small"
+          secondary
+          :loading="updates.securityScansLoading"
+          :disabled="securityScanRefreshDisabled"
+          :title="securityScanRefreshDisabledMessage || undefined"
+          @click="refreshSecurityScans"
+        >
+          <template #icon>
+            <ShieldCheck :size="16" aria-hidden="true" />
+          </template>
+          Refresh scans
+        </n-button>
+        <n-tag size="small" :type="mutationStateType">{{ mutationStateLabel }}</n-tag>
+      </n-flex>
     </div>
 
     <n-alert

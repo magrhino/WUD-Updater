@@ -2,7 +2,7 @@ import { mount, type VueWrapper } from "@vue/test-utils";
 import { defineComponent, h, type Component, type VNodeChild } from "vue";
 import { describe, expect, it, vi } from "vitest";
 
-import type { PendingItem } from "../src/api/client";
+import type { PendingItem, SecurityScanInfo } from "../src/api/client";
 import PendingCleanupModal from "../src/components/pending/PendingCleanupModal.vue";
 import PendingPlanReviewModal from "../src/components/pending/PendingPlanReviewModal.vue";
 import PendingRemovalModal from "../src/components/pending/PendingRemovalModal.vue";
@@ -60,6 +60,64 @@ function mountPendingModal(component: Component, props: Record<string, unknown>)
       },
     },
   });
+}
+
+function securityScanInfo(
+  overrides: Partial<SecurityScanInfo> = {},
+): SecurityScanInfo {
+  const severityCounts = {
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+    unknown: 0,
+    ...overrides.severity_counts,
+  };
+  return {
+    line_no: 1,
+    state: "not_scanned",
+    verdict: "unknown",
+    scanner: "trivy",
+    scanner_version: "",
+    scanner_schema: "",
+    scanned_at: "",
+    db_revision: "",
+    db_updated_at: "",
+    severity_counts: severityCounts,
+    fixable_counts: {
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+      unknown: 0,
+    },
+    unfixed_count: 0,
+    warnings: [],
+    error_code: "",
+    error_message: "",
+    subject: {
+      subject_id: "",
+      line_no: 1,
+      raw: "repo/app:1.0",
+      image: "repo/app:1.0",
+      candidate_image: "repo/app:1.0",
+      canonical_registry: "",
+      canonical_repository: "",
+      requested_ref: "",
+      reported_digest: "",
+      index_digest: "",
+      manifest_digest: "",
+      platform: "",
+      platform_os: "",
+      platform_architecture: "",
+      platform_variant: "",
+      platform_source: "",
+      identity_status: "",
+      warnings: [],
+    },
+    ...overrides,
+    severity_counts: severityCounts,
+  };
 }
 
 function pendingPlanReviewModalProps(
@@ -218,6 +276,11 @@ describe("pending helper modules", () => {
       releaseNote: note,
       releaseNotesLoaded: true,
       releaseNotesLoading: false,
+      securityScan: null,
+      securityScansCurrent: false,
+      securityScansEnabled: false,
+      securityScansLoaded: false,
+      securityScansLoading: false,
       servicePolicies: [servicePolicy({ service_key: "media/app", auto_update: true })],
       snoozes: [snooze({ service_key: "media/app" })],
     }).map((cue) => cue.label);
@@ -232,6 +295,11 @@ describe("pending helper modules", () => {
         releaseNote: null,
         releaseNotesLoaded: false,
         releaseNotesLoading: false,
+        securityScan: null,
+        securityScansCurrent: false,
+        securityScansEnabled: false,
+        securityScansLoaded: false,
+        securityScansLoading: false,
         servicePolicies: [],
         snoozes: [],
       }).map((cue) => cue.label),
@@ -242,6 +310,11 @@ describe("pending helper modules", () => {
         releaseNote: null,
         releaseNotesLoaded: false,
         releaseNotesLoading: false,
+        securityScan: null,
+        securityScansCurrent: false,
+        securityScansEnabled: false,
+        securityScansLoaded: false,
+        securityScansLoading: false,
         servicePolicies: [],
         snoozes: [],
       }).map((cue) => cue.label),
@@ -252,6 +325,11 @@ describe("pending helper modules", () => {
       releaseNote: noReleaseNote,
       releaseNotesLoaded: true,
       releaseNotesLoading: false,
+      securityScan: null,
+      securityScansCurrent: false,
+      securityScansEnabled: false,
+      securityScansLoaded: false,
+      securityScansLoading: false,
       servicePolicies: [],
       snoozes: [],
     }).map((cue) => cue.label);
@@ -259,6 +337,91 @@ describe("pending helper modules", () => {
     expect(digestLabels).toContain("Mutable latest");
     expect(digestLabels).toContain("Stack restart");
     expect(digestLabels).toContain("No release notes");
+  });
+
+  it("adds candidate security scan cues without implying safety", () => {
+    const item = pendingGroupedItem({ line_no: 3, image: "repo/app:1.0" });
+    const pending = pendingResponse([item]);
+    const scan = securityScanInfo({
+      line_no: item.line_no,
+      state: "complete",
+      verdict: "findings",
+      severity_counts: {
+        critical: 0,
+        high: 1,
+        medium: 0,
+        low: 0,
+        unknown: 0,
+      },
+    });
+
+    expect(
+      safetyCues(item, {
+        pending,
+        releaseNote: null,
+        releaseNotesLoaded: false,
+        releaseNotesLoading: false,
+        securityScan: scan,
+        securityScansCurrent: true,
+        securityScansEnabled: true,
+        securityScansLoaded: true,
+        securityScansLoading: false,
+        servicePolicies: [],
+        snoozes: [],
+      }).map((cue) => cue.label),
+    ).toContain("Findings");
+
+    expect(
+      safetyCues(item, {
+        pending,
+        releaseNote: null,
+        releaseNotesLoaded: false,
+        releaseNotesLoading: false,
+        securityScan: securityScanInfo({
+          line_no: item.line_no,
+          state: "complete",
+          verdict: "none_reported",
+        }),
+        securityScansCurrent: true,
+        securityScansEnabled: true,
+        securityScansLoaded: true,
+        securityScansLoading: false,
+        servicePolicies: [],
+        snoozes: [],
+      }).map((cue) => cue.label),
+    ).toContain("None reported");
+
+    expect(
+      safetyCues(item, {
+        pending,
+        releaseNote: null,
+        releaseNotesLoaded: false,
+        releaseNotesLoading: false,
+        securityScan: null,
+        securityScansCurrent: false,
+        securityScansEnabled: true,
+        securityScansLoaded: true,
+        securityScansLoading: false,
+        servicePolicies: [],
+        snoozes: [],
+      }).map((cue) => cue.label),
+    ).toContain("Scan stale");
+
+    expect(
+      safetyCues(item, {
+        pending,
+        releaseNote: null,
+        releaseNotesLoaded: false,
+        releaseNotesLoading: false,
+        securityScan: null,
+        securityScansCurrent: true,
+        securityScansEnabled: true,
+        securityScansLoaded: true,
+        securityScansLoading: false,
+        servicePolicies: [],
+        snoozes: [],
+      }).map((cue) => cue.label),
+    ).toContain("Security unknown");
   });
 
   it("formats pending queue display helpers without store dependencies", () => {

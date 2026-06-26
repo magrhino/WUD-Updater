@@ -690,6 +690,7 @@ describe("pending view fallback and release notes", () => {
     vi.spyOn(updates, "loadPending").mockResolvedValue();
     vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
     vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "loadSecurityScans").mockResolvedValue();
     vi.spyOn(settings, "loadPendingSafetyCues").mockResolvedValue();
     const wrapper = mountPendingView(pinia);
 
@@ -742,6 +743,8 @@ describe("pending view fallback and release notes", () => {
     vi.spyOn(updates, "loadPending").mockResolvedValue();
     vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
     vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "loadSecurityScans").mockResolvedValue();
+    vi.spyOn(settings, "loadPendingSafetyCues").mockResolvedValue();
     const wrapper = mountPendingView(pinia);
 
     expect(wrapper.text()).toContain("LSIO release");
@@ -794,6 +797,8 @@ describe("pending view fallback and release notes", () => {
     vi.spyOn(updates, "loadPending").mockResolvedValue();
     vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
     vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "loadSecurityScans").mockResolvedValue();
+    vi.spyOn(settings, "loadPendingSafetyCues").mockResolvedValue();
     const wrapper = mountPendingView(pinia);
 
     expect(wrapper.text()).toContain("Unavailable");

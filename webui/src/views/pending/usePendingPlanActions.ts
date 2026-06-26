@@ -222,6 +222,7 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
   ): Promise<void> {
     await updates.loadPending(requestOptions);
     await updates.loadReleaseNotes().catch(() => undefined);
+    await updates.loadSecurityScans().catch(() => undefined);
     refreshReleaseNotesInBackground();
   }
 

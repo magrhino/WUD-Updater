@@ -1,5 +1,5 @@
 // webui/src/stores/updates.ts
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import {
   ApiError,
@@ -13,6 +13,7 @@ import {
   type PendingRescanLine,
   type PendingRescanResponse,
   type PendingRescanScope,
+  type PendingItem,
   type PlanResponse,
   type PendingResponse,
   type ReleaseNoteInfo,
@@ -29,6 +30,9 @@ import {
   type SelfUpdatePlanResponse,
   type SelfUpdatePrepareResponse,
   type SelfUpdateResponse,
+  type SecurityScanInfo,
+  type SecurityScanJobResponse,
+  type SecurityScansResponse,
   type TagOverrideRequest,
   type UpdateTargetsResponse,
   webApi,
@@ -67,6 +71,13 @@ const TERMINAL_RETAG_PREVIEW_STATUSES = new Set<RetagPreviewJobResponse["status"
   "success",
   "failure",
 ]);
+const TERMINAL_SECURITY_SCAN_STATUSES = new Set<SecurityScanJobResponse["status"]>([
+  "success",
+  "failure",
+]);
+export const SECURITY_SCAN_POLL_MAX_ATTEMPTS = 720;
+export const SECURITY_SCAN_POLL_INTERVAL_MS = 500;
+const SECURITY_SCAN_POLL_ATTEMPTS_PER_CANDIDATE = 720;
 
 export const useUpdatesStore = defineStore("updates", () => {
   const pending = ref<PendingResponse | null>(null);
@@ -90,6 +101,30 @@ export const useUpdatesStore = defineStore("updates", () => {
   );
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const releaseNotification = ref<ReleaseNotificationResponse | null>(null);
+  const securityScans = ref<SecurityScansResponse | null>(null);
+  const currentSecurityScans = computed<SecurityScansResponse | null>(() => {
+    const scans = securityScans.value;
+    const pendingSourceHash = pending.value?.source_hash ?? "";
+    if (!scans || !pendingSourceHash || scans.source_hash !== pendingSourceHash) {
+      return null;
+    }
+    return scans;
+  });
+  const securityScansCurrent = computed(() => currentSecurityScans.value !== null);
+  const currentSecurityScanItems = computed<SecurityScanInfo[]>(() => {
+    const scans = currentSecurityScans.value;
+    const pendingItems = pending.value?.items ?? [];
+    if (!scans || pendingItems.length === 0) {
+      return [];
+    }
+    return scans.items.filter((scan) => {
+      const item = pendingItems.find(
+        (candidate) => candidate.line_no === scan.line_no,
+      );
+      return item ? securityScanMatchesPendingItem(scan, item) : false;
+    });
+  });
+  const securityScanJob = ref<SecurityScanJobResponse | null>(null);
   const releaseChangelogs = ref<Record<string, ReleaseChangelogState>>({});
   const releaseChangelogRequests = new Map<string, Promise<void>>();
   const selfUpdate = ref<SelfUpdateResponse | null>(null);
@@ -109,6 +144,8 @@ export const useUpdatesStore = defineStore("updates", () => {
   const releaseNotesError = ref("");
   const releaseNotificationLoading = ref(false);
   const releaseNotificationError = ref("");
+  const securityScansLoading = ref(false);
+  const securityScansError = ref("");
   const error = ref("");
 
   async function loadWithState(work: () => Promise<void>): Promise<void> {
@@ -432,6 +469,144 @@ export const useUpdatesStore = defineStore("updates", () => {
     releaseNotificationError.value = "";
   }
 
+  async function loadSecurityScans(): Promise<void> {
+    securityScansLoading.value = true;
+    securityScansError.value = "";
+    try {
+      securityScans.value = await webApi.securityScans();
+    } catch (caughtError) {
+      securityScansError.value = errorMessage(caughtError);
+      throw caughtError;
+    } finally {
+      securityScansLoading.value = false;
+    }
+  }
+
+  async function refreshSecurityScans(): Promise<void> {
+    const auth = useAuthStore();
+    securityScansLoading.value = true;
+    securityScansError.value = "";
+    try {
+      let job = await webApi.refreshSecurityScans(await auth.ensureCsrf());
+      securityScanJob.value = job;
+      let pollAttempts = 0;
+      while (!TERMINAL_SECURITY_SCAN_STATUSES.has(job.status)) {
+        if (pollAttempts >= securityScanPollMaxAttempts(job)) {
+          throw new Error("Security scan refresh timed out");
+        }
+        pollAttempts += 1;
+        await delay(SECURITY_SCAN_POLL_INTERVAL_MS);
+        job = await webApi.securityScanJob(job.job_id);
+        securityScanJob.value = job;
+      }
+      if (job.status === "failure") {
+        throw new Error(job.error || "Security scan refresh failed");
+      }
+      if (job.result) {
+        securityScans.value = job.result;
+      } else {
+        await loadSecurityScans();
+      }
+    } catch (caughtError) {
+      securityScansError.value = errorMessage(caughtError);
+      throw caughtError;
+    } finally {
+      securityScansLoading.value = false;
+    }
+  }
+
+  function securityScanFor(item: PendingItem): SecurityScanInfo | null {
+    const scans = currentSecurityScans.value;
+    if (!scans) {
+      return null;
+    }
+    const scan = currentSecurityScanItems.value.find(
+      (candidate) => candidate.line_no === item.line_no,
+    );
+    if (!scan || !securityScanMatchesPendingItem(scan, item)) {
+      return null;
+    }
+    return scan;
+  }
+
+  function securityScanMatchesPendingItem(
+    scan: SecurityScanInfo,
+    item: PendingItem,
+  ): boolean {
+    if (scan.subject.raw !== item.raw || scan.subject.image !== item.image) {
+      return false;
+    }
+    if (
+      normalizeSecurityDigest(scan.subject.reported_digest) !==
+      normalizeSecurityDigest(item.digest)
+    ) {
+      return false;
+    }
+    const itemPlatform = pendingItemPlatform(item);
+    const scanPlatform = scan.subject.platform.trim();
+    if (scan.subject.platform_source === "compose") {
+      return Boolean(scanPlatform);
+    }
+    return !scanPlatform || (Boolean(itemPlatform) && scanPlatform === itemPlatform);
+  }
+
+  function pendingItemPlatform(item: PendingItem): string {
+    if (item.platform?.trim()) {
+      return item.platform.trim();
+    }
+    const wudMetadata = item.wud_metadata;
+    if (wudMetadata?.platform?.trim()) {
+      return wudMetadata.platform.trim();
+    }
+    const wudPlatform = platformFromParts(
+      wudMetadata?.platform_os,
+      wudMetadata?.platform_architecture,
+      wudMetadata?.platform_variant,
+    );
+    if (wudPlatform) {
+      return wudPlatform;
+    }
+    return platformFromParts(
+      item.platform_os,
+      item.platform_architecture,
+      item.platform_variant,
+    );
+  }
+
+  function normalizeSecurityDigest(value: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return "";
+    }
+    const digest = trimmed.includes("@sha256:")
+      ? trimmed.slice(trimmed.lastIndexOf("@") + 1)
+      : trimmed;
+    return digest.startsWith("sha256:") ? digest : `sha256:${digest}`;
+  }
+
+  function platformFromParts(
+    os: string | undefined,
+    architecture: string | undefined,
+    variant: string | undefined,
+  ): string {
+    const platformOs = os?.trim() ?? "";
+    const platformArchitecture = architecture?.trim() ?? "";
+    if (!platformOs || !platformArchitecture) {
+      return "";
+    }
+    return [platformOs, platformArchitecture, variant?.trim() ?? ""]
+      .filter(Boolean)
+      .join("/");
+  }
+
+  function securityScanPollMaxAttempts(job: SecurityScanJobResponse): number {
+    const totalCount = Math.max(1, job.total_count || 0);
+    return Math.max(
+      SECURITY_SCAN_POLL_MAX_ATTEMPTS,
+      totalCount * SECURITY_SCAN_POLL_ATTEMPTS_PER_CANDIDATE,
+    );
+  }
+
   function releaseChangelogStateFor(
     note: ReleaseNoteInfo | null,
   ): ReleaseChangelogState {
@@ -701,6 +876,7 @@ export const useUpdatesStore = defineStore("updates", () => {
       pending.value = await webApi.pending();
     });
     await loadReleaseNotes().catch(() => undefined);
+    await loadSecurityScans().catch(() => undefined);
     refreshReleaseNotes().catch(() => undefined);
     await runs.loadRuns().catch(() => undefined);
     if (response === null) {
@@ -884,6 +1060,11 @@ export const useUpdatesStore = defineStore("updates", () => {
     retagGithubLatestFallback,
     releaseNotes,
     releaseNotification,
+    securityScans,
+    currentSecurityScans,
+    securityScansCurrent,
+    currentSecurityScanItems,
+    securityScanJob,
     releaseChangelogs,
     selfUpdate,
     selfUpdatePlan,
@@ -902,6 +1083,8 @@ export const useUpdatesStore = defineStore("updates", () => {
     releaseNotesError,
     releaseNotificationLoading,
     releaseNotificationError,
+    securityScansLoading,
+    securityScansError,
     error,
     loadPending,
     loadUpdateTargets,
@@ -921,6 +1104,9 @@ export const useUpdatesStore = defineStore("updates", () => {
     previewReleaseNotifications,
     sendReleaseNotifications,
     clearReleaseNotification,
+    loadSecurityScans,
+    refreshSecurityScans,
+    securityScanFor,
     releaseChangelogStateFor,
     releaseChangelogCanLoad,
     loadReleaseChangelog,
@@ -958,6 +1144,12 @@ function releaseChangelogCanLoad(note: ReleaseNoteInfo | null): boolean {
 
 function releaseChangelogLinkFor(note: ReleaseNoteInfo | null): string {
   return note?.links.find((link) => link.kind === "github_release")?.url ?? "";
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 function readRememberedApplyJobId(): string {

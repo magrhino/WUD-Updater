@@ -96,6 +96,7 @@ export function mockPendingLifecycle(
   vi.spyOn(updates, "loadPending").mockResolvedValue();
   vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
   vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
+  vi.spyOn(updates, "loadSecurityScans").mockResolvedValue();
   vi.spyOn(settings, "loadPendingSafetyCues").mockResolvedValue();
 }
 

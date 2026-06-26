@@ -763,6 +763,41 @@ describe("demo web API", () => {
     );
   });
 
+  it("reports demo security scans only for supported exact subjects", async () => {
+    const api = createDemoWebApi();
+    const pending = await api.pending();
+    const scans = await api.securityScans();
+    const tagOnlyLine = pending.items.find((item) => item.digest === "");
+    const digestLine = pending.items.find((item) =>
+      item.digest.startsWith("sha256:"),
+    );
+
+    expect(tagOnlyLine).toBeDefined();
+    expect(digestLine).toBeDefined();
+    if (!tagOnlyLine || !digestLine) {
+      throw new Error("Expected demo pending fixture to include scan examples");
+    }
+
+    const tagOnlyScan = scans.items.find(
+      (scan) => scan.line_no === tagOnlyLine.line_no,
+    );
+    const digestScan = scans.items.find(
+      (scan) => scan.line_no === digestLine.line_no,
+    );
+
+    expect(tagOnlyScan).toMatchObject({
+      state: "unsupported",
+      verdict: "unknown",
+      severity_counts: { high: 0, medium: 0 },
+    });
+    expect(digestScan?.subject.reported_digest).toBe(digestLine.digest);
+    expect(digestScan?.subject.reported_digest).not.toContain("sha256:sha256:");
+    expect(digestScan).toMatchObject({
+      state: "unsupported",
+      verdict: "unknown",
+    });
+  });
+
   it("streams apply jobs and updates pending state and run history", async () => {
     vi.useFakeTimers();
     const api = createDemoWebApi();

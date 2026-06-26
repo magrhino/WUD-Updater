@@ -32,6 +32,10 @@ import type {
   RunEventRecord,
   RunLogResponse,
   RunSummary,
+  SecurityScanInfo,
+  SecurityScanJobResponse,
+  SecurityScanSeverityCounts,
+  SecurityScansResponse,
   ServicePolicyRecord,
   SelfUpdatePlanResponse,
   SelfUpdateResponse,
@@ -73,6 +77,13 @@ const STATIC_FIXTURE_ERROR =
   "This selection is not part of the static demo fixture set.";
 const DEMO_NOW = "2026-05-31T00:00:00.000Z";
 const fixtures: DemoGeneratedFixtures = generatedFixtures;
+const EMPTY_SECURITY_COUNTS: SecurityScanSeverityCounts = {
+  critical: 0,
+  high: 0,
+  medium: 0,
+  low: 0,
+  unknown: 0,
+};
 
 type PendingLineFixture = {
   line_no: number;
@@ -93,6 +104,29 @@ function activeLineNumbers(activeKeys: Set<string>): Set<number> {
       .filter((item) => activeKeys.has(cleanupLineKey(item)))
       .map((item) => item.line_no),
   );
+}
+
+function pendingItemPlatform(item: PendingItem): string {
+  if (item.platform) {
+    return item.platform;
+  }
+  if (!item.platform_os || !item.platform_architecture) {
+    return "";
+  }
+  return [item.platform_os, item.platform_architecture, item.platform_variant]
+    .filter(Boolean)
+    .join("/");
+}
+
+function normalizeDemoDigest(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  const digest = trimmed.includes("@sha256:")
+    ? trimmed.slice(trimmed.lastIndexOf("@") + 1)
+    : trimmed;
+  return digest.startsWith("sha256:") ? digest : `sha256:${digest}`;
 }
 
 function uniqueSortedNumbers(values: number[]): number[] {
@@ -781,6 +815,96 @@ export class DemoApiState {
       sent,
       audit_run_id: sent ? 9004 : 0,
       error: "",
+    };
+  }
+
+  securityScans(): SecurityScansResponse {
+    const pending = this.pendingResponse();
+    const items = pending.items.map((item, index) =>
+      this.securityScanInfo(item, index),
+    );
+    return {
+      source_file: pending.source_file,
+      source: clone(pending.source),
+      source_hash: pending.source_hash ?? "",
+      scanning_enabled: true,
+      scanner: "trivy",
+      scan_mode: "registry",
+      count: items.length,
+      items,
+      warnings: [],
+    };
+  }
+
+  securityScanJob(): SecurityScanJobResponse {
+    const result = this.securityScans();
+    return {
+      job_id: "demo-security-scan",
+      status: "success",
+      total_count: result.count,
+      completed_count: result.count,
+      result,
+      error: "",
+    };
+  }
+
+  private securityScanInfo(
+    item: PendingItem,
+    index: number,
+  ): SecurityScanInfo {
+    const reportedDigest = normalizeDemoDigest(item.digest);
+    const platform = item.platform || pendingItemPlatform(item);
+    const exact = Boolean(reportedDigest && platform);
+    const hasFindings = index === 0 && exact;
+    const counts =
+      hasFindings
+        ? { critical: 0, high: 1, medium: 2, low: 0, unknown: 0 }
+        : EMPTY_SECURITY_COUNTS;
+    const [platformOs = "", platformArchitecture = "", platformVariant = ""] =
+      platform.split("/");
+
+    return {
+      line_no: item.line_no,
+      state: exact ? (hasFindings ? "complete" : "not_scanned") : "unsupported",
+      verdict: hasFindings ? "findings" : "unknown",
+      scanner: "trivy",
+      scanner_version: hasFindings ? "demo" : "",
+      scanner_schema: hasFindings ? "trivy-json" : "",
+      scanned_at: hasFindings ? DEMO_NOW : "",
+      db_revision: "",
+      db_updated_at: "",
+      severity_counts: { ...counts },
+      fixable_counts:
+        hasFindings
+          ? { critical: 0, high: 1, medium: 1, low: 0, unknown: 0 }
+          : { ...EMPTY_SECURITY_COUNTS },
+      unfixed_count: hasFindings ? 1 : 0,
+      warnings:
+        hasFindings ? ["Demo finding for candidate-only advisory display."] : [],
+      error_code: "",
+      error_message: "",
+      subject: {
+        subject_id: reportedDigest ? `${item.image}@${reportedDigest}` : "",
+        line_no: item.line_no,
+        raw: item.raw,
+        image: item.image,
+        candidate_image: item.digest
+          ? `${item.image}@${reportedDigest}`
+          : item.image,
+        canonical_registry: "",
+        canonical_repository: item.repo,
+        requested_ref: item.desired_tag,
+        reported_digest: reportedDigest,
+        index_digest: reportedDigest,
+        manifest_digest: reportedDigest,
+        platform,
+        platform_os: item.platform_os || platformOs,
+        platform_architecture: item.platform_architecture || platformArchitecture,
+        platform_variant: item.platform_variant || platformVariant,
+        platform_source: item.platform ? "wud" : "demo",
+        identity_status: exact ? "exact" : "unsupported",
+        warnings: [],
+      },
     };
   }
 
