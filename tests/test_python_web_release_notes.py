@@ -22,12 +22,41 @@ from tests.web_test_helpers import (
 )
 
 
-def test_release_notes_get_returns_placeholders_without_creating_database(
+def _release_client(tmp_path: Path, env: dict[str, str] | None = None):
+    values = {
+        "WUD_WEB_DEV_NO_AUTH": "true",
+        "WUD_RELEASE_NOTES_ENABLED": "true",
+    }
+    if env:
+        values.update(env)
+    return _client(tmp_path, values)
+
+
+def test_release_notes_get_is_disabled_by_default_without_creating_database(
     tmp_path: Path,
 ) -> None:
     wud_file = tmp_path / "state" / "images.todo"
     db_path = tmp_path / "state" / "wud.sqlite"
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    wud_file.write_text("ghcr.io/acme/app:1.0.0\n", encoding="utf-8")
+
+    response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["enabled"] is False
+    assert body["disabled_reason"] == "Release-note notifications are disabled."
+    assert body["count"] == 0
+    assert body["items"] == []
+    assert not db_path.exists()
+
+
+def test_release_notes_get_returns_placeholders_without_creating_database(
+    tmp_path: Path,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    db_path = tmp_path / "state" / "wud.sqlite"
+    client = _release_client(tmp_path)
     wud_file.write_text("ghcr.io/acme/app:1.0.0\n", encoding="utf-8")
 
     response = client.get("/api/v1/release-notes")
@@ -55,10 +84,9 @@ def test_release_notes_get_uses_api_pending_source_without_wud_file(
             )
         ],
     )
-    client = _client(
+    client = _release_client(
         tmp_path,
         {
-            "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_PENDING_SOURCE": "api",
             "WUD_API_BASE_URL": "https://wud.release-api-source.test:3000",
         },
@@ -106,7 +134,7 @@ def test_release_notes_get_skips_wud_metadata_when_file_is_missing(
         "metadata_by_target",
         fail_metadata_by_target,
     )
-    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    client = _release_client(tmp_path)
 
     response = client.get("/api/v1/release-notes")
 
@@ -123,10 +151,9 @@ def test_release_notes_get_uses_docker_source_label_without_creating_database(
     wud_file = tmp_path / "state" / "images.todo"
     db_path = tmp_path / "state" / "wud.sqlite"
     docker_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(
+    client = _release_client(
         tmp_path,
         {
-            "WUD_WEB_DEV_NO_AUTH": "true",
             **docker_env,
         },
     )
@@ -173,10 +200,9 @@ def test_release_notes_get_uses_tagged_label_for_digest_ref(
 ) -> None:
     wud_file = tmp_path / "state" / "images.todo"
     docker_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(
+    client = _release_client(
         tmp_path,
         {
-            "WUD_WEB_DEV_NO_AUTH": "true",
             **docker_env,
         },
     )
@@ -205,10 +231,9 @@ def test_release_notes_get_uses_running_container_label_for_bare_digest_ref(
 ) -> None:
     wud_file = tmp_path / "state" / "images.todo"
     docker_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(
+    client = _release_client(
         tmp_path,
         {
-            "WUD_WEB_DEV_NO_AUTH": "true",
             **docker_env,
         },
     )
@@ -253,10 +278,9 @@ def test_release_notes_get_recovers_ghcr_repo_from_running_container(
     wud_file = tmp_path / "state" / "images.todo"
     db_path = tmp_path / "state" / "wud.sqlite"
     docker_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(
+    client = _release_client(
         tmp_path,
         {
-            "WUD_WEB_DEV_NO_AUTH": "true",
             **docker_env,
         },
     )
@@ -287,10 +311,9 @@ def test_release_notes_get_logs_when_docker_source_label_inspect_fails(
     wud_file = tmp_path / "state" / "images.todo"
     no_docker_bin = tmp_path / "no-docker-bin"
     no_docker_bin.mkdir()
-    client = _client(
+    client = _release_client(
         tmp_path,
         {
-            "WUD_WEB_DEV_NO_AUTH": "true",
             "PATH": str(no_docker_bin),
         },
     )
@@ -342,10 +365,9 @@ def test_release_notes_get_sanitizes_docker_inspect_stderr_in_log(
             return []
 
     monkeypatch.setattr(release_notes_module, "DockerCli", FakeDockerCli)
-    client = _client(
+    client = _release_client(
         tmp_path,
         {
-            "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_TOKEN": secret,
         },
     )
@@ -368,7 +390,7 @@ def test_release_notes_get_sanitizes_docker_inspect_stderr_in_log(
 
 def test_release_notes_refresh_requires_csrf(tmp_path: Path) -> None:
     wud_file = tmp_path / "state" / "images.todo"
-    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    client = _release_client(tmp_path)
     wud_file.write_text("docker.io/library/redis:latest\n", encoding="utf-8")
 
     response = client.post("/api/v1/release-notes/refresh")
@@ -388,7 +410,7 @@ def test_release_notes_refresh_works_when_mutations_are_disabled(
     tmp_path: Path,
 ) -> None:
     wud_file = tmp_path / "state" / "images.todo"
-    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    client = _release_client(tmp_path)
     wud_file.write_text("docker.io/library/redis:latest\n", encoding="utf-8")
 
     response = client.post(
@@ -410,10 +432,9 @@ def test_release_note_error_metadata_redacts_configured_secrets(
     release_webhook = "https://discord.test/fail/release-secret-token"
     admin_webhook = "https://discord.test/fail/admin-secret-token"
     wud_file = tmp_path / "state" / "images.todo"
-    client = _client(
+    client = _release_client(
         tmp_path,
         {
-            "WUD_WEB_DEV_NO_AUTH": "true",
             "GITHUB_TOKEN": github_token,
             "DISCORD_RELEASES_WEBHOOK": release_webhook,
             "ADMIN_WEBHOOK": admin_webhook,

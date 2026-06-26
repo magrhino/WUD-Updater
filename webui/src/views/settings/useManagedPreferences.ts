@@ -37,11 +37,15 @@ export function useManagedPreferences() {
   const digestPinUpdatesEntry = computed(() =>
     managedEntries.value.find((entry) => entry.key === "digest_pin_updates"),
   );
+  const releaseNotesEnabledEntry = computed(() =>
+    managedEntries.value.find((entry) => entry.key === "release_notes_enabled"),
+  );
 
   const themePreferenceValue = ref("system");
   const onboardingChecklistValue = ref("visible");
   const composeIgnorePathsValue = ref("");
   const digestPinUpdatesValue = ref("false");
+  const releaseNotesEnabledValue = ref(false);
   const preferencesMessage = ref("");
   const preferencesError = ref("");
 
@@ -54,6 +58,9 @@ export function useManagedPreferences() {
   const digestPinUpdatesEditable = computed(
     () => digestPinUpdatesEntry.value?.editable === true,
   );
+  const releaseNotesEnabledEditable = computed(
+    () => releaseNotesEnabledEntry.value?.editable === true,
+  );
   const preferencesDirty = computed(
     () =>
       themePreferenceValue.value !==
@@ -65,7 +72,10 @@ export function useManagedPreferences() {
           (composeIgnorePathsEntry.value?.value ?? "")) ||
       (digestPinUpdatesEditable.value &&
         digestPinUpdatesValue.value !==
-          (digestPinUpdatesEntry.value?.value ?? "false")),
+          (digestPinUpdatesEntry.value?.value ?? "false")) ||
+      (releaseNotesEnabledEditable.value &&
+        releaseNotesEnabledValue.value !==
+          (releaseNotesEnabledEntry.value?.value === "true")),
   );
   const preferenceSaveDisabled = computed(
     () => preferenceControlsDisabled.value || !preferencesDirty.value,
@@ -92,6 +102,7 @@ export function useManagedPreferences() {
       onboardingChecklistEntry.value?.value ?? "visible";
     composeIgnorePathsValue.value = composeIgnorePathsEntry.value?.value ?? "";
     digestPinUpdatesValue.value = digestPinUpdatesEntry.value?.value ?? "false";
+    releaseNotesEnabledValue.value = releaseNotesEnabledEntry.value?.value === "true";
   }
 
   function resetPreferenceForm(): void {
@@ -129,6 +140,13 @@ export function useManagedPreferences() {
         (digestPinUpdatesEntry.value?.value ?? "false")
     ) {
       values.digest_pin_updates = digestPinUpdatesValue.value;
+    }
+    if (
+      releaseNotesEnabledEditable.value &&
+      releaseNotesEnabledValue.value !==
+        (releaseNotesEnabledEntry.value?.value === "true")
+    ) {
+      values.release_notes_enabled = releaseNotesEnabledValue.value ? "true" : "false";
     }
     if (!Object.keys(values).length) {
       return;
@@ -212,16 +230,19 @@ export function useManagedPreferences() {
     onboardingChecklistEntry,
     composeIgnorePathsEntry,
     digestPinUpdatesEntry,
+    releaseNotesEnabledEntry,
     themePreferenceValue,
     onboardingChecklistValue,
     composeIgnorePathsValue,
     digestPinUpdatesValue,
+    releaseNotesEnabledValue,
     preferencesMessage,
     preferencesError,
     preferencesDisabledReason,
     preferenceControlsDisabled,
     composeIgnorePathsEditable,
     digestPinUpdatesEditable,
+    releaseNotesEnabledEditable,
     preferencesDirty,
     preferenceSaveDisabled,
     themePreferenceOptions,

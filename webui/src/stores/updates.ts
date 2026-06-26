@@ -17,6 +17,7 @@ import {
   type PendingResponse,
   type ReleaseNoteInfo,
   type ReleaseNotesResponse,
+  type ReleaseNotificationResponse,
   type RetagChoiceRequest,
   type RetagPlanResponse,
   type RetagPreviewJobResponse,
@@ -66,6 +67,8 @@ const TERMINAL_RETAG_PREVIEW_STATUSES = new Set<RetagPreviewJobResponse["status"
   "failure",
 ]);
 
+type ReleaseNotificationSource = { line_numbers: number[] } | { run_id: number };
+
 export const useUpdatesStore = defineStore("updates", () => {
   const pending = ref<PendingResponse | null>(null);
   const updateTargets = ref<UpdateTargetsResponse | null>(null);
@@ -87,6 +90,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     { intervalMs: 400 },
   );
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
+  const releaseNotification = ref<ReleaseNotificationResponse | null>(null);
   const releaseChangelogs = ref<Record<string, ReleaseChangelogState>>({});
   const releaseChangelogRequests = new Map<string, Promise<void>>();
   const selfUpdate = ref<SelfUpdateResponse | null>(null);
@@ -104,6 +108,8 @@ export const useUpdatesStore = defineStore("updates", () => {
   const loading = ref(false);
   const releaseNotesLoading = ref(false);
   const releaseNotesError = ref("");
+  const releaseNotificationLoading = ref(false);
+  const releaseNotificationError = ref("");
   const error = ref("");
 
   async function loadWithState(work: () => Promise<void>): Promise<void> {
@@ -379,6 +385,51 @@ export const useUpdatesStore = defineStore("updates", () => {
     } finally {
       releaseNotesLoading.value = false;
     }
+  }
+
+  async function previewReleaseNotifications(
+    source: ReleaseNotificationSource,
+  ): Promise<ReleaseNotificationResponse> {
+    const auth = useAuthStore();
+    releaseNotificationLoading.value = true;
+    releaseNotificationError.value = "";
+    try {
+      releaseNotification.value = await webApi.previewReleaseNotifications(
+        source,
+        await auth.ensureCsrf(),
+      );
+      return releaseNotification.value;
+    } catch (caughtError) {
+      releaseNotificationError.value = errorMessage(caughtError);
+      throw caughtError;
+    } finally {
+      releaseNotificationLoading.value = false;
+    }
+  }
+
+  async function sendReleaseNotifications(
+    source: ReleaseNotificationSource,
+  ): Promise<ReleaseNotificationResponse> {
+    const auth = useAuthStore();
+    releaseNotificationLoading.value = true;
+    releaseNotificationError.value = "";
+    try {
+      releaseNotification.value = await webApi.sendReleaseNotifications(
+        source,
+        await auth.ensureCsrf(),
+      );
+      return releaseNotification.value;
+    } catch (caughtError) {
+      releaseNotificationError.value = errorMessage(caughtError);
+      throw caughtError;
+    } finally {
+      releaseNotificationLoading.value = false;
+    }
+  }
+
+  function clearReleaseNotification(): void {
+    releaseNotification.value = null;
+    releaseNotificationError.value = "";
   }
 
   function releaseChangelogStateFor(
@@ -832,6 +883,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     retagPreviewError: retagPreviewPoller.error,
     retagGithubLatestFallback,
     releaseNotes,
+    releaseNotification,
     releaseChangelogs,
     selfUpdate,
     selfUpdatePlan,
@@ -848,6 +900,8 @@ export const useUpdatesStore = defineStore("updates", () => {
     loading,
     releaseNotesLoading,
     releaseNotesError,
+    releaseNotificationLoading,
+    releaseNotificationError,
     error,
     loadPending,
     loadUpdateTargets,
@@ -864,6 +918,9 @@ export const useUpdatesStore = defineStore("updates", () => {
     applyRetagPlan,
     loadReleaseNotes,
     refreshReleaseNotes,
+    previewReleaseNotifications,
+    sendReleaseNotifications,
+    clearReleaseNotification,
     releaseChangelogStateFor,
     releaseChangelogCanLoad,
     loadReleaseChangelog,

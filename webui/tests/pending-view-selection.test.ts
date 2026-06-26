@@ -11,6 +11,8 @@ import {
   pendingRescanResponse,
   pendingSourceInfo,
   planResponse,
+  releaseNotificationResponse,
+  releaseNotesResponse,
   snooze,
   wudApiStatus,
   wudContainerMetadata,
@@ -322,6 +324,54 @@ describe("pending view selection actions", () => {
     await removalButton?.trigger("click");
 
     expect(createRemovalPlan).not.toHaveBeenCalled();
+  });
+
+  it("previews and sends Discord release notes for selected pending updates", async () => {
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = pendingResponse();
+    updates.releaseNotes = releaseNotesResponse();
+    mockPendingLifecycle(settings, updates);
+    const previewReleaseNotifications = vi
+      .spyOn(updates, "previewReleaseNotifications")
+      .mockImplementation(async () => {
+        updates.releaseNotification = releaseNotificationResponse();
+      });
+    const sendReleaseNotifications = vi
+      .spyOn(updates, "sendReleaseNotifications")
+      .mockImplementation(async () => {
+        updates.releaseNotification = releaseNotificationResponse({
+          sent: true,
+          audit_run_id: 79,
+        });
+      });
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview release notes"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(previewReleaseNotifications).toHaveBeenCalledWith({ line_numbers: [1] });
+    expect(wrapper.find('[role="dialog"]').text()).toContain(
+      "Send Discord notifications",
+    );
+
+    await wrapper
+      .find('[role="dialog"]')
+      .findAll("button")
+      .find((button) => button.text().includes("Send to Discord"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(sendReleaseNotifications).toHaveBeenCalledWith({ line_numbers: [1] });
+    expect(wrapper.find('[role="dialog"]').text()).toContain(
+      "Release-note notifications sent. Audit run #79.",
+    );
   });
 
   it("disables WUD rescan controls in read-only mode", async () => {

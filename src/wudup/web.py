@@ -35,6 +35,7 @@ from . import (
     web_pending_rescan,
     web_pending_sources,
     web_plans,
+    web_release_notifications,
     web_release_notes,
     web_retags,
     web_runs,
@@ -50,6 +51,7 @@ from .config import (
     ConfigError,
     UpdaterConfig,
     load_config,
+    parse_bool_env,
 )
 
 DEFAULT_WEB_PORT = 7417
@@ -366,6 +368,28 @@ def create_app(
         response_model=web_models.ReleaseNotesResponse,
     )
     router.add_api_route(
+        "/release-notifications/preview",
+        web_release_notifications.api_preview_release_notifications,
+        methods=["POST"],
+        response_model=web_models.ReleaseNotificationResponse,
+    )
+    router.add_api_route(
+        "/release-notifications/preview",
+        api_post_only_method_not_allowed,
+        methods=["GET"],
+    )
+    router.add_api_route(
+        "/release-notifications/send",
+        web_release_notifications.api_send_release_notifications,
+        methods=["POST"],
+        response_model=web_models.ReleaseNotificationResponse,
+    )
+    router.add_api_route(
+        "/release-notifications/send",
+        api_post_only_method_not_allowed,
+        methods=["GET"],
+    )
+    router.add_api_route(
         "/service-policies",
         web_state.api_service_policies,
         methods=["GET"],
@@ -536,6 +560,14 @@ def load_web_settings(
         wud_api_startup_wait_seconds=web_wud_api.configured_startup_wait_seconds(env),
         wud_api_client=web_wud_api.configured_client_config(env),
         pending_source=web_pending_sources.configured_pending_source(env),
+        release_notes_enabled_env=(
+            parse_bool_env(
+                web_settings.RELEASE_NOTES_ENABLED_ENV,
+                env.get(web_settings.RELEASE_NOTES_ENABLED_ENV),
+            )
+            if web_settings.RELEASE_NOTES_ENABLED_ENV in env
+            else None
+        ),
         command_env=dict(env),
     )
 

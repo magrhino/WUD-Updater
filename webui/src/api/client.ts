@@ -55,6 +55,10 @@ export type {
   ReleaseNoteLink,
   ReleaseNoteInfo,
   ReleaseNotesResponse,
+  ReleaseNotificationDestination,
+  ReleaseNotificationTrigger,
+  ReleaseNotificationItem,
+  ReleaseNotificationResponse,
   // Plans
   PlanStatus,
   PlanSummary,
@@ -179,6 +183,7 @@ import type {
   PendingRescanResponse,
   PendingRemovalPlanResponse,
   ReleaseNotesResponse,
+  ReleaseNotificationResponse,
   ServicePolicyRecord,
   SnoozeState,
   SnoozeRecord,
@@ -534,6 +539,27 @@ const updatesApi = {
     apiRequest<ReleaseNotesResponse>("/release-notes/refresh", {
       method: "POST",
       headers: { "x-wud-csrf-token": csrfToken },
+    }),
+  previewReleaseNotifications: (
+    source: { line_numbers: number[] } | { run_id: number },
+    csrfToken: string,
+  ) =>
+    apiRequest<ReleaseNotificationResponse>("/release-notifications/preview", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify(source),
+    }),
+  sendReleaseNotifications: (
+    source: { line_numbers: number[] } | { run_id: number },
+    csrfToken: string,
+  ) =>
+    apiRequest<ReleaseNotificationResponse>("/release-notifications/send", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({
+        ...source,
+        confirmation: "send-release-notes",
+      }),
     }),
 };
 

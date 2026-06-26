@@ -1,8 +1,32 @@
 # Release-Note Notifications
 
-WUDup includes optional helpers that post release information to Discord
-when WUD reports an available image update. Webhook and token values must come
-from the WUD container environment or another host-local secret store.
+WUDup can post release information to Discord from the WebUI after you preview
+selected pending updates or a successful apply run. Legacy WUD shell helpers
+remain available for existing callback setups. Webhook and token values must
+come from the WUDup/WebUI runtime environment, the WUD container environment
+for shell callbacks, or another host-local secret store.
+
+## WebUI Workflow
+
+Release-note notifications default disabled. Enable them from Settings, or set
+`WUD_RELEASE_NOTES_ENABLED=true` in the WebUI runtime environment to force the
+value and make the Settings toggle read-only.
+
+Configure `DISCORD_RELEASES_WEBHOOK` in the WUDup runtime environment, with
+`DISCORD_WEBHOOK` accepted as a fallback. Webhook URLs and GitHub tokens are not
+editable in the WebUI and are never stored in SQLite.
+
+Use WUD's append-only callback (`/wud/on-update.sh`) or the WUD API pending
+source to populate pending updates, then choose **Preview release notes** from
+selected pending updates or from a completed apply job. The WebUI sender builds
+Discord payloads in Python, previews the sanitized payload without the webhook
+URL, and posts one embed per update in Discord-sized batches. It reads WUD
+trigger summaries when WUD API metadata is available, but it does not call WUD
+trigger POST endpoints.
+
+If a legacy shell release-note callback is also configured, Discord can receive
+duplicate notifications for the same WUD update. Keep only one notification path
+enabled unless duplicate posts are intentional.
 
 ## Default Callback
 

@@ -2261,6 +2261,15 @@ def _write_demo_management_state(conn) -> None:
             metadata_json=DEMO_SOURCE_METADATA_JSON,
         )
 
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO web_settings (key, value, updated_at)
+            VALUES (?, ?, ?)
+            """,
+            ("release_notes.enabled", "true", created_at),
+        )
+
     for known in DEMO_KNOWN_IMAGES:
         upsert_known_image(
             conn,

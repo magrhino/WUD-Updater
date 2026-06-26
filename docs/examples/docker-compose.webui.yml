@@ -43,9 +43,13 @@ services:
       WUD_API_AUTH_BASIC_PASSWORD_FILE: "${WUD_API_AUTH_BASIC_PASSWORD_FILE:-}"
       WUD_API_HEADERS_FILE: "${WUD_API_HEADERS_FILE:-}"
       WUD_PENDING_SOURCE: "${WUD_PENDING_SOURCE:-file}"
+      # Leave unset to manage from Settings; uncomment to force the env override.
+      # WUD_RELEASE_NOTES_ENABLED: "true"
       OUT_UID: "${OUT_UID:-1000}"
       OUT_GID: "${OUT_GID:-1000}"
       GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+      DISCORD_RELEASES_WEBHOOK: "${DISCORD_RELEASES_WEBHOOK:-}"
+      DISCORD_WEBHOOK: "${DISCORD_WEBHOOK:-}"
     networks:
       - wudup-app
       - wudup-egress

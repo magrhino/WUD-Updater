@@ -42,11 +42,13 @@ from .web_database import (
     connect_readonly_db as _connect_readonly_db,
 )
 from .web_models import (
+    PendingSourceInfo,
     ReleaseNoteInfo,
     ReleaseNotesResponse,
     WebSettings,
     WudApiStatus,
 )
+from .web_settings import effective_release_notes_enabled
 from .wud_file import WudTarget
 
 
@@ -67,6 +69,8 @@ class _ReleaseNotesRequestContext:
 
 def api_release_notes(request: Request) -> ReleaseNotesResponse:
     settings = _settings(request)
+    if not effective_release_notes_enabled(settings):
+        return release_notes_disabled_response(settings)
     context = _release_notes_request_context(settings)
     if isinstance(context, ReleaseNotesResponse):
         return context
@@ -106,6 +110,8 @@ def api_release_notes(request: Request) -> ReleaseNotesResponse:
 
 def api_refresh_release_notes(request: Request) -> ReleaseNotesResponse:
     settings = _settings(request)
+    if not effective_release_notes_enabled(settings):
+        return release_notes_disabled_response(settings)
     context = _release_notes_request_context(settings)
     if isinstance(context, ReleaseNotesResponse):
         return context
@@ -212,6 +218,32 @@ def _wud_api_status(source: web_pending_sources.PendingSourceResult) -> WudApiSt
         available=False,
         metadata_available=False,
         last_checked_at="",
+    )
+
+
+def release_notes_disabled_response(settings: WebSettings) -> ReleaseNotesResponse:
+    return ReleaseNotesResponse(
+        source_file=str(settings.config.wud_out_file),
+        source=PendingSourceInfo(
+            configured=settings.pending_source,
+            active="file",
+            label="Release notes disabled",
+            fresh=True,
+            degraded=False,
+            detail="Release-note notifications are disabled.",
+        ),
+        count=0,
+        items=[],
+        enabled=False,
+        disabled_reason="Release-note notifications are disabled.",
+        wud_api=WudApiStatus(
+            state="unavailable",
+            available=False,
+            metadata_available=False,
+            last_checked_at="",
+            detail="Release-note notifications are disabled.",
+        ),
+        warnings=[],
     )
 
 

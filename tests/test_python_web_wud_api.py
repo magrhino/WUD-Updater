@@ -1014,6 +1014,7 @@ def test_release_notes_refresh_uses_wud_source_and_safe_remote_tag(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_API_BASE_URL": "https://wud.release-notes.test:3000",
+            "WUD_RELEASE_NOTES_ENABLED": "true",
         },
     )
     wud_file = tmp_path / "state" / "images.todo"

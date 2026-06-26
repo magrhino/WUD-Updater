@@ -68,9 +68,14 @@ MANAGED_COMPOSE_IGNORE_PATHS_KEY = "compose_ignore_paths"
 MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY = "compose.ignore_paths"
 MANAGED_DIGEST_PIN_UPDATES_KEY = "digest_pin_updates"
 MANAGED_DIGEST_PIN_UPDATES_DB_KEY = "compose.digest_pin_updates"
+RELEASE_NOTES_ENABLED_ENV = "WUD_RELEASE_NOTES_ENABLED"
+MANAGED_RELEASE_NOTES_ENABLED_KEY = "release_notes_enabled"
+MANAGED_RELEASE_NOTES_ENABLED_DB_KEY = "release_notes.enabled"
 THEME_PREFERENCE_VALUES = ("system", "light", "dark")
 ONBOARDING_CHECKLIST_VALUES = ("visible", "dismissed")
 DIGEST_PIN_UPDATES_VALUES = ("false", "true")
+RELEASE_NOTES_ENABLED_VALUES = ("false", "true")
+DEFAULT_RELEASE_NOTES_ENABLED = False
 
 
 def api_settings(request: Request) -> SettingsResponse:
@@ -234,6 +239,57 @@ def _digest_pin_disabled_reason(settings: WebSettings) -> str:
     )
 
 
+def effective_release_notes_enabled(settings: WebSettings) -> bool:
+    if _release_notes_enabled_env_configured(settings):
+        return bool(settings.release_notes_enabled_env)
+    return _stored_release_notes_enabled(settings)
+
+
+def _stored_release_notes_enabled(settings: WebSettings) -> bool:
+    try:
+        with closing(_connect_readonly_db(settings)) as conn:
+            value = _web_setting(conn, MANAGED_RELEASE_NOTES_ENABLED_DB_KEY)
+    except ReadOnlyDatabaseMissing:
+        return DEFAULT_RELEASE_NOTES_ENABLED
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read release-note setting",
+                exc,
+            ),
+        ) from exc
+    try:
+        return parse_bool_env(
+            MANAGED_RELEASE_NOTES_ENABLED_KEY,
+            value,
+            default=DEFAULT_RELEASE_NOTES_ENABLED,
+        )
+    except ConfigError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                f"stored {MANAGED_RELEASE_NOTES_ENABLED_KEY} is invalid",
+                exc,
+            ),
+        ) from exc
+
+
+def _release_notes_enabled_env_configured(settings: WebSettings) -> bool:
+    return RELEASE_NOTES_ENABLED_ENV in _settings_env(settings)
+
+
+def _release_notes_enabled_disabled_reason(settings: WebSettings) -> str:
+    if not _release_notes_enabled_env_configured(settings):
+        return ""
+    return (
+        f"{RELEASE_NOTES_ENABLED_ENV} is configured in the server environment. "
+        "Unset it to manage release-note notifications in the WebUI."
+    )
+
+
 def _managed_settings_entries(settings: WebSettings) -> list[ManagedSettingEntry]:
     try:
         with closing(_connect_readonly_db(settings)) as conn:
@@ -287,13 +343,14 @@ def _managed_settings_db_values(conn: sqlite3.Connection) -> dict[str, str]:
         """
         SELECT key, value
         FROM web_settings
-        WHERE key IN (?, ?, ?, ?)
+        WHERE key IN (?, ?, ?, ?, ?)
         """,
         (
             MANAGED_THEME_PREFERENCE_DB_KEY,
             ONBOARDING_DISMISSED_AT_KEY,
             MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY,
             MANAGED_DIGEST_PIN_UPDATES_DB_KEY,
+            MANAGED_RELEASE_NOTES_ENABLED_DB_KEY,
         ),
     ).fetchall()
     return {str(row["key"]): str(row["value"]) for row in rows}
@@ -308,6 +365,7 @@ def _managed_settings_entries_from_values(
     onboarding_dismissed_at = values.get(ONBOARDING_DISMISSED_AT_KEY, "")
     compose_disabled_reason = _compose_ignore_paths_disabled_reason(settings)
     digest_disabled_reason = _digest_pin_disabled_reason(settings)
+    release_notes_disabled_reason = _release_notes_enabled_disabled_reason(settings)
     if _compose_ignore_env_configured(settings):
         compose_ignore_paths = settings.config.compose_ignore_paths
         compose_configured = True
@@ -331,6 +389,16 @@ def _managed_settings_entries_from_values(
             MANAGED_DIGEST_PIN_UPDATES_KEY,
             values.get(MANAGED_DIGEST_PIN_UPDATES_DB_KEY, ""),
             default=DEFAULT_DIGEST_PIN_UPDATES,
+        )
+    if _release_notes_enabled_env_configured(settings):
+        release_notes_enabled = bool(settings.release_notes_enabled_env)
+        release_notes_configured = True
+    else:
+        release_notes_configured = MANAGED_RELEASE_NOTES_ENABLED_DB_KEY in values
+        release_notes_enabled = parse_bool_env(
+            MANAGED_RELEASE_NOTES_ENABLED_KEY,
+            values.get(MANAGED_RELEASE_NOTES_ENABLED_DB_KEY, ""),
+            default=DEFAULT_RELEASE_NOTES_ENABLED,
         )
     return [
         ManagedSettingEntry(
@@ -371,6 +439,16 @@ def _managed_settings_entries_from_values(
             restart_required=False,
             disabled_reason=digest_disabled_reason,
         ),
+        ManagedSettingEntry(
+            key=MANAGED_RELEASE_NOTES_ENABLED_KEY,
+            value=_format_bool(release_notes_enabled),
+            default_value=_format_bool(DEFAULT_RELEASE_NOTES_ENABLED),
+            source="configured" if release_notes_configured else "default",
+            editable=not release_notes_disabled_reason,
+            allowed_values=list(RELEASE_NOTES_ENABLED_VALUES),
+            restart_required=False,
+            disabled_reason=release_notes_disabled_reason,
+        ),
     ]
 
 
@@ -388,6 +466,7 @@ def _validated_managed_setting_updates(
         MANAGED_THEME_PREFERENCE_KEY: THEME_PREFERENCE_VALUES,
         MANAGED_ONBOARDING_CHECKLIST_KEY: ONBOARDING_CHECKLIST_VALUES,
         MANAGED_DIGEST_PIN_UPDATES_KEY: DIGEST_PIN_UPDATES_VALUES,
+        MANAGED_RELEASE_NOTES_ENABLED_KEY: RELEASE_NOTES_ENABLED_VALUES,
     }
     updates: dict[str, str] = {}
     for key, raw_value in payload.values.items():
@@ -411,6 +490,14 @@ def _validated_managed_setting_updates(
             raise HTTPException(
                 status_code=422,
                 detail=_digest_pin_disabled_reason(settings),
+            )
+        if (
+            key == MANAGED_RELEASE_NOTES_ENABLED_KEY
+            and _release_notes_enabled_env_configured(settings)
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=_release_notes_enabled_disabled_reason(settings),
             )
         if key not in allowed_values:
             raise HTTPException(
@@ -449,6 +536,8 @@ def _apply_managed_setting_updates(
             _set_web_setting(conn, MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY, value)
         elif key == MANAGED_DIGEST_PIN_UPDATES_KEY:
             _set_web_setting(conn, MANAGED_DIGEST_PIN_UPDATES_DB_KEY, value)
+        elif key == MANAGED_RELEASE_NOTES_ENABLED_KEY:
+            _set_web_setting(conn, MANAGED_RELEASE_NOTES_ENABLED_DB_KEY, value)
 
 
 def _managed_settings_audit_values(
@@ -483,6 +572,17 @@ def _updater_settings_entries(settings: WebSettings) -> list[SettingsEntry]:
             settings,
             DIGEST_PIN_UPDATES_ENV,
             _format_bool(config.digest_pin_updates),
+        ),
+        _settings_entry(
+            RELEASE_NOTES_ENABLED_ENV,
+            _format_bool(effective_release_notes_enabled(settings)),
+            _format_bool(DEFAULT_RELEASE_NOTES_ENABLED),
+            _env_configured(settings, RELEASE_NOTES_ENABLED_ENV),
+            source=(
+                "configured"
+                if _env_configured(settings, RELEASE_NOTES_ENABLED_ENV)
+                else "default"
+            ),
         ),
     ]
 

@@ -116,6 +116,7 @@ EOF
     src/wudup/web_pending_rescan_payload.py \
     src/wudup/web_pending_sources.py \
     src/wudup/web_plans.py \
+    src/wudup/web_release_notifications.py \
     src/wudup/web_release_notes.py \
     src/wudup/web_retag_choices.py \
     src/wudup/web_retag_identity.py \
@@ -168,6 +169,7 @@ EOF
     tests/test_python_web_jobs.py \
     tests/test_python_web_metadata.py \
     tests/test_python_web_onboarding.py \
+    tests/test_python_web_release_notifications.py \
     tests/test_python_web_release_notes.py \
     tests/test_python_web_release_notes_live.py \
     tests/test_python_web_retag_apply.py \

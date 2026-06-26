@@ -125,6 +125,13 @@ def test_settings_reports_effective_non_secret_configuration(
         "configured": False,
         "source": "default",
     }
+    assert updater["WUD_RELEASE_NOTES_ENABLED"] == {
+        "name": "WUD_RELEASE_NOTES_ENABLED",
+        "value": "false",
+        "default_value": "false",
+        "configured": False,
+        "source": "default",
+    }
     assert webui["WUD_WEB_PUBLIC_ORIGIN"]["value"] == "https://wud.example.test"
     assert webui["WUD_WEB_MUTATIONS_ENABLED"]["value"] == "true"
     assert webui["WUD_WEB_RESTART_CONTAINER"]["value"] == "wudup"
@@ -219,6 +226,16 @@ def test_settings_reports_effective_non_secret_configuration(
         "restart_required": False,
         "disabled_reason": "",
     }
+    assert managed["release_notes_enabled"] == {
+        "key": "release_notes_enabled",
+        "value": "false",
+        "default_value": "false",
+        "source": "default",
+        "editable": True,
+        "allowed_values": ["false", "true"],
+        "restart_required": False,
+        "disabled_reason": "",
+    }
     for value in (*secret_values.values(), "wud-api-header-secret"):
         assert value not in serialized
 
@@ -305,6 +322,11 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
         json={"values": {"compose_ignore_paths": "old,,archive"}},
         headers=headers,
     )
+    invalid_release_notes = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"release_notes_enabled": "maybe"}},
+        headers=headers,
+    )
     empty_payload = client.post(
         "/api/v1/settings/managed",
         json={"values": {}},
@@ -323,6 +345,10 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
     )
     assert invalid_compose_ignore.status_code == 422
     assert "non-empty relative paths" in invalid_compose_ignore.json()["detail"]
+    assert invalid_release_notes.status_code == 422
+    assert invalid_release_notes.json()["detail"] == (
+        "release_notes_enabled must be one of: false, true"
+    )
     assert empty_payload.status_code == 422
     assert empty_payload.json()["detail"] == "at least one managed setting is required"
     assert managed["theme_preference"]["value"] == "system"
@@ -477,6 +503,38 @@ def test_managed_compose_ignore_paths_env_guard_disables_webui_edit(
     assert response.json()["detail"] == managed["compose_ignore_paths"]["disabled_reason"]
 
 
+def test_managed_release_notes_env_guard_disables_webui_edit(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_RELEASE_NOTES_ENABLED": "true",
+        },
+    )
+    headers = _csrf_headers(client)
+
+    settings_response = client.get("/api/v1/settings")
+    managed = {entry["key"]: entry for entry in settings_response.json()["managed"]}
+    response = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"release_notes_enabled": "false"}},
+        headers=headers,
+    )
+
+    assert managed["release_notes_enabled"]["value"] == "true"
+    assert managed["release_notes_enabled"]["editable"] is False
+    assert "Unset it to manage release-note notifications" in managed[
+        "release_notes_enabled"
+    ]["disabled_reason"]
+    assert response.status_code == 422
+    assert response.json()["detail"] == managed["release_notes_enabled"][
+        "disabled_reason"
+    ]
+
+
 def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> None:
     client = _client(
         tmp_path,
@@ -495,6 +553,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
                 "onboarding_checklist": "dismissed",
                 "compose_ignore_paths": "old, archive/disabled",
                 "digest_pin_updates": "true",
+                "release_notes_enabled": "true",
             }
         },
         headers=headers,
@@ -512,6 +571,8 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert managed["compose_ignore_paths"]["source"] == "configured"
     assert managed["digest_pin_updates"]["value"] == "true"
     assert managed["digest_pin_updates"]["source"] == "configured"
+    assert managed["release_notes_enabled"]["value"] == "true"
+    assert managed["release_notes_enabled"]["source"] == "configured"
 
     db_path = tmp_path / "state" / "wud.sqlite"
     with open_db(db_path) as conn:
@@ -526,6 +587,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         ).fetchone()
         digest_pin_updates = conn.execute(
             "SELECT value FROM web_settings WHERE key = 'compose.digest_pin_updates'"
+        ).fetchone()
+        release_notes_enabled = conn.execute(
+            "SELECT value FROM web_settings WHERE key = 'release_notes.enabled'"
         ).fetchone()
         run = conn.execute(
             "SELECT * FROM update_runs WHERE id = ?",
@@ -542,6 +606,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert onboarding["value"]
     assert compose_ignore_paths["value"] == "old, archive/disabled"
     assert digest_pin_updates["value"] == "true"
+    assert release_notes_enabled["value"] == "true"
     assert run["mode"] == "web-settings"
     assert run_metadata["operation"] == "update_managed_settings"
     assert run_metadata["target"] == {
@@ -549,6 +614,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
             "compose_ignore_paths",
             "digest_pin_updates",
             "onboarding_checklist",
+            "release_notes_enabled",
             "theme_preference",
         ]
     }
@@ -557,12 +623,14 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         "onboarding_checklist": "visible",
         "compose_ignore_paths": "old",
         "digest_pin_updates": "false",
+        "release_notes_enabled": "false",
     }
     assert event_metadata["after"] == {
         "theme_preference": "dark",
         "onboarding_checklist": "dismissed",
         "compose_ignore_paths": "old, archive/disabled",
         "digest_pin_updates": "true",
+        "release_notes_enabled": "true",
     }
 
     reset = client.post(

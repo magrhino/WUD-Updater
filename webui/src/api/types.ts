@@ -411,8 +411,53 @@ export interface ReleaseNotesResponse {
   source: PendingSourceInfo;
   count: number;
   items: ReleaseNoteInfo[];
+  enabled: boolean;
+  disabled_reason: string;
   wud_api: WudApiStatus;
   warnings: string[];
+}
+
+export interface ReleaseNotificationDestination {
+  type: "discord";
+  configured: boolean;
+  source: string;
+}
+
+export interface ReleaseNotificationTrigger {
+  id: string;
+  type: string;
+  name: string;
+}
+
+export interface ReleaseNotificationItem {
+  line_no: number;
+  image: string;
+  service_key: string;
+  title: string;
+  description: string;
+  status: string;
+  release_tag: string;
+  upstream_repo: string;
+  links: ReleaseNoteLink[];
+  triggers: ReleaseNotificationTrigger[];
+  skipped_reason: string;
+}
+
+export interface ReleaseNotificationResponse {
+  enabled: boolean;
+  destination: ReleaseNotificationDestination;
+  source: PendingSourceInfo;
+  source_file: string;
+  count: number;
+  sendable_count: number;
+  skipped_count: number;
+  batches: Array<Record<string, unknown>>;
+  items: ReleaseNotificationItem[];
+  wud_api: WudApiStatus;
+  warnings: string[];
+  sent: boolean;
+  audit_run_id: number;
+  error: string;
 }
 
 // ---------------------------------------------------------------------------

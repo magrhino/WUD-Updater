@@ -203,6 +203,7 @@ def _install_wud_api(
             }
         ],
     ),
+    triggers: Mapping[str, WudApiResponse] | None = None,
     health_error: Exception | None = None,
 ) -> None:
     if health_error is not None:
@@ -216,6 +217,8 @@ def _install_wud_api(
         "/api/watchers": watchers,
         "/api/registries": registries,
     }
+    for container_id, response in (triggers or {}).items():
+        responses[f"/api/containers/{container_id}/triggers"] = response
 
     def fake_request_json(url: str, _client_config=None) -> object:
         path = urllib.parse.urlsplit(url).path

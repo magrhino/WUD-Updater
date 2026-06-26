@@ -567,6 +567,7 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_API_AUTH_BASIC_USER` + `WUD_API_AUTH_BASIC_PASSWORD_FILE` / `WUD_API_AUTH_BASIC_PASSWORD` | unset | Optional basic auth credentials for WUDup's outbound WUD API calls. The user and one password source must be set together. Prefer the `_FILE` password form in containers. |
 | `WUD_API_HEADERS_FILE` | unset | Optional UTF-8 JSON object of static WUD API request headers, such as `{"X-Api-Key":"example"}`. Header names and values are validated, values are redacted, and an `Authorization` header cannot be combined with bearer or basic auth. |
 | `WUD_PENDING_SOURCE` | `file` | Experimental WebUI/API pending-update source: `file` keeps the callback todo file as the source of truth, `api` derives pending entries from WUD `/api/containers`, and `auto` uses API metadata when usable before falling back to `WUD_OUT_FILE`. Host CLI update commands remain file-based. |
+| `WUD_RELEASE_NOTES_ENABLED` | unset | Optional env override for WebUI Discord release-note notifications. Leave unset to manage the setting from Settings; set `true` or `false` only when the deployment should force the value and make the Settings toggle read-only. |
 | `WUD_WEB_HOST` | Host/direct app: `127.0.0.1`; container image: `0.0.0.0` | Host passed to Uvicorn when running `wudup web`. The image default makes published Docker ports reachable; Compose still controls host-side exposure with `WEBUI_HTTP_BIND`. |
 | `WUD_WEB_PORT` | `7417` | Port passed to Uvicorn when running `wudup web`. |
 | `WUD_WEB_STATIC_DIR` | packaged SPA, auto-detected if present | Optional built SPA directory override. Backend tests and API startup do not require a frontend build. |
@@ -610,12 +611,12 @@ TrueNAS status helper values for the Python `updates` wrapper:
 | `TRUENAS_STATUS_CHECK` | unset | For the Python/container `updates` wrapper, set to `true` to run the short-lived local `midclt` status helper. |
 | `TRUENAS_STATUS_TIMEOUT` | `5` | Seconds to wait for each helper `midclt` call before skipping it. The parent wrapper derives a longer Docker helper timeout from this value. |
 
-Release-note notification values for the WUD container:
+Release-note notification values:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DISCORD_RELEASES_WEBHOOK` | unset | Required by the default `/wud/release-notes-to-discord.sh` helper when rich release notes are enabled. |
-| `DISCORD_WEBHOOK` | unset | Alternate webhook name accepted by `/wud/release-notes-to-discord.sh`. |
+| `DISCORD_RELEASES_WEBHOOK` | unset | Discord webhook for WebUI-sent release-note notifications and for the legacy `/wud/release-notes-to-discord.sh` helper. Prefer this name for new deployments. |
+| `DISCORD_WEBHOOK` | unset | Alternate webhook name accepted by the WebUI notification sender and shell helper. |
 | `ADMIN_WEBHOOK` | selected release webhook | Optional webhook for missing LinuxServer.io upstream mapping alerts. |
 | `GITHUB_TOKEN` | unset | Optional GitHub API token for higher release-note lookup rate limits in WUD notifications and WebUI metadata refreshes. |
 | `MAX_COMMITS` | `3` | Maximum representative commits or pull requests included in Discord release embeds. |
@@ -628,8 +629,20 @@ WUD supplies callback fields such as `update_available`, `image_name`,
 `image_tag_value`, `name`, `update_kind_kind`, `update_kind_remote_value`, and
 `result_tag`; these are runtime inputs to the mounted scripts, not deployment
 settings you normally set yourself. Provide webhook and GitHub token values
-through the WUD container environment or another host-local secret store. Do not
-put secrets in this repository.
+through the WUDup/WebUI runtime environment for WebUI-sent notifications, or
+through the WUD container environment when using the legacy shell callback path.
+Do not put secrets in this repository or in SQLite.
+
+For the WebUI workflow, keep WUD's append-only callback or API pending source in
+place, enable release-note notifications from Settings or by setting
+`WUD_RELEASE_NOTES_ENABLED=true`, configure `DISCORD_RELEASES_WEBHOOK` in the
+WUDup runtime, then use **Preview release notes** from selected pending updates
+or from a successful apply job. The WebUI reads WUD trigger summaries through
+the WUD API when available, but it does not invoke WUD trigger POST endpoints.
+
+Do not keep a legacy WUD shell release-note callback enabled unless you still
+want that separate path. Running both the shell helper and WebUI sender for the
+same update can duplicate Discord notifications.
 
 ## Security Notes
 
