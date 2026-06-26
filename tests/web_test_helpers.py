@@ -92,18 +92,30 @@ def _wud_api_container(
     remote_tag: str = "2.0",
     remote_digest: str = "",
     update_kind: str = "tag",
+    platform: str = "",
 ) -> dict[str, object]:
+    image_payload: dict[str, object] = {
+        "name": image,
+        "tag": {"value": tag},
+        "digest": {"value": "sha256:old"},
+    }
+    platform_parts = platform.split("/")
+    if len(platform_parts) in {2, 3}:
+        platform_payload = {
+            "os": platform_parts[0],
+            "architecture": platform_parts[1],
+        }
+        if len(platform_parts) == 3:
+            platform_payload["variant"] = platform_parts[2]
+        image_payload["platform"] = platform_payload
+
     return {
         "id": f"docker.local.{name}",
         "name": name,
         "displayName": name.title(),
         "status": "running",
         "watcher": "local",
-        "image": {
-            "name": image,
-            "tag": {"value": tag},
-            "digest": {"value": "sha256:old"},
-        },
+        "image": image_payload,
         "result": {
             "tag": remote_tag,
             "digest": remote_digest,

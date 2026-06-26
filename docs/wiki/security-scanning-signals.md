@@ -114,7 +114,7 @@ Keep default CI fixture-based and offline. Focused tests should cover:
 - WUD-reported index digest, child digest, stale digest, and platform mismatch;
 - Compose and WUD platform conflicts;
 - unsupported, auth-required, offline, stale, partial, error, findings, and
-  none-reported states;
+  no-findings states;
 - cold and warm cache behavior, duplicate subjects, and concurrent refreshes;
 - scratch, distroless, EOL, language-only, zero-finding, unfixed, and fixable
   findings fixtures;

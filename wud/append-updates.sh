@@ -235,11 +235,12 @@ digest_from_remote() {
 platform_component_valid() {
   value="$1"
   [ -n "$value" ] || return 1
+  # Keep this POSIX copy aligned with src/wudup/platforms.py:platform_from_parts.
   case "$value" in
     *[!A-Za-z0-9_.-]*)
       return 1
       ;;
-    unknown)
+    [Uu][Nn][Kk][Nn][Oo][Ww][Nn])
       return 1
       ;;
     *)

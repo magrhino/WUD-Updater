@@ -146,6 +146,13 @@ test_invalid_platform_metadata_is_omitted(){
   teardown_case
 }
 
+test_unknown_platform_metadata_is_omitted_case_insensitively(){
+  setup_case
+  run_script update_available=true image_name=repo/app image_tag_value=1.0 image_os=linux image_architecture=Unknown
+  assert_file_equals 'repo/app:1.0'
+  teardown_case
+}
+
 test_container_name_fallback(){
   setup_case
   run_script update_available=true name=container-app
@@ -433,6 +440,7 @@ main(){
   run_test test_platform_metadata_is_appended
   run_test test_platform_variant_metadata_is_appended
   run_test test_invalid_platform_metadata_is_omitted
+  run_test test_unknown_platform_metadata_is_omitted_case_insensitively
   run_test test_container_name_fallback
   run_test test_digest_update_kind_fallback
   run_test test_tag_dedupe_replaces_existing_image_line

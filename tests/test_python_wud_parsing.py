@@ -246,6 +246,15 @@ class WudFileParsingTests(unittest.TestCase):
             ("Ignoring invalid platform on WUD line 1: linux",),
         )
 
+    def test_unknown_platform_component_is_warned_and_ignored(self) -> None:
+        parsed = parse_wud_text("repo/app:1.0 platform=linux/amd64/UNKNOWN\n")
+
+        self.assertIsNone(parsed.targets[0].platform)
+        self.assertEqual(
+            parsed.warnings,
+            ("Ignoring invalid platform on WUD line 1: linux/amd64/UNKNOWN",),
+        )
+
     def test_trailing_platform_separator_is_warned_and_ignored(self) -> None:
         parsed = parse_wud_text("repo/app:1.0 platform=linux/amd64/\n")
 

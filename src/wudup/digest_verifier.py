@@ -8,12 +8,12 @@ import urllib.parse
 import urllib.request
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from .command import CommandError
 from .docker_cli import DockerCli
 from .images import normalize_digest, strip_digest
-from .platforms import ImagePlatform, platform_value
+from .platforms import ImagePlatform, platform_from_parts, platform_value
 
 
 GHCR_REGISTRY = "ghcr.io"
@@ -28,6 +28,14 @@ _STATUS_VERIFIED = "verified"
 _STATUS_UNTRUSTED = "untrusted"
 _REASON_PLATFORM_MISMATCH = "platform-mismatch"
 _REASON_MANIFEST_CONFIG_MISSING = "manifest-config-missing"
+IdentityStatus = Literal[
+    "exact",
+    "mismatch",
+    "stale",
+    "unsupported",
+    "auth_required",
+    "error",
+]
 _DOCKER_MANIFEST_LIST_MEDIA_TYPE = (
     "application/vnd.docker.distribution.manifest.list.v2+json"
 )
@@ -188,7 +196,7 @@ class ResolvedImageSubject:
     architecture: str = ""
     variant: str = ""
     platform_source: str = ""
-    identity_status: str = "unsupported"
+    identity_status: IdentityStatus = "unsupported"
     warnings: tuple[str, ...] = ()
     source: str = ""
     error: str = ""
@@ -962,18 +970,7 @@ def _is_registry_prefix(value: str) -> bool:
 
 
 def _real_platform(value: Any) -> bool:
-    if not isinstance(value, Mapping):
-        return False
-    os_value = value.get("os")
-    architecture = value.get("architecture")
-    if not isinstance(os_value, str) or not isinstance(architecture, str):
-        return False
-    return (
-        os_value.strip() != ""
-        and architecture.strip() != ""
-        and os_value.lower() != "unknown"
-        and architecture.lower() != "unknown"
-    )
+    return _platform_from_descriptor(value) is not None
 
 
 def _platform_from_descriptor(value: Any) -> ImagePlatform | None:
@@ -984,16 +981,10 @@ def _platform_from_descriptor(value: Any) -> ImagePlatform | None:
     variant = value.get("variant")
     if not isinstance(os_value, str) or not isinstance(architecture, str):
         return None
-    if not os_value.strip() or not architecture.strip():
-        return None
-    if os_value.strip().lower() == "unknown":
-        return None
-    if architecture.strip().lower() == "unknown":
-        return None
-    return ImagePlatform(
-        os=os_value.strip().lower(),
-        architecture=architecture.strip().lower(),
-        variant=variant.strip().lower() if isinstance(variant, str) else "",
+    return platform_from_parts(
+        os_value,
+        architecture,
+        variant if isinstance(variant, str) else "",
     )
 
 
@@ -1003,7 +994,7 @@ def _platform_matches(found: ImagePlatform, wanted: ImagePlatform) -> bool:
     return found.variant == wanted.variant
 
 
-def _subject_error_status(error: str) -> str:
+def _subject_error_status(error: str) -> IdentityStatus:
     lowered = error.lower()
     if "401" in lowered or "403" in lowered or "auth" in lowered:
         return "auth_required"

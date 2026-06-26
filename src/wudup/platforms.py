@@ -49,7 +49,7 @@ def platform_from_parts(
         return None
     if variant and not _valid_platform_component(variant):
         return None
-    if os_value == "unknown" or architecture == "unknown":
+    if os_value == "unknown" or architecture == "unknown" or variant == "unknown":
         return None
     return ImagePlatform(
         os=os_value,
