@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.46.6](https://github.com/magrhino/wudup/compare/v0.46.5...v0.46.6) (2026-06-25)
+
+
+### Bug Fixes
+
+* **retag:** Fix retag selection UX in WebUI and demo fixtures ([#409](https://github.com/magrhino/wudup/issues/409)) ([eab1b91](https://github.com/magrhino/wudup/commit/eab1b91fba80d602fb561d4e743fe3b20a42e599))
+
 ## [0.46.5](https://github.com/magrhino/wudup/compare/v0.46.4...v0.46.5) (2026-06-24)
 
 
