@@ -115,6 +115,86 @@ def test_release_notification_preview_includes_wud_triggers(
     assert "secret" not in json.dumps(body["items"][0]["triggers"])
 
 
+def test_notification_items_cache_wud_trigger_lookup_by_container(
+    monkeypatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake_container_triggers(_settings, container_id: str):
+        calls.append(container_id)
+        return (
+            [
+                notifications_module.ReleaseNotificationTrigger(
+                    id="discord.release",
+                    type="discord",
+                    name="release",
+                )
+            ],
+            "",
+        )
+
+    def target(line_no: int) -> notifications_module._NotificationTarget:
+        return notifications_module._NotificationTarget(
+            target=notifications_module.WudTarget(
+                line_no=line_no,
+                raw=f"ghcr.io/acme/app:{line_no}.0.0 tag=2.0.0",
+                first=f"ghcr.io/acme/app:{line_no}.0.0",
+                key=f"app-{line_no}",
+                repo="ghcr.io/acme/app",
+                has_tag=True,
+                allow_repo=True,
+                digest="",
+                desired_tag="2.0.0",
+                tag_token=f"{line_no}.0.0",
+            ),
+            service_key=f"app-{line_no}",
+            wud_container_id="docker.local.app",
+        )
+
+    monkeypatch.setattr(
+        notifications_module.web_wud_api,
+        "container_triggers",
+        fake_container_triggers,
+    )
+    source = notifications_module._NotificationSource(
+        targets=(target(1), target(2)),
+        source_file="images.todo",
+        source=notifications_module.PendingSourceInfo(),
+        wud_api=notifications_module.WudApiStatus(
+            state="ready",
+            available=True,
+            metadata_available=True,
+            last_checked_at="2026-06-01T00:00:00Z",
+        ),
+        metadata_by_line={},
+    )
+    notes = {
+        line_no: notifications_module.ReleaseNoteInfo(
+            line_no=line_no,
+            status="ready",
+            provider="github",
+            image_repo="ghcr.io/acme/app",
+            upstream_repo="acme/app",
+            release_tag="2.0.0",
+            title="v2.0.0",
+        )
+        for line_no in (1, 2)
+    }
+
+    items, warnings = notifications_module._notification_items(
+        object(),
+        source,
+        notes,
+    )
+
+    assert calls == ["docker.local.app"]
+    assert warnings == []
+    assert [item.triggers[0].id for item in items] == [
+        "discord.release",
+        "discord.release",
+    ]
+
+
 def test_release_notification_preview_degrades_when_wud_triggers_require_auth(
     tmp_path: Path,
     monkeypatch,

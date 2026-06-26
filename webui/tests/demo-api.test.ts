@@ -98,6 +98,17 @@ describe("demo web API", () => {
         }),
       ]),
     });
+    await expect(
+      api.updateManagedSettings({ release_notes_enabled: "true" }, "csrf"),
+    ).resolves.toMatchObject({
+      managed: expect.arrayContaining([
+        expect.objectContaining({
+          key: "release_notes_enabled",
+          value: "true",
+          source: "configured",
+        }),
+      ]),
+    });
     await expect(api.onboardingChecklist("csrf")).resolves.toMatchObject({
       visible: true,
       items: expect.arrayContaining([

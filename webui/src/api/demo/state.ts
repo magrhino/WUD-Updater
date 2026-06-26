@@ -484,6 +484,11 @@ export class DemoApiState {
       (entry) => entry.key === "digest_pin_updates",
     )?.value ?? "false";
   digestPinUpdatesConfigured = false;
+  releaseNotesEnabled =
+    fixtures.settings.managed.find(
+      (entry) => entry.key === "release_notes_enabled",
+    )?.value ?? "false";
+  releaseNotesEnabledConfigured = false;
   coreUpdateTour: CoreUpdateTourResponse = {
     status: "not_started",
     step: "dashboard",
@@ -536,6 +541,12 @@ export class DemoApiState {
       "digest_pin_updates",
       this.digestPinUpdates,
       this.digestPinUpdatesConfigured,
+    );
+    this.updateManagedEntry(
+      settings,
+      "release_notes_enabled",
+      this.releaseNotesEnabled,
+      this.releaseNotesEnabledConfigured,
     );
     return settings;
   }
@@ -639,6 +650,13 @@ export class DemoApiState {
         }
         this.digestPinUpdates = value;
         this.digestPinUpdatesConfigured = true;
+        return;
+      case "release_notes_enabled":
+        if (!["false", "true"].includes(value)) {
+          throw new Error("release_notes_enabled must be false or true");
+        }
+        this.releaseNotesEnabled = value;
+        this.releaseNotesEnabledConfigured = true;
         return;
       default:
         throw new Error(`managed setting is not editable: ${key}`);

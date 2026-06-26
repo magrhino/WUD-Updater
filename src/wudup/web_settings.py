@@ -240,17 +240,27 @@ def _digest_pin_disabled_reason(settings: WebSettings) -> str:
 
 
 def effective_release_notes_enabled(settings: WebSettings) -> bool:
+    enabled, _configured = _effective_release_notes_enabled_state(settings)
+    return enabled
+
+
+def _effective_release_notes_enabled_state(settings: WebSettings) -> tuple[bool, bool]:
     if _release_notes_enabled_env_configured(settings):
-        return bool(settings.release_notes_enabled_env)
-    return _stored_release_notes_enabled(settings)
+        return bool(settings.release_notes_enabled_env), True
+    return _stored_release_notes_enabled_state(settings)
 
 
 def _stored_release_notes_enabled(settings: WebSettings) -> bool:
+    enabled, _configured = _stored_release_notes_enabled_state(settings)
+    return enabled
+
+
+def _stored_release_notes_enabled_state(settings: WebSettings) -> tuple[bool, bool]:
     try:
         with closing(_connect_readonly_db(settings)) as conn:
-            value = _web_setting(conn, MANAGED_RELEASE_NOTES_ENABLED_DB_KEY)
+            value = _web_setting_or_none(conn, MANAGED_RELEASE_NOTES_ENABLED_DB_KEY)
     except ReadOnlyDatabaseMissing:
-        return DEFAULT_RELEASE_NOTES_ENABLED
+        return DEFAULT_RELEASE_NOTES_ENABLED, False
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
@@ -261,10 +271,13 @@ def _stored_release_notes_enabled(settings: WebSettings) -> bool:
             ),
         ) from exc
     try:
-        return parse_bool_env(
-            MANAGED_RELEASE_NOTES_ENABLED_KEY,
-            value,
-            default=DEFAULT_RELEASE_NOTES_ENABLED,
+        return (
+            parse_bool_env(
+                MANAGED_RELEASE_NOTES_ENABLED_KEY,
+                value or "",
+                default=DEFAULT_RELEASE_NOTES_ENABLED,
+            ),
+            value is not None,
         )
     except ConfigError as exc:
         raise HTTPException(
@@ -548,6 +561,9 @@ def _managed_settings_audit_values(
 
 def _updater_settings_entries(settings: WebSettings) -> list[SettingsEntry]:
     config = settings.config
+    release_notes_enabled, release_notes_configured = (
+        _effective_release_notes_enabled_state(settings)
+    )
     return [
         _config_setting_entry(settings, "DOCKER_BASE", str(config.docker_base)),
         _settings_entry(
@@ -575,14 +591,9 @@ def _updater_settings_entries(settings: WebSettings) -> list[SettingsEntry]:
         ),
         _settings_entry(
             RELEASE_NOTES_ENABLED_ENV,
-            _format_bool(effective_release_notes_enabled(settings)),
+            _format_bool(release_notes_enabled),
             _format_bool(DEFAULT_RELEASE_NOTES_ENABLED),
-            _env_configured(settings, RELEASE_NOTES_ENABLED_ENV),
-            source=(
-                "configured"
-                if _env_configured(settings, RELEASE_NOTES_ENABLED_ENV)
-                else "default"
-            ),
+            release_notes_configured,
         ),
     ]
 

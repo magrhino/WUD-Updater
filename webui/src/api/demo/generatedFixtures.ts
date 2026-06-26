@@ -1168,10 +1168,10 @@ export const generatedFixtures = {
           "value": "false"
         },
         {
-          "configured": false,
+          "configured": true,
           "default_value": "false",
           "name": "WUD_RELEASE_NOTES_ENABLED",
-          "source": "default",
+          "source": "configured",
           "value": "true"
         }
       ],
@@ -121911,10 +121911,10 @@ export const generatedFixtures = {
         "value": "false"
       },
       {
-        "configured": false,
+        "configured": true,
         "default_value": "false",
         "name": "WUD_RELEASE_NOTES_ENABLED",
-        "source": "default",
+        "source": "configured",
         "value": "true"
       }
     ],

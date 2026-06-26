@@ -396,6 +396,7 @@ def _notification_items(
 ) -> tuple[list[ReleaseNotificationItem], list[str]]:
     items: list[ReleaseNotificationItem] = []
     warnings: list[str] = []
+    trigger_cache: dict[str, tuple[list[ReleaseNotificationTrigger], str]] = {}
     for target in source.targets:
         note = notes.get(target.target.line_no)
         if note is None:
@@ -403,10 +404,12 @@ def _notification_items(
             continue
         triggers: list[ReleaseNotificationTrigger] = []
         if target.wud_container_id:
-            triggers, trigger_warning = web_wud_api.container_triggers(
-                settings,
-                target.wud_container_id,
-            )
+            if target.wud_container_id not in trigger_cache:
+                trigger_cache[target.wud_container_id] = web_wud_api.container_triggers(
+                    settings,
+                    target.wud_container_id,
+                )
+            triggers, trigger_warning = trigger_cache[target.wud_container_id]
             if trigger_warning:
                 warnings.append(
                     f"Line {target.target.line_no} WUD triggers unavailable: "
@@ -459,17 +462,7 @@ def _notification_copy(
         lines.append(f"Repository: `{repo}`")
     if tag:
         lines.append(f"Release: `{tag}`")
-    if note.status == "ready":
-        lines.append("Release metadata is ready in WUDup.")
-    elif note.status == "not_found":
-        lines.append("A matching GitHub release was not found; project links are included.")
-    elif note.status == "missing":
-        lines.append("Release metadata was not cached before this notification.")
-    elif note.error:
-        error = _redact_sensitive_text(settings, note.error)
-        lines.append(f"Release-note status: {error or note.status}")
-    else:
-        lines.append(f"Release-note status: {note.status}")
+    lines.append(_status_line(settings, note))
     if note.breaking:
         lines.append("Breaking-risk indicators were detected.")
         lines.extend(note.breaking_reasons[:3])
@@ -477,6 +470,19 @@ def _notification_copy(
         label = ", ".join(_trigger_label(trigger) for trigger in triggers[:5])
         lines.append(f"WUD triggers: {label}")
     return title, "\n".join(lines)[:DISCORD_EMBED_DESCRIPTION_LIMIT]
+
+
+def _status_line(settings: WebSettings, note: ReleaseNoteInfo) -> str:
+    if note.status == "ready":
+        return "Release metadata is ready in WUDup."
+    if note.status == "not_found":
+        return "A matching GitHub release was not found; project links are included."
+    if note.status == "missing":
+        return "Release metadata was not cached before this notification."
+    if note.error:
+        error = _redact_sensitive_text(settings, note.error)
+        return f"Release-note status: {error or note.status}"
+    return f"Release-note status: {note.status}"
 
 
 def _trigger_label(trigger: ReleaseNotificationTrigger) -> str:

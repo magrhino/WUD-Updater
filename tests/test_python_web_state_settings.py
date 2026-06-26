@@ -240,6 +240,25 @@ def test_settings_reports_effective_non_secret_configuration(
         assert value not in serialized
 
 
+def test_settings_release_notes_entry_reports_managed_source(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    _store_web_setting(tmp_path, "release_notes.enabled", "true")
+
+    response = client.get("/api/v1/settings")
+    updater = {entry["name"]: entry for entry in response.json()["updater"]}
+
+    assert response.status_code == 200
+    assert updater["WUD_RELEASE_NOTES_ENABLED"] == {
+        "name": "WUD_RELEASE_NOTES_ENABLED",
+        "value": "true",
+        "default_value": "false",
+        "configured": True,
+        "source": "configured",
+    }
+
+
 def test_settings_wraps_invalid_managed_setting_config_error(
     tmp_path: Path,
 ) -> None:
