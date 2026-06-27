@@ -264,6 +264,17 @@ class WudFileParsingTests(unittest.TestCase):
             ("Ignoring invalid platform on WUD line 1: linux/amd64/",),
         )
 
+    def test_only_final_invalid_platform_token_is_warned(self) -> None:
+        parsed = parse_wud_text(
+            "repo/app:1.0 platform=linux/amd64 platform=linux platform=bad\n"
+        )
+
+        self.assertIsNone(parsed.targets[0].platform)
+        self.assertEqual(
+            parsed.warnings,
+            ("Ignoring invalid platform on WUD line 1: bad",),
+        )
+
     def test_last_desired_tag_token_wins(self) -> None:
         parsed = parse_wud_text("repo/app:1.0 tag=2.0 note=ignored tag=3.0\n")
 

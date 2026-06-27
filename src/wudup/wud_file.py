@@ -313,6 +313,8 @@ def _parse_target(
     desired_tag = ""
     tag_token = ""
     platform: ImagePlatform | None = None
+    platform_raw = ""
+    platform_seen = False
     for token in _rest_tokens(rest):
         if token.startswith("tag="):
             desired_tag = token.removeprefix("tag=")
@@ -323,7 +325,9 @@ def _parse_target(
             if digest_token:
                 digest = normalize_digest(digest_token)
         elif token.startswith("platform="):
-            platform = parse_platform(token.removeprefix("platform="))
+            platform_seen = True
+            platform_raw = token.removeprefix("platform=")
+            platform = parse_platform(platform_raw)
 
     warnings: list[str] = []
     if desired_tag != "":
@@ -338,13 +342,10 @@ def _parse_target(
                 f"{line_no}: {first}"
             )
             desired_tag = ""
-
-    for token in _rest_tokens(rest):
-        if token.startswith("platform=") and platform is None:
-            warnings.append(
-                f"Ignoring invalid platform on WUD line {line_no}: "
-                f"{token.removeprefix('platform=')}"
-            )
+    if platform_seen and platform is None:
+        warnings.append(
+            f"Ignoring invalid platform on WUD line {line_no}: {platform_raw}"
+        )
 
     has_tag = image_has_tag(first)
     allow_repo = not has_tag
