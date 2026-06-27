@@ -17,7 +17,6 @@ from .digest_provenance import (
 )
 from .docker_cli import DockerCli
 from .images import (
-    image_has_tag,
     image_tag,
     image_with_tag,
     normalize_digest,
@@ -77,7 +76,12 @@ from .plan_models import (
     PlanInputError,
     UnmatchedDiagnostic,
 )
-from .wud_file import ParsedWudFile, WudTarget, parse_wud_file
+from .wud_file import (
+    ParsedWudFile,
+    WudTarget,
+    is_digest_target_line,
+    parse_wud_file,
+)
 
 __all__ = [
     "DryRunPlan",
@@ -586,11 +590,7 @@ class _PlanBuilder(_UpdateScopeMixin):
         return self._normalized_resolved_image(match)
 
     def _normalized_resolved_image(self, match: Match) -> str:
-        if (
-            not self.config.digest_pin_updates
-            and match.target.digest
-            and image_has_tag(match.target.first)
-        ):
+        if not self.config.digest_pin_updates and is_digest_target_line(match.target):
             return image_with_tag(match.compose_image, image_tag(match.target.first))
         return match.resolved
 
@@ -1033,7 +1033,7 @@ def _pending_grouping_target_image(
 
 
 def _pending_digest_provenance(target: WudTarget) -> DigestTagProvenance | None:
-    if not target.first or not target.digest:
+    if not is_digest_target_line(target):
         return None
     return digest_provenance_from_digest_target(
         target.first,
@@ -1067,11 +1067,7 @@ def _pending_normalized_resolved(
     *,
     digest_pin_updates_enabled: bool,
 ) -> str:
-    if (
-        not digest_pin_updates_enabled
-        and match.target.digest
-        and image_has_tag(match.target.first)
-    ):
+    if not digest_pin_updates_enabled and is_digest_target_line(match.target):
         return image_with_tag(match.compose_image, image_tag(match.target.first))
     return match.resolved
 
@@ -1095,11 +1091,7 @@ def _preserve_digest_tag(
     target: WudTarget,
     digest_pin_updates_enabled: bool,
 ) -> bool:
-    return (
-        not digest_pin_updates_enabled
-        and bool(target.digest)
-        and image_has_tag(target.first)
-    )
+    return not digest_pin_updates_enabled and is_digest_target_line(target)
 
 
 def _target_action_name(

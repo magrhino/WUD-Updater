@@ -234,9 +234,9 @@ const pendingRescanMessage = computed(() => {
   return `WUD rescan requested for ${watched}.`;
 });
 const releaseNotificationsDisabledReason = computed(() => {
-  if (updates.releaseNotes?.enabled === false) {
+  if (updates.releaseNotes?.notifications_enabled === false) {
     return (
-      updates.releaseNotes.disabled_reason ||
+      updates.releaseNotes.notifications_disabled_reason ||
       "Release-note notifications are disabled in Settings."
     );
   }

@@ -304,6 +304,47 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
             plan.stacks[0].digest_unpin_updates[0].source_image,
             "repo/app@sha256:old",
         )
+    def test_tag_update_digest_metadata_does_not_plan_digest_unpin(self) -> None:
+        digest = "sha256:" + ("a" * 64)
+        self.wud_file.write_text(
+            f"repo/app:1.0 tag=2.0 sha256={digest}\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack("app", [("app", "repo/app@sha256:old", "cid-app")])
+        (stack_dir / "docker-compose.yml").write_text(
+            "\n".join(
+                [
+                    "services:",
+                    "  app:",
+                    "    image: repo/app@sha256:old",
+                    "    labels:",
+                    "      - wud.tag.include=^1\\.0$$",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        config = load_config(
+            {
+                "DOCKER_BASE": str(self.base),
+                "WUD_OUT_FILE": str(self.wud_file),
+                "WUD_LOG_DIR": str(self.log_dir),
+            },
+            home=str(self.root),
+        )
+
+        plan = build_dry_run_plan(
+            config,
+            line_numbers=(1,),
+            allow_tag_updates=True,
+            environ=self.env,
+        )
+
+        self.assertEqual(plan.status, "blocked")
+        self.assertEqual(plan.summary.matched_target_count, 0)
+        self.assertEqual(plan.targets[0].action, "unmatched")
+        self.assertNotEqual(plan.targets[0].action, "digest-unpin")
+        self.assertEqual(plan.stacks, ())
     def test_digest_pin_plan_blocks_stale_tagged_digest_only_latest_child(self) -> None:
         self.wud_file.write_text(
             "repo/app:latest@sha256:stale\n",

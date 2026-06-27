@@ -421,6 +421,36 @@ describe("pending view selection actions", () => {
     expect(sendReleaseNotifications).not.toHaveBeenCalled();
   });
 
+  it("disables selected release-note notifications from metadata notification state", async () => {
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = pendingResponse();
+    updates.releaseNotes = {
+      ...releaseNotesResponse(),
+      notifications_enabled: false,
+      notifications_disabled_reason: "Release-note notifications are disabled.",
+    };
+    mockPendingLifecycle(settings, updates);
+    const previewReleaseNotifications = vi.spyOn(
+      updates,
+      "previewReleaseNotifications",
+    );
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Release-note notifications are disabled.");
+    const previewButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview release notes"));
+    expect(previewButton?.attributes("disabled")).toBeDefined();
+    await previewButton?.trigger("click");
+
+    expect(previewReleaseNotifications).not.toHaveBeenCalled();
+  });
+
   it("disables WUD rescan controls in read-only mode", async () => {
     const { pinia, settings, updates } = setupStores(false);
     updates.pending = pendingResponse();

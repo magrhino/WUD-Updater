@@ -755,6 +755,8 @@ class ReleaseNotesResponse(BaseModel):
     items: list[ReleaseNoteInfo] = Field(default_factory=list)
     enabled: bool = True
     disabled_reason: str = ""
+    notifications_enabled: bool = True
+    notifications_disabled_reason: str = ""
     wud_api: WudApiStatus = Field(
         default_factory=lambda: WudApiStatus(
             state="unavailable",

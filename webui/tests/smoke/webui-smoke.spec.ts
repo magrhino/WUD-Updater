@@ -143,6 +143,8 @@ function releaseNotesResponse() {
     count: 1,
     enabled: true,
     disabled_reason: "",
+    notifications_enabled: true,
+    notifications_disabled_reason: "",
     warnings: [],
     wud_api: wudApiStatus(),
     items: [

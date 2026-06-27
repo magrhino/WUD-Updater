@@ -11,7 +11,12 @@ from wudup.db import init_db, utc_timestamp
 from wudup.digest_verifier import ResolvedImageSubject
 from wudup.platforms import ImagePlatform
 from wudup.security_scanner import SecurityScanResult
-from wudup.security_store import cached_scan_by_request, row_to_scan_info, upsert_scan_result
+from wudup.security_store import (
+    cached_scan_by_request,
+    cached_scan_by_request_or_unambiguous_platform,
+    row_to_scan_info,
+    upsert_scan_result,
+)
 from wudup.security_subjects import PendingSecurityContext, PendingSecurityRequest
 from wudup import web_jobs
 from wudup.web_pending_sources import PendingSourceResult
@@ -411,6 +416,59 @@ def test_security_scan_refresh_scans_caches_and_reads_back_result(
     assert "[REDACTED_PATH]" in raw_json
 
 
+def test_security_scan_cache_readback_uses_unambiguous_cached_platform(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    raw = f"ghcr.io/acme/app:1.0 sha256={VALID_DIGEST}"
+    refresh_context = _single_security_context(
+        tmp_path,
+        raw=raw,
+        platform=ImagePlatform("linux", "amd64"),
+    )
+    get_context = _single_security_context(tmp_path, raw=raw, platform=None)
+
+    def fake_context(_settings, **kwargs) -> PendingSecurityContext:
+        if kwargs.get("include_compose") is False:
+            return get_context
+        return refresh_context
+
+    monkeypatch.setattr("wudup.web_security.pending_security_context", fake_context)
+    monkeypatch.setattr(
+        "wudup.web_security.default_digest_verifier",
+        lambda _settings: FakeVerifier(),
+    )
+    monkeypatch.setattr("wudup.web_security.TrivyScanner", FakeScanner)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+
+    queued = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+    assert queued.status_code == 200
+    result = _poll_until(
+        lambda: _completed_security_job(client, queued.json()["job_id"]),
+        timeout_message="security scan job did not complete",
+    )
+    assert result["status"] == "success"
+
+    cached = client.get("/api/v1/security-scans")
+
+    assert cached.status_code == 200
+    item = cached.json()["items"][0]
+    assert item["state"] == "complete"
+    assert item["verdict"] == "findings"
+    assert item["severity_counts"]["high"] == 1
+    assert item["subject"]["platform"] == "linux/amd64"
+
+
 def test_security_scan_cache_readback_does_not_cross_platform_request_keys(
     tmp_path: Path,
     monkeypatch,
@@ -551,6 +609,50 @@ def test_security_scan_cache_corrupt_counts_degrade_to_zero() -> None:
     assert info.subject.warnings == []
 
 
+def test_security_scan_cache_platform_fallback_rejects_ambiguous_platforms() -> None:
+    result = SecurityScanResult(state="complete", verdict="clean")
+    amd64_request = _single_security_request(platform=ImagePlatform("linux", "amd64"))
+    arm64_request = _single_security_request(platform=ImagePlatform("linux", "arm64"))
+    fallback_request = _single_security_request(platform=None)
+    arm64_subject = ResolvedImageSubject(
+        canonical_registry="ghcr.io",
+        canonical_repository="acme/app",
+        requested_ref="ghcr.io/acme/app:1.0",
+        reported_digest=f"sha256:{VALID_DIGEST}",
+        index_digest=f"sha256:{VALID_DIGEST}",
+        manifest_digest="sha256:arm-child",
+        os="linux",
+        architecture="arm64",
+        platform_source="wud",
+        identity_status="exact",
+    )
+
+    with sqlite3.connect(":memory:") as conn:
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        upsert_scan_result(
+            conn,
+            amd64_request,
+            _exact_subject(),
+            result,
+            timestamp="2026-06-26T00:00:00+00:00",
+        )
+        upsert_scan_result(
+            conn,
+            arm64_request,
+            arm64_subject,
+            result,
+            timestamp="2026-06-26T00:00:01+00:00",
+        )
+
+        cached = cached_scan_by_request_or_unambiguous_platform(
+            conn,
+            fallback_request,
+        )
+
+    assert cached is None
+
+
 def test_security_scan_cache_uses_newest_same_second_row_and_prunes() -> None:
     request = _single_security_request()
     subject = _exact_subject()
@@ -644,6 +746,8 @@ def _single_security_request(
     raw: str | None = None,
     platform: ImagePlatform | None = DEFAULT_SECURITY_PLATFORM,
 ) -> PendingSecurityRequest:
+    identity_status = "pending" if platform is not None else "unsupported"
+    error = "" if platform is not None else "platform is required"
     return PendingSecurityRequest(
         line_no=1,
         raw=raw or f"ghcr.io/acme/app:1.0 platform=linux/amd64 sha256={VALID_DIGEST}",
@@ -652,6 +756,8 @@ def _single_security_request(
         reported_digest=f"sha256:{VALID_DIGEST}",
         platform=platform,
         platform_source="wud" if platform is not None else "",
+        identity_status=identity_status,
+        error=error,
     )
 
 

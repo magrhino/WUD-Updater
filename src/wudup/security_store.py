@@ -36,6 +36,56 @@ def cached_scan_by_request(
     return row_to_scan_info(row, request)
 
 
+def cached_scan_by_request_or_unambiguous_platform(
+    conn: sqlite3.Connection,
+    request: PendingSecurityRequest,
+) -> SecurityScanInfo | None:
+    cached = cached_scan_by_request(conn, request)
+    if cached is not None:
+        return cached
+    return _cached_scan_by_unambiguous_platform(conn, request)
+
+
+def _cached_scan_by_unambiguous_platform(
+    conn: sqlite3.Connection,
+    request: PendingSecurityRequest,
+) -> SecurityScanInfo | None:
+    if request.platform is not None:
+        return None
+    if not request.candidate_image or not request.reported_digest:
+        return None
+    platforms = [
+        str(row["platform"])
+        for row in conn.execute(
+            """
+            SELECT DISTINCT platform
+            FROM security_scan_cache
+            WHERE requested_ref = ?
+              AND reported_digest = ?
+              AND platform <> ''
+            """,
+            (request.candidate_image, request.reported_digest),
+        ).fetchall()
+    ]
+    if len(platforms) != 1:
+        return None
+    row = conn.execute(
+        """
+        SELECT *
+        FROM security_scan_cache
+        WHERE requested_ref = ?
+          AND reported_digest = ?
+          AND platform = ?
+        ORDER BY updated_at DESC, rowid DESC
+        LIMIT 1
+        """,
+        (request.candidate_image, request.reported_digest, platforms[0]),
+    ).fetchone()
+    if row is None:
+        return None
+    return row_to_scan_info(row, request)
+
+
 def upsert_scan_result(
     conn: sqlite3.Connection,
     request: PendingSecurityRequest,

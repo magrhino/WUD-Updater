@@ -342,6 +342,8 @@ CREATE INDEX IF NOT EXISTS idx_security_scan_cache_request
     ON security_scan_cache (request_key, updated_at);
 CREATE INDEX IF NOT EXISTS idx_security_scan_cache_subject
     ON security_scan_cache (subject_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_security_scan_cache_image_digest_platform
+    ON security_scan_cache (requested_ref, reported_digest, platform, updated_at);
 """
 
 

@@ -11,6 +11,7 @@ from wudup.file_ops import OwnerConfig, atomic_rewrite
 from wudup.images import (
     image_has_tag,
     image_key,
+    image_tag,
     normalize_digest,
     repo_key,
     tag_value_valid,
@@ -47,6 +48,14 @@ class WudTarget:
     @property
     def platform_value(self) -> str:
         return platform_value(self.platform)
+
+
+def is_digest_target_line(target: WudTarget) -> bool:
+    if target.desired_tag:
+        return False
+    if not target.digest or not image_has_tag(target.first):
+        return False
+    return tag_value_valid(image_tag(target.first))
 
 
 @dataclass(frozen=True)

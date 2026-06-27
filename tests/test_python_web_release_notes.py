@@ -32,7 +32,7 @@ def _release_client(tmp_path: Path, env: dict[str, str] | None = None):
     return _client(tmp_path, values)
 
 
-def test_release_notes_get_is_disabled_by_default_without_creating_database(
+def test_release_notes_get_returns_placeholders_by_default_without_creating_database(
     tmp_path: Path,
 ) -> None:
     wud_file = tmp_path / "state" / "images.todo"
@@ -44,12 +44,17 @@ def test_release_notes_get_is_disabled_by_default_without_creating_database(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["enabled"] is False
-    assert body["disabled_reason"] == "Release-note notifications are disabled."
-    assert body["source"]["detail"] == "Release-note notifications are disabled."
-    assert body["count"] == 0
-    assert body["items"] == []
-    assert body["wud_api"]["detail"] == "Release-note notifications are disabled."
+    assert body["enabled"] is True
+    assert body["disabled_reason"] == ""
+    assert body["notifications_enabled"] is False
+    assert (
+        body["notifications_disabled_reason"]
+        == "Release-note notifications are disabled."
+    )
+    assert body["count"] == 1
+    assert body["items"][0]["line_no"] == 1
+    assert body["items"][0]["status"] == "missing"
+    assert body["items"][0]["provider"] == "github"
     assert not db_path.exists()
 
 
@@ -408,11 +413,11 @@ def test_release_notes_refresh_requires_csrf(tmp_path: Path) -> None:
     assert response.status_code == 403
     assert response.json()["detail"] == "csrf token is required"
 
-def test_release_notes_refresh_works_when_mutations_are_disabled(
+def test_release_notes_refresh_works_when_notifications_and_mutations_are_disabled(
     tmp_path: Path,
 ) -> None:
     wud_file = tmp_path / "state" / "images.todo"
-    client = _release_client(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
     wud_file.write_text("docker.io/library/redis:latest\n", encoding="utf-8")
 
     response = client.post(
@@ -422,6 +427,8 @@ def test_release_notes_refresh_works_when_mutations_are_disabled(
 
     assert response.status_code == 200
     body = response.json()
+    assert body["enabled"] is True
+    assert body["notifications_enabled"] is False
     assert body["items"][0]["status"] == "unsupported"
     assert body["items"][0]["error"] == "no supported GitHub release source found"
 

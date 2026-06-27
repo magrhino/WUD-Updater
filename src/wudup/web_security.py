@@ -18,7 +18,11 @@ from .config import ConfigError, parse_bool_env
 from .db import DatabaseError, init_db, open_db, utc_timestamp
 from .digest_verifier import ResolvedImageSubject
 from .security_scanner import SecurityScanResult, TrivyScanner
-from .security_store import cached_scan_by_request, upsert_scan_result
+from .security_store import (
+    cached_scan_by_request,
+    cached_scan_by_request_or_unambiguous_platform,
+    upsert_scan_result,
+)
 from .security_subjects import (
     PendingSecurityContext,
     PendingSecurityRequest,
@@ -219,7 +223,7 @@ def security_scans_response(settings: WebSettings) -> SecurityScansResponse:
     try:
         with closing(_connect_readonly_db(settings)) as conn:
             items = [
-                cached_scan_by_request(conn, request)
+                cached_scan_by_request_or_unambiguous_platform(conn, request)
                 or _placeholder_info(request, state=_placeholder_state(request))
                 for request in context.requests
             ]

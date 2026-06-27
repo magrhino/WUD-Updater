@@ -12,7 +12,6 @@ from .images import (
     image_tag,
     image_with_tag,
     repo_key,
-    tag_value_valid,
 )
 from .updater_models import (
     DigestPinUpdate,
@@ -22,7 +21,7 @@ from .updater_models import (
     TagExclusionUpdate,
     UpdateScope,
 )
-from .wud_file import WudTarget
+from .wud_file import WudTarget, is_digest_target_line
 
 
 RECREATE_STACK_LABEL = "WUD-UPDATER-RECREATE-STACK"
@@ -60,13 +59,11 @@ def _digest_pin_rematch_services(
     image: str,
     target: WudTarget,
 ) -> tuple[str, ...]:
-    if not target.digest or not image_has_tag(target.first):
+    if not is_digest_target_line(target):
         return ()
     if image_has_tag(image) or repo_key(image) != target.repo:
         return ()
     tag = image_tag(target.first)
-    if not tag_value_valid(tag):
-        return ()
     return tuple(
         sorted(
             item.service

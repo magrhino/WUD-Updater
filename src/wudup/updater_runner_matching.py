@@ -12,7 +12,12 @@ from .images import image_has_tag, image_tag, normalize_digest, repo_key
 from .line_specs import parse_line_spec
 from .updater_matching import _services_for_target_match
 from .updater_models import Match, UpdaterError, UpdaterProgressEvent
-from .wud_file import ParsedWudFile, WudTarget, parse_wud_file
+from .wud_file import (
+    ParsedWudFile,
+    WudTarget,
+    is_digest_target_line,
+    parse_wud_file,
+)
 
 
 class _RunnerMatchingMixin:
@@ -187,7 +192,7 @@ class _RunnerMatchingMixin:
         target: WudTarget,
         stack: ComposeStack,
     ) -> list[tuple[str, str, str]]:
-        if not target.digest or not image_has_tag(target.first):
+        if not is_digest_target_line(target):
             return []
         target_tag = image_tag(target.first)
         target_digest = normalize_digest(target.digest)

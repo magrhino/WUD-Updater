@@ -4,18 +4,6 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
-## [0.47.0](https://github.com/magrhino/wudup/compare/v0.46.6...v0.47.0) (2026-06-26)
-
-
-### Features
-
-* **release-notes:** Add WebUI pending mutation flows and release notification support ([#422](https://github.com/magrhino/wudup/issues/422)) ([f3b1b73](https://github.com/magrhino/wudup/commit/f3b1b73697370b62fc551f71820ccaec281d6a86))
-
-
-### Documentation
-
-* **agents:** Add issue creation guidance to repo instructions ([#414](https://github.com/magrhino/wudup/issues/414)) ([83707a0](https://github.com/magrhino/wudup/commit/83707a0e30cb4c00adf385b74909307ab1227fc0))
-
 ## [0.46.6](https://github.com/magrhino/wudup/compare/v0.46.5...v0.46.6) (2026-06-25)
 
 
