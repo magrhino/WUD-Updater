@@ -46,9 +46,12 @@ class TrivyScanner:
 
     def scan(self, subject: ResolvedImageSubject) -> SecurityScanResult:
         if subject.identity_status != "exact" or not subject.immutable_ref:
+            error_code = subject.identity_status or "unsupported"
+            if not subject.immutable_ref:
+                error_code = "unsupported"
             return SecurityScanResult(
                 state="unsupported",
-                error_code=subject.identity_status or "unsupported",
+                error_code=error_code,
                 error_message=subject.error or "security scan subject is not exact",
                 warnings=subject.warnings,
             )

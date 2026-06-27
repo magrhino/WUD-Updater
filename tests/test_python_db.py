@@ -172,7 +172,7 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(
             [row[0] for row in rows],
-            [1, 2, 3, 4, 5, 6, 7, 8, 9],
+            list(range(1, SCHEMA_VERSION + 1)),
         )
 
     def test_migration_registries_cover_supported_versions(self) -> None:

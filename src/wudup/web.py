@@ -392,29 +392,7 @@ def create_app(
         api_post_only_method_not_allowed,
         methods=["GET"],
     )
-    router.add_api_route(
-        "/security-scans",
-        web_security.api_security_scans,
-        methods=["GET"],
-        response_model=web_models.SecurityScansResponse,
-    )
-    router.add_api_route(
-        "/security-scans/refresh",
-        web_security.api_refresh_security_scans,
-        methods=["POST"],
-        response_model=web_models.SecurityScanJobResponse,
-    )
-    router.add_api_route(
-        "/security-scans/refresh",
-        api_post_only_method_not_allowed,
-        methods=["GET"],
-    )
-    router.add_api_route(
-        "/security-scans/jobs/{job_id}",
-        web_security.api_security_scan_job,
-        methods=["GET"],
-        response_model=web_models.SecurityScanJobResponse,
-    )
+    web_security.register_security_scan_routes(router, api_post_only_method_not_allowed)
     router.add_api_route(
         "/service-policies",
         web_state.api_service_policies,

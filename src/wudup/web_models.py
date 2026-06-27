@@ -140,10 +140,12 @@ __all__ = (
     "SecurityScanConfig",
     "SecurityScanInfo",
     "SecurityScanJobResponse",
+    "SecurityScanMode",
     "SecurityScanSeverityCounts",
     "SecurityScanState",
     "SecurityScanSubjectInfo",
     "SecurityScansResponse",
+    "SecurityScannerName",
     "SecurityScanVerdict",
     "SELF_UPDATE_RELEASE_NOTES_CAP",
     "SecretSettingStatus",
@@ -283,8 +285,8 @@ class WudApiClientConfig:
 @dataclass(frozen=True)
 class SecurityScanConfig:
     enabled: bool = False
-    scanner: str = "trivy"
-    mode: str = "registry"
+    scanner: SecurityScannerName = "trivy"
+    mode: SecurityScanMode = "registry"
     executable: str = "trivy"
     cache_dir: str = ""
     timeout_seconds: int = 300
@@ -1063,6 +1065,10 @@ RunVerificationWudStatus = Literal[
     "unknown",
 ]
 
+SecurityScannerName = Literal["trivy"]
+
+SecurityScanMode = Literal["registry"]
+
 SecurityScanState = Literal[
     "disabled",
     "not_scanned",
@@ -1137,8 +1143,8 @@ class SecurityScansResponse(BaseModel):
     source: PendingSourceInfo = Field(default_factory=PendingSourceInfo)
     source_hash: str = ""
     scanning_enabled: bool = False
-    scanner: str = "trivy"
-    scan_mode: str = "registry"
+    scanner: SecurityScannerName = "trivy"
+    scan_mode: SecurityScanMode = "registry"
     count: int = 0
     items: list[SecurityScanInfo] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

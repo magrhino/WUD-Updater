@@ -5,6 +5,8 @@ from pathlib import Path
 from threading import Lock
 from types import SimpleNamespace
 
+import pytest
+
 from wudup.db import init_db, utc_timestamp
 from wudup.digest_verifier import ResolvedImageSubject
 from wudup.platforms import ImagePlatform
@@ -176,6 +178,41 @@ def test_security_scan_refresh_rejects_concurrent_jobs(
     assert second.status_code == 409
     assert second.json()["detail"] == "security scan refresh is already running"
     assert len(executor.calls) == 1
+
+
+def test_security_scan_refresh_cleans_up_job_when_executor_submit_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "wudup.web_security.pending_security_context",
+        lambda _settings: _empty_security_context(tmp_path),
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+
+    class FailingExecutor:
+        def submit(self, *_args: object, **_kwargs: object) -> None:
+            raise RuntimeError("queue failed")
+
+        def shutdown(self, **_kwargs: object) -> None:
+            pass
+
+    client.app.state.web_security_scan_executor = FailingExecutor()
+
+    with pytest.raises(RuntimeError, match="queue failed"):
+        client.post(
+            "/api/v1/security-scans/refresh",
+            headers=_csrf_headers(client),
+        )
+
+    assert client.app.state.web_security_scan_jobs == {}
 
 
 def test_active_mutation_error_checks_security_jobs_under_scan_lock() -> None:
@@ -374,7 +411,7 @@ def test_security_scan_refresh_scans_caches_and_reads_back_result(
     assert "[REDACTED_PATH]" in raw_json
 
 
-def test_security_scan_cache_readback_uses_platform_independent_request_key(
+def test_security_scan_cache_readback_does_not_cross_platform_request_keys(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -386,7 +423,7 @@ def test_security_scan_cache_readback_uses_platform_independent_request_key(
     get_context = _single_security_context(
         tmp_path,
         raw=f"ghcr.io/acme/app:1.0 sha256={VALID_DIGEST}",
-        platform=None,
+        platform=ImagePlatform("linux", "arm64"),
     )
 
     def fake_context(_settings, **kwargs) -> PendingSecurityContext:
@@ -424,8 +461,8 @@ def test_security_scan_cache_readback_uses_platform_independent_request_key(
 
     assert cached.status_code == 200
     item = cached.json()["items"][0]
-    assert item["state"] == "complete"
-    assert item["subject"]["platform"] == "linux/amd64"
+    assert item["state"] == "not_scanned"
+    assert item["subject"]["platform"] == "linux/arm64"
 
 
 def test_security_scan_refresh_persists_non_exact_resolution(

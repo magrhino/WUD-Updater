@@ -149,6 +149,29 @@ class SecurityScannerTests(unittest.TestCase):
         self.assertEqual(result.error_message, "missing digest")
         self.assertEqual(runner.calls, [])
 
+    def test_trivy_missing_immutable_ref_uses_unsupported_error_code(self) -> None:
+        runner = FakeRunner("{}")
+        scanner = TrivyScanner(
+            SecurityScanConfig(enabled=True, mode="registry"),
+            runner=runner,  # type: ignore[arg-type]
+        )
+
+        result = scanner.scan(
+            ResolvedImageSubject(
+                canonical_registry="ghcr.io",
+                canonical_repository="acme/app",
+                identity_status="exact",
+                error="missing manifest digest",
+                warnings=("subject warning",),
+            )
+        )
+
+        self.assertEqual(result.state, "unsupported")
+        self.assertEqual(result.error_code, "unsupported")
+        self.assertEqual(result.error_message, "missing manifest digest")
+        self.assertEqual(result.warnings, ("subject warning",))
+        self.assertEqual(runner.calls, [])
+
 
 def _exact_subject() -> ResolvedImageSubject:
     return ResolvedImageSubject(

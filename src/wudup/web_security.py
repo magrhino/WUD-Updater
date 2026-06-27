@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from dataclasses import dataclass, replace
@@ -11,7 +11,7 @@ from threading import Lock
 import secrets
 from typing import Any, cast
 
-from fastapi import HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from .command import CommandRunner
 from .config import ConfigError, parse_bool_env
@@ -122,6 +122,35 @@ def api_security_scans(request: Request) -> SecurityScansResponse:
     return security_scans_response(settings)
 
 
+def register_security_scan_routes(
+    router: APIRouter,
+    post_only_method_not_allowed: Callable[[], object],
+) -> None:
+    router.add_api_route(
+        "/security-scans",
+        api_security_scans,
+        methods=["GET"],
+        response_model=SecurityScansResponse,
+    )
+    router.add_api_route(
+        "/security-scans/refresh",
+        api_refresh_security_scans,
+        methods=["POST"],
+        response_model=SecurityScanJobResponse,
+    )
+    router.add_api_route(
+        "/security-scans/refresh",
+        post_only_method_not_allowed,
+        methods=["GET"],
+    )
+    router.add_api_route(
+        "/security-scans/jobs/{job_id}",
+        api_security_scan_job,
+        methods=["GET"],
+        response_model=SecurityScanJobResponse,
+    )
+
+
 def api_refresh_security_scans(request: Request) -> SecurityScanJobResponse:
     settings = _settings(request)
     if not settings.security_scan.enabled:
@@ -152,13 +181,17 @@ def api_refresh_security_scans(request: Request) -> SecurityScanJobResponse:
         )
         jobs[job.id] = job
         _prune_security_scan_jobs_unlocked(jobs)
-    state.web_security_scan_executor.submit(
-        _run_security_scan_job,
-        state,
-        settings,
-        job.id,
-    )
-    return _job_response(job)
+        try:
+            state.web_security_scan_executor.submit(
+                _run_security_scan_job,
+                state,
+                settings,
+                job.id,
+            )
+        except Exception:
+            jobs.pop(job.id, None)
+            raise
+        return _job_response(job)
 
 
 def api_security_scan_job(job_id: str, request: Request) -> SecurityScanJobResponse:

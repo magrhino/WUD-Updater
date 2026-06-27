@@ -12,7 +12,7 @@ from .digest_verifier import DigestVerifier, ResolvedImageSubject
 from .docker_cli import DockerCli
 from .images import image_with_tag
 from .plan_matching import _match_targets
-from .platforms import ImagePlatform
+from .platforms import ImagePlatform, platform_value
 from .web_pending_sources import PendingSourceResult, resolve_pending_source
 from .wud_file import WudTarget
 
@@ -41,6 +41,7 @@ class PendingSecurityRequest:
             self.raw,
             self.candidate_image,
             self.reported_digest,
+            platform_value(self.platform),
         )
 
 
