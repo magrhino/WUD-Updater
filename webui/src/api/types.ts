@@ -36,6 +36,10 @@ export interface WudContainerMetadata {
   semver_diff: string;
   link: string;
   error: string;
+  platform: string;
+  platform_os: string;
+  platform_architecture: string;
+  platform_variant: string;
 }
 
 export interface WudApiDiagnosticEndpointStatus {
@@ -114,6 +118,10 @@ export interface PendingItem {
   allow_repo: boolean;
   digest: string;
   desired_tag: string;
+  platform: string;
+  platform_os: string;
+  platform_architecture: string;
+  platform_variant: string;
   digest_provenance?: DigestTagProvenance | null;
   wud_metadata?: WudContainerMetadata | null;
   source: PendingSourceActive;

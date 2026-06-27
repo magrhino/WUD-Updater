@@ -17,6 +17,7 @@ from wudup.digest_verifier import (
     parse_registry_image,
 )
 from wudup.docker_cli import DockerCli
+from wudup.platforms import ImagePlatform
 from tests.update_from_wud_helpers import (
     FakeDockerTestCase,
     MANIFEST_INDEX_TYPE,
@@ -110,6 +111,35 @@ def index_doc(
                     "platform": {"os": "linux", "architecture": "amd64"},
                 }
                 for child in children
+            ],
+        },
+    )
+
+
+def variant_index_doc(
+    digest: str,
+    children: tuple[tuple[str, str, str, str], ...],
+    *,
+    source: str = "static",
+) -> ManifestDocument:
+    return ManifestDocument(
+        source=source,
+        digest=digest,
+        media_type=INDEX_TYPE,
+        payload={
+            "schemaVersion": 2,
+            "mediaType": INDEX_TYPE,
+            "manifests": [
+                {
+                    "mediaType": MANIFEST_TYPE,
+                    "digest": child,
+                    "platform": {
+                        "os": os_value,
+                        "architecture": architecture,
+                        "variant": variant,
+                    },
+                }
+                for child, os_value, architecture, variant in children
             ],
         },
     )
@@ -498,6 +528,224 @@ class DigestVerifierTests(unittest.TestCase):
         self.assertEqual(result.status, "failed")
         self.assertEqual(result.reason, "stale-digest")
         self.assertEqual(result.tag_digest, "sha256:index")
+
+    def test_resolve_subject_uses_current_index_child_for_platform(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("ghcr.io", "acme/app", "latest"): index_doc(
+                    "sha256:index",
+                    ("sha256:child",),
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        subject = verifier.resolve_subject(
+            "ghcr.io/acme/app:latest",
+            "sha256:index",
+            ImagePlatform("linux", "amd64"),
+            platform_source="compose",
+        )
+
+        self.assertEqual(subject.identity_status, "exact")
+        self.assertEqual(subject.canonical_registry, "ghcr.io")
+        self.assertEqual(subject.canonical_repository, "acme/app")
+        self.assertEqual(subject.index_digest, "sha256:index")
+        self.assertEqual(subject.manifest_digest, "sha256:child")
+        self.assertEqual(subject.immutable_ref, "ghcr.io/acme/app@sha256:child")
+        self.assertEqual(subject.platform, "linux/amd64")
+        self.assertEqual(subject.platform_source, "compose")
+
+    def test_resolve_subject_accepts_current_platform_child_digest(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("quay.io", "acme/app", "latest"): index_doc(
+                    "sha256:index",
+                    ("sha256:child",),
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        subject = verifier.resolve_subject(
+            "quay.io/acme/app:latest",
+            "sha256:child",
+            ImagePlatform("linux", "amd64"),
+            platform_source="wud",
+        )
+
+        self.assertEqual(subject.identity_status, "exact")
+        self.assertEqual(subject.canonical_registry, "quay.io")
+        self.assertEqual(subject.index_digest, "sha256:index")
+        self.assertEqual(subject.manifest_digest, "sha256:child")
+        self.assertEqual(subject.immutable_ref, "quay.io/acme/app@sha256:child")
+        self.assertEqual(subject.platform_source, "wud")
+
+    def test_resolve_subject_rejects_stale_reported_digest(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("ghcr.io", "acme/app", "latest"): index_doc(
+                    "sha256:index",
+                    ("sha256:child",),
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        subject = verifier.resolve_subject(
+            "ghcr.io/acme/app:latest",
+            "sha256:stale",
+            ImagePlatform("linux", "amd64"),
+        )
+
+        self.assertEqual(subject.identity_status, "stale")
+        self.assertEqual(subject.index_digest, "sha256:index")
+        self.assertEqual(subject.manifest_digest, "")
+        self.assertEqual(subject.immutable_ref, "")
+
+    def test_resolve_subject_rejects_platform_mismatch(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("ghcr.io", "acme/app", "latest"): index_doc(
+                    "sha256:index",
+                    ("sha256:child",),
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        subject = verifier.resolve_subject(
+            "ghcr.io/acme/app:latest",
+            "sha256:child",
+            ImagePlatform("linux", "arm64"),
+        )
+
+        self.assertEqual(subject.identity_status, "mismatch")
+        self.assertEqual(subject.error, "reported child digest platform does not match")
+        self.assertEqual(subject.manifest_digest, "")
+        self.assertEqual(subject.immutable_ref, "")
+
+    def test_resolve_subject_rejects_variantless_platform_for_variant_child(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("ghcr.io", "acme/app", "latest"): variant_index_doc(
+                    "sha256:index",
+                    (("sha256:armv7", "linux", "arm", "v7"),),
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        subject = verifier.resolve_subject(
+            "ghcr.io/acme/app:latest",
+            "sha256:armv7",
+            ImagePlatform("linux", "arm"),
+        )
+
+        self.assertEqual(subject.identity_status, "mismatch")
+        self.assertEqual(subject.error, "reported child digest platform does not match")
+        self.assertEqual(subject.manifest_digest, "")
+        self.assertEqual(subject.immutable_ref, "")
+
+    def test_resolve_subject_rejects_ambiguous_platform_children(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("ghcr.io", "acme/app", "latest"): variant_index_doc(
+                    "sha256:index",
+                    (
+                        ("sha256:first", "linux", "amd64", ""),
+                        ("sha256:second", "linux", "amd64", ""),
+                    ),
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        subject = verifier.resolve_subject(
+            "ghcr.io/acme/app:latest",
+            "sha256:index",
+            ImagePlatform("linux", "amd64"),
+        )
+
+        self.assertEqual(subject.identity_status, "mismatch")
+        self.assertEqual(
+            subject.error,
+            "reported index digest has no matching platform child",
+        )
+        self.assertEqual(subject.manifest_digest, "")
+        self.assertEqual(subject.immutable_ref, "")
+
+    def test_resolve_subject_does_not_mark_unknown_index_digest_stale(self) -> None:
+        resolver = SequencedHttpResolver(
+            (
+                index_doc("", ("sha256:child",)),
+            )
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=FailingResolver(),
+        )
+
+        subject = verifier.resolve_subject(
+            "ghcr.io/acme/app:latest",
+            "sha256:index",
+            ImagePlatform("linux", "amd64"),
+        )
+
+        self.assertEqual(subject.identity_status, "error")
+        self.assertEqual(subject.error, "current index digest could not be resolved")
+        self.assertEqual(subject.manifest_digest, "")
+        self.assertEqual(subject.immutable_ref, "")
+
+    def test_resolve_subject_requires_reported_digest_and_platform(self) -> None:
+        resolver = StaticResolver({})
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        no_digest = verifier.resolve_subject(
+            "ghcr.io/acme/app:latest",
+            "",
+            ImagePlatform("linux", "amd64"),
+        )
+        no_platform = verifier.resolve_subject(
+            "ghcr.io/acme/app:latest",
+            "sha256:index",
+            None,
+        )
+
+        self.assertEqual(no_digest.identity_status, "unsupported")
+        self.assertEqual(no_digest.error, "reported digest is required")
+        self.assertEqual(no_platform.identity_status, "unsupported")
+        self.assertEqual(no_platform.error, "platform is required")
+        self.assertEqual(resolver.calls, [])
 
     def test_non_ghcr_manifest_unavailable_is_untrusted(self) -> None:
         verifier = DigestVerifier(

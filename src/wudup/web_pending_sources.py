@@ -286,17 +286,30 @@ def _container_pending_line(container: web_wud_api.WudApiContainer) -> str:
     image = container.image.strip()
     if not image:
         return ""
+    platform_suffix = (
+        f" platform={container.platform.value}" if container.platform is not None else ""
+    )
     if container.update_kind == "tag" and tag_value_valid(container.remote_tag):
-        return f"{image} tag={container.remote_tag}"
+        return (
+            f"{image} tag={container.remote_tag}{platform_suffix}"
+            f"{_digest_metadata_suffix(container.remote_digest)}"
+        )
     if container.remote_digest:
-        return _pending_image_with_digest(image, container.remote_digest)
+        return (
+            f"{_pending_image_with_digest(image, container.remote_digest)}"
+            f"{platform_suffix}"
+        )
     if tag_value_valid(container.remote_tag):
-        return f"{image} tag={container.remote_tag}"
-    return image
+        return f"{image} tag={container.remote_tag}{platform_suffix}"
+    return f"{image}{platform_suffix}"
 
 
 def _pending_image_with_digest(image: str, digest: str) -> str:
     return f"{strip_digest(image)}@{normalize_digest(digest)}"
+
+
+def _digest_metadata_suffix(digest: str) -> str:
+    return f" sha256={normalize_digest(digest)}" if digest else ""
 
 
 def _container_source_id(container: web_wud_api.WudApiContainer) -> str:

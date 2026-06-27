@@ -57,9 +57,16 @@ def test_pending_endpoint_reads_wud_api_source_without_wud_file(
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
+    remote_digest = f"sha256:{'b' * 64}"
+    remote_platform = "linux/arm64/v8"
     _install_wud_api(
         monkeypatch,
-        containers=[_wud_api_container()],
+        containers=[
+            _wud_api_container(
+                remote_digest=remote_digest,
+                platform=remote_platform,
+            )
+        ],
     )
     client = _client(
         tmp_path,
@@ -88,7 +95,11 @@ def test_pending_endpoint_reads_wud_api_source_without_wud_file(
     assert body["source_file"] == "WUD API"
     assert body["count"] == 1
     assert body["items"][0]["line_no"] == 1
-    assert body["items"][0]["raw"] == "repo/app:1.0 tag=2.0"
+    assert body["items"][0]["raw"] == (
+        f"repo/app:1.0 tag=2.0 platform={remote_platform} "
+        f"sha256={remote_digest}"
+    )
+    assert body["items"][0]["digest"] == remote_digest
     assert body["items"][0]["source"] == "api"
     assert body["items"][0]["source_id"] == "docker.local.app"
     assert body["items"][0]["wud_metadata"]["remote_tag"] == "2.0"

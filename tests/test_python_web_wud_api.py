@@ -50,18 +50,22 @@ def _container_payload(
     source: str = "https://github.com/acme/app",
     link: str = "https://github.com/acme/app/releases/tag/v1.1.0",
     update_available: bool = True,
+    platform: dict[str, str] | None = None,
 ) -> dict[str, Any]:
+    image_payload: dict[str, Any] = {
+        "name": image,
+        "tag": {"value": tag},
+        "digest": {"value": "sha256:local"},
+    }
+    if platform is not None:
+        image_payload["platform"] = platform
     return {
         "id": f"docker.local.{name}",
         "name": name,
         "displayName": name.title(),
         "status": "running",
         "watcher": "local",
-        "image": {
-            "name": image,
-            "tag": {"value": tag},
-            "digest": {"value": "sha256:local"},
-        },
+        "image": image_payload,
         "result": {
             "tag": remote_tag,
             "digest": "sha256:remote",
@@ -894,7 +898,22 @@ def test_pending_endpoint_enriches_items_from_wud_metadata(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _install_wud_api(monkeypatch, containers=(200, [_container_payload(name="app")]))
+    _install_wud_api(
+        monkeypatch,
+        containers=(
+            200,
+            [
+                _container_payload(
+                    name="app",
+                    platform={
+                        "os": "linux",
+                        "architecture": "arm64",
+                        "variant": "v8",
+                    },
+                )
+            ],
+        ),
+    )
     client = _client(
         tmp_path,
         {
@@ -915,6 +934,10 @@ def test_pending_endpoint_enriches_items_from_wud_metadata(
     assert metadata["name"] == "app"
     assert metadata["remote_tag"] == "1.1.0"
     assert metadata["remote_digest"] == "sha256:remote"
+    assert metadata["platform"] == "linux/arm64/v8"
+    assert metadata["platform_os"] == "linux"
+    assert metadata["platform_architecture"] == "arm64"
+    assert metadata["platform_variant"] == "v8"
     assert body["grouping"]["unmatched"][0]["wud_metadata"] == metadata
     assert wud_file.read_text(encoding="utf-8") == original
 

@@ -8,11 +8,12 @@ import urllib.parse
 import urllib.request
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from .command import CommandError
 from .docker_cli import DockerCli
 from .images import normalize_digest, strip_digest
+from .platforms import ImagePlatform, platform_from_parts, platform_value
 
 
 GHCR_REGISTRY = "ghcr.io"
@@ -27,6 +28,14 @@ _STATUS_VERIFIED = "verified"
 _STATUS_UNTRUSTED = "untrusted"
 _REASON_PLATFORM_MISMATCH = "platform-mismatch"
 _REASON_MANIFEST_CONFIG_MISSING = "manifest-config-missing"
+IdentityStatus = Literal[
+    "exact",
+    "mismatch",
+    "stale",
+    "unsupported",
+    "auth_required",
+    "error",
+]
 _DOCKER_MANIFEST_LIST_MEDIA_TYPE = (
     "application/vnd.docker.distribution.manifest.list.v2+json"
 )
@@ -109,6 +118,27 @@ class ManifestDocument:
                 return digest
         return ""
 
+    def child_platform(self, digest: str) -> ImagePlatform | None:
+        for manifest in self._manifest_items():
+            if manifest.get("digest") != digest:
+                continue
+            return _platform_from_descriptor(manifest.get("platform"))
+        return None
+
+    def matching_platform_child_digest(self, platform: ImagePlatform) -> str:
+        matches: list[str] = []
+        for manifest in self._manifest_items():
+            digest = manifest.get("digest")
+            if not isinstance(digest, str) or not digest:
+                continue
+            child_platform = _platform_from_descriptor(manifest.get("platform"))
+            if child_platform is not None and _platform_matches(
+                child_platform,
+                platform,
+            ):
+                matches.append(digest)
+        return matches[0] if len(matches) == 1 else ""
+
     def child_digests(self) -> tuple[str, ...]:
         return tuple(
             digest
@@ -152,6 +182,47 @@ class DigestResolveResult:
     digest: str = ""
     source: str = ""
     error: str = ""
+
+
+@dataclass(frozen=True)
+class ResolvedImageSubject:
+    canonical_registry: str = ""
+    canonical_repository: str = ""
+    requested_ref: str = ""
+    reported_digest: str = ""
+    index_digest: str = ""
+    manifest_digest: str = ""
+    os: str = ""
+    architecture: str = ""
+    variant: str = ""
+    platform_source: str = ""
+    identity_status: IdentityStatus = "unsupported"
+    warnings: tuple[str, ...] = ()
+    source: str = ""
+    error: str = ""
+
+    @property
+    def platform(self) -> str:
+        if not self.os or not self.architecture:
+            return ""
+        return platform_value(
+            ImagePlatform(
+                os=self.os,
+                architecture=self.architecture,
+                variant=self.variant,
+            )
+        )
+
+    @property
+    def immutable_ref(self) -> str:
+        if not self.canonical_registry or not self.canonical_repository:
+            return ""
+        if not self.manifest_digest:
+            return ""
+        return (
+            f"{self.canonical_registry}/{self.canonical_repository}"
+            f"@{self.manifest_digest}"
+        )
 
 
 class RegistryHttpManifestResolver:
@@ -468,6 +539,136 @@ class DigestVerifier:
             source=tag_document.source,
         )
 
+    def resolve_subject(
+        self,
+        image: str,
+        reported_digest: str,
+        platform: ImagePlatform | None,
+        *,
+        platform_source: str = "",
+    ) -> ResolvedImageSubject:
+        reported_digest = normalize_digest(reported_digest)
+        registry_image = parse_registry_image(image)
+        if registry_image is None:
+            return ResolvedImageSubject(
+                requested_ref=image,
+                reported_digest=reported_digest,
+                platform_source=platform_source,
+                identity_status="unsupported",
+                error="unsupported image reference",
+            )
+        if not reported_digest:
+            return _resolved_subject(
+                registry_image,
+                reported_digest,
+                None,
+                platform_source,
+                identity_status="unsupported",
+                error="reported digest is required",
+            )
+        if platform is None:
+            return _resolved_subject(
+                registry_image,
+                reported_digest,
+                platform,
+                platform_source,
+                identity_status="unsupported",
+                error="platform is required",
+            )
+
+        try:
+            tag_document = self._fetch(registry_image, registry_image.tag)
+        except ManifestLookupError as exc:
+            return _resolved_subject(
+                registry_image,
+                reported_digest,
+                platform,
+                platform_source,
+                identity_status=_subject_error_status(str(exc)),
+                error=str(exc),
+            )
+
+        tag_digest = _tag_document_digest(tag_document)
+        if tag_document.is_index():
+            return self._resolve_index_subject(
+                registry_image,
+                tag_document,
+                reported_digest,
+                platform,
+                platform_source,
+                tag_digest,
+            )
+        if tag_document.is_image_manifest():
+            return _resolve_image_manifest_subject(
+                registry_image,
+                tag_document,
+                reported_digest,
+                platform,
+                platform_source,
+                tag_digest,
+            )
+        return _resolved_subject(
+            registry_image,
+            reported_digest,
+            platform,
+            platform_source,
+            identity_status="unsupported",
+            source=tag_document.source,
+            error="manifest document was not an image manifest or index",
+        )
+
+    def _resolve_index_subject(
+        self,
+        registry_image: RegistryImageRef,
+        tag_document: ManifestDocument,
+        reported_digest: str,
+        platform: ImagePlatform,
+        platform_source: str,
+        tag_digest: str,
+    ) -> ResolvedImageSubject:
+        if not tag_digest:
+            tag_digest = self._resolve_index_digest(registry_image)
+        if tag_digest and reported_digest == tag_digest:
+            return _resolve_reported_index_subject(
+                registry_image,
+                tag_document,
+                reported_digest,
+                platform,
+                platform_source,
+                tag_digest,
+            )
+        child_platform = tag_document.child_platform(reported_digest)
+        if child_platform is not None:
+            return _resolve_reported_child_subject(
+                registry_image,
+                tag_document,
+                reported_digest,
+                platform,
+                platform_source,
+                tag_digest,
+                child_platform,
+            )
+        if not tag_digest:
+            return _resolved_subject(
+                registry_image,
+                reported_digest,
+                platform,
+                platform_source,
+                identity_status="error",
+                source=tag_document.source,
+                error="current index digest could not be resolved",
+            )
+        return _resolved_subject(
+            registry_image,
+            reported_digest,
+            platform,
+            platform_source,
+            identity_status="stale",
+            index_digest=tag_digest,
+            source=tag_document.source,
+            error="reported digest is not in the current index",
+        )
+
     def _resolve_index_digest(
         self,
         image: RegistryImageRef,
@@ -644,6 +845,135 @@ class DigestVerifier:
             return None
 
 
+def _tag_document_digest(tag_document: ManifestDocument) -> str:
+    return normalize_digest(tag_document.digest or _payload_digest(tag_document.payload))
+
+
+def _resolve_reported_index_subject(
+    registry_image: RegistryImageRef,
+    tag_document: ManifestDocument,
+    reported_digest: str,
+    platform: ImagePlatform,
+    platform_source: str,
+    tag_digest: str,
+) -> ResolvedImageSubject:
+    child_digest = tag_document.matching_platform_child_digest(platform)
+    if not child_digest:
+        return _resolved_subject(
+            registry_image,
+            reported_digest,
+            platform,
+            platform_source,
+            identity_status="mismatch",
+            index_digest=tag_digest,
+            source=tag_document.source,
+            error="reported index digest has no matching platform child",
+        )
+    return _resolved_subject(
+        registry_image,
+        reported_digest,
+        platform,
+        platform_source,
+        identity_status="exact",
+        index_digest=tag_digest,
+        manifest_digest=child_digest,
+        source=tag_document.source,
+    )
+
+
+def _resolve_reported_child_subject(
+    registry_image: RegistryImageRef,
+    tag_document: ManifestDocument,
+    reported_digest: str,
+    platform: ImagePlatform,
+    platform_source: str,
+    tag_digest: str,
+    child_platform: ImagePlatform,
+) -> ResolvedImageSubject:
+    if not _platform_matches(child_platform, platform):
+        return _resolved_subject(
+            registry_image,
+            reported_digest,
+            platform,
+            platform_source,
+            identity_status="mismatch",
+            index_digest=tag_digest,
+            source=tag_document.source,
+            error="reported child digest platform does not match",
+        )
+    return _resolved_subject(
+        registry_image,
+        reported_digest,
+        platform,
+        platform_source,
+        identity_status="exact",
+        index_digest=tag_digest,
+        manifest_digest=reported_digest,
+        source=tag_document.source,
+    )
+
+
+def _resolve_image_manifest_subject(
+    registry_image: RegistryImageRef,
+    tag_document: ManifestDocument,
+    reported_digest: str,
+    platform: ImagePlatform,
+    platform_source: str,
+    tag_digest: str,
+) -> ResolvedImageSubject:
+    if reported_digest != tag_digest:
+        return _resolved_subject(
+            registry_image,
+            reported_digest,
+            platform,
+            platform_source,
+            identity_status="stale",
+            source=tag_document.source,
+            error="reported digest does not match the current manifest",
+        )
+    return _resolved_subject(
+        registry_image,
+        reported_digest,
+        platform,
+        platform_source,
+        identity_status="exact",
+        manifest_digest=reported_digest,
+        source=tag_document.source,
+        warnings=("single-manifest platform was supplied by metadata",),
+    )
+
+
+def _resolved_subject(
+    registry_image: RegistryImageRef,
+    reported_digest: str,
+    platform: ImagePlatform | None,
+    platform_source: str,
+    *,
+    identity_status: IdentityStatus,
+    index_digest: str = "",
+    manifest_digest: str = "",
+    source: str = "",
+    warnings: tuple[str, ...] = (),
+    error: str = "",
+) -> ResolvedImageSubject:
+    return ResolvedImageSubject(
+        canonical_registry=registry_image.registry,
+        canonical_repository=registry_image.repo,
+        requested_ref=registry_image.manifest_ref(registry_image.tag),
+        reported_digest=reported_digest,
+        index_digest=index_digest,
+        manifest_digest=manifest_digest,
+        os=platform.os if platform is not None else "",
+        architecture=platform.architecture if platform is not None else "",
+        variant=platform.variant if platform is not None else "",
+        platform_source=platform_source,
+        identity_status=identity_status,
+        warnings=warnings,
+        source=source,
+        error=error,
+    )
+
+
 def parse_registry_image(image: str) -> RegistryImageRef | None:
     image = strip_digest(image).strip()
     if not image:
@@ -699,18 +1029,35 @@ def _is_registry_prefix(value: str) -> bool:
 
 
 def _real_platform(value: Any) -> bool:
+    return _platform_from_descriptor(value) is not None
+
+
+def _platform_from_descriptor(value: Any) -> ImagePlatform | None:
     if not isinstance(value, Mapping):
-        return False
+        return None
     os_value = value.get("os")
     architecture = value.get("architecture")
+    variant = value.get("variant")
     if not isinstance(os_value, str) or not isinstance(architecture, str):
-        return False
-    return (
-        os_value.strip() != ""
-        and architecture.strip() != ""
-        and os_value.lower() != "unknown"
-        and architecture.lower() != "unknown"
+        return None
+    return platform_from_parts(
+        os_value,
+        architecture,
+        variant if isinstance(variant, str) else "",
     )
+
+
+def _platform_matches(found: ImagePlatform, wanted: ImagePlatform) -> bool:
+    if found.os != wanted.os or found.architecture != wanted.architecture:
+        return False
+    return found.variant == wanted.variant
+
+
+def _subject_error_status(error: str) -> IdentityStatus:
+    lowered = error.lower()
+    if "401" in lowered or "403" in lowered or "auth" in lowered:
+        return "auth_required"
+    return "error"
 
 
 def _content_type(value: str) -> str:

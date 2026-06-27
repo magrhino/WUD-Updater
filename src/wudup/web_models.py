@@ -404,6 +404,10 @@ class WudContainerMetadata(BaseModel):
     semver_diff: str
     link: str
     error: str
+    platform: str = ""
+    platform_os: str = ""
+    platform_architecture: str = ""
+    platform_variant: str = ""
 
 PendingSourceMode = Literal["file", "api", "auto"]
 PendingSourceActive = Literal["file", "api"]
@@ -494,6 +498,10 @@ class PendingItem(BaseModel):
     allow_repo: bool
     digest: str
     desired_tag: str
+    platform: str = ""
+    platform_os: str = ""
+    platform_architecture: str = ""
+    platform_variant: str = ""
     digest_provenance: DigestTagProvenance | None = None
     wud_metadata: WudContainerMetadata | None = None
     source: PendingSourceActive = "file"

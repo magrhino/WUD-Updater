@@ -141,6 +141,9 @@ compose_config_json_from_file(){
           printf ","
         }
         printf "\"%s\":{\"image\":\"%s\"", esc(svc), esc(image)
+        if (platform != "") {
+          printf ",\"platform\":\"%s\"", esc(platform)
+        }
         if (network_mode != "") {
           printf ",\"network_mode\":\"%s\"", esc(network_mode)
         }
@@ -177,6 +180,7 @@ compose_config_json_from_file(){
       svc = $1
       sub(/:$/, "", svc)
       image = ""
+      platform = ""
       network_mode = ""
       expose_count = 0
       in_expose = 0
@@ -208,6 +212,12 @@ compose_config_json_from_file(){
       in_expose = 0
       in_labels = 0
       image = scalar($0)
+      next
+    }
+    /^[[:space:]]+platform:[[:space:]]*/ {
+      in_expose = 0
+      in_labels = 0
+      platform = scalar($0)
       next
     }
     /^[[:space:]]+network_mode:[[:space:]]*/ {

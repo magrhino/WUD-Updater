@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .command import CommandError, CommandResult, CommandRunner
 from .config import DEFAULT_COMPOSE_IGNORE_PATHS, format_compose_ignore_paths
+from .platforms import ImagePlatform, parse_platform
 
 
 COMPOSE_FILENAMES = frozenset(
@@ -32,6 +33,7 @@ class ServiceImage:
     image: str
     network_mode: str = ""
     labels: tuple[tuple[str, str], ...] = ()
+    platform: ImagePlatform | None = None
 
 
 @dataclass(frozen=True)
@@ -726,9 +728,16 @@ def _service_image_pairs_from_config_json(config_json: str) -> tuple[ServiceImag
                     image=image,
                     network_mode=network_mode_text,
                     labels=_service_labels(config.get("labels")),
+                    platform=_service_platform(config.get("platform")),
                 )
             )
     return tuple(sorted(pairs, key=lambda pair: (pair.service, pair.image)))
+
+
+def _service_platform(value: object) -> ImagePlatform | None:
+    if not isinstance(value, str):
+        return None
+    return parse_platform(value)
 
 
 def _service_labels(labels: object) -> tuple[tuple[str, str], ...]:

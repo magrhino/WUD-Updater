@@ -40,6 +40,14 @@ from .updater_planning import (
 )
 
 
+def _expected_digest_requirement(match: Match) -> str:
+    if not match.target.digest:
+        return ""
+    if "@sha256:" not in match.target.first:
+        return ""
+    return match.target.digest
+
+
 class _LifecycleDigestMixin:
     def _verify_expected_digests(
         self,
@@ -54,10 +62,10 @@ class _LifecycleDigestMixin:
                 match.target.first,
                 _digest_check_image(match),
                 _digest_check_allow_repo(match),
-                match.target.digest,
+                expected_digest,
             )
             for match in matches
-            if match.target.digest
+            if (expected_digest := _expected_digest_requirement(match))
         }
         for line_no, target, expected_image, allow_repo, expected in sorted(requirements):
             matched = False

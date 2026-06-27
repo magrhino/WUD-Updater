@@ -233,6 +233,10 @@ class PendingGroupingItem:
     compose_images: tuple[str, ...]
     services: tuple[str, ...]
     action: str
+    platform: str = ""
+    platform_os: str = ""
+    platform_architecture: str = ""
+    platform_variant: str = ""
     diagnostic: UnmatchedDiagnostic | None = None
     digest_provenance: DigestTagProvenance | None = None
 
