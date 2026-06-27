@@ -303,6 +303,47 @@ _EXPECTED_SCHEMAS_BY_VERSION: dict[int, SchemaDefinition] = {
     SCHEMA_VERSION: EXPECTED_SCHEMA,
 }
 
+_SECURITY_SCAN_CACHE_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS security_scan_cache (
+    cache_key TEXT PRIMARY KEY,
+    request_key TEXT NOT NULL,
+    subject_id TEXT NOT NULL DEFAULT '',
+    canonical_registry TEXT NOT NULL DEFAULT '',
+    canonical_repository TEXT NOT NULL DEFAULT '',
+    requested_ref TEXT NOT NULL DEFAULT '',
+    reported_digest TEXT NOT NULL DEFAULT '',
+    index_digest TEXT NOT NULL DEFAULT '',
+    manifest_digest TEXT NOT NULL DEFAULT '',
+    platform TEXT NOT NULL DEFAULT '',
+    platform_os TEXT NOT NULL DEFAULT '',
+    platform_architecture TEXT NOT NULL DEFAULT '',
+    platform_variant TEXT NOT NULL DEFAULT '',
+    platform_source TEXT NOT NULL DEFAULT '',
+    identity_status TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL,
+    verdict TEXT NOT NULL DEFAULT '',
+    scanner TEXT NOT NULL DEFAULT '',
+    scanner_version TEXT NOT NULL DEFAULT '',
+    scanner_schema TEXT NOT NULL DEFAULT '',
+    db_revision TEXT NOT NULL DEFAULT '',
+    db_updated_at TEXT NOT NULL DEFAULT '',
+    severity_counts_json TEXT NOT NULL DEFAULT '{}',
+    fixable_counts_json TEXT NOT NULL DEFAULT '{}',
+    unfixed_count INTEGER NOT NULL DEFAULT 0,
+    warnings_json TEXT NOT NULL DEFAULT '[]',
+    error_code TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT '',
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_security_scan_cache_request
+    ON security_scan_cache (request_key, updated_at);
+CREATE INDEX IF NOT EXISTS idx_security_scan_cache_subject
+    ON security_scan_cache (subject_id, updated_at);
+"""
+
 
 class DatabaseError(RuntimeError):
     """Raised when the SQLite schema cannot be initialized safely."""
@@ -528,45 +569,6 @@ def init_db(conn: sqlite3.Connection) -> None:
             CREATE INDEX IF NOT EXISTS idx_release_note_cache_updated_at
                 ON release_note_cache (updated_at);
 
-            CREATE TABLE IF NOT EXISTS security_scan_cache (
-                cache_key TEXT PRIMARY KEY,
-                request_key TEXT NOT NULL,
-                subject_id TEXT NOT NULL DEFAULT '',
-                canonical_registry TEXT NOT NULL DEFAULT '',
-                canonical_repository TEXT NOT NULL DEFAULT '',
-                requested_ref TEXT NOT NULL DEFAULT '',
-                reported_digest TEXT NOT NULL DEFAULT '',
-                index_digest TEXT NOT NULL DEFAULT '',
-                manifest_digest TEXT NOT NULL DEFAULT '',
-                platform TEXT NOT NULL DEFAULT '',
-                platform_os TEXT NOT NULL DEFAULT '',
-                platform_architecture TEXT NOT NULL DEFAULT '',
-                platform_variant TEXT NOT NULL DEFAULT '',
-                platform_source TEXT NOT NULL DEFAULT '',
-                identity_status TEXT NOT NULL DEFAULT '',
-                state TEXT NOT NULL,
-                verdict TEXT NOT NULL DEFAULT '',
-                scanner TEXT NOT NULL DEFAULT '',
-                scanner_version TEXT NOT NULL DEFAULT '',
-                scanner_schema TEXT NOT NULL DEFAULT '',
-                db_revision TEXT NOT NULL DEFAULT '',
-                db_updated_at TEXT NOT NULL DEFAULT '',
-                severity_counts_json TEXT NOT NULL DEFAULT '{}',
-                fixable_counts_json TEXT NOT NULL DEFAULT '{}',
-                unfixed_count INTEGER NOT NULL DEFAULT 0,
-                warnings_json TEXT NOT NULL DEFAULT '[]',
-                error_code TEXT NOT NULL DEFAULT '',
-                error_message TEXT NOT NULL DEFAULT '',
-                raw_json TEXT NOT NULL DEFAULT '{}',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                metadata_json TEXT NOT NULL DEFAULT '{}'
-            );
-            CREATE INDEX IF NOT EXISTS idx_security_scan_cache_request
-                ON security_scan_cache (request_key, updated_at);
-            CREATE INDEX IF NOT EXISTS idx_security_scan_cache_subject
-                ON security_scan_cache (subject_id, updated_at);
-
             CREATE TABLE IF NOT EXISTS tag_exclusion_rules (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 scope TEXT NOT NULL,
@@ -616,6 +618,7 @@ def init_db(conn: sqlite3.Connection) -> None:
             );
             """
         )
+        conn.executescript(_SECURITY_SCAN_CACHE_SCHEMA_SQL)
         _validate_schema(conn)
         _backfill_schema_migrations(conn, SCHEMA_VERSION)
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
@@ -1629,48 +1632,7 @@ def _migrate_v8_to_v9(conn: sqlite3.Connection) -> None:
             EXPECTED_SCHEMA["security_scan_cache"],
         )
     with conn:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS security_scan_cache (
-                cache_key TEXT PRIMARY KEY,
-                request_key TEXT NOT NULL,
-                subject_id TEXT NOT NULL DEFAULT '',
-                canonical_registry TEXT NOT NULL DEFAULT '',
-                canonical_repository TEXT NOT NULL DEFAULT '',
-                requested_ref TEXT NOT NULL DEFAULT '',
-                reported_digest TEXT NOT NULL DEFAULT '',
-                index_digest TEXT NOT NULL DEFAULT '',
-                manifest_digest TEXT NOT NULL DEFAULT '',
-                platform TEXT NOT NULL DEFAULT '',
-                platform_os TEXT NOT NULL DEFAULT '',
-                platform_architecture TEXT NOT NULL DEFAULT '',
-                platform_variant TEXT NOT NULL DEFAULT '',
-                platform_source TEXT NOT NULL DEFAULT '',
-                identity_status TEXT NOT NULL DEFAULT '',
-                state TEXT NOT NULL,
-                verdict TEXT NOT NULL DEFAULT '',
-                scanner TEXT NOT NULL DEFAULT '',
-                scanner_version TEXT NOT NULL DEFAULT '',
-                scanner_schema TEXT NOT NULL DEFAULT '',
-                db_revision TEXT NOT NULL DEFAULT '',
-                db_updated_at TEXT NOT NULL DEFAULT '',
-                severity_counts_json TEXT NOT NULL DEFAULT '{}',
-                fixable_counts_json TEXT NOT NULL DEFAULT '{}',
-                unfixed_count INTEGER NOT NULL DEFAULT 0,
-                warnings_json TEXT NOT NULL DEFAULT '[]',
-                error_code TEXT NOT NULL DEFAULT '',
-                error_message TEXT NOT NULL DEFAULT '',
-                raw_json TEXT NOT NULL DEFAULT '{}',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                metadata_json TEXT NOT NULL DEFAULT '{}'
-            );
-            CREATE INDEX IF NOT EXISTS idx_security_scan_cache_request
-                ON security_scan_cache (request_key, updated_at);
-            CREATE INDEX IF NOT EXISTS idx_security_scan_cache_subject
-                ON security_scan_cache (subject_id, updated_at);
-            """
-        )
+        conn.executescript(_SECURITY_SCAN_CACHE_SCHEMA_SQL)
         conn.execute("PRAGMA user_version = 9")
     _record_schema_migration(conn, 9)
 

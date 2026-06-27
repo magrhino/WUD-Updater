@@ -350,6 +350,59 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(policy["auto_update_days_json"], "[]")
         self.assertEqual(migration_versions, list(range(1, SCHEMA_VERSION + 1)))
 
+    def test_init_db_migrates_v8_schema_and_adds_security_scan_cache(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            init_db(conn)
+            conn.execute("DROP TABLE security_scan_cache")
+            conn.execute("DELETE FROM schema_migrations WHERE version = 9")
+            conn.execute("PRAGMA user_version = 8")
+
+            init_db(conn)
+
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            table = conn.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name = 'security_scan_cache'
+                """
+            ).fetchone()
+            columns = [
+                row[1]
+                for row in conn.execute("PRAGMA table_info(security_scan_cache)")
+            ]
+            expected_columns = [
+                column[0]
+                for column in _EXPECTED_SCHEMAS_BY_VERSION[SCHEMA_VERSION][
+                    "security_scan_cache"
+                ]
+            ]
+            indexes = [
+                row[1]
+                for row in conn.execute("PRAGMA index_list('security_scan_cache')")
+            ]
+
+        self.assertEqual(version, SCHEMA_VERSION)
+        self.assertIsNotNone(table)
+        self.assertEqual(columns, expected_columns)
+        self.assertIn("idx_security_scan_cache_request", indexes)
+        self.assertIn("idx_security_scan_cache_subject", indexes)
+
+    def test_init_db_rejects_v8_schema_with_conflicting_security_cache(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            init_db(conn)
+            conn.execute("DROP TABLE security_scan_cache")
+            conn.execute("CREATE VIEW security_scan_cache AS SELECT 1 AS dummy_column")
+            conn.execute("DELETE FROM schema_migrations WHERE version = 9")
+            conn.execute("PRAGMA user_version = 8")
+
+            with self.assertRaisesRegex(
+                DatabaseError,
+                "Expected security_scan_cache to be a table, found view",
+            ):
+                init_db(conn)
+
     def test_init_db_migrates_v6_schema_and_preserves_digestless_rows(self) -> None:
         with sqlite3.connect(":memory:") as conn:
             conn.row_factory = sqlite3.Row

@@ -168,6 +168,43 @@ def test_active_mutation_error_checks_security_jobs_under_scan_lock() -> None:
     )
 
 
+def test_active_mutation_error_keeps_general_guards_when_scan_jobs_excluded() -> None:
+    state = SimpleNamespace(
+        web_apply_lock=Lock(),
+        web_apply_jobs={"apply": SimpleNamespace(status="queued")},
+        web_self_update_running=False,
+        web_security_scan_lock=Lock(),
+        web_security_scan_jobs={"scan": SimpleNamespace(status="running")},
+    )
+
+    assert (
+        web_jobs._active_mutation_error_in_state(
+            state,
+            include_security_scan_jobs=False,
+        )
+        == "an apply job is already running"
+    )
+
+    state.web_apply_jobs = {}
+    state.web_self_update_running = True
+    assert (
+        web_jobs._active_mutation_error_in_state(
+            state,
+            include_security_scan_jobs=False,
+        )
+        == "self-update is already running"
+    )
+
+    state.web_self_update_running = False
+    assert (
+        web_jobs._active_mutation_error_in_state(
+            state,
+            include_security_scan_jobs=False,
+        )
+        == ""
+    )
+
+
 def test_security_scan_refresh_allows_configured_concurrent_jobs(
     tmp_path: Path,
     monkeypatch,

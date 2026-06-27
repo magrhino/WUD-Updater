@@ -89,7 +89,8 @@ class CommandRunner:
         argv = normalize_args(args)
         cwd_path = Path(cwd) if cwd is not None else None
         try:
-            completed = subprocess.run(
+            # Security audit: argv stays a tuple and shell=False is the subprocess default.
+            completed = subprocess.run(  # nosemgrep
                 argv,
                 cwd=str(cwd_path) if cwd_path is not None else None,
                 env=self._merged_env(env),
