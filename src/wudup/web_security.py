@@ -9,7 +9,7 @@ from contextlib import closing
 from dataclasses import dataclass, replace
 from threading import Lock
 import secrets
-from typing import Any
+from typing import Any, cast
 
 from fastapi import HTTPException, Request
 
@@ -448,10 +448,13 @@ def _sanitize_scan_result(
     settings: WebSettings,
     result: SecurityScanResult,
 ) -> SecurityScanResult:
-    return replace(
-        result,
-        warnings=tuple(_sanitize_text(settings, item) for item in result.warnings),
-        error_message=_sanitize_text(settings, result.error_message),
+    return cast(
+        SecurityScanResult,
+        replace(
+            result,
+            warnings=tuple(_sanitize_text(settings, item) for item in result.warnings),
+            error_message=_sanitize_text(settings, result.error_message),
+        ),
     )
 
 

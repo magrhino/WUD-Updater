@@ -599,7 +599,7 @@ class StaleVerifier:
 
 class FakeScanner:
     def __init__(self, *_args, **_kwargs) -> None:
-        pass
+        pass  # Test double accepts the production scanner constructor signature.
 
     def scan(self, subject: ResolvedImageSubject) -> SecurityScanResult:
         assert subject.identity_status == "exact"
@@ -616,7 +616,7 @@ class FakeScanner:
 
 class FailingScanner:
     def __init__(self, *_args, **_kwargs) -> None:
-        pass
+        pass  # Test double accepts the production scanner constructor signature.
 
     def scan(self, _subject: ResolvedImageSubject) -> SecurityScanResult:
         raise AssertionError("non-exact subject should not be scanned")
@@ -630,7 +630,7 @@ class QueuedExecutor:
         self.calls.append(args)
 
     def shutdown(self, **_kwargs) -> None:
-        pass
+        pass  # Queued test executor has no background workers to stop.
 
 
 class TrackingLock:

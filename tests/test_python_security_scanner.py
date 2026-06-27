@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
 
 from wudup.command import CommandResult
@@ -57,17 +58,18 @@ class SecurityScannerTests(unittest.TestCase):
             ],
         }
         runner = FakeRunner(json.dumps(payload))
-        scanner = TrivyScanner(
-            SecurityScanConfig(
-                enabled=True,
-                mode="registry",
-                timeout_seconds=30,
-                cache_dir="/tmp/trivy-cache",
-            ),
-            runner=runner,  # type: ignore[arg-type]
-        )
+        with tempfile.TemporaryDirectory(prefix="wudup-trivy-cache-") as cache_dir:
+            scanner = TrivyScanner(
+                SecurityScanConfig(
+                    enabled=True,
+                    mode="registry",
+                    timeout_seconds=30,
+                    cache_dir=cache_dir,
+                ),
+                runner=runner,  # type: ignore[arg-type]
+            )
 
-        result = scanner.scan(_exact_subject())
+            result = scanner.scan(_exact_subject())
 
         self.assertEqual(result.state, "complete")
         self.assertEqual(result.verdict, "findings")
@@ -98,7 +100,7 @@ class SecurityScannerTests(unittest.TestCase):
                 "--timeout",
                 "30s",
                 "--cache-dir",
-                "/tmp/trivy-cache",
+                cache_dir,
                 "ghcr.io/acme/app@sha256:child",
             ),
         )

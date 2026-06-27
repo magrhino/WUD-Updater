@@ -196,7 +196,7 @@ def _db_metadata(payload: Mapping[str, Any]) -> Mapping[str, Any]:
 
 
 def _empty_counts() -> dict[str, int]:
-    return {severity: 0 for severity in SEVERITIES}
+    return dict.fromkeys(SEVERITIES, 0)
 
 
 def _severity(value: object) -> str:

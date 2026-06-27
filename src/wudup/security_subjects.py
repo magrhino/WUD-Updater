@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from .command import CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError, ServiceImage
@@ -93,9 +93,12 @@ def resolve_security_subject(
         request.platform,
         platform_source=request.platform_source,
     )
-    return replace(
-        subject,
-        warnings=(*request.warnings, *subject.warnings),
+    return cast(
+        ResolvedImageSubject,
+        replace(
+            subject,
+            warnings=(*request.warnings, *subject.warnings),
+        ),
     )
 
 
