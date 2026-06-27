@@ -128,7 +128,7 @@ def upsert_scan_result(
                 json.dumps([*subject.warnings, *result.warnings], sort_keys=True),
                 result.error_code,
                 result.error_message,
-                "{}",
+                result.raw_json or "{}",
                 timestamp,
                 timestamp,
                 json.dumps(

@@ -191,20 +191,35 @@ def security_scans_response(settings: WebSettings) -> SecurityScansResponse:
                 for request in context.requests
             ]
     except ReadOnlyDatabaseMissing:
-        items = [
-            _placeholder_info(request, state=_placeholder_state(request))
-            for request in context.requests
-        ]
+        items = _placeholder_items(context)
     except (OSError, sqlite3.Error, DatabaseError) as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=_safe_exception_detail(
-                settings,
-                "could not read security scan cache",
-                exc,
-            ),
-        ) from exc
+        if _missing_security_scan_cache_table(exc):
+            items = _placeholder_items(context)
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=_safe_exception_detail(
+                    settings,
+                    "could not read security scan cache",
+                    exc,
+                ),
+            ) from exc
     return _response_from_items(settings, context, items)
+
+
+def _placeholder_items(context: PendingSecurityContext) -> list[SecurityScanInfo]:
+    return [
+        _placeholder_info(request, state=_placeholder_state(request))
+        for request in context.requests
+    ]
+
+
+def _missing_security_scan_cache_table(exc: BaseException) -> bool:
+    message = str(exc)
+    return (
+        "Missing expected table: security_scan_cache" in message
+        or "no such table: security_scan_cache" in message
+    )
 
 
 def _run_security_scan_job(
@@ -454,6 +469,7 @@ def _sanitize_scan_result(
             result,
             warnings=tuple(_sanitize_text(settings, item) for item in result.warnings),
             error_message=_sanitize_text(settings, result.error_message),
+            raw_json=_sanitize_text(settings, result.raw_json) or "{}",
         ),
     )
 

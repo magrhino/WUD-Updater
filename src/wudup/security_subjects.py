@@ -135,7 +135,6 @@ def _request_for_target(
     platform_source = "compose" if compose_platform is not None else "wud"
     if compose_platform is None and wud_platform is None:
         platform_source = ""
-    warnings: list[str] = []
     identity_status = "pending"
     error = ""
     if compose_platform_conflict:
@@ -160,7 +159,6 @@ def _request_for_target(
         platform=platform,
         platform_source=platform_source,
         identity_status=identity_status,
-        warnings=tuple(warnings),
         error=error,
     )
 

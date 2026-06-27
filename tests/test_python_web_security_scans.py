@@ -24,6 +24,7 @@ from tests.web_test_helpers import (
 
 
 VALID_DIGEST = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+DEFAULT_SECURITY_PLATFORM = ImagePlatform("linux", "amd64")
 
 
 def test_security_scans_get_is_disabled_and_cache_only_by_default(
@@ -71,6 +72,34 @@ def test_security_scans_get_uses_cache_only_context(
 
     assert response.status_code == 200
     assert calls == [(False, False)]
+
+
+def test_security_scans_get_missing_cache_table_uses_placeholders(
+    tmp_path: Path,
+) -> None:
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    (state_dir / "images.todo").write_text(
+        f"repo/app:1.0 platform=linux/amd64 sha256={VALID_DIGEST}\n",
+        encoding="utf-8",
+    )
+    with sqlite3.connect(state_dir / WEB_DB_NAME) as conn:
+        init_db(conn)
+        conn.execute("DROP TABLE security_scan_cache")
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+
+    response = client.get("/api/v1/security-scans")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["items"][0]["state"] == "not_scanned"
 
 
 def test_security_scan_refresh_enforces_csrf_disabled_and_read_only(
@@ -304,6 +333,7 @@ def test_security_scan_refresh_scans_caches_and_reads_back_result(
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
             "WUD_SECURITY_SCANNING_ENABLED": "true",
+            "WUD_WEB_TOKEN": "supersecret",
         },
     )
 
@@ -333,6 +363,15 @@ def test_security_scan_refresh_scans_caches_and_reads_back_result(
     assert cached_item["verdict"] == "findings"
     assert cached_item["severity_counts"]["high"] == 1
     assert cached_item["subject"]["warnings"] == ["subject warning"]
+    with sqlite3.connect(tmp_path / "state" / WEB_DB_NAME) as conn:
+        raw_json = conn.execute(
+            "SELECT raw_json FROM security_scan_cache"
+        ).fetchone()[0]
+    assert '"Results":[]' in raw_json
+    assert "supersecret" not in raw_json
+    assert "<redacted>" in raw_json
+    assert "/private/app" not in raw_json
+    assert "[REDACTED_PATH]" in raw_json
 
 
 def test_security_scan_cache_readback_uses_platform_independent_request_key(
@@ -511,7 +550,7 @@ def test_security_scan_cache_uses_newest_same_second_row_and_prunes() -> None:
     assert cached.db_revision == "6"
     assert cached.severity_counts.high == 6
     assert len(rows) == 5
-    assert {row["raw_json"] for row in rows} == {"{}"}
+    assert {row["raw_json"] for row in rows} == {'{"large":"payload"}'}
 
 
 def _completed_security_job(client, job_id: str) -> dict[str, object] | None:
@@ -542,7 +581,7 @@ def _single_security_context(
     tmp_path: Path,
     *,
     raw: str | None = None,
-    platform: ImagePlatform | None = ImagePlatform("linux", "amd64"),
+    platform: ImagePlatform | None = DEFAULT_SECURITY_PLATFORM,
 ) -> PendingSecurityContext:
     source_file = tmp_path / "state" / "images.todo"
     source_file.parent.mkdir(parents=True, exist_ok=True)
@@ -566,7 +605,7 @@ def _single_security_context(
 def _single_security_request(
     *,
     raw: str | None = None,
-    platform: ImagePlatform | None = ImagePlatform("linux", "amd64"),
+    platform: ImagePlatform | None = DEFAULT_SECURITY_PLATFORM,
 ) -> PendingSecurityRequest:
     return PendingSecurityRequest(
         line_no=1,
@@ -647,7 +686,10 @@ class FakeScanner:
             scanner_schema="2",
             severity_counts={"high": 1},
             fixable_counts={"high": 1},
-            raw_json='{"Results":[]}',
+            raw_json=(
+                '{"Results":[],"ArtifactName":"/private/app",'
+                '"Token":"supersecret"}'
+            ),
         )
 
 
