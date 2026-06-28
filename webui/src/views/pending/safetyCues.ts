@@ -7,6 +7,7 @@ import type {
   ServicePolicyRecord,
   SnoozeRecord,
 } from "../../api/client";
+import { securityScanCueDisplay } from "../../utils/securityScans";
 
 export type SafetyCue = {
   key: string;
@@ -176,28 +177,10 @@ function addSecurityScanCues(
     addCue("security-unknown", "Security unknown", "warning");
     return;
   }
-  if (scan.state === "disabled") {
-    return;
+  const display = securityScanCueDisplay(scan);
+  if (display) {
+    addCue(display.key, display.label, display.type);
   }
-  if (scan.state === "complete" && scan.verdict === "findings") {
-    const highImpact =
-      scan.severity_counts.critical > 0 || scan.severity_counts.high > 0;
-    addCue("security-findings", "Findings", highImpact ? "error" : "warning");
-    return;
-  }
-  if (scan.state === "complete" && scan.verdict === "none_reported") {
-    addCue("security-none-reported", "None reported", "success");
-    return;
-  }
-  if (scan.state === "not_scanned") {
-    addCue("security-not-scanned", "Not scanned", "default");
-    return;
-  }
-  if (scan.state === "stale") {
-    addCue("security-stale", "Scan stale", "warning");
-    return;
-  }
-  addCue("security-unknown", "Security unknown", "warning");
 }
 
 function addPolicyCues(

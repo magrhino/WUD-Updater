@@ -29,6 +29,7 @@ import { useSettingsStore } from "../stores/settings";
 import { useUpdatesStore } from "../stores/updates";
 import { displayDigest } from "../utils/digestProvenance";
 import { runInBackground } from "../utils/promises";
+import { securityScanSummaryDisplay } from "../utils/securityScans";
 import {
   displayValue,
   releaseNoteReason,
@@ -320,37 +321,15 @@ const securityScanRefreshDisabledMessage = computed(() => {
   }
   return "";
 });
-const securityScanSummaryLabel = computed(() => {
-  if (!updates.securityScans) {
-    return "Security scans loading";
-  }
-  if (!updates.securityScans.scanning_enabled) {
-    return "Security scans off";
-  }
-  if (!updates.securityScansCurrent) {
-    return "Security scans stale";
-  }
-  const scans = updates.currentSecurityScanItems;
-  const findings = scans.filter((scan) => scan.verdict === "findings").length;
-  if (findings > 0) {
-    return pluralize(findings, "candidate with findings");
-  }
-  const complete = scans.filter((scan) => scan.state === "complete").length;
-  if (complete > 0) {
-    return `${pluralize(complete, "candidate")} scanned`;
-  }
-  return "No candidate scans yet";
-});
-const securityScanSummaryType = computed(() => {
-  if (!updates.securityScans?.scanning_enabled) {
-    return "default";
-  }
-  if (!updates.securityScansCurrent) {
-    return "warning";
-  }
-  const scans = updates.currentSecurityScanItems;
-  return scans.some((scan) => scan.verdict === "findings") ? "warning" : "info";
-});
+const securityScanSummary = computed(() =>
+  securityScanSummaryDisplay({
+    securityScans: updates.securityScans,
+    securityScansCurrent: updates.securityScansCurrent,
+    items: updates.currentSecurityScanItems,
+  }),
+);
+const securityScanSummaryLabel = computed(() => securityScanSummary.value.label);
+const securityScanSummaryType = computed(() => securityScanSummary.value.type);
 
 const {
   actionCommand,

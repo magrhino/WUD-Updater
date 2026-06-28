@@ -72,6 +72,10 @@ import type {
   DemoRunFixture,
   DemoTagToken,
 } from "./types";
+import {
+  normalizeSecurityDigest,
+  pendingItemPlatform,
+} from "../../utils/securityScans";
 
 const STATIC_FIXTURE_ERROR =
   "This selection is not part of the static demo fixture set.";
@@ -104,29 +108,6 @@ function activeLineNumbers(activeKeys: Set<string>): Set<number> {
       .filter((item) => activeKeys.has(cleanupLineKey(item)))
       .map((item) => item.line_no),
   );
-}
-
-function pendingItemPlatform(item: PendingItem): string {
-  if (item.platform) {
-    return item.platform;
-  }
-  if (!item.platform_os || !item.platform_architecture) {
-    return "";
-  }
-  return [item.platform_os, item.platform_architecture, item.platform_variant]
-    .filter(Boolean)
-    .join("/");
-}
-
-function normalizeDemoDigest(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return "";
-  }
-  const digest = trimmed.includes("@sha256:")
-    ? trimmed.slice(trimmed.lastIndexOf("@") + 1)
-    : trimmed;
-  return digest.startsWith("sha256:") ? digest : `sha256:${digest}`;
 }
 
 function uniqueSortedNumbers(values: number[]): number[] {
@@ -852,8 +833,12 @@ export class DemoApiState {
     item: PendingItem,
     index: number,
   ): SecurityScanInfo {
-    const reportedDigest = normalizeDemoDigest(item.digest);
-    const platform = item.platform || pendingItemPlatform(item);
+    const reportedDigest = normalizeSecurityDigest(item.digest);
+    const platform = pendingItemPlatform(item);
+    const platformFromWud = Boolean(
+      item.platform.trim() || (item.wud_metadata && platform),
+    );
+    const platformSource = platformFromWud ? "wud" : "demo";
     const exact = Boolean(reportedDigest && platform);
     const hasFindings = index === 0 && exact;
     const counts =
@@ -901,7 +886,7 @@ export class DemoApiState {
         platform_os: item.platform_os || platformOs,
         platform_architecture: item.platform_architecture || platformArchitecture,
         platform_variant: item.platform_variant || platformVariant,
-        platform_source: item.platform ? "wud" : "demo",
+        platform_source: platformSource,
         identity_status: exact ? "exact" : "unsupported",
         warnings: [],
       },

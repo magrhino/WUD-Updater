@@ -53,6 +53,7 @@ import {
   releaseChangelogKey,
   type ReleaseChangelogState,
 } from "../utils/releaseChangelog";
+import { securityScanMatchesPendingItem } from "../utils/securityScans";
 import { useRunsStore } from "./runs";
 
 export const APPLY_JOB_RECOVERY_MESSAGE =
@@ -527,76 +528,6 @@ export const useUpdatesStore = defineStore("updates", () => {
       return null;
     }
     return scan;
-  }
-
-  function securityScanMatchesPendingItem(
-    scan: SecurityScanInfo,
-    item: PendingItem,
-  ): boolean {
-    if (scan.subject.raw !== item.raw || scan.subject.image !== item.image) {
-      return false;
-    }
-    if (
-      normalizeSecurityDigest(scan.subject.reported_digest) !==
-      normalizeSecurityDigest(item.digest)
-    ) {
-      return false;
-    }
-    const itemPlatform = pendingItemPlatform(item);
-    const scanPlatform = scan.subject.platform.trim();
-    if (scan.subject.platform_source === "compose") {
-      return Boolean(scanPlatform);
-    }
-    return !scanPlatform || (Boolean(itemPlatform) && scanPlatform === itemPlatform);
-  }
-
-  function pendingItemPlatform(item: PendingItem): string {
-    if (item.platform?.trim()) {
-      return item.platform.trim();
-    }
-    const wudMetadata = item.wud_metadata;
-    if (wudMetadata?.platform?.trim()) {
-      return wudMetadata.platform.trim();
-    }
-    const wudPlatform = platformFromParts(
-      wudMetadata?.platform_os,
-      wudMetadata?.platform_architecture,
-      wudMetadata?.platform_variant,
-    );
-    if (wudPlatform) {
-      return wudPlatform;
-    }
-    return platformFromParts(
-      item.platform_os,
-      item.platform_architecture,
-      item.platform_variant,
-    );
-  }
-
-  function normalizeSecurityDigest(value: string): string {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return "";
-    }
-    const digest = trimmed.includes("@sha256:")
-      ? trimmed.slice(trimmed.lastIndexOf("@") + 1)
-      : trimmed;
-    return digest.startsWith("sha256:") ? digest : `sha256:${digest}`;
-  }
-
-  function platformFromParts(
-    os: string | undefined,
-    architecture: string | undefined,
-    variant: string | undefined,
-  ): string {
-    const platformOs = os?.trim() ?? "";
-    const platformArchitecture = architecture?.trim() ?? "";
-    if (!platformOs || !platformArchitecture) {
-      return "";
-    }
-    return [platformOs, platformArchitecture, variant?.trim() ?? ""]
-      .filter(Boolean)
-      .join("/");
   }
 
   function securityScanPollMaxAttempts(job: SecurityScanJobResponse): number {

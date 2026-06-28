@@ -265,6 +265,35 @@ def test_security_scan_refresh_rejects_active_self_update(tmp_path: Path) -> Non
     assert response.json()["detail"] == "self-update is already running"
 
 
+def test_security_scan_refresh_respects_max_concurrency_limit(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+            "WUD_SECURITY_SCAN_MAX_CONCURRENCY": "2",
+        },
+    )
+
+    for index in range(client.app.state.web_settings.security_scan.max_concurrency):
+        job_id = f"test-concurrent-{index}"
+        client.app.state.web_security_scan_jobs[job_id] = web_security.WebSecurityScanJob(
+            id=job_id,
+            status="running",
+        )
+
+    response = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "security scan refresh is already running"
+
+
 def test_security_scan_refresh_reserves_against_self_update_race(
     tmp_path: Path,
 ) -> None:
