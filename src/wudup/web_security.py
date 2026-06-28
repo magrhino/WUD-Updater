@@ -41,6 +41,7 @@ from .web_database import (
     connect_readonly_db as _connect_readonly_db,
 )
 from .web_models import (
+    DEFAULT_SECURITY_SCAN_CACHE_DIR,
     SecurityScanConfig,
     SecurityScanInfo,
     SecurityScanJobResponse,
@@ -80,7 +81,10 @@ def configured_security_scan_config(
         executable=(
             environ.get(WUD_SECURITY_SCANNER_EXECUTABLE_ENV, "").strip() or "trivy"
         ),
-        cache_dir=environ.get(WUD_SECURITY_SCAN_CACHE_DIR_ENV, "").strip(),
+        cache_dir=(
+            environ.get(WUD_SECURITY_SCAN_CACHE_DIR_ENV, "").strip()
+            or DEFAULT_SECURITY_SCAN_CACHE_DIR
+        ),
         timeout_seconds=_parse_positive_int(
             WUD_SECURITY_SCAN_TIMEOUT_SECONDS_ENV,
             environ.get(WUD_SECURITY_SCAN_TIMEOUT_SECONDS_ENV),

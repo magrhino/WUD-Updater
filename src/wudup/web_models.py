@@ -38,6 +38,7 @@ __all__ = (
     "CreateSnoozeOperation",
     "CsrfResponse",
     "DEFAULT_CORE_UPDATE_TOUR_STEP",
+    "DEFAULT_SECURITY_SCAN_CACHE_DIR",
     "DeleteDependencySnoozeOperation",
     "DeleteServicePolicyOperation",
     "DeleteSnoozeOperation",
@@ -279,11 +280,14 @@ class WudApiClientConfig:
         return bool(self.header_items)
 
 
+DEFAULT_SECURITY_SCAN_CACHE_DIR = "/logs/trivy-cache"
+
+
 @dataclass(frozen=True)
 class SecurityScanConfig:
     enabled: bool = False
     executable: str = "trivy"
-    cache_dir: str = ""
+    cache_dir: str = DEFAULT_SECURITY_SCAN_CACHE_DIR
     timeout_seconds: int = 300
 
 

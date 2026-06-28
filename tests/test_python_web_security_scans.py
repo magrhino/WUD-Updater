@@ -35,6 +35,16 @@ VALID_DIGEST = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 DEFAULT_SECURITY_PLATFORM = ImagePlatform("linux", "amd64")
 
 
+def test_security_scan_config_defaults_to_writable_trivy_cache() -> None:
+    default_config = web_security.configured_security_scan_config({})
+    empty_env_config = web_security.configured_security_scan_config(
+        {"WUD_SECURITY_SCAN_CACHE_DIR": ""}
+    )
+
+    assert default_config.cache_dir == "/logs/trivy-cache"
+    assert empty_env_config.cache_dir == "/logs/trivy-cache"
+
+
 def test_security_scans_get_is_disabled_and_cache_only_by_default(
     tmp_path: Path,
 ) -> None:
