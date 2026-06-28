@@ -107032,8 +107032,6 @@ export const generatedFixtures = {
     "count": 7,
     "disabled_reason": "",
     "enabled": true,
-    "notifications_disabled_reason": "",
-    "notifications_enabled": true,
     "items": [
       {
         "breaking": false,
@@ -107170,6 +107168,8 @@ export const generatedFixtures = {
         "upstream_repo": ""
       }
     ],
+    "notifications_disabled_reason": "",
+    "notifications_enabled": true,
     "source": {
       "active": "file",
       "configured": "file",
