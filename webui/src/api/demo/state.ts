@@ -801,9 +801,15 @@ export class DemoApiState {
 
   securityScans(): SecurityScansResponse {
     const pending = this.pendingResponse();
-    const items = pending.items.map((item, index) =>
-      this.securityScanInfo(item, index),
-    );
+    let seenExact = false;
+    const items = pending.items.map((item) => {
+      const exact = Boolean(
+        normalizeSecurityDigest(item.digest) && pendingItemPlatform(item),
+      );
+      const firstExact = exact && !seenExact;
+      seenExact ||= exact;
+      return this.securityScanInfo(item, firstExact);
+    });
     return {
       source_file: pending.source_file,
       source: clone(pending.source),
@@ -831,11 +837,11 @@ export class DemoApiState {
 
   private securityScanInfo(
     item: PendingItem,
-    index: number,
+    firstExact: boolean,
   ): SecurityScanInfo {
     const reportedDigest = normalizeSecurityDigest(item.digest);
     const platform = pendingItemPlatform(item);
-    const decision = this.securityScanDecision(reportedDigest, platform, index);
+    const decision = this.securityScanDecision(reportedDigest, platform, firstExact);
     const severityCounts = this.securityScanSeverityCounts(decision.hasFindings);
     const fixableCounts = this.securityScanFixableCounts(decision.hasFindings);
 
@@ -862,10 +868,10 @@ export class DemoApiState {
   private securityScanDecision(
     reportedDigest: string,
     platform: string,
-    index: number,
+    firstExact: boolean,
   ): DemoSecurityScanDecision {
     const exact = Boolean(reportedDigest && platform);
-    const hasFindings = exact && index === 0;
+    const hasFindings = exact && firstExact;
 
     if (!exact) {
       return {

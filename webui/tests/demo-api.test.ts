@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createDemoWebApi } from "../src/api/demo";
-import type { ApplyJobLogResponse, ApplyJobResponse } from "../src/api/client";
+import type {
+  ApplyJobLogResponse,
+  ApplyJobResponse,
+  PendingItem,
+} from "../src/api/client";
+import { generatedFixtures } from "../src/api/demo/generatedFixtures";
 import { DemoApiState } from "../src/api/demo/state";
 
 const postgresDigest =
@@ -800,6 +805,36 @@ describe("demo web API", () => {
       state: "unsupported",
       verdict: "unknown",
     });
+  });
+
+  it("uses the first supported exact demo security scan as the findings candidate", () => {
+    const pendingFixture = generatedFixtures.pending as { items: PendingItem[] };
+    const originalItems = pendingFixture.items;
+    const [unsupported, firstExact, laterExact] = originalItems;
+
+    expect(unsupported).toBeDefined();
+    expect(firstExact).toBeDefined();
+    expect(laterExact).toBeDefined();
+    if (!unsupported || !firstExact || !laterExact) {
+      throw new Error("Expected demo pending fixture to include three pending items");
+    }
+
+    pendingFixture.items = [
+      { ...unsupported, digest: "", platform: "" },
+      { ...firstExact, digest: postgresDigest, platform: "linux/amd64" },
+      { ...laterExact, digest: wudupDigest, platform: "linux/arm64" },
+    ];
+    try {
+      const scans = new DemoApiState().securityScans();
+
+      expect(scans.items.map((scan) => [scan.state, scan.verdict])).toEqual([
+        ["unsupported", "unknown"],
+        ["complete", "findings"],
+        ["not_scanned", "unknown"],
+      ]);
+    } finally {
+      pendingFixture.items = originalItems;
+    }
   });
 
   it("preserves requested demo security scan job ids", async () => {

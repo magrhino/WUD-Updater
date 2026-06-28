@@ -342,12 +342,14 @@ def _parse_target(
                 f"Ignoring invalid tag value on WUD line {line_no}: {desired_tag}"
             )
             desired_tag = ""
+            tag_token = ""
         elif not has_tag:
             warnings.append(
                 "Ignoring tag update without a tagged source image on WUD line "
                 f"{line_no}: {first}"
             )
             desired_tag = ""
+            tag_token = ""
     if platform_seen and platform is None:
         warnings.append(f"Ignoring invalid platform on WUD line {line_no}: {platform_raw}")
     allow_repo = not has_tag
