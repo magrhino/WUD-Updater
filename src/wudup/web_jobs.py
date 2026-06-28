@@ -252,6 +252,9 @@ def _reserve_mutation_state(
         )
         if active_error:
             return active_error
+        # Lock order: reserve() runs while web_apply_condition is held and may
+        # take job-family locks. Future callbacks must preserve this order to
+        # avoid opposite-order deadlocks with active-job checks.
         reserve()
     return ""
 

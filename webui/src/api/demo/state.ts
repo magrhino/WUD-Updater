@@ -824,10 +824,10 @@ export class DemoApiState {
     };
   }
 
-  securityScanJob(): SecurityScanJobResponse {
+  securityScanJob(jobId = "demo-security-scan"): SecurityScanJobResponse {
     const result = this.securityScans();
     return {
-      job_id: "demo-security-scan",
+      job_id: jobId,
       status: "success",
       total_count: result.count,
       completed_count: result.count,

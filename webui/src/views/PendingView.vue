@@ -318,13 +318,16 @@ const releaseNotificationSendDisabled = computed(
 const securityScanRefreshVisible = computed(
   () => updates.securityScans?.scanning_enabled ?? false,
 );
-const securityScanSummary = computed(() =>
-  securityScanSummaryDisplay({
+const securityScanSummary = computed(() => {
+  if (!updates.securityScans && updates.securityScansError) {
+    return { label: "Security scans unavailable", type: "warning" as const };
+  }
+  return securityScanSummaryDisplay({
     securityScans: updates.securityScans,
     securityScansCurrent: updates.securityScansCurrent,
     items: updates.currentSecurityScanItems,
-  }),
-);
+  });
+});
 const securityScanSummaryLabel = computed(() => securityScanSummary.value.label);
 const securityScanSummaryType = computed(() => securityScanSummary.value.type);
 

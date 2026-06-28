@@ -209,6 +209,22 @@ describe("pending view selection actions", () => {
     expect(refreshSecurityScans).not.toHaveBeenCalled();
   });
 
+  it("shows security scans unavailable after metadata load fails", () => {
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = pendingResponse();
+    updates.securityScans = null;
+    updates.securityScansError = "scanner unavailable";
+    mockPendingLifecycle(settings, updates);
+
+    const wrapper = mountPendingView(pinia);
+
+    expect(wrapper.text()).toContain(
+      "Candidate security scan metadata is unavailable: scanner unavailable",
+    );
+    expect(wrapper.text()).toContain("Security scans unavailable");
+    expect(wrapper.text()).not.toContain("Security scans loading");
+  });
+
   it("confirms unmatched cleanup before refreshing pending state", async () => {
     const item = unmatchedPendingItem();
     const { pinia, updates, runs } = setupStores(true);

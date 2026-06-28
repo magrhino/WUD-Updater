@@ -805,6 +805,19 @@ describe("demo web API", () => {
     });
   });
 
+  it("preserves requested demo security scan job ids", async () => {
+    const api = createDemoWebApi();
+
+    await expect(api.refreshSecurityScans("csrf")).resolves.toMatchObject({
+      job_id: "demo-security-scan",
+      status: "success",
+    });
+    await expect(api.securityScanJob("security-scan-custom")).resolves.toMatchObject({
+      job_id: "security-scan-custom",
+      status: "success",
+    });
+  });
+
   it("streams apply jobs and updates pending state and run history", async () => {
     vi.useFakeTimers();
     const api = createDemoWebApi();
