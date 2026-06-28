@@ -413,11 +413,36 @@ def test_release_notes_refresh_requires_csrf(tmp_path: Path) -> None:
     assert response.status_code == 403
     assert response.json()["detail"] == "csrf token is required"
 
-def test_release_notes_refresh_works_when_notifications_and_mutations_are_disabled(
+
+def test_release_notes_refresh_requires_mutations(
     tmp_path: Path,
 ) -> None:
     wud_file = tmp_path / "state" / "images.todo"
+    db_path = tmp_path / "state" / "wud.sqlite"
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    wud_file.write_text("docker.io/library/redis:latest\n", encoding="utf-8")
+
+    response = client.post(
+        "/api/v1/release-notes/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "mutations are disabled"
+    assert not db_path.exists()
+
+
+def test_release_notes_refresh_works_when_mutations_are_enabled(
+    tmp_path: Path,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
     wud_file.write_text("docker.io/library/redis:latest\n", encoding="utf-8")
 
     response = client.post(
@@ -431,6 +456,7 @@ def test_release_notes_refresh_works_when_notifications_and_mutations_are_disabl
     assert body["notifications_enabled"] is False
     assert body["items"][0]["status"] == "unsupported"
     assert body["items"][0]["error"] == "no supported GitHub release source found"
+
 
 def test_release_note_error_metadata_redacts_configured_secrets(
     tmp_path: Path,
@@ -447,6 +473,7 @@ def test_release_note_error_metadata_redacts_configured_secrets(
             "GITHUB_TOKEN": github_token,
             "DISCORD_RELEASES_WEBHOOK": release_webhook,
             "ADMIN_WEBHOOK": admin_webhook,
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
         },
     )
     wud_file.write_text("ghcr.io/acme/app:1.0.0 tag=2.0.0\n", encoding="utf-8")

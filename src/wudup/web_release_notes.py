@@ -116,6 +116,8 @@ def api_release_notes(request: Request) -> ReleaseNotesResponse:
 
 def api_refresh_release_notes(request: Request) -> ReleaseNotesResponse:
     settings = _settings(request)
+    if not settings.mutations_enabled:
+        raise HTTPException(status_code=403, detail="mutations are disabled")
     context = _release_notes_request_context(settings)
     if isinstance(context, ReleaseNotesResponse):
         return context

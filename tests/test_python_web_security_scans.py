@@ -9,7 +9,7 @@ import pytest
 
 from wudup.db import init_db, utc_timestamp
 from wudup.digest_verifier import ResolvedImageSubject
-from wudup.platforms import ImagePlatform
+from wudup.platforms import ImagePlatform, platform_value
 from wudup.security_scanner import SecurityScanResult
 from wudup.security_store import (
     cached_scan_by_request,
@@ -420,13 +420,11 @@ def test_security_scan_cache_readback_uses_unambiguous_cached_platform(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    raw = f"ghcr.io/acme/app:1.0 sha256={VALID_DIGEST}"
     refresh_context = _single_security_context(
         tmp_path,
-        raw=raw,
         platform=ImagePlatform("linux", "amd64"),
     )
-    get_context = _single_security_context(tmp_path, raw=raw, platform=None)
+    get_context = _single_security_context(tmp_path, platform=None)
 
     def fake_context(_settings, **kwargs) -> PendingSecurityContext:
         if kwargs.get("include_compose") is False:
@@ -475,12 +473,10 @@ def test_security_scan_cache_readback_does_not_cross_platform_request_keys(
 ) -> None:
     refresh_context = _single_security_context(
         tmp_path,
-        raw=f"ghcr.io/acme/app:1.0 sha256={VALID_DIGEST}",
         platform=ImagePlatform("linux", "amd64"),
     )
     get_context = _single_security_context(
         tmp_path,
-        raw=f"ghcr.io/acme/app:1.0 sha256={VALID_DIGEST}",
         platform=ImagePlatform("linux", "arm64"),
     )
 
@@ -724,7 +720,8 @@ def _single_security_context(
 ) -> PendingSecurityContext:
     source_file = tmp_path / "state" / "images.todo"
     source_file.parent.mkdir(parents=True, exist_ok=True)
-    text = f"{raw or f'ghcr.io/acme/app:1.0 platform=linux/amd64 sha256={VALID_DIGEST}'}\n"
+    line = raw if raw is not None else _single_security_raw(platform)
+    text = f"{line}\n"
     source_file.write_text(text, encoding="utf-8")
     return PendingSecurityContext(
         source=PendingSourceResult(
@@ -737,7 +734,7 @@ def _single_security_context(
             text=text,
             source_hash="single",
         ),
-        requests=(_single_security_request(raw=raw, platform=platform),),
+        requests=(_single_security_request(raw=line, platform=platform),),
     )
 
 
@@ -746,11 +743,12 @@ def _single_security_request(
     raw: str | None = None,
     platform: ImagePlatform | None = DEFAULT_SECURITY_PLATFORM,
 ) -> PendingSecurityRequest:
+    line = raw if raw is not None else _single_security_raw(platform)
     identity_status = "pending" if platform is not None else "unsupported"
     error = "" if platform is not None else "platform is required"
     return PendingSecurityRequest(
         line_no=1,
-        raw=raw or f"ghcr.io/acme/app:1.0 platform=linux/amd64 sha256={VALID_DIGEST}",
+        raw=line,
         image="ghcr.io/acme/app:1.0",
         candidate_image="ghcr.io/acme/app:1.0",
         reported_digest=f"sha256:{VALID_DIGEST}",
@@ -759,6 +757,12 @@ def _single_security_request(
         identity_status=identity_status,
         error=error,
     )
+
+
+def _single_security_raw(platform: ImagePlatform | None) -> str:
+    platform_text = platform_value(platform)
+    platform_suffix = f" platform={platform_text}" if platform_text else ""
+    return f"ghcr.io/acme/app:1.0{platform_suffix} sha256={VALID_DIGEST}"
 
 
 def _exact_subject() -> ResolvedImageSubject:
