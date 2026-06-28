@@ -31,7 +31,7 @@ def test_pending_rescan_endpoint_enforces_auth_csrf_and_read_only(
     monkeypatch.setattr(
         web_wud_api,
         "_post_json",
-        lambda url, _client_config=None: {"status": "ok"},
+        lambda url, _client_config=None, **_kwargs: {"status": "ok"},
     )
     payload = rescan_payload()
     unauthenticated = _client(tmp_path, {"WUD_WEB_MUTATIONS_ENABLED": "true"})
@@ -162,7 +162,9 @@ def test_pending_rescan_reports_wud_api_unavailable_without_file_mutation(
     monkeypatch.setattr(
         web_wud_api,
         "_post_json",
-        lambda url, _client_config=None: posts.append(urllib.parse.urlsplit(url).path),
+        lambda url, _client_config=None, **_kwargs: posts.append(
+            urllib.parse.urlsplit(url).path
+        ),
     )
     client = _client(
         tmp_path,
@@ -205,7 +207,9 @@ def test_pending_rescan_reports_wud_api_auth_required_without_watch(
     monkeypatch.setattr(
         web_wud_api,
         "_post_json",
-        lambda url, _client_config=None: posts.append(urllib.parse.urlsplit(url).path),
+        lambda url, _client_config=None, **_kwargs: posts.append(
+            urllib.parse.urlsplit(url).path
+        ),
     )
     client = _client(
         tmp_path,
@@ -236,7 +240,7 @@ def test_pending_rescan_reports_wud_watch_auth_required_on_http_error(
     _install_wud_api(monkeypatch)
     posts: list[str] = []
 
-    def raise_watch_http_error(url: str, _client_config=None) -> object:
+    def raise_watch_http_error(url: str, _client_config=None, **_kwargs) -> object:
         posts.append(urllib.parse.urlsplit(url).path)
         raise HTTPError(
             url=url,

@@ -18,6 +18,12 @@ const route = useRoute();
 const runs = useRunsStore();
 const runId = computed(() => Number(route.params.id));
 const run = computed(() => runs.runDetails[runId.value] ?? null);
+const hasRunMetadata = computed(
+  () => Object.keys(run.value?.metadata ?? {}).length > 0,
+);
+const runMetadataJson = computed(() =>
+  run.value ? JSON.stringify(run.value.metadata, null, 2) : "",
+);
 
 async function load(): Promise<void> {
   await runs.loadRunDetail(runId.value);
@@ -97,6 +103,16 @@ function shortEventDigest(value: string): string {
         title="Post-update verification"
       />
 
+      <section v-if="hasRunMetadata" class="section-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow value-eyebrow">{{ run.mode }}</p>
+            <h2>Run metadata</h2>
+          </div>
+        </div>
+        <pre class="log-viewer run-metadata-block">{{ runMetadataJson }}</pre>
+      </section>
+
       <section class="section-panel">
         <div class="section-heading">
           <div>
@@ -157,3 +173,11 @@ function shortEventDigest(value: string): string {
     </div>
   </section>
 </template>
+
+<style scoped>
+.run-metadata-block {
+  min-height: 0;
+  max-height: 18rem;
+  font-size: 0.82rem;
+}
+</style>

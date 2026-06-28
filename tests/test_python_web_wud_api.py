@@ -3,7 +3,9 @@ from __future__ import annotations
 import base64
 import json
 import urllib.parse
+from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -136,6 +138,50 @@ def test_wud_api_snapshot_reads_update_metadata(tmp_path: Path, monkeypatch) -> 
     assert container.semver_diff == "minor"
 
 
+def test_wud_api_watch_uses_longer_timeout_than_metadata_reads(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls: list[tuple[str, str, float]] = []
+
+    def response(payload: object):
+        return nullcontext(
+            SimpleNamespace(read=lambda: json.dumps(payload).encode("utf-8"))
+        )
+
+    def urlopen(request, *, timeout: float):
+        path = urllib.parse.urlsplit(request.get_full_url()).path
+        calls.append((request.get_method(), path, timeout))
+        if path == "/health":
+            return response({"status": "ok"})
+        if path == "/api/containers/watch":
+            return response({"status": "ok"})
+        if path == "/api/containers":
+            return response([_container_payload()])
+        raise AssertionError(f"unexpected WUD API URL: {request.get_full_url()}")
+
+    monkeypatch.setattr(web_wud_api.urllib.request, "urlopen", urlopen)
+
+    watch = web_wud_api.watch_all(_settings(tmp_path, "https://wud.timeout.test:3000"))
+
+    assert watch.watched is True
+    assert (
+        "POST",
+        "/api/containers/watch",
+        web_wud_api.WUD_API_WATCH_TIMEOUT_SECONDS,
+    ) in calls
+    assert (
+        "GET",
+        "/api/containers",
+        web_wud_api.WUD_API_TIMEOUT_SECONDS,
+    ) in calls
+    assert {
+        timeout
+        for _method, path, timeout in calls
+        if path == "/health"
+    } == {web_wud_api.WUD_API_TIMEOUT_SECONDS}
+
+
 def test_container_triggers_ignores_non_object_entries(
     tmp_path: Path,
     monkeypatch,
@@ -264,7 +310,7 @@ def test_wud_api_bearer_auth_applies_to_get_and_post_requests(
             return [_container_payload(name="app")]
         raise AssertionError(f"unexpected WUD API URL: {url}")
 
-    def post_json(url: str, client_config=None) -> object:
+    def post_json(url: str, client_config=None, **_kwargs) -> object:
         path = urllib.parse.urlsplit(url).path
         calls.append(("POST", path, web_wud_api._request_headers(client_config)))
         return {"status": "ok"}

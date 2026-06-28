@@ -69,6 +69,7 @@ WUD_API_AUTH_BASIC_PASSWORD_FILE_ENV = "WUD_API_AUTH_BASIC_PASSWORD_FILE"
 WUD_API_HEADERS_FILE_ENV = "WUD_API_HEADERS_FILE"
 DEFAULT_WUD_API_STARTUP_WAIT_SECONDS = 0.0
 WUD_API_TIMEOUT_SECONDS = 1.0
+WUD_API_WATCH_TIMEOUT_SECONDS = 120.0
 WUD_API_STARTUP_RETRY_INTERVAL_SECONDS = 0.5
 WUD_API_CACHE_TTL_SECONDS = 30.0
 WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS = 5.0
@@ -765,7 +766,11 @@ def _watch_paths(
     watched_count = 0
     for path in paths:
         try:
-            _post_json(_join_url(normalized_base_url, path), settings.wud_api_client)
+            _post_json(
+                _join_url(normalized_base_url, path),
+                settings.wud_api_client,
+                timeout=WUD_API_WATCH_TIMEOUT_SECONDS,
+            )
             watched_count += 1
         except urllib.error.HTTPError as exc:
             snapshot = _watch_http_error_snapshot(
@@ -896,8 +901,15 @@ def _request_json(
 def _post_json(
     url: str,
     client_config: WudApiClientConfig | None = None,
+    *,
+    timeout: float = WUD_API_TIMEOUT_SECONDS,
 ) -> object:
-    return _request_json_with_method(url, method="POST", client_config=client_config)
+    return _request_json_with_method(
+        url,
+        method="POST",
+        client_config=client_config,
+        timeout=timeout,
+    )
 
 
 def _request_json_with_method(
@@ -905,13 +917,14 @@ def _request_json_with_method(
     *,
     method: str,
     client_config: WudApiClientConfig | None = None,
+    timeout: float = WUD_API_TIMEOUT_SECONDS,
 ) -> object:
     request = urllib.request.Request(
         url,
         method=method,
         headers=_request_headers(client_config),
     )
-    with urllib.request.urlopen(request, timeout=WUD_API_TIMEOUT_SECONDS) as response:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         body = response.read()
     if not body:
         return {}

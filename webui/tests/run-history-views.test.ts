@@ -540,7 +540,16 @@ describe("RunDetailView", () => {
     runs.runDetails = {
       9: runDetail({
         id: 9,
+        mode: "web-wud-rescan",
+        status: "failure",
         log_file: "",
+        metadata: {
+          operation: "rescan_wud",
+          status: "blocked",
+          wud_api: {
+            detail: "WUD API watch request requires authentication",
+          },
+        },
         pending_updates: [],
         events: [],
         verification: emptyVerification(),
@@ -555,6 +564,10 @@ describe("RunDetailView", () => {
       "run detail failed to load",
     );
     expect(wrapper.find('a[href="/runs/9/log"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain("Run metadata");
+    expect(wrapper.text()).toContain("rescan_wud");
+    expect(wrapper.text()).toContain("blocked");
+    expect(wrapper.text()).toContain("WUD API watch request requires authentication");
     expect(wrapper.text()).toContain("No log path");
     expect(wrapper.text()).toContain("No pending records.");
     expect(wrapper.text()).toContain("No events recorded.");
