@@ -33,10 +33,12 @@ else
   IMAGE="wudup:test-${RUN_ID_COMPONENT}-$$"
   cleanup_image=1
 fi
+TRIVY_IMAGE="${WUDUP_TEST_TRIVY_IMAGE:-${IMAGE}-trivy}"
 
 cleanup(){
   if [[ "$cleanup_image" -eq 1 ]]; then
     docker image rm "$IMAGE" >/dev/null 2>&1 || true
+    docker image rm "$TRIVY_IMAGE" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
@@ -71,18 +73,19 @@ assert_duration(){
 }
 
 assert_image_metadata(){
+  local image_ref="${1:-$IMAGE}"
   local cmd web_host
   local health_test_len health_test_type health_test_command
   local health_interval health_timeout health_retries health_start_period
 
-  cmd="$(docker image inspect -f '{{json .Config.Cmd}}' "$IMAGE")"
+  cmd="$(docker image inspect -f '{{json .Config.Cmd}}' "$image_ref")"
   [[ "$cmd" == '["web"]' ]] || {
     printf 'Expected image Cmd ["web"], got %s\n' "$cmd" >&2
     return 1
   }
 
   web_host="$(
-    docker image inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$IMAGE" |
+    docker image inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$image_ref" |
       awk -F= '$1 == "WUD_WEB_HOST" { print $2; exit }'
   )"
   [[ "$web_host" == "0.0.0.0" ]] || {
@@ -90,13 +93,13 @@ assert_image_metadata(){
     return 1
   }
 
-  health_test_len="$(docker image inspect -f '{{if .Config.Healthcheck}}{{len .Config.Healthcheck.Test}}{{else}}0{{end}}' "$IMAGE")"
+  health_test_len="$(docker image inspect -f '{{if .Config.Healthcheck}}{{len .Config.Healthcheck.Test}}{{else}}0{{end}}' "$image_ref")"
   [[ "$health_test_len" == "2" ]] || {
     printf 'Expected healthcheck test with 2 entries, got %s\n' "$health_test_len" >&2
     return 1
   }
-  health_test_type="$(docker image inspect -f '{{index .Config.Healthcheck.Test 0}}' "$IMAGE")"
-  health_test_command="$(docker image inspect -f '{{index .Config.Healthcheck.Test 1}}' "$IMAGE")"
+  health_test_type="$(docker image inspect -f '{{index .Config.Healthcheck.Test 0}}' "$image_ref")"
+  health_test_command="$(docker image inspect -f '{{index .Config.Healthcheck.Test 1}}' "$image_ref")"
   [[ "$health_test_type" == "CMD-SHELL" ]] || {
     printf 'Expected healthcheck type CMD-SHELL, got %s\n' "$health_test_type" >&2
     return 1
@@ -122,10 +125,10 @@ assert_image_metadata(){
     return 1
   }
 
-  health_interval="$(docker image inspect -f '{{.Config.Healthcheck.Interval}}' "$IMAGE")"
-  health_timeout="$(docker image inspect -f '{{.Config.Healthcheck.Timeout}}' "$IMAGE")"
-  health_retries="$(docker image inspect -f '{{.Config.Healthcheck.Retries}}' "$IMAGE")"
-  health_start_period="$(docker image inspect -f '{{.Config.Healthcheck.StartPeriod}}' "$IMAGE")"
+  health_interval="$(docker image inspect -f '{{.Config.Healthcheck.Interval}}' "$image_ref")"
+  health_timeout="$(docker image inspect -f '{{.Config.Healthcheck.Timeout}}' "$image_ref")"
+  health_retries="$(docker image inspect -f '{{.Config.Healthcheck.Retries}}' "$image_ref")"
+  health_start_period="$(docker image inspect -f '{{.Config.Healthcheck.StartPeriod}}' "$image_ref")"
 
   assert_duration "healthcheck.interval" "$health_interval" "30s" "30000000000"
   assert_duration "healthcheck.timeout" "$health_timeout" "5s" "5000000000"
@@ -155,5 +158,8 @@ run_quiet docker compose -f "$COMPOSE_HARDENED" config
 run_quiet docker compose -f "$COMPOSE_BUILD" config
 run_quiet docker compose -f "$COMPOSE_TRUENAS" config
 run docker build -t "$IMAGE" .
-run assert_image_metadata
+run assert_image_metadata "$IMAGE"
 run bash tests/smoke-container-image.sh "$IMAGE"
+run docker build --target wudup-trivy -t "$TRIVY_IMAGE" .
+run assert_image_metadata "$TRIVY_IMAGE"
+run docker run --rm "$TRIVY_IMAGE" trivy --version

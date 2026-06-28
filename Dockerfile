@@ -1,5 +1,7 @@
 FROM docker:29.5.3-cli@sha256:873de13208aab9c1de73fe984fd45883e01464fcfcc85efa20aa56a9ccfe7aa6 AS docker-cli
 
+FROM aquasec/trivy:0.71.2@sha256:f5d0e600ecda7449e2a9b272805aef698631d3bb3f3a739a750de2c6819acdc9 AS trivy
+
 FROM node:26-bookworm-slim@sha256:79723b41edbedf595f62e943a9f8b0ba9af5b1e61045c5f8f59c2c02c1212a16 AS webui-build
 
 WORKDIR /webui
@@ -11,7 +13,7 @@ COPY webui/ /webui/
 RUN npm run build
 
 
-FROM python:3.14.5-slim-bookworm@sha256:a9bee15510a364124aa24692899d269835683b883de42f7ebec8c293cf679ccb
+FROM python:3.14.5-slim-bookworm@sha256:a9bee15510a364124aa24692899d269835683b883de42f7ebec8c293cf679ccb AS wudup-runtime
 
 ARG TRUENAS_API_CLIENT_REF=""
 
@@ -75,3 +77,9 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/entrypoint.sh"]
 CMD ["web"]
+
+FROM wudup-runtime AS wudup-trivy
+
+COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
+
+FROM wudup-runtime AS wudup

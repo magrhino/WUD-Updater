@@ -166,7 +166,7 @@ jobs:
   publish-image:
     name: publish image
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: write
       packages: write
@@ -244,6 +244,43 @@ jobs:
           image="$REGISTRY/$IMAGE_NAME"
           bash tests/smoke-container-image.sh "$image:$RELEASE_TAG"
 
+      - name: Build amd64 Trivy smoke image
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          VERSION: ${{ needs.validate-tag.outputs.version }}
+          MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
+          RELEASE_SHA: ${{ steps.release-commit.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          image="$REGISTRY/$IMAGE_NAME"
+          docker buildx build \
+            --platform linux/amd64 \
+            --target wudup-trivy \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$RELEASE_SHA" \
+            --label "org.opencontainers.image.version=$RELEASE_TAG" \
+            -t "$image:$RELEASE_TAG-trivy" \
+            -t "$image:$VERSION-trivy" \
+            -t "$image:$MINOR_VERSION-trivy" \
+            -t "$image:latest-trivy" \
+            --cache-from "$BUILDX_CACHE_FROM" \
+            --cache-to "$BUILDX_CACHE_TO" \
+            --load \
+            .
+
+      - name: Validate amd64 Trivy smoke image
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          image="$REGISTRY/$IMAGE_NAME"
+          bash tests/smoke-container-image.sh "$image:$RELEASE_TAG-trivy"
+          docker run --rm "$image:$RELEASE_TAG-trivy" trivy --version
+
       - name: Publish multi-arch image
         shell: bash
         env:
@@ -270,6 +307,33 @@ jobs:
             --push \
             .
 
+      - name: Publish multi-arch Trivy image
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          VERSION: ${{ needs.validate-tag.outputs.version }}
+          MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
+          RELEASE_SHA: ${{ steps.release-commit.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          image="$REGISTRY/$IMAGE_NAME"
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --target wudup-trivy \
+            --provenance=false \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$RELEASE_SHA" \
+            --label "org.opencontainers.image.version=$RELEASE_TAG" \
+            -t "$image:$RELEASE_TAG-trivy" \
+            -t "$image:$VERSION-trivy" \
+            -t "$image:$MINOR_VERSION-trivy" \
+            -t "$image:latest-trivy" \
+            --cache-from "$BUILDX_CACHE_FROM" \
+            --cache-to "$BUILDX_CACHE_TO" \
+            --push \
+            .
+
       - name: Validate multi-arch image manifests
         shell: bash
         env:
@@ -282,17 +346,19 @@ jobs:
           image="$REGISTRY/$IMAGE_NAME"
           expected_platforms="linux/amd64 linux/arm64"
 
-          for tag in "$RELEASE_TAG" "$VERSION" "$MINOR_VERSION" latest; do
-            ref="$image:$tag"
-            platforms="$(
-              docker buildx imagetools inspect --raw "$ref" |
-                jq -r '[.manifests[].platform | "\(.os)/\(.architecture)"] | sort | unique | join(" ")'
-            )"
+          for suffix in "" "-trivy"; do
+            for tag in "$RELEASE_TAG$suffix" "$VERSION$suffix" "$MINOR_VERSION$suffix" "latest$suffix"; do
+              ref="$image:$tag"
+              platforms="$(
+                docker buildx imagetools inspect --raw "$ref" |
+                  jq -r '[.manifests[].platform | "\(.os)/\(.architecture)"] | sort | unique | join(" ")'
+              )"
 
-            if [[ "$platforms" != "$expected_platforms" ]]; then
-              printf 'Expected %s to publish platforms "%s", got "%s"\n' "$ref" "$expected_platforms" "$platforms" >&2
-              exit 1
-            fi
+              if [[ "$platforms" != "$expected_platforms" ]]; then
+                printf 'Expected %s to publish platforms "%s", got "%s"\n' "$ref" "$expected_platforms" "$platforms" >&2
+                exit 1
+              fi
+            done
           done
 
       - name: Create or publish GitHub release
