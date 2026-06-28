@@ -80,7 +80,7 @@ services:
       - no-new-privileges:true
 
   wudup:
-    image: ghcr.io/magrhino/wudup:latest
+    image: ${WUDUP_IMAGE:-ghcr.io/magrhino/wudup:latest}
     restart: unless-stopped
     networks:
       - wudup-app
@@ -114,8 +114,10 @@ services:
       WUD_PENDING_SOURCE: "${WUD_PENDING_SOURCE:-file}"
       # Leave unset to manage from Settings; uncomment to force the env override.
       # WUD_RELEASE_NOTES_ENABLED: "true"
+      # Use WUDUP_IMAGE=ghcr.io/magrhino/wudup:latest-trivy when enabling scans.
       WUD_SECURITY_SCANNING_ENABLED: "${WUD_SECURITY_SCANNING_ENABLED:-false}"
-      WUD_SECURITY_SCANNER_EXECUTABLE: "${WUD_SECURITY_SCANNER_EXECUTABLE:-trivy}"
+      # Optional advanced override when trivy is installed at a non-standard path.
+      # WUD_SECURITY_SCANNER_EXECUTABLE: "${WUD_SECURITY_SCANNER_EXECUTABLE:-trivy}"
       WUD_SECURITY_SCAN_CACHE_DIR: "${WUD_SECURITY_SCAN_CACHE_DIR:-}"
       WUD_SECURITY_SCAN_TIMEOUT_SECONDS: "${WUD_SECURITY_SCAN_TIMEOUT_SECONDS:-300}"
       HOME: /tmp

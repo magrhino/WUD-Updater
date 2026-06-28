@@ -34,6 +34,10 @@ are also published as `X.Y.Z`, `X.Y`, and `latest`. The same tags support
 `linux/amd64` and `linux/arm64`, and Docker selects the matching image for the
 host platform automatically.
 
+Candidate security scanning deployments can use the matching Trivy-enabled tag
+suffixes: `vX.Y.Z-trivy`, `X.Y.Z-trivy`, `X.Y-trivy`, and `latest-trivy`.
+Those images include the Trivy CLI on `PATH`; the default image does not.
+
 The image uses a multi-stage Dockerfile that first compiles the frontend with a
 Node.js `webui-build` stage. The final stage uses `python:3.14.5-slim-bookworm`,
 installs the Docker CLI with the Compose plugin, copies `bin/`, `src/`, and `wud/`
@@ -218,6 +222,15 @@ mkdir -p "$HOME/.config/wudup"
 test -f "$WEBUI_ENV" || cp docs/examples/webui.env.example "$WEBUI_ENV"
 docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml up -d
 docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml logs wudup
+```
+
+To refresh candidate security scans from the WebUI container, use the Trivy
+image variant and enable both scan metadata and browser-triggered jobs:
+
+```env
+WUDUP_IMAGE=ghcr.io/magrhino/wudup:latest-trivy
+WUD_SECURITY_SCANNING_ENABLED=true
+WUD_WEB_MUTATIONS_ENABLED=true
 ```
 
 The env file keeps first-run defaults in one place. `HOST_DOCKER_BASE` must
@@ -531,6 +544,7 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 |---|---|---|
 | `DOCKER_BASE` | Host: `$HOME/docker`; container examples: `${HOST_DOCKER_BASE:-/srv/docker}` | Compose project search root. Containerized runs should mount this at the same absolute path the Docker daemon uses. |
 | `HOST_DOCKER_BASE` | unset | Optional daemon-visible host root matching `DOCKER_BASE` inside the helper. The path must also be mounted/readable inside the helper because Compose uses it as `--project-directory`. |
+| `WUDUP_IMAGE` | `ghcr.io/magrhino/wudup:latest` | Image reference used by the long-running WebUI Compose examples. Use a `-trivy` tag, such as `ghcr.io/magrhino/wudup:latest-trivy`, when enabling candidate security scan refreshes in a container. |
 | `WEBUI_LOG_DIR` | `./logs` | Host-side directory mounted at `/logs` by the long-running WebUI Compose examples; persists updater logs and SQLite state. |
 | `WEBUI_HTTP_BIND` | `127.0.0.1` | Host-side bind address used by the long-running WebUI Compose examples. Keep loopback for first run; use a LAN address or `0.0.0.0` only with `WUD_WEB_PUBLIC_ORIGIN` configured. |
 | `DOCKER_HOST` | Docker CLI default | Optional Docker daemon endpoint, such as the hardened example's socket proxy. |
@@ -561,8 +575,8 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_WEB_SECURE_COOKIES` | `auto` | Cookie `Secure` mode: `auto` enables it for effective HTTPS origins, `true` always enables it, and `false` disables it for local HTTP testing. |
 | `WUD_WEB_MUTATIONS_ENABLED` | `false` | Enables browser plan/apply update mutations, candidate security scan refresh jobs, and Settings container restart when set to `true`. Leave unset or `false` for read-only WebUI deployments. |
 | `WUD_WEB_RESTART_CONTAINER` | Docker `HOSTNAME` inside a container, otherwise unset | Optional Docker container name or ID restarted from Settings. Set this explicitly only when the auto-detected current container target is unavailable or wrong. |
-| `WUD_SECURITY_SCANNING_ENABLED` | `false` | Enables the opt-in candidate vulnerability advisory prototype. Results are cache-backed WebUI metadata for pending candidates only; they do not gate updates, snooze updates, or mark an image safe. Browser refresh also requires `WUD_WEB_MUTATIONS_ENABLED=true`; read-only deployments can only read cached scan metadata. |
-| `WUD_SECURITY_SCANNER_EXECUTABLE` | `trivy` | Executable used for scan refresh jobs. The published image does not bundle Trivy; provide a compatible executable before enabling scans. |
+| `WUD_SECURITY_SCANNING_ENABLED` | `false` | Enables the opt-in candidate vulnerability advisory prototype. Results are cache-backed WebUI metadata for pending candidates only; they do not gate updates, snooze updates, or mark an image safe. Browser refresh also requires `WUD_WEB_MUTATIONS_ENABLED=true`; read-only deployments can only read cached scan metadata. Use a `-trivy` image tag for container deployments that need to refresh scans. |
+| `WUD_SECURITY_SCANNER_EXECUTABLE` | `trivy` | Advanced override for the scanner executable path. Not required when using a `-trivy` image tag because `trivy` is already on `PATH`. |
 | `WUD_SECURITY_SCAN_CACHE_DIR` | unset | Optional Trivy cache directory passed to scan refresh jobs. |
 | `WUD_SECURITY_SCAN_TIMEOUT_SECONDS` | `300` | Per-candidate scanner timeout passed to Trivy. |
 | `WUD_API_BASE_URL` | `http://wud:3000` | Internal WUD API base URL used for best-effort WebUI metadata discovery and experimental API-backed pending source modes. Unavailable or error states are reported as degraded and retried faster on later WebUI requests; auth-required WUD still uses the normal cache TTL. |
