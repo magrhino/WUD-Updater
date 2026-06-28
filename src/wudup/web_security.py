@@ -9,7 +9,7 @@ from contextlib import closing
 from dataclasses import dataclass, replace
 from threading import Lock
 import secrets
-from typing import Any, cast
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -29,7 +29,6 @@ from .security_subjects import (
     default_digest_verifier,
     pending_security_context,
     resolve_security_subject,
-    subject_id,
 )
 from .web_auth import (
     _redact_sensitive_text,
@@ -46,7 +45,6 @@ from .web_models import (
     SecurityScanInfo,
     SecurityScanJobResponse,
     SecurityScanSeverityCounts,
-    SecurityScanSubjectInfo,
     SecurityScansResponse,
     WebSettings,
 )
@@ -54,14 +52,10 @@ from . import web_jobs
 
 
 WUD_SECURITY_SCANNING_ENABLED_ENV = "WUD_SECURITY_SCANNING_ENABLED"
-WUD_SECURITY_SCANNER_ENV = "WUD_SECURITY_SCANNER"
-WUD_SECURITY_SCAN_MODE_ENV = "WUD_SECURITY_SCAN_MODE"
 WUD_SECURITY_SCANNER_EXECUTABLE_ENV = "WUD_SECURITY_SCANNER_EXECUTABLE"
 WUD_SECURITY_SCAN_CACHE_DIR_ENV = "WUD_SECURITY_SCAN_CACHE_DIR"
 WUD_SECURITY_SCAN_TIMEOUT_SECONDS_ENV = "WUD_SECURITY_SCAN_TIMEOUT_SECONDS"
-WUD_SECURITY_SCAN_MAX_CONCURRENCY_ENV = "WUD_SECURITY_SCAN_MAX_CONCURRENCY"
 DEFAULT_SECURITY_SCAN_TIMEOUT_SECONDS = 300
-DEFAULT_SECURITY_SCAN_MAX_CONCURRENCY = 1
 
 
 @dataclass
@@ -77,21 +71,12 @@ class WebSecurityScanJob:
 def configured_security_scan_config(
     environ: Mapping[str, str],
 ) -> SecurityScanConfig:
-    scanner = environ.get(WUD_SECURITY_SCANNER_ENV, "trivy").strip().lower() or "trivy"
-    if scanner != "trivy":
-        raise ConfigError(f"{WUD_SECURITY_SCANNER_ENV} must be trivy")
-    mode = environ.get(WUD_SECURITY_SCAN_MODE_ENV, "registry").strip().lower()
-    mode = mode or "registry"
-    if mode != "registry":
-        raise ConfigError(f"{WUD_SECURITY_SCAN_MODE_ENV} must be registry")
     return SecurityScanConfig(
         enabled=parse_bool_env(
             WUD_SECURITY_SCANNING_ENABLED_ENV,
             environ.get(WUD_SECURITY_SCANNING_ENABLED_ENV),
             default=False,
         ),
-        scanner=scanner,
-        mode=mode,
         executable=(
             environ.get(WUD_SECURITY_SCANNER_EXECUTABLE_ENV, "").strip() or "trivy"
         ),
@@ -101,17 +86,11 @@ def configured_security_scan_config(
             environ.get(WUD_SECURITY_SCAN_TIMEOUT_SECONDS_ENV),
             DEFAULT_SECURITY_SCAN_TIMEOUT_SECONDS,
         ),
-        max_concurrency=_parse_positive_int(
-            WUD_SECURITY_SCAN_MAX_CONCURRENCY_ENV,
-            environ.get(WUD_SECURITY_SCAN_MAX_CONCURRENCY_ENV),
-            DEFAULT_SECURITY_SCAN_MAX_CONCURRENCY,
-        ),
     )
 
 
-def initialize_security_scan_state(state: Any, settings: WebSettings) -> None:
-    max_workers = max(settings.security_scan.max_concurrency, 1)
-    state.web_security_scan_executor = ThreadPoolExecutor(max_workers=max_workers)
+def initialize_security_scan_state(state: Any, _settings: WebSettings) -> None:
+    state.web_security_scan_executor = ThreadPoolExecutor(max_workers=1)
     state.web_security_scan_lock = Lock()
     state.web_security_scan_jobs = {}
 
@@ -161,41 +140,46 @@ def api_refresh_security_scans(request: Request) -> SecurityScanJobResponse:
         raise HTTPException(status_code=403, detail="security scanning is disabled")
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
-    active_error = web_jobs._active_mutation_error(
-        request,
+
+    state = request.app.state
+    job: WebSecurityScanJob | None = None
+
+    def reserve_scan_job() -> None:
+        nonlocal job
+        with state.web_security_scan_lock:
+            jobs: dict[str, WebSecurityScanJob] = state.web_security_scan_jobs
+            if _active_security_scan_jobs_unlocked(jobs):
+                raise HTTPException(
+                    status_code=409,
+                    detail="security scan refresh is already running",
+                )
+            job = WebSecurityScanJob(
+                id=secrets.token_urlsafe(18),
+                status="queued",
+            )
+            jobs[job.id] = job
+            _prune_security_scan_jobs_unlocked(jobs)
+
+    active_error = web_jobs._reserve_mutation_state(
+        state,
+        reserve_scan_job,
         include_security_scan_jobs=False,
     )
     if active_error:
         raise HTTPException(status_code=409, detail=active_error)
-
-    state = request.app.state
-    with state.web_security_scan_lock:
-        jobs: dict[str, WebSecurityScanJob] = state.web_security_scan_jobs
-        if (
-            _active_security_scan_jobs_unlocked(jobs)
-            >= settings.security_scan.max_concurrency
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail="security scan refresh is already running",
-            )
-        job = WebSecurityScanJob(
-            id=secrets.token_urlsafe(18),
-            status="queued",
+    assert job is not None
+    try:
+        state.web_security_scan_executor.submit(
+            _run_security_scan_job,
+            state,
+            settings,
+            job.id,
         )
-        jobs[job.id] = job
-        _prune_security_scan_jobs_unlocked(jobs)
-        try:
-            state.web_security_scan_executor.submit(
-                _run_security_scan_job,
-                state,
-                settings,
-                job.id,
-            )
-        except Exception:
-            jobs.pop(job.id, None)
-            raise
-        return _job_response(job)
+    except Exception:
+        with state.web_security_scan_lock:
+            state.web_security_scan_jobs.pop(job.id, None)
+        raise
+    return _job_response(job)
 
 
 def api_security_scan_job(job_id: str, request: Request) -> SecurityScanJobResponse:
@@ -359,8 +343,6 @@ def _response_from_items(
         source=context.source.response_source(),
         source_hash=context.source.source_hash,
         scanning_enabled=settings.security_scan.enabled,
-        scanner=settings.security_scan.scanner,
-        scan_mode=settings.security_scan.mode,
         count=len(items),
         items=_sanitize_scan_items(settings, items),
         warnings=[
@@ -375,17 +357,13 @@ def _placeholder_info(
     *,
     state: str,
 ) -> SecurityScanInfo:
-    verdict = "unknown"
-    if state == "disabled":
-        verdict = "unknown"
     return SecurityScanInfo(
         line_no=request.line_no,
         state=state,  # type: ignore[arg-type]
-        verdict=verdict,  # type: ignore[arg-type]
+        verdict="unknown",
         error_code="" if request.identity_status == "pending" else request.identity_status,
         error_message=request.error,
         warnings=list(request.warnings),
-        subject=_subject_from_request(request),
     )
 
 
@@ -402,7 +380,6 @@ def _subject_info(
         error_code=subject.identity_status,
         error_message=subject.error,
         warnings=list(subject.warnings),
-        subject=_subject_from_resolved(request, subject),
     )
 
 
@@ -426,53 +403,6 @@ def _result_info(
         warnings=[*subject.warnings, *result.warnings],
         error_code=result.error_code,
         error_message=result.error_message,
-        subject=_subject_from_resolved(request, subject),
-    )
-
-
-def _subject_from_request(request: PendingSecurityRequest) -> SecurityScanSubjectInfo:
-    platform = request.platform
-    return SecurityScanSubjectInfo(
-        line_no=request.line_no,
-        raw=request.raw,
-        image=request.image,
-        candidate_image=request.candidate_image,
-        reported_digest=request.reported_digest,
-        platform=platform.value if platform is not None else "",
-        platform_os=platform.os if platform is not None else "",
-        platform_architecture=platform.architecture if platform is not None else "",
-        platform_variant=platform.variant if platform is not None else "",
-        platform_source=request.platform_source,
-        identity_status=(
-            "unknown" if request.identity_status == "pending" else request.identity_status
-        ),
-        warnings=list(request.warnings),
-    )
-
-
-def _subject_from_resolved(
-    request: PendingSecurityRequest,
-    subject: ResolvedImageSubject,
-) -> SecurityScanSubjectInfo:
-    return SecurityScanSubjectInfo(
-        subject_id=subject_id(subject),
-        line_no=request.line_no,
-        raw=request.raw,
-        image=request.image,
-        candidate_image=request.candidate_image,
-        canonical_registry=subject.canonical_registry,
-        canonical_repository=subject.canonical_repository,
-        requested_ref=subject.requested_ref,
-        reported_digest=subject.reported_digest,
-        index_digest=subject.index_digest,
-        manifest_digest=subject.manifest_digest,
-        platform=subject.platform,
-        platform_os=subject.os,
-        platform_architecture=subject.architecture,
-        platform_variant=subject.variant,
-        platform_source=subject.platform_source,
-        identity_status=subject.identity_status,
-        warnings=list(subject.warnings),
     )
 
 
@@ -500,14 +430,10 @@ def _sanitize_scan_result(
     settings: WebSettings,
     result: SecurityScanResult,
 ) -> SecurityScanResult:
-    return cast(
-        SecurityScanResult,
-        replace(
-            result,
-            warnings=tuple(_sanitize_text(settings, item) for item in result.warnings),
-            error_message=_sanitize_text(settings, result.error_message),
-            raw_json=_sanitize_text(settings, result.raw_json) or "{}",
-        ),
+    return replace(
+        result,
+        warnings=tuple(_sanitize_text(settings, item) for item in result.warnings),
+        error_message=_sanitize_text(settings, result.error_message),
     )
 
 
@@ -522,18 +448,10 @@ def _sanitize_scan_info(
     settings: WebSettings,
     info: SecurityScanInfo,
 ) -> SecurityScanInfo:
-    subject = info.subject.model_copy(
-        update={
-            "warnings": [
-                _sanitize_text(settings, item) for item in info.subject.warnings
-            ],
-        },
-    )
     return info.model_copy(
         update={
             "warnings": [_sanitize_text(settings, item) for item in info.warnings],
             "error_message": _sanitize_text(settings, info.error_message),
-            "subject": subject,
         },
     )
 

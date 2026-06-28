@@ -32,6 +32,10 @@ import type {
   RunEventRecord,
   RunLogResponse,
   RunSummary,
+  SecurityScanInfo,
+  SecurityScanJobResponse,
+  SecurityScanSeverityCounts,
+  SecurityScansResponse,
   ServicePolicyRecord,
   SelfUpdatePlanResponse,
   SelfUpdateResponse,
@@ -68,11 +72,28 @@ import type {
   DemoRunFixture,
   DemoTagToken,
 } from "./types";
+import {
+  normalizeSecurityDigest,
+  pendingItemPlatform,
+} from "../../utils/securityScans";
 
 const STATIC_FIXTURE_ERROR =
   "This selection is not part of the static demo fixture set.";
 const DEMO_NOW = "2026-05-31T00:00:00.000Z";
 const fixtures: DemoGeneratedFixtures = generatedFixtures;
+const EMPTY_SECURITY_COUNTS: SecurityScanSeverityCounts = {
+  critical: 0,
+  high: 0,
+  medium: 0,
+  low: 0,
+  unknown: 0,
+};
+
+type DemoSecurityScanDecision = {
+  hasFindings: boolean;
+  state: SecurityScanInfo["state"];
+  verdict: SecurityScanInfo["verdict"];
+};
 
 type PendingLineFixture = {
   line_no: number;
@@ -756,12 +777,6 @@ export class DemoApiState {
         };
       });
     const sendableCount = items.filter((item) => !item.skipped_reason).length;
-    const embeds = items
-      .filter((item) => !item.skipped_reason)
-      .map((item) => ({
-        title: item.title,
-        description: item.description,
-      }));
     return {
       enabled: true,
       destination: {
@@ -774,7 +789,7 @@ export class DemoApiState {
       count: items.length,
       sendable_count: sendableCount,
       skipped_count: items.length - sendableCount,
-      batches: embeds.length ? [{ embeds }] : [],
+      batch_count: Math.ceil(sendableCount / 10),
       items,
       wud_api: releaseNotes.wud_api,
       warnings: releaseNotes.warnings,
@@ -782,6 +797,119 @@ export class DemoApiState {
       audit_run_id: sent ? 9004 : 0,
       error: "",
     };
+  }
+
+  securityScans(): SecurityScansResponse {
+    const pending = this.pendingResponse();
+    let seenExact = false;
+    const items = pending.items.map((item) => {
+      const exact = Boolean(
+        normalizeSecurityDigest(item.digest) && pendingItemPlatform(item),
+      );
+      const firstExact = exact && !seenExact;
+      seenExact ||= exact;
+      return this.securityScanInfo(item, firstExact);
+    });
+    return {
+      source_file: pending.source_file,
+      source: clone(pending.source),
+      source_hash: pending.source_hash ?? "",
+      scanning_enabled: true,
+      scanner: "trivy",
+      scan_mode: "registry",
+      count: items.length,
+      items,
+      warnings: [],
+    };
+  }
+
+  securityScanJob(jobId = "demo-security-scan"): SecurityScanJobResponse {
+    const result = this.securityScans();
+    return {
+      job_id: jobId,
+      status: "success",
+      total_count: result.count,
+      completed_count: result.count,
+      result,
+      error: "",
+    };
+  }
+
+  private securityScanInfo(
+    item: PendingItem,
+    firstExact: boolean,
+  ): SecurityScanInfo {
+    const reportedDigest = normalizeSecurityDigest(item.digest);
+    const platform = pendingItemPlatform(item);
+    const decision = this.securityScanDecision(reportedDigest, platform, firstExact);
+    const severityCounts = this.securityScanSeverityCounts(decision.hasFindings);
+    const fixableCounts = this.securityScanFixableCounts(decision.hasFindings);
+
+    return {
+      line_no: item.line_no,
+      state: decision.state,
+      verdict: decision.verdict,
+      scanner: "trivy",
+      scanner_version: decision.hasFindings ? "demo" : "",
+      scanner_schema: decision.hasFindings ? "trivy-json" : "",
+      scanned_at: decision.hasFindings ? DEMO_NOW : "",
+      db_revision: "",
+      db_updated_at: "",
+      severity_counts: severityCounts,
+      fixable_counts: fixableCounts,
+      unfixed_count: decision.hasFindings ? 1 : 0,
+      warnings:
+        decision.hasFindings ? ["Demo finding for candidate-only advisory display."] : [],
+      error_code: "",
+      error_message: "",
+    };
+  }
+
+  private securityScanDecision(
+    reportedDigest: string,
+    platform: string,
+    firstExact: boolean,
+  ): DemoSecurityScanDecision {
+    const exact = Boolean(reportedDigest && platform);
+    const hasFindings = exact && firstExact;
+
+    if (!exact) {
+      return {
+        hasFindings,
+        state: "unsupported",
+        verdict: "unknown",
+      };
+    }
+    if (hasFindings) {
+      return {
+        hasFindings,
+        state: "complete",
+        verdict: "findings",
+      };
+    }
+    return {
+      hasFindings,
+      state: "not_scanned",
+      verdict: "unknown",
+    };
+  }
+
+  private securityScanSeverityCounts(
+    hasFindings: boolean,
+  ): SecurityScanSeverityCounts {
+    if (hasFindings) {
+      return { critical: 0, high: 1, medium: 2, low: 0, unknown: 0 };
+    }
+    return { ...EMPTY_SECURITY_COUNTS };
+  }
+
+  private securityScanFixableCounts(
+    hasFindings: boolean,
+  ): SecurityScanSeverityCounts {
+    if (hasFindings) {
+      return { critical: 0, high: 1, medium: 1, low: 0, unknown: 0 };
+    }
+    return { ...EMPTY_SECURITY_COUNTS };
   }
 
   selfUpdate(): SelfUpdateResponse {

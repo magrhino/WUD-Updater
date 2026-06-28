@@ -20,7 +20,7 @@ editable in the WebUI and are never stored in SQLite.
 Use WUD's append-only callback (`/wud/on-update.sh`) or the WUD API pending
 source to populate pending updates, then choose **Preview release notes** from
 selected pending updates or from a completed apply job. The WebUI sender builds
-Discord payloads in Python, previews the sanitized payload without the webhook
+Discord payloads in Python, previews the notification summary without the webhook
 URL, and posts one embed per update in Discord-sized batches. It reads WUD
 trigger summaries when WUD API metadata is available, but it does not call WUD
 trigger POST endpoints.

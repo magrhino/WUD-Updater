@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createDemoWebApi } from "../src/api/demo";
-import type { ApplyJobLogResponse, ApplyJobResponse } from "../src/api/client";
+import type {
+  ApplyJobLogResponse,
+  ApplyJobResponse,
+  PendingItem,
+} from "../src/api/client";
+import { generatedFixtures } from "../src/api/demo/generatedFixtures";
 import { DemoApiState } from "../src/api/demo/state";
 
 const postgresDigest =
@@ -763,6 +768,88 @@ describe("demo web API", () => {
     );
   });
 
+  it("reports demo security scans only for supported exact subjects", async () => {
+    const api = createDemoWebApi();
+    const pending = await api.pending();
+    const scans = await api.securityScans();
+    const tagOnlyLine = pending.items.find((item) => item.digest === "");
+    const digestLine = pending.items.find((item) => {
+      const scan = scans.items.find(
+        (candidate) => candidate.line_no === item.line_no,
+      );
+      return (
+        item.digest.startsWith("sha256:") &&
+        scan?.state === "unsupported"
+      );
+    });
+
+    expect(tagOnlyLine).toBeDefined();
+    expect(digestLine).toBeDefined();
+    if (!tagOnlyLine || !digestLine) {
+      throw new Error("Expected demo pending fixture to include scan examples");
+    }
+
+    const tagOnlyScan = scans.items.find(
+      (scan) => scan.line_no === tagOnlyLine.line_no,
+    );
+    const digestScan = scans.items.find(
+      (scan) => scan.line_no === digestLine.line_no,
+    );
+
+    expect(tagOnlyScan).toMatchObject({
+      state: "unsupported",
+      verdict: "unknown",
+      severity_counts: { high: 0, medium: 0 },
+    });
+    expect(digestScan).toMatchObject({
+      state: "unsupported",
+      verdict: "unknown",
+    });
+  });
+
+  it("uses the first supported exact demo security scan as the findings candidate", () => {
+    const pendingFixture = generatedFixtures.pending as { items: PendingItem[] };
+    const originalItems = pendingFixture.items;
+    const [unsupported, firstExact, laterExact] = originalItems;
+
+    expect(unsupported).toBeDefined();
+    expect(firstExact).toBeDefined();
+    expect(laterExact).toBeDefined();
+    if (!unsupported || !firstExact || !laterExact) {
+      throw new Error("Expected demo pending fixture to include three pending items");
+    }
+
+    pendingFixture.items = [
+      { ...unsupported, digest: "", platform: "" },
+      { ...firstExact, digest: postgresDigest, platform: "linux/amd64" },
+      { ...laterExact, digest: wudupDigest, platform: "linux/arm64" },
+    ];
+    try {
+      const scans = new DemoApiState().securityScans();
+
+      expect(scans.items.map((scan) => [scan.state, scan.verdict])).toEqual([
+        ["unsupported", "unknown"],
+        ["complete", "findings"],
+        ["not_scanned", "unknown"],
+      ]);
+    } finally {
+      pendingFixture.items = originalItems;
+    }
+  });
+
+  it("preserves requested demo security scan job ids", async () => {
+    const api = createDemoWebApi();
+
+    await expect(api.refreshSecurityScans("csrf")).resolves.toMatchObject({
+      job_id: "demo-security-scan",
+      status: "success",
+    });
+    await expect(api.securityScanJob("security-scan-custom")).resolves.toMatchObject({
+      job_id: "security-scan-custom",
+      status: "success",
+    });
+  });
+
   it("streams apply jobs and updates pending state and run history", async () => {
     vi.useFakeTimers();
     const api = createDemoWebApi();
@@ -990,16 +1077,7 @@ describe("demo web API", () => {
       status: "not_found",
       skipped_reason: "not_found",
     });
-    expect(preview.batches).toEqual([
-      {
-        embeds: [
-          {
-            title: "Home Assistant Core 2026.5.3",
-            description: "home-assistant/core",
-          },
-        ],
-      },
-    ]);
+    expect(preview.batch_count).toBe(1);
 
     const sent = await api.sendReleaseNotifications(
       { line_numbers: selected },

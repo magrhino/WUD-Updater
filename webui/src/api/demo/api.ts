@@ -111,6 +111,10 @@ export function createDemoWebApi(): WebApi {
       source: ReleaseNotificationSource,
       _csrfToken: string,
     ) => state.releaseNotifications(source, true),
+    securityScans: async () => state.securityScans(),
+    refreshSecurityScans: async (_csrfToken: string) =>
+      state.securityScanJob("demo-security-scan"),
+    securityScanJob: async (jobId: string) => state.securityScanJob(jobId),
     selfUpdate: async () => state.selfUpdate(),
     planSelfUpdate: async (_csrfToken: string) => state.selfUpdatePlan(),
     applySelfUpdate: async (

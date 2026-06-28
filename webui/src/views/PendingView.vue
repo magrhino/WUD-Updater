@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { ShieldCheck } from "@lucide/vue";
 import {
   NAlert,
   NButton,
@@ -28,6 +29,7 @@ import { useSettingsStore } from "../stores/settings";
 import { useUpdatesStore } from "../stores/updates";
 import { displayDigest } from "../utils/digestProvenance";
 import { runInBackground } from "../utils/promises";
+import { securityScanSummaryDisplay } from "../utils/securityScans";
 import {
   displayValue,
   releaseNoteReason,
@@ -108,6 +110,12 @@ let clearPreflightHandler: () => void = () => undefined;
 let loadPendingAndReleaseNotesHandler: () => Promise<void> = async () => undefined;
 const showReleaseNotificationModal = ref(false);
 const releaseNotificationSource = ref<ReleaseNotificationSource | null>(null);
+const securityScanRefreshReadOnlyMessage =
+  "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server " +
+  "to refresh candidate security scans.";
+const securityScanRefreshMutationMessage =
+  "Wait for the active WebUI mutation to finish before refreshing candidate " +
+  "security scans.";
 
 const {
   clearSelection,
@@ -307,6 +315,21 @@ const releaseNotificationSendDisabled = computed(
     releaseNotificationSource.value === null ||
     Boolean(releaseNotificationSendDisabledMessage.value),
 );
+const securityScanRefreshVisible = computed(
+  () => updates.securityScans?.scanning_enabled ?? false,
+);
+const securityScanSummary = computed(() => {
+  if (!updates.securityScans && updates.securityScansError) {
+    return { label: "Security scans unavailable", type: "warning" as const };
+  }
+  return securityScanSummaryDisplay({
+    securityScans: updates.securityScans,
+    securityScansCurrent: updates.securityScansCurrent,
+    items: updates.currentSecurityScanItems,
+  });
+});
+const securityScanSummaryLabel = computed(() => securityScanSummary.value.label);
+const securityScanSummaryType = computed(() => securityScanSummary.value.type);
 
 const {
   actionCommand,
@@ -436,6 +459,24 @@ const {
   applyJobPanelRef,
   loadPendingAndReleaseNotes: () => loadPendingAndReleaseNotesHandler(),
 });
+const mutationInProgress = computed(
+  () => updates.loading || applyJobActive.value,
+);
+const securityScanRefreshDisabled = computed(
+  () =>
+    updates.securityScansLoading ||
+    auth.session?.mutations_enabled === false ||
+    mutationInProgress.value,
+);
+const securityScanRefreshDisabledMessage = computed(() => {
+  if (auth.session?.mutations_enabled === false) {
+    return securityScanRefreshReadOnlyMessage;
+  }
+  if (mutationInProgress.value) {
+    return securityScanRefreshMutationMessage;
+  }
+  return "";
+});
 
 const {
   clearPreflight,
@@ -536,6 +577,13 @@ async function sendReleaseNotifications(): Promise<void> {
   await updates.sendReleaseNotifications(releaseNotificationSource.value).catch(() => undefined);
 }
 
+async function refreshSecurityScans(): Promise<void> {
+  if (securityScanRefreshDisabled.value) {
+    return;
+  }
+  await updates.refreshSecurityScans();
+}
+
 onMounted(() => {
   runInBackground(retryPendingLoad());
   runInBackground(settings.loadPendingSafetyCues());
@@ -559,6 +607,9 @@ onMounted(() => {
     </n-alert>
     <n-alert v-if="updates.releaseNotificationError" type="warning">
       Release-note notification is unavailable: {{ updates.releaseNotificationError }}
+    </n-alert>
+    <n-alert v-if="updates.securityScansError" type="warning">
+      Candidate security scan metadata is unavailable: {{ updates.securityScansError }}
     </n-alert>
     <n-alert v-if="pendingRescanMessage" :type="pendingRescanAlertType">
       {{ pendingRescanMessage }}
@@ -657,7 +708,26 @@ onMounted(() => {
         </p>
         <h2>{{ pendingHeadingText }}</h2>
       </div>
-      <n-tag size="small" :type="mutationStateType">{{ mutationStateLabel }}</n-tag>
+      <n-flex align="center" :size="8">
+        <n-tag size="small" :type="securityScanSummaryType">
+          {{ securityScanSummaryLabel }}
+        </n-tag>
+        <n-button
+          v-if="securityScanRefreshVisible"
+          size="small"
+          secondary
+          :loading="updates.securityScansLoading"
+          :disabled="securityScanRefreshDisabled"
+          :title="securityScanRefreshDisabledMessage || undefined"
+          @click="refreshSecurityScans"
+        >
+          <template #icon>
+            <ShieldCheck :size="16" aria-hidden="true" />
+          </template>
+          Refresh scans
+        </n-button>
+        <n-tag size="small" :type="mutationStateType">{{ mutationStateLabel }}</n-tag>
+      </n-flex>
     </div>
 
     <n-alert

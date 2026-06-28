@@ -31,6 +31,12 @@ export type {
   PendingRescanStatus,
   PendingRescanSkippedLine,
   PendingRescanResponse,
+  SecurityScanState,
+  SecurityScanVerdict,
+  SecurityScanSeverityCounts,
+  SecurityScanInfo,
+  SecurityScansResponse,
+  SecurityScanJobResponse,
   PendingRemovalPlanLine,
   PendingRemovalPlanResponse,
   // Update targets
@@ -182,6 +188,8 @@ import type {
   PendingRescanLine,
   PendingRescanScope,
   PendingRescanResponse,
+  SecurityScansResponse,
+  SecurityScanJobResponse,
   PendingRemovalPlanResponse,
   ReleaseNotesResponse,
   ReleaseNotificationSource,
@@ -563,6 +571,16 @@ const updatesApi = {
         confirmation: "send-release-notes",
       }),
     }),
+  securityScans: () => apiRequest<SecurityScansResponse>("/security-scans"),
+  refreshSecurityScans: (csrfToken: string) =>
+    apiRequest<SecurityScanJobResponse>("/security-scans/refresh", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+    }),
+  securityScanJob: (jobId: string) =>
+    apiRequest<SecurityScanJobResponse>(
+      `/security-scans/jobs/${encodeURIComponent(jobId)}`,
+    ),
 };
 
 // ---------------------------------------------------------------------------

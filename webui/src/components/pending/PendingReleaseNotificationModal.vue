@@ -129,7 +129,7 @@ function handleModalShowUpdate(value: boolean): void {
                   : "Preview not loaded"
               }}
             </strong>
-            <em>{{ response ? response.batches.length : 0 }} Discord message batch(es)</em>
+            <em>{{ response?.batch_count ?? 0 }} Discord message batch(es)</em>
           </div>
         </div>
       </section>

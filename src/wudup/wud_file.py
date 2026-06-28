@@ -65,16 +65,6 @@ class ParsedWudFile:
     warnings: tuple[str, ...]
 
 
-@dataclass(frozen=True)
-class _TargetMetadata:
-    digest: str
-    desired_tag: str
-    tag_token: str
-    platform: ImagePlatform | None
-    platform_raw: str
-    platform_seen: bool
-
-
 def parse_wud_text(
     text: str,
     *,
@@ -323,16 +313,45 @@ def _parse_target(
 ) -> tuple[WudTarget, list[str]]:
     first = _first_token(trimmed)
     rest = trimmed[len(first) :]
-    metadata = _parse_target_metadata(first, rest)
 
+    digest = normalize_digest(first.split("@", 1)[1] if "@sha256:" in first else "")
+    desired_tag = ""
+    tag_token = ""
+    platform: ImagePlatform | None = None
+    platform_raw = ""
+    platform_seen = False
+    for token in _rest_tokens(rest):
+        if token.startswith("tag="):
+            desired_tag = token.removeprefix("tag=")
+            if tag_value_valid(desired_tag):
+                tag_token = desired_tag
+        elif token.startswith("sha256="):
+            digest_token = token.removeprefix("sha256=")
+            if digest_token:
+                digest = normalize_digest(digest_token)
+        elif token.startswith("platform="):
+            platform_seen = True
+            platform_raw = token.removeprefix("platform=")
+            platform = parse_platform(platform_raw)
+
+    warnings: list[str] = []
     has_tag = image_has_tag(first)
-    desired_tag, warnings = _validated_desired_tag(
-        line_no,
-        first,
-        metadata.desired_tag,
-        has_tag,
-    )
-    warnings.extend(_platform_warnings(line_no, metadata))
+    if desired_tag != "":
+        if not tag_value_valid(desired_tag):
+            warnings.append(
+                f"Ignoring invalid tag value on WUD line {line_no}: {desired_tag}"
+            )
+            desired_tag = ""
+            tag_token = ""
+        elif not has_tag:
+            warnings.append(
+                "Ignoring tag update without a tagged source image on WUD line "
+                f"{line_no}: {first}"
+            )
+            desired_tag = ""
+            tag_token = ""
+    if platform_seen and platform is None:
+        warnings.append(f"Ignoring invalid platform on WUD line {line_no}: {platform_raw}")
     allow_repo = not has_tag
 
     return (
@@ -344,83 +363,13 @@ def _parse_target(
             repo=repo_key(first),
             has_tag=has_tag,
             allow_repo=allow_repo,
-            digest=metadata.digest,
+            digest=digest,
             desired_tag=desired_tag,
-            tag_token=metadata.tag_token,
-            platform=metadata.platform,
+            tag_token=tag_token,
+            platform=platform,
         ),
         warnings,
     )
-
-
-def _parse_target_metadata(first: str, rest: str) -> _TargetMetadata:
-    digest = _digest_from_first_token(first)
-    desired_tag = ""
-    tag_token = ""
-    platform: ImagePlatform | None = None
-    platform_raw = ""
-    platform_seen = False
-    for token in _rest_tokens(rest):
-        if token.startswith("tag="):
-            desired_tag, tag_token = _tag_metadata(token, tag_token)
-        elif token.startswith("sha256="):
-            digest = _digest_metadata(token, digest)
-        elif token.startswith("platform="):
-            platform_seen = True
-            platform_raw = token.removeprefix("platform=")
-            platform = parse_platform(platform_raw)
-    return _TargetMetadata(
-        digest=digest,
-        desired_tag=desired_tag,
-        tag_token=tag_token,
-        platform=platform,
-        platform_raw=platform_raw,
-        platform_seen=platform_seen,
-    )
-
-
-def _digest_from_first_token(first: str) -> str:
-    digest = first.split("@", 1)[1] if "@sha256:" in first else ""
-    return normalize_digest(digest)
-
-
-def _tag_metadata(token: str, fallback_tag_token: str) -> tuple[str, str]:
-    desired_tag = token.removeprefix("tag=")
-    if tag_value_valid(desired_tag):
-        return desired_tag, desired_tag
-    return desired_tag, fallback_tag_token
-
-
-def _digest_metadata(token: str, current_digest: str) -> str:
-    digest_token = token.removeprefix("sha256=")
-    return normalize_digest(digest_token) if digest_token else current_digest
-
-
-def _validated_desired_tag(
-    line_no: int,
-    first: str,
-    desired_tag: str,
-    has_tag: bool,
-) -> tuple[str, list[str]]:
-    if desired_tag == "":
-        return "", []
-    if not tag_value_valid(desired_tag):
-        return "", [f"Ignoring invalid tag value on WUD line {line_no}: {desired_tag}"]
-    if not has_tag:
-        return (
-            "",
-            [
-                "Ignoring tag update without a tagged source image on WUD line "
-                f"{line_no}: {first}"
-            ],
-        )
-    return desired_tag, []
-
-
-def _platform_warnings(line_no: int, metadata: _TargetMetadata) -> list[str]:
-    if metadata.platform_seen and metadata.platform is None:
-        return [f"Ignoring invalid platform on WUD line {line_no}: {metadata.platform_raw}"]
-    return []
 
 
 def _first_token(value: str) -> str:

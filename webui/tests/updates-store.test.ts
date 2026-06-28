@@ -2,11 +2,21 @@ import { createPinia, setActivePinia } from "pinia";
 import { flushPromises } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { webApi } from "../src/api/client";
+import {
+  webApi,
+  type SecurityScanJobResponse,
+  type SecurityScanInfo,
+  type SecurityScansResponse,
+} from "../src/api/client";
 import { useAuthStore } from "../src/stores/auth";
 import { useConnectionStore } from "../src/stores/connection";
 import { useSettingsStore } from "../src/stores/settings";
-import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
+import {
+  useUpdatesStore,
+  APPLY_JOB_RECOVERY_MESSAGE,
+  SECURITY_SCAN_POLL_INTERVAL_MS,
+  SECURITY_SCAN_POLL_MAX_ATTEMPTS,
+} from "../src/stores/updates";
 import { useRunsStore } from "../src/stores/runs";
 import {
   jsonRequestBody,
@@ -93,6 +103,69 @@ function expectReleaseChangelogFetches(fetchMock: ReturnType<typeof vi.fn>): voi
     "https://api.github.com/repos/t-mart/mousehole/releases/tags/v0.5.0",
   );
   expect(fetchMock.mock.calls[1][0]).toBe(TEST_CHANGELOG_URL);
+}
+
+function securityScanInfo(
+  overrides: Partial<SecurityScanInfo> = {},
+): SecurityScanInfo {
+  return {
+    line_no: 1,
+    state: "complete",
+    verdict: "findings",
+    scanner: "trivy",
+    scanner_version: "test",
+    scanner_schema: "2",
+    scanned_at: "2026-06-26T00:00:00+00:00",
+    db_revision: "",
+    db_updated_at: "",
+    severity_counts: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+    fixable_counts: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+    unfixed_count: 0,
+    warnings: [],
+    error_code: "",
+    error_message: "",
+    ...overrides,
+  };
+}
+
+function securityScansResponse(
+  items: SecurityScanInfo[],
+  overrides: Partial<SecurityScansResponse> = {},
+): SecurityScansResponse {
+  return {
+    source_file: "/out/images.todo",
+    source: {
+      configured: "file",
+      active: "file",
+      label: "Pending file",
+      fresh: true,
+      degraded: false,
+      fallback_reason: "",
+      detail: "",
+    },
+    source_hash: "pending-source-hash",
+    scanning_enabled: true,
+    scanner: "trivy",
+    scan_mode: "registry",
+    count: items.length,
+    items,
+    warnings: [],
+    ...overrides,
+  };
+}
+
+function securityScanJobResponse(
+  overrides: Partial<SecurityScanJobResponse> = {},
+): SecurityScanJobResponse {
+  return {
+    job_id: "security-scan-test",
+    status: "success",
+    total_count: 1,
+    completed_count: 1,
+    result: securityScansResponse([securityScanInfo()]),
+    error: "",
+    ...overrides,
+  };
 }
 
 describe("updates store", () => {
@@ -190,6 +263,194 @@ describe("updates store", () => {
     expect(updates.pendingCleanup).toBeNull();
   });
 
+  it("matches security scans only for the current pending source and line", () => {
+    useConnectionStore();
+    useSettingsStore();
+    const updates = useUpdatesStore();
+    useRunsStore();
+    const item = pendingItem({
+      line_no: 1,
+      raw: "repo/app:1.0 platform=linux/amd64 sha256=abc",
+      image: "repo/app:1.0",
+      digest: "abc",
+      platform: "linux/amd64",
+    });
+    const scan = securityScanInfo();
+    updates.pending = pendingResponse([item]);
+    updates.securityScans = securityScansResponse([scan]);
+
+    expect(updates.securityScansCurrent).toBe(true);
+    expect(updates.currentSecurityScans?.source_hash).toBe("pending-source-hash");
+    expect(updates.currentSecurityScanItems).toEqual([scan]);
+    expect(updates.securityScanFor(item)).toEqual(scan);
+
+    updates.pending = {
+      ...pendingResponse([item]),
+      source_hash: "changed-source-hash",
+    };
+    expect(updates.securityScansCurrent).toBe(false);
+    expect(updates.currentSecurityScans).toBeNull();
+    expect(updates.currentSecurityScanItems).toEqual([]);
+    expect(updates.securityScanFor(item)).toBeNull();
+
+    const changedLine = pendingItem({
+      ...item,
+      line_no: 2,
+      raw: "repo/other:1.0 platform=linux/amd64 sha256=abc",
+      image: "repo/other:1.0",
+    });
+    updates.pending = pendingResponse([changedLine]);
+    updates.securityScans = securityScansResponse([scan]);
+    expect(updates.currentSecurityScanItems).toEqual([]);
+    expect(updates.securityScanFor(changedLine)).toBeNull();
+  });
+
+  it("refreshes security scans through a bounded job poll", async () => {
+    vi.useFakeTimers();
+    const scan = securityScanInfo();
+    const result = securityScansResponse([scan]);
+    const queuedJob = securityScanJobResponse({
+      status: "queued",
+      completed_count: 0,
+      result: null,
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/v1/security-scans/refresh") {
+        return Promise.resolve(jsonResponse(queuedJob));
+      }
+      if (url === "/api/v1/security-scans/jobs/security-scan-test") {
+        return Promise.resolve(jsonResponse(securityScanJobResponse({ result })));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-security");
+    const updates = useUpdatesStore();
+
+    try {
+      const refreshPromise = updates.refreshSecurityScans();
+      await flushPromises();
+      expect(updates.securityScanJob?.status).toBe("queued");
+
+      await vi.advanceTimersByTimeAsync(500);
+      await refreshPromise;
+
+      expect(updates.securityScanJob?.status).toBe("success");
+      expect(updates.securityScans).toEqual(result);
+      expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+        "/api/v1/security-scans/refresh",
+        "/api/v1/security-scans/jobs/security-scan-test",
+      ]);
+      expect(
+        ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+          "x-wud-csrf-token",
+        ),
+      ).toBe("csrf-security");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("times out security scan refresh polling instead of polling forever", async () => {
+    vi.useFakeTimers();
+    const queuedJob = securityScanJobResponse({
+      status: "queued",
+      completed_count: 0,
+      result: null,
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (
+        url === "/api/v1/security-scans/refresh" ||
+        url === "/api/v1/security-scans/jobs/security-scan-test"
+      ) {
+        return Promise.resolve(jsonResponse(queuedJob));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-security");
+    const updates = useUpdatesStore();
+
+    try {
+      const refreshPromise = updates.refreshSecurityScans().then(
+        () => null,
+        (caughtError: unknown) => caughtError,
+      );
+      await flushPromises();
+      await vi.advanceTimersByTimeAsync(
+        SECURITY_SCAN_POLL_MAX_ATTEMPTS * SECURITY_SCAN_POLL_INTERVAL_MS,
+      );
+
+      const caughtError = await refreshPromise;
+      expect(caughtError).toBeInstanceOf(Error);
+      expect((caughtError as Error).message).toBe(
+        "Security scan refresh timed out",
+      );
+      expect(updates.securityScansLoading).toBe(false);
+      expect(updates.securityScansError).toBe("Security scan refresh timed out");
+      expect(
+        fetchMock.mock.calls.filter(
+          (call) => call[0] === "/api/v1/security-scans/jobs/security-scan-test",
+        ),
+      ).toHaveLength(SECURITY_SCAN_POLL_MAX_ATTEMPTS);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("extends security scan refresh polling for multi-candidate jobs", async () => {
+    vi.useFakeTimers();
+    const result = securityScansResponse([securityScanInfo()]);
+    const runningJob = securityScanJobResponse({
+      status: "running",
+      total_count: 2,
+      completed_count: 0,
+      result: null,
+    });
+    let jobPolls = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/v1/security-scans/refresh") {
+        return Promise.resolve(jsonResponse(runningJob));
+      }
+      if (url === "/api/v1/security-scans/jobs/security-scan-test") {
+        jobPolls += 1;
+        return Promise.resolve(
+          jsonResponse(
+            jobPolls > SECURITY_SCAN_POLL_MAX_ATTEMPTS
+              ? securityScanJobResponse({ result })
+              : runningJob,
+          ),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-security");
+    const updates = useUpdatesStore();
+
+    try {
+      const refreshPromise = updates.refreshSecurityScans();
+      await flushPromises();
+      await vi.advanceTimersByTimeAsync(
+        (SECURITY_SCAN_POLL_MAX_ATTEMPTS + 1) *
+          SECURITY_SCAN_POLL_INTERVAL_MS,
+      );
+      await refreshPromise;
+
+      expect(updates.securityScans).toEqual(result);
+      expect(updates.securityScansError).toBe("");
+      expect(jobPolls).toBe(SECURITY_SCAN_POLL_MAX_ATTEMPTS + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("rescans pending updates and refreshes dependent state", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
@@ -204,6 +465,9 @@ describe("updates store", () => {
         url === "/api/v1/release-notes/refresh"
       ) {
         return Promise.resolve(jsonResponse(releaseNotesResponse()));
+      }
+      if (url === "/api/v1/security-scans") {
+        return Promise.resolve(jsonResponse(securityScansResponse([])));
       }
       if (url === "/api/v1/runs") {
         return Promise.resolve(jsonResponse([]));
@@ -229,13 +493,15 @@ describe("updates store", () => {
     expect(response.audit_run_id).toBe(24);
     expect(updates.pendingRescan?.audit_run_id).toBe(24);
     expect(updates.pending?.count).toBe(1);
+    expect(updates.securityScans?.source_hash).toBe("pending-source-hash");
     const urls = fetchMock.mock.calls.map((call) => call[0]);
-    expect(urls.slice(0, 3)).toEqual([
+    expect(urls.slice(0, 4)).toEqual([
       "/api/v1/pending/rescan",
       "/api/v1/pending",
       "/api/v1/release-notes",
+      "/api/v1/security-scans",
     ]);
-    expect(new Set(urls.slice(3))).toEqual(
+    expect(new Set(urls.slice(4))).toEqual(
       new Set(["/api/v1/release-notes/refresh", "/api/v1/runs"]),
     );
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
@@ -274,6 +540,9 @@ describe("updates store", () => {
       ) {
         return Promise.resolve(jsonResponse(releaseNotesResponse()));
       }
+      if (url === "/api/v1/security-scans") {
+        return Promise.resolve(jsonResponse(securityScansResponse([])));
+      }
       if (url === "/api/v1/runs") {
         return Promise.resolve(jsonResponse([]));
       }
@@ -302,12 +571,13 @@ describe("updates store", () => {
       lines: [],
     });
     const urls = fetchMock.mock.calls.map((call) => call[0]);
-    expect(urls.slice(0, 3)).toEqual([
+    expect(urls.slice(0, 4)).toEqual([
       "/api/v1/pending/rescan",
       "/api/v1/pending",
       "/api/v1/release-notes",
+      "/api/v1/security-scans",
     ]);
-    expect(new Set(urls.slice(3))).toEqual(
+    expect(new Set(urls.slice(4))).toEqual(
       new Set(["/api/v1/release-notes/refresh", "/api/v1/runs"]),
     );
   });
@@ -357,6 +627,9 @@ describe("updates store", () => {
       ) {
         return Promise.resolve(jsonResponse(releaseNotesResponse()));
       }
+      if (url === "/api/v1/security-scans") {
+        return Promise.resolve(jsonResponse(securityScansResponse([])));
+      }
       if (url === "/api/v1/runs") {
         return Promise.resolve(jsonResponse([]));
       }
@@ -379,12 +652,13 @@ describe("updates store", () => {
     expect(updates.pendingRescan?.status).toBe("blocked");
     expect(updates.pending?.count).toBe(1);
     const urls = fetchMock.mock.calls.map((call) => call[0]);
-    expect(urls.slice(0, 3)).toEqual([
+    expect(urls.slice(0, 4)).toEqual([
       "/api/v1/pending/rescan",
       "/api/v1/pending",
       "/api/v1/release-notes",
+      "/api/v1/security-scans",
     ]);
-    expect(new Set(urls.slice(3))).toEqual(
+    expect(new Set(urls.slice(4))).toEqual(
       new Set(["/api/v1/release-notes/refresh", "/api/v1/runs"]),
     );
   });

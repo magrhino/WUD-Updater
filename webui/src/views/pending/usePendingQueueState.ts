@@ -157,6 +157,11 @@ export function usePendingQueueState() {
       releaseNote: releaseNoteFor(row),
       releaseNotesLoaded: Boolean(updates.releaseNotes),
       releaseNotesLoading: updates.releaseNotesLoading,
+      securityScan: updates.securityScanFor(row),
+      securityScansCurrent: updates.securityScansCurrent,
+      securityScansEnabled: updates.securityScans?.scanning_enabled ?? false,
+      securityScansLoaded: Boolean(updates.securityScans),
+      securityScansLoading: updates.securityScansLoading,
       servicePolicies: settings.servicePolicies,
       snoozes: settings.snoozes,
     });

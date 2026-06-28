@@ -2,7 +2,7 @@ import { mount, type VueWrapper } from "@vue/test-utils";
 import { defineComponent, h, type Component, type VNodeChild } from "vue";
 import { describe, expect, it, vi } from "vitest";
 
-import type { PendingItem } from "../src/api/client";
+import type { PendingItem, SecurityScanInfo } from "../src/api/client";
 import PendingCleanupModal from "../src/components/pending/PendingCleanupModal.vue";
 import PendingPlanReviewModal from "../src/components/pending/PendingPlanReviewModal.vue";
 import PendingRemovalModal from "../src/components/pending/PendingRemovalModal.vue";
@@ -10,6 +10,7 @@ import {
   digestProvenanceDisplay,
   displayDigest,
 } from "../src/utils/digestProvenance";
+import { securityScanSummaryDisplay } from "../src/utils/securityScans";
 import { safetyCues } from "../src/views/pending/safetyCues";
 import { createPendingColumns } from "../src/views/pending/tableColumns";
 import {
@@ -60,6 +61,43 @@ function mountPendingModal(component: Component, props: Record<string, unknown>)
       },
     },
   });
+}
+
+function securityScanInfo(
+  overrides: Partial<SecurityScanInfo> = {},
+): SecurityScanInfo {
+  const severityCounts = {
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+    unknown: 0,
+    ...overrides.severity_counts,
+  };
+  return {
+    line_no: 1,
+    state: "not_scanned",
+    verdict: "unknown",
+    scanner: "trivy",
+    scanner_version: "",
+    scanner_schema: "",
+    scanned_at: "",
+    db_revision: "",
+    db_updated_at: "",
+    fixable_counts: {
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+      unknown: 0,
+    },
+    unfixed_count: 0,
+    warnings: [],
+    error_code: "",
+    error_message: "",
+    ...overrides,
+    severity_counts: severityCounts,
+  };
 }
 
 function pendingPlanReviewModalProps(
@@ -218,6 +256,11 @@ describe("pending helper modules", () => {
       releaseNote: note,
       releaseNotesLoaded: true,
       releaseNotesLoading: false,
+      securityScan: null,
+      securityScansCurrent: false,
+      securityScansEnabled: false,
+      securityScansLoaded: false,
+      securityScansLoading: false,
       servicePolicies: [servicePolicy({ service_key: "media/app", auto_update: true })],
       snoozes: [snooze({ service_key: "media/app" })],
     }).map((cue) => cue.label);
@@ -232,6 +275,11 @@ describe("pending helper modules", () => {
         releaseNote: null,
         releaseNotesLoaded: false,
         releaseNotesLoading: false,
+        securityScan: null,
+        securityScansCurrent: false,
+        securityScansEnabled: false,
+        securityScansLoaded: false,
+        securityScansLoading: false,
         servicePolicies: [],
         snoozes: [],
       }).map((cue) => cue.label),
@@ -242,6 +290,11 @@ describe("pending helper modules", () => {
         releaseNote: null,
         releaseNotesLoaded: false,
         releaseNotesLoading: false,
+        securityScan: null,
+        securityScansCurrent: false,
+        securityScansEnabled: false,
+        securityScansLoaded: false,
+        securityScansLoading: false,
         servicePolicies: [],
         snoozes: [],
       }).map((cue) => cue.label),
@@ -252,6 +305,11 @@ describe("pending helper modules", () => {
       releaseNote: noReleaseNote,
       releaseNotesLoaded: true,
       releaseNotesLoading: false,
+      securityScan: null,
+      securityScansCurrent: false,
+      securityScansEnabled: false,
+      securityScansLoaded: false,
+      securityScansLoading: false,
       servicePolicies: [],
       snoozes: [],
     }).map((cue) => cue.label);
@@ -259,6 +317,236 @@ describe("pending helper modules", () => {
     expect(digestLabels).toContain("Mutable latest");
     expect(digestLabels).toContain("Stack restart");
     expect(digestLabels).toContain("No release notes");
+  });
+
+  it("adds candidate security scan cues without implying safety", () => {
+    const item = pendingGroupedItem({ line_no: 3, image: "repo/app:1.0" });
+    const pending = pendingResponse([item]);
+    const securityCuesFor = (
+      securityScan: SecurityScanInfo | null,
+      overrides: Partial<Parameters<typeof safetyCues>[1]> = {},
+    ) =>
+      safetyCues(item, {
+        pending,
+        releaseNote: null,
+        releaseNotesLoaded: false,
+        releaseNotesLoading: false,
+        securityScan,
+        securityScansCurrent: true,
+        securityScansEnabled: true,
+        securityScansLoaded: true,
+        securityScansLoading: false,
+        servicePolicies: [],
+        snoozes: [],
+        ...overrides,
+      }).filter((cue) => cue.key.startsWith("security-"));
+    const completeFindingsScan = securityScanInfo({
+      line_no: item.line_no,
+      state: "complete",
+      verdict: "findings",
+      severity_counts: {
+        critical: 0,
+        high: 1,
+        medium: 0,
+        low: 0,
+        unknown: 0,
+      },
+    });
+    const completeLowerSeverityScan = securityScanInfo({
+      line_no: item.line_no,
+      state: "complete",
+      verdict: "findings",
+      severity_counts: {
+        critical: 0,
+        high: 0,
+        medium: 2,
+        low: 1,
+        unknown: 1,
+      },
+    });
+    const noneReportedScan = securityScanInfo({
+      line_no: item.line_no,
+      state: "complete",
+      verdict: "none_reported",
+    });
+    const notScannedScan = securityScanInfo({
+      line_no: item.line_no,
+      state: "not_scanned",
+      verdict: "unknown",
+    });
+    const staleScan = securityScanInfo({
+      line_no: item.line_no,
+      state: "stale",
+      verdict: "findings",
+      severity_counts: {
+        critical: 0,
+        high: 0,
+        medium: 1,
+        low: 0,
+        unknown: 0,
+      },
+    });
+    const disabledScan = securityScanInfo({
+      line_no: item.line_no,
+      state: "disabled",
+      verdict: "unknown",
+    });
+
+    expect(securityCuesFor(completeFindingsScan)).toContainEqual(
+      expect.objectContaining({
+        key: "security-findings",
+        label: "Findings",
+        type: "error",
+      }),
+    );
+    expect(securityCuesFor(completeLowerSeverityScan)).toContainEqual(
+      expect.objectContaining({
+        key: "security-findings",
+        label: "Findings",
+        type: "warning",
+      }),
+    );
+    expect(securityCuesFor(noneReportedScan)).toContainEqual(
+      expect.objectContaining({
+        key: "security-none-reported",
+        label: "None reported",
+        type: "success",
+      }),
+    );
+    expect(securityCuesFor(noneReportedScan).map((cue) => cue.label)).not.toContain(
+      "Safe",
+    );
+    expect(securityCuesFor(notScannedScan)).toContainEqual(
+      expect.objectContaining({
+        key: "security-not-scanned",
+        label: "Not scanned",
+        type: "default",
+      }),
+    );
+    expect(securityCuesFor(staleScan)).toContainEqual(
+      expect.objectContaining({
+        key: "security-stale",
+        label: "Scan stale",
+        type: "warning",
+      }),
+    );
+    expect(
+      securityCuesFor(null, { securityScansCurrent: false }),
+    ).toContainEqual(
+      expect.objectContaining({
+        key: "security-stale",
+        label: "Scan stale",
+        type: "warning",
+      }),
+    );
+    expect(securityCuesFor(null)).toContainEqual(
+      expect.objectContaining({
+        key: "security-unknown",
+        label: "Security unknown",
+        type: "warning",
+      }),
+    );
+    expect(securityCuesFor(disabledScan)).toEqual([]);
+    expect(
+      securityCuesFor(completeFindingsScan, { securityScansLoaded: false }),
+    ).toEqual([]);
+    expect(
+      securityCuesFor(completeFindingsScan, { securityScansEnabled: false }),
+    ).toEqual([]);
+  });
+
+  it("summarizes candidate security scans with shared severity semantics", () => {
+    const highImpactScan = securityScanInfo({
+      line_no: 1,
+      state: "complete",
+      verdict: "findings",
+      severity_counts: {
+        critical: 0,
+        high: 1,
+        medium: 0,
+        low: 0,
+        unknown: 0,
+      },
+    });
+    const lowerSeverityScan = securityScanInfo({
+      line_no: 2,
+      state: "complete",
+      verdict: "findings",
+      severity_counts: {
+        critical: 0,
+        high: 0,
+        medium: 1,
+        low: 0,
+        unknown: 0,
+      },
+    });
+    const cleanScan = securityScanInfo({
+      line_no: 3,
+      state: "complete",
+      verdict: "none_reported",
+    });
+    const staleScan = securityScanInfo({
+      line_no: 4,
+      state: "stale",
+      verdict: "findings",
+    });
+
+    expect(
+      securityScanSummaryDisplay({
+        securityScans: null,
+        securityScansCurrent: false,
+        items: [],
+      }),
+    ).toEqual({ label: "Security scans loading", type: "default" });
+    expect(
+      securityScanSummaryDisplay({
+        securityScans: { scanning_enabled: false },
+        securityScansCurrent: false,
+        items: [],
+      }),
+    ).toEqual({ label: "Security scans off", type: "default" });
+    expect(
+      securityScanSummaryDisplay({
+        securityScans: { scanning_enabled: true },
+        securityScansCurrent: false,
+        items: [highImpactScan],
+      }),
+    ).toEqual({ label: "Security scans stale", type: "warning" });
+    expect(
+      securityScanSummaryDisplay({
+        securityScans: { scanning_enabled: true },
+        securityScansCurrent: true,
+        items: [highImpactScan],
+      }),
+    ).toEqual({ label: "1 candidate with findings", type: "error" });
+    expect(
+      securityScanSummaryDisplay({
+        securityScans: { scanning_enabled: true },
+        securityScansCurrent: true,
+        items: [staleScan],
+      }),
+    ).toEqual({ label: "Security scans stale", type: "warning" });
+    expect(
+      securityScanSummaryDisplay({
+        securityScans: { scanning_enabled: true },
+        securityScansCurrent: true,
+        items: [lowerSeverityScan],
+      }),
+    ).toEqual({ label: "1 candidate with findings", type: "warning" });
+    expect(
+      securityScanSummaryDisplay({
+        securityScans: { scanning_enabled: true },
+        securityScansCurrent: true,
+        items: [cleanScan],
+      }),
+    ).toEqual({ label: "1 candidate scanned", type: "info" });
+    expect(
+      securityScanSummaryDisplay({
+        securityScans: { scanning_enabled: true },
+        securityScansCurrent: true,
+        items: [],
+      }),
+    ).toEqual({ label: "No candidate scans yet", type: "info" });
   });
 
   it("formats pending queue display helpers without store dependencies", () => {

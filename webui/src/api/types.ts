@@ -224,6 +224,68 @@ export interface PendingRescanResponse {
   wud_api: WudApiStatus;
 }
 
+export type SecurityScanState =
+  | "disabled"
+  | "not_scanned"
+  | "queued"
+  | "running"
+  | "complete"
+  | "stale"
+  | "partial"
+  | "unsupported"
+  | "unavailable_offline"
+  | "auth_required"
+  | "error";
+
+export type SecurityScanVerdict = "findings" | "none_reported" | "unknown";
+
+export interface SecurityScanSeverityCounts {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  unknown: number;
+}
+
+export interface SecurityScanInfo {
+  line_no: number;
+  state: SecurityScanState;
+  verdict: SecurityScanVerdict;
+  scanner: string;
+  scanner_version: string;
+  scanner_schema: string;
+  scanned_at: string;
+  db_revision: string;
+  db_updated_at: string;
+  severity_counts: SecurityScanSeverityCounts;
+  fixable_counts: SecurityScanSeverityCounts;
+  unfixed_count: number;
+  warnings: string[];
+  error_code: string;
+  error_message: string;
+}
+
+export interface SecurityScansResponse {
+  source_file: string;
+  source: PendingSourceInfo;
+  source_hash: string;
+  scanning_enabled: boolean;
+  scanner: string;
+  scan_mode: string;
+  count: number;
+  items: SecurityScanInfo[];
+  warnings: string[];
+}
+
+export interface SecurityScanJobResponse {
+  job_id: string;
+  status: "queued" | "running" | "success" | "failure";
+  total_count: number;
+  completed_count: number;
+  result: SecurityScansResponse | null;
+  error: string;
+}
+
 export interface PendingRemovalPlanLine {
   line_no: number;
   raw: string;
@@ -465,7 +527,7 @@ export interface ReleaseNotificationResponse {
   count: number;
   sendable_count: number;
   skipped_count: number;
-  batches: Array<Record<string, unknown>>;
+  batch_count: number;
   items: ReleaseNotificationItem[];
   wud_api: WudApiStatus;
   warnings: string[];

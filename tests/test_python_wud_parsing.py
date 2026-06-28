@@ -204,12 +204,12 @@ class WudFileParsingTests(unittest.TestCase):
         self.assertEqual(image_with_tag(target.first, target.desired_tag), "repo/app:2.0")
         self.assertEqual(parsed.warnings, ())
 
-    def test_bare_digest_tag_token_does_not_become_desired_tag(self) -> None:
+    def test_bare_digest_tag_token_is_rejected_without_source_tag(self) -> None:
         parsed = parse_wud_text("repo/app@sha256:good tag=2.0\n")
         target = parsed.targets[0]
 
-        self.assertEqual(target.tag_token, "2.0")
         self.assertEqual(target.desired_tag, "")
+        self.assertEqual(target.tag_token, "")
         self.assertEqual(
             parsed.warnings,
             (
@@ -286,7 +286,7 @@ class WudFileParsingTests(unittest.TestCase):
         parsed = parse_wud_text("repo/app:1.0 tag=2.0 tag=bad:value\n")
 
         self.assertEqual(parsed.targets[0].desired_tag, "")
-        self.assertEqual(parsed.targets[0].tag_token, "2.0")
+        self.assertEqual(parsed.targets[0].tag_token, "")
         self.assertEqual(
             parsed.warnings,
             ("Ignoring invalid tag value on WUD line 1: bad:value",),

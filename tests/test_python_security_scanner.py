@@ -62,7 +62,6 @@ class SecurityScannerTests(unittest.TestCase):
             scanner = TrivyScanner(
                 SecurityScanConfig(
                     enabled=True,
-                    mode="registry",
                     timeout_seconds=30,
                     cache_dir=cache_dir,
                 ),
@@ -107,7 +106,7 @@ class SecurityScannerTests(unittest.TestCase):
 
     def test_trivy_invalid_json_returns_error_result(self) -> None:
         scanner = TrivyScanner(
-            SecurityScanConfig(enabled=True, mode="registry"),
+            SecurityScanConfig(enabled=True),
             runner=FakeRunner("{bad json"),  # type: ignore[arg-type]
         )
 
@@ -119,7 +118,7 @@ class SecurityScannerTests(unittest.TestCase):
 
     def test_trivy_missing_results_array_returns_error_result(self) -> None:
         scanner = TrivyScanner(
-            SecurityScanConfig(enabled=True, mode="registry"),
+            SecurityScanConfig(enabled=True),
             runner=FakeRunner("{}"),  # type: ignore[arg-type]
         )
 
@@ -136,7 +135,7 @@ class SecurityScannerTests(unittest.TestCase):
     def test_trivy_does_not_scan_non_exact_subject(self) -> None:
         runner = FakeRunner("{}")
         scanner = TrivyScanner(
-            SecurityScanConfig(enabled=True, mode="registry"),
+            SecurityScanConfig(enabled=True),
             runner=runner,  # type: ignore[arg-type]
         )
 
@@ -152,7 +151,7 @@ class SecurityScannerTests(unittest.TestCase):
     def test_trivy_missing_immutable_ref_uses_unsupported_error_code(self) -> None:
         runner = FakeRunner("{}")
         scanner = TrivyScanner(
-            SecurityScanConfig(enabled=True, mode="registry"),
+            SecurityScanConfig(enabled=True),
             runner=runner,  # type: ignore[arg-type]
         )
 

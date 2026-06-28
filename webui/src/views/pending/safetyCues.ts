@@ -3,9 +3,11 @@ import type {
   PendingItem,
   PendingResponse,
   ReleaseNoteInfo,
+  SecurityScanInfo,
   ServicePolicyRecord,
   SnoozeRecord,
 } from "../../api/client";
+import { securityScanCueDisplay } from "../../utils/securityScans";
 
 export type SafetyCue = {
   key: string;
@@ -18,6 +20,11 @@ export type SafetyCueContext = {
   releaseNote: ReleaseNoteInfo | null;
   releaseNotesLoaded: boolean;
   releaseNotesLoading: boolean;
+  securityScan: SecurityScanInfo | null;
+  securityScansCurrent: boolean;
+  securityScansEnabled: boolean;
+  securityScansLoaded: boolean;
+  securityScansLoading: boolean;
   servicePolicies: Pick<ServicePolicyRecord, "auto_update" | "service_key">[];
   snoozes: Pick<SnoozeRecord, "service_key">[];
 };
@@ -96,6 +103,7 @@ export function safetyCues(
   }
 
   addReleaseNoteCues(context, addCue);
+  addSecurityScanCues(context, addCue);
   addPolicyCues(serviceKeys, context, addCue);
 
   return cues;
@@ -139,6 +147,39 @@ function addReleaseNoteCues(
     (!note?.links.length || note.status === "error" || note.status === "unsupported")
   ) {
     addCue("no-release-notes", "No release notes", "warning");
+  }
+}
+
+function addSecurityScanCues(
+  context: Pick<
+    SafetyCueContext,
+    | "securityScan"
+    | "securityScansCurrent"
+    | "securityScansEnabled"
+    | "securityScansLoaded"
+    | "securityScansLoading"
+  >,
+  addCue: (key: string, label: string, type: SafetyCue["type"]) => void,
+): void {
+  if (
+    !context.securityScansLoaded ||
+    context.securityScansLoading ||
+    !context.securityScansEnabled
+  ) {
+    return;
+  }
+  if (!context.securityScansCurrent) {
+    addCue("security-stale", "Scan stale", "warning");
+    return;
+  }
+  const scan = context.securityScan;
+  if (!scan) {
+    addCue("security-unknown", "Security unknown", "warning");
+    return;
+  }
+  const display = securityScanCueDisplay(scan);
+  if (display) {
+    addCue(display.key, display.label, display.type);
   }
 }
 
