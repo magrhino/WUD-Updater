@@ -112,7 +112,7 @@ def api_send_release_notifications(
             payload,
             response,
         )
-        for batch in response.batches:
+        for batch in _payload_batches(response.items):
             _post_discord_payload(webhook.value, batch["payload"])
             sent_batch_count += 1
             sent_count += int(batch.get("count") or 0)
@@ -184,7 +184,6 @@ def _notification_response(
 
     notes = _release_note_infos(settings, source)
     items, warnings = _notification_items(settings, source, notes)
-    batches = _payload_batches(items)
     sendable_count = sum(1 for item in items if not item.skipped_reason)
     return ReleaseNotificationResponse(
         enabled=True,
@@ -194,7 +193,7 @@ def _notification_response(
         count=len(items),
         sendable_count=sendable_count,
         skipped_count=len(items) - sendable_count,
-        batches=batches,
+        batch_count=_payload_batch_count(sendable_count),
         items=items,
         wud_api=source.wud_api,
         warnings=[*source.warnings, *warnings],
@@ -511,6 +510,10 @@ def _payload_batches(items: Sequence[ReleaseNotificationItem]) -> list[dict[str,
     return batches
 
 
+def _payload_batch_count(sendable_count: int) -> int:
+    return (sendable_count + DISCORD_EMBEDS_PER_MESSAGE - 1) // DISCORD_EMBEDS_PER_MESSAGE
+
+
 def _discord_embed(item: ReleaseNotificationItem) -> dict[str, object]:
     links = [_discord_link(link.label, link.url) for link in item.links if link.url]
     fields: list[dict[str, object]] = [
@@ -760,7 +763,7 @@ def _release_notification_audit_metadata(
         },
         "sent_count": sent_count,
         "skipped_count": response.skipped_count,
-        "batch_count": len(response.batches),
+        "batch_count": response.batch_count,
         "sent_batch_count": sent_batch_count,
     }
     if error:

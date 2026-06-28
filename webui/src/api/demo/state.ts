@@ -90,7 +90,6 @@ const EMPTY_SECURITY_COUNTS: SecurityScanSeverityCounts = {
 };
 
 type DemoSecurityScanDecision = {
-  exact: boolean;
   hasFindings: boolean;
   state: SecurityScanInfo["state"];
   verdict: SecurityScanInfo["verdict"];
@@ -778,12 +777,6 @@ export class DemoApiState {
         };
       });
     const sendableCount = items.filter((item) => !item.skipped_reason).length;
-    const embeds = items
-      .filter((item) => !item.skipped_reason)
-      .map((item) => ({
-        title: item.title,
-        description: item.description,
-      }));
     return {
       enabled: true,
       destination: {
@@ -796,7 +789,7 @@ export class DemoApiState {
       count: items.length,
       sendable_count: sendableCount,
       skipped_count: items.length - sendableCount,
-      batches: embeds.length ? [{ embeds }] : [],
+      batch_count: Math.ceil(sendableCount / 10),
       items,
       wud_api: releaseNotes.wud_api,
       warnings: releaseNotes.warnings,
@@ -842,15 +835,9 @@ export class DemoApiState {
   ): SecurityScanInfo {
     const reportedDigest = normalizeSecurityDigest(item.digest);
     const platform = pendingItemPlatform(item);
-    const platformFromWud = Boolean(
-      item.platform.trim() || (item.wud_metadata && platform),
-    );
-    const platformSource = platformFromWud ? "wud" : "demo";
     const decision = this.securityScanDecision(reportedDigest, platform, index);
     const severityCounts = this.securityScanSeverityCounts(decision.hasFindings);
     const fixableCounts = this.securityScanFixableCounts(decision.hasFindings);
-    const [platformOs = "", platformArchitecture = "", platformVariant = ""] =
-      platform.split("/");
 
     return {
       line_no: item.line_no,
@@ -869,28 +856,6 @@ export class DemoApiState {
         decision.hasFindings ? ["Demo finding for candidate-only advisory display."] : [],
       error_code: "",
       error_message: "",
-      subject: {
-        subject_id: reportedDigest ? `${item.image}@${reportedDigest}` : "",
-        line_no: item.line_no,
-        raw: item.raw,
-        image: item.image,
-        candidate_image: item.digest
-          ? `${item.image}@${reportedDigest}`
-          : item.image,
-        canonical_registry: "",
-        canonical_repository: item.repo,
-        requested_ref: item.desired_tag,
-        reported_digest: reportedDigest,
-        index_digest: reportedDigest,
-        manifest_digest: reportedDigest,
-        platform,
-        platform_os: item.platform_os || platformOs,
-        platform_architecture: item.platform_architecture || platformArchitecture,
-        platform_variant: item.platform_variant || platformVariant,
-        platform_source: platformSource,
-        identity_status: decision.exact ? "exact" : "unsupported",
-        warnings: [],
-      },
     };
   }
 
@@ -904,7 +869,6 @@ export class DemoApiState {
 
     if (!exact) {
       return {
-        exact,
         hasFindings,
         state: "unsupported",
         verdict: "unknown",
@@ -912,14 +876,12 @@ export class DemoApiState {
     }
     if (hasFindings) {
       return {
-        exact,
         hasFindings,
         state: "complete",
         verdict: "findings",
       };
     }
     return {
-      exact,
       hasFindings,
       state: "not_scanned",
       verdict: "unknown",

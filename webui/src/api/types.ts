@@ -239,27 +239,6 @@ export type SecurityScanState =
 
 export type SecurityScanVerdict = "findings" | "none_reported" | "unknown";
 
-export interface SecurityScanSubjectInfo {
-  subject_id: string;
-  line_no: number;
-  raw: string;
-  image: string;
-  candidate_image: string;
-  canonical_registry: string;
-  canonical_repository: string;
-  requested_ref: string;
-  reported_digest: string;
-  index_digest: string;
-  manifest_digest: string;
-  platform: string;
-  platform_os: string;
-  platform_architecture: string;
-  platform_variant: string;
-  platform_source: string;
-  identity_status: string;
-  warnings: string[];
-}
-
 export interface SecurityScanSeverityCounts {
   critical: number;
   high: number;
@@ -284,7 +263,6 @@ export interface SecurityScanInfo {
   warnings: string[];
   error_code: string;
   error_message: string;
-  subject: SecurityScanSubjectInfo;
 }
 
 export interface SecurityScansResponse {
@@ -549,7 +527,7 @@ export interface ReleaseNotificationResponse {
   count: number;
   sendable_count: number;
   skipped_count: number;
-  batches: Array<Record<string, unknown>>;
+  batch_count: number;
   items: ReleaseNotificationItem[];
   wud_api: WudApiStatus;
   warnings: string[];

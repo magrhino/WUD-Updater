@@ -33,7 +33,6 @@ export type {
   PendingRescanResponse,
   SecurityScanState,
   SecurityScanVerdict,
-  SecurityScanSubjectInfo,
   SecurityScanSeverityCounts,
   SecurityScanInfo,
   SecurityScansResponse,

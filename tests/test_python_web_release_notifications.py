@@ -678,7 +678,7 @@ def test_release_notification_send_batches_discord_embeds(
     body = response.json()
     assert response.status_code == 200
     assert body["sendable_count"] == 11
-    assert [batch["count"] for batch in body["batches"]] == [10, 1]
+    assert body["batch_count"] == 2
     assert [len(payload["embeds"]) for _url, payload in posted] == [10, 1]
 
 

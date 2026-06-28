@@ -140,12 +140,9 @@ __all__ = (
     "SecurityScanConfig",
     "SecurityScanInfo",
     "SecurityScanJobResponse",
-    "SecurityScanMode",
     "SecurityScanSeverityCounts",
     "SecurityScanState",
-    "SecurityScanSubjectInfo",
     "SecurityScansResponse",
-    "SecurityScannerName",
     "SecurityScanVerdict",
     "SELF_UPDATE_RELEASE_NOTES_CAP",
     "SecretSettingStatus",
@@ -285,12 +282,9 @@ class WudApiClientConfig:
 @dataclass(frozen=True)
 class SecurityScanConfig:
     enabled: bool = False
-    scanner: SecurityScannerName = "trivy"
-    mode: SecurityScanMode = "registry"
     executable: str = "trivy"
     cache_dir: str = ""
     timeout_seconds: int = 300
-    max_concurrency: int = 1
 
 
 @dataclass(frozen=True)
@@ -813,7 +807,7 @@ class ReleaseNotificationResponse(BaseModel):
     count: int = 0
     sendable_count: int = 0
     skipped_count: int = 0
-    batches: list[dict[str, Any]] = Field(default_factory=list)
+    batch_count: int = 0
     items: list[ReleaseNotificationItem] = Field(default_factory=list)
     wud_api: WudApiStatus = Field(
         default_factory=lambda: WudApiStatus(
@@ -1067,10 +1061,6 @@ RunVerificationWudStatus = Literal[
     "unknown",
 ]
 
-SecurityScannerName = Literal["trivy"]
-
-SecurityScanMode = Literal["registry"]
-
 SecurityScanState = Literal[
     "disabled",
     "not_scanned",
@@ -1086,27 +1076,6 @@ SecurityScanState = Literal[
 ]
 
 SecurityScanVerdict = Literal["findings", "none_reported", "unknown"]
-
-
-class SecurityScanSubjectInfo(BaseModel):
-    subject_id: str = ""
-    line_no: int = 0
-    raw: str = ""
-    image: str = ""
-    candidate_image: str = ""
-    canonical_registry: str = ""
-    canonical_repository: str = ""
-    requested_ref: str = ""
-    reported_digest: str = ""
-    index_digest: str = ""
-    manifest_digest: str = ""
-    platform: str = ""
-    platform_os: str = ""
-    platform_architecture: str = ""
-    platform_variant: str = ""
-    platform_source: str = ""
-    identity_status: str = "unsupported"
-    warnings: list[str] = Field(default_factory=list)
 
 
 class SecurityScanSeverityCounts(BaseModel):
@@ -1137,7 +1106,6 @@ class SecurityScanInfo(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     error_code: str = ""
     error_message: str = ""
-    subject: SecurityScanSubjectInfo = Field(default_factory=SecurityScanSubjectInfo)
 
 
 class SecurityScansResponse(BaseModel):
@@ -1145,8 +1113,8 @@ class SecurityScansResponse(BaseModel):
     source: PendingSourceInfo = Field(default_factory=PendingSourceInfo)
     source_hash: str = ""
     scanning_enabled: bool = False
-    scanner: SecurityScannerName = "trivy"
-    scan_mode: SecurityScanMode = "registry"
+    scanner: Literal["trivy"] = "trivy"
+    scan_mode: Literal["registry"] = "registry"
     count: int = 0
     items: list[SecurityScanInfo] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

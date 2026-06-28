@@ -922,16 +922,7 @@ export function releaseNotificationResponse(
     count: 1,
     sendable_count: 1,
     skipped_count: 0,
-    batches: [
-      {
-        embeds: [
-          {
-            title: "v2.0.0",
-            description: "acme/app",
-          },
-        ],
-      },
-    ],
+    batch_count: 1,
     items: [
       {
         line_no: 1,

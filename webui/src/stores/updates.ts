@@ -53,7 +53,6 @@ import {
   releaseChangelogKey,
   type ReleaseChangelogState,
 } from "../utils/releaseChangelog";
-import { securityScanMatchesPendingItem } from "../utils/securityScans";
 import { useRunsStore } from "./runs";
 
 export const APPLY_JOB_RECOVERY_MESSAGE =
@@ -118,12 +117,8 @@ export const useUpdatesStore = defineStore("updates", () => {
     if (!scans || pendingItems.length === 0) {
       return [];
     }
-    return scans.items.filter((scan) => {
-      const item = pendingItems.find(
-        (candidate) => candidate.line_no === scan.line_no,
-      );
-      return item ? securityScanMatchesPendingItem(scan, item) : false;
-    });
+    const pendingLineNumbers = new Set(pendingItems.map((item) => item.line_no));
+    return scans.items.filter((scan) => pendingLineNumbers.has(scan.line_no));
   });
   const securityScanJob = ref<SecurityScanJobResponse | null>(null);
   const releaseChangelogs = ref<Record<string, ReleaseChangelogState>>({});
@@ -521,13 +516,9 @@ export const useUpdatesStore = defineStore("updates", () => {
     if (!scans) {
       return null;
     }
-    const scan = currentSecurityScanItems.value.find(
+    return currentSecurityScanItems.value.find(
       (candidate) => candidate.line_no === item.line_no,
-    );
-    if (!scan || !securityScanMatchesPendingItem(scan, item)) {
-      return null;
-    }
-    return scan;
+    ) ?? null;
   }
 
   function securityScanPollMaxAttempts(job: SecurityScanJobResponse): number {

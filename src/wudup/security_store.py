@@ -13,7 +13,6 @@ from .security_subjects import PendingSecurityRequest, subject_id
 from .web_models import (
     SecurityScanInfo,
     SecurityScanSeverityCounts,
-    SecurityScanSubjectInfo,
 )
 
 
@@ -94,10 +93,9 @@ def upsert_scan_result(
     *,
     timestamp: str,
 ) -> None:
-    active_subject_id = subject_id(subject)
     cache_key = _cache_key(
         request.request_key,
-        active_subject_id,
+        subject_id(subject),
         result.scanner,
         result.scanner_version,
         result.scanner_schema,
@@ -142,17 +140,15 @@ def upsert_scan_result(
                 warnings_json,
                 error_code,
                 error_message,
-                raw_json,
                 created_at,
-                updated_at,
-                metadata_json
+                updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 cache_key,
                 request.request_key,
-                active_subject_id,
+                subject_id(subject),
                 subject.canonical_registry,
                 subject.canonical_repository,
                 subject.requested_ref,
@@ -178,17 +174,8 @@ def upsert_scan_result(
                 json.dumps([*subject.warnings, *result.warnings], sort_keys=True),
                 result.error_code,
                 result.error_message,
-                result.raw_json or "{}",
                 timestamp,
                 timestamp,
-                json.dumps(
-                    {
-                        "line_no": request.line_no,
-                        "scan_warnings": list(result.warnings),
-                        "subject_warnings": list(subject.warnings),
-                    },
-                    sort_keys=True,
-                ),
             ),
         )
         _prune_cache_rows(conn, request.request_key)
@@ -198,8 +185,6 @@ def row_to_scan_info(
     row: sqlite3.Row,
     request: PendingSecurityRequest,
 ) -> SecurityScanInfo:
-    metadata = _json_object(str(row["metadata_json"]))
-    subject_warnings = _metadata_string_list(metadata, "subject_warnings")
     return SecurityScanInfo(
         line_no=request.line_no,
         state=str(row["state"]),  # type: ignore[arg-type]
@@ -216,26 +201,6 @@ def row_to_scan_info(
         warnings=_json_string_list(str(row["warnings_json"])),
         error_code=str(row["error_code"]),
         error_message=str(row["error_message"]),
-        subject=SecurityScanSubjectInfo(
-            subject_id=str(row["subject_id"]),
-            line_no=request.line_no,
-            raw=request.raw,
-            image=request.image,
-            candidate_image=request.candidate_image,
-            canonical_registry=str(row["canonical_registry"]),
-            canonical_repository=str(row["canonical_repository"]),
-            requested_ref=str(row["requested_ref"]),
-            reported_digest=str(row["reported_digest"]),
-            index_digest=str(row["index_digest"]),
-            manifest_digest=str(row["manifest_digest"]),
-            platform=str(row["platform"]),
-            platform_os=str(row["platform_os"]),
-            platform_architecture=str(row["platform_architecture"]),
-            platform_variant=str(row["platform_variant"]),
-            platform_source=str(row["platform_source"]),
-            identity_status=str(row["identity_status"]),
-            warnings=subject_warnings,
-        ),
     )
 
 
@@ -266,13 +231,6 @@ def _json_string_list(value: str) -> list[str]:
     if not isinstance(parsed, list):
         return []
     return [str(item) for item in parsed if isinstance(item, str)]
-
-
-def _metadata_string_list(metadata: Mapping[str, object], key: str) -> list[str]:
-    value = metadata.get(key)
-    if not isinstance(value, list):
-        return []
-    return [str(item) for item in value if isinstance(item, str)]
 
 
 def _safe_int(value: object) -> int:

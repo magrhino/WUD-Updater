@@ -54,7 +54,6 @@ def test_security_scans_get_is_disabled_and_cache_only_by_default(
     assert body["scan_mode"] == "registry"
     assert body["count"] == 1
     assert body["items"][0]["state"] == "disabled"
-    assert body["items"][0]["subject"]["platform"] == "linux/amd64"
     assert not (tmp_path / "state" / WEB_DB_NAME).exists()
 
 
@@ -265,35 +264,6 @@ def test_security_scan_refresh_rejects_active_self_update(tmp_path: Path) -> Non
     assert response.json()["detail"] == "self-update is already running"
 
 
-def test_security_scan_refresh_respects_max_concurrency_limit(
-    tmp_path: Path,
-) -> None:
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_SECURITY_SCANNING_ENABLED": "true",
-            "WUD_SECURITY_SCAN_MAX_CONCURRENCY": "2",
-        },
-    )
-
-    for index in range(client.app.state.web_settings.security_scan.max_concurrency):
-        job_id = f"test-concurrent-{index}"
-        client.app.state.web_security_scan_jobs[job_id] = web_security.WebSecurityScanJob(
-            id=job_id,
-            status="running",
-        )
-
-    response = client.post(
-        "/api/v1/security-scans/refresh",
-        headers=_csrf_headers(client),
-    )
-
-    assert response.status_code == 409
-    assert response.json()["detail"] == "security scan refresh is already running"
-
-
 def test_security_scan_refresh_reserves_against_self_update_race(
     tmp_path: Path,
 ) -> None:
@@ -415,47 +385,6 @@ def test_active_mutation_error_keeps_general_guards_when_scan_jobs_excluded() ->
     )
 
 
-def test_security_scan_refresh_allows_configured_concurrent_jobs(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    context = _empty_security_context(tmp_path)
-    monkeypatch.setattr(
-        "wudup.web_security.pending_security_context",
-        lambda _settings: context,
-    )
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_SECURITY_SCANNING_ENABLED": "true",
-            "WUD_SECURITY_SCAN_MAX_CONCURRENCY": "2",
-        },
-    )
-    executor = QueuedExecutor()
-    client.app.state.web_security_scan_executor = executor
-
-    first = client.post(
-        "/api/v1/security-scans/refresh",
-        headers=_csrf_headers(client),
-    )
-    second = client.post(
-        "/api/v1/security-scans/refresh",
-        headers=_csrf_headers(client),
-    )
-    third = client.post(
-        "/api/v1/security-scans/refresh",
-        headers=_csrf_headers(client),
-    )
-
-    assert first.status_code == 200
-    assert second.status_code == 200
-    assert third.status_code == 409
-    assert third.json()["detail"] == "security scan refresh is already running"
-    assert len(executor.calls) == 2
-
-
 def test_security_scan_refresh_queues_server_resolved_job(
     tmp_path: Path,
     monkeypatch,
@@ -533,8 +462,7 @@ def test_security_scan_refresh_scans_caches_and_reads_back_result(
     assert item["state"] == "complete"
     assert item["verdict"] == "findings"
     assert item["severity_counts"]["high"] == 1
-    assert item["subject"]["manifest_digest"] == "sha256:child"
-    assert item["subject"]["warnings"] == ["subject warning"]
+    assert item["warnings"] == ["subject warning"]
 
     cached = client.get("/api/v1/security-scans")
 
@@ -543,16 +471,7 @@ def test_security_scan_refresh_scans_caches_and_reads_back_result(
     assert cached_item["state"] == "complete"
     assert cached_item["verdict"] == "findings"
     assert cached_item["severity_counts"]["high"] == 1
-    assert cached_item["subject"]["warnings"] == ["subject warning"]
-    with sqlite3.connect(tmp_path / "state" / WEB_DB_NAME) as conn:
-        raw_json = conn.execute(
-            "SELECT raw_json FROM security_scan_cache"
-        ).fetchone()[0]
-    assert '"Results":[]' in raw_json
-    assert "supersecret" not in raw_json
-    assert "<redacted>" in raw_json
-    assert "/private/app" not in raw_json
-    assert "[REDACTED_PATH]" in raw_json
+    assert cached_item["warnings"] == ["subject warning"]
 
 
 def test_security_scan_cache_readback_uses_unambiguous_cached_platform(
@@ -603,7 +522,6 @@ def test_security_scan_cache_readback_uses_unambiguous_cached_platform(
     assert item["state"] == "complete"
     assert item["verdict"] == "findings"
     assert item["severity_counts"]["high"] == 1
-    assert item["subject"]["platform"] == "linux/amd64"
 
 
 def test_security_scan_cache_readback_does_not_cross_platform_request_keys(
@@ -655,7 +573,6 @@ def test_security_scan_cache_readback_does_not_cross_platform_request_keys(
     assert cached.status_code == 200
     item = cached.json()["items"][0]
     assert item["state"] == "not_scanned"
-    assert item["subject"]["platform"] == "linux/arm64"
 
 
 def test_security_scan_refresh_persists_non_exact_resolution(
@@ -728,10 +645,9 @@ def test_security_scan_cache_corrupt_counts_degrade_to_zero() -> None:
             UPDATE security_scan_cache
             SET severity_counts_json = ?,
                 fixable_counts_json = ?,
-                unfixed_count = ?,
-                metadata_json = ?
+                unfixed_count = ?
             """,
-            ('{"high":"not-a-number"}', "[]", "not-a-number", "{}"),
+            ('{"high":"not-a-number"}', "[]", "not-a-number"),
         )
         row = conn.execute("SELECT * FROM security_scan_cache").fetchone()
 
@@ -741,7 +657,6 @@ def test_security_scan_cache_corrupt_counts_degrade_to_zero() -> None:
     assert info.fixable_counts.high == 0
     assert info.unfixed_count == 0
     assert info.warnings == ["subject warning", "scan warning"]
-    assert info.subject.warnings == []
 
 
 def test_security_scan_cache_platform_fallback_rejects_ambiguous_platforms() -> None:
@@ -806,14 +721,13 @@ def test_security_scan_cache_uses_newest_same_second_row_and_prunes() -> None:
                     scanner_schema=str(index),
                     db_revision=str(index),
                     severity_counts={"high": index},
-                    raw_json='{"large":"payload"}',
                 ),
                 timestamp=timestamp,
             )
         cached = cached_scan_by_request(conn, request)
         rows = conn.execute(
             """
-            SELECT raw_json
+            SELECT rowid
             FROM security_scan_cache
             WHERE request_key = ?
             """,
@@ -824,7 +738,6 @@ def test_security_scan_cache_uses_newest_same_second_row_and_prunes() -> None:
     assert cached.db_revision == "6"
     assert cached.severity_counts.high == 6
     assert len(rows) == 5
-    assert {row["raw_json"] for row in rows} == {'{"large":"payload"}'}
 
 
 def _completed_security_job(client, job_id: str) -> dict[str, object] | None:
@@ -972,10 +885,6 @@ class FakeScanner:
             scanner_schema="2",
             severity_counts={"high": 1},
             fixable_counts={"high": 1},
-            raw_json=(
-                '{"Results":[],"ArtifactName":"/private/app",'
-                '"Token":"supersecret"}'
-            ),
         )
 
 

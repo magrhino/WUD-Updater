@@ -124,26 +124,6 @@ function securityScanInfo(
     warnings: [],
     error_code: "",
     error_message: "",
-    subject: {
-      subject_id: "scan-subject",
-      line_no: 1,
-      raw: "repo/app:1.0 platform=linux/amd64 sha256=abc",
-      image: "repo/app:1.0",
-      candidate_image: "repo/app:1.1",
-      canonical_registry: "docker.io",
-      canonical_repository: "library/repo/app",
-      requested_ref: "docker.io/library/repo/app:1.1",
-      reported_digest: "sha256:abc",
-      index_digest: "sha256:abc",
-      manifest_digest: "sha256:child",
-      platform: "linux/amd64",
-      platform_os: "linux",
-      platform_architecture: "amd64",
-      platform_variant: "",
-      platform_source: "wud",
-      identity_status: "exact",
-      warnings: [],
-    },
     ...overrides,
   };
 }
@@ -283,7 +263,7 @@ describe("updates store", () => {
     expect(updates.pendingCleanup).toBeNull();
   });
 
-  it("matches security scans only for the current pending source and subject", () => {
+  it("matches security scans only for the current pending source and line", () => {
     useConnectionStore();
     useSettingsStore();
     const updates = useUpdatesStore();
@@ -315,6 +295,7 @@ describe("updates store", () => {
 
     const changedLine = pendingItem({
       ...item,
+      line_no: 2,
       raw: "repo/other:1.0 platform=linux/amd64 sha256=abc",
       image: "repo/other:1.0",
     });
@@ -322,48 +303,6 @@ describe("updates store", () => {
     updates.securityScans = securityScansResponse([scan]);
     expect(updates.currentSecurityScanItems).toEqual([]);
     expect(updates.securityScanFor(changedLine)).toBeNull();
-
-    const wudPlatformItem = pendingItem({
-      line_no: 1,
-      raw: "repo/app:1.0 sha256=abc",
-      image: "repo/app:1.0",
-      digest: "abc",
-      wud_metadata: wudContainerMetadata({ platform: "linux/amd64" }),
-    });
-    const wudPlatformScan = securityScanInfo({
-      subject: {
-        ...scan.subject,
-        raw: wudPlatformItem.raw,
-        platform: "linux/amd64",
-      },
-    });
-    updates.pending = pendingResponse([wudPlatformItem]);
-    updates.securityScans = securityScansResponse([wudPlatformScan]);
-    expect(updates.currentSecurityScanItems).toEqual([wudPlatformScan]);
-    expect(updates.securityScanFor(wudPlatformItem)).toEqual(wudPlatformScan);
-
-    const noPlatformItem = pendingItem({
-      line_no: 1,
-      raw: "repo/app:1.0 sha256=abc",
-      image: "repo/app:1.0",
-      digest: "abc",
-    });
-    updates.pending = pendingResponse([noPlatformItem]);
-    updates.securityScans = securityScansResponse([wudPlatformScan]);
-    expect(updates.currentSecurityScanItems).toEqual([]);
-    expect(updates.securityScanFor(noPlatformItem)).toBeNull();
-
-    const composePlatformScan = securityScanInfo({
-      subject: {
-        ...scan.subject,
-        raw: noPlatformItem.raw,
-        platform: "linux/amd64",
-        platform_source: "compose",
-      },
-    });
-    updates.securityScans = securityScansResponse([composePlatformScan]);
-    expect(updates.currentSecurityScanItems).toEqual([composePlatformScan]);
-    expect(updates.securityScanFor(noPlatformItem)).toEqual(composePlatformScan);
   });
 
   it("refreshes security scans through a bounded job poll", async () => {

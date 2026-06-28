@@ -183,7 +183,6 @@ EXPECTED_SCHEMA: SchemaDefinition = {
         ("warnings_json", "TEXT", 1, "'[]'", 0),
         ("error_code", "TEXT", 1, "''", 0),
         ("error_message", "TEXT", 1, "''", 0),
-        ("raw_json", "TEXT", 1, "'{}'", 0),
         ("created_at", "TEXT", 1, None, 0),
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
@@ -333,15 +332,12 @@ CREATE TABLE IF NOT EXISTS security_scan_cache (
     warnings_json TEXT NOT NULL DEFAULT '[]',
     error_code TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
-    raw_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     metadata_json TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_security_scan_cache_request
     ON security_scan_cache (request_key, updated_at);
-CREATE INDEX IF NOT EXISTS idx_security_scan_cache_subject
-    ON security_scan_cache (subject_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_security_scan_cache_image_digest_platform
     ON security_scan_cache (requested_ref, reported_digest, platform, updated_at);
 """

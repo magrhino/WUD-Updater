@@ -387,7 +387,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIsNotNone(table)
         self.assertEqual(columns, expected_columns)
         self.assertIn("idx_security_scan_cache_request", indexes)
-        self.assertIn("idx_security_scan_cache_subject", indexes)
+        self.assertIn("idx_security_scan_cache_image_digest_platform", indexes)
 
     def test_init_db_rejects_v8_schema_with_conflicting_security_cache(self) -> None:
         with sqlite3.connect(":memory:") as conn:

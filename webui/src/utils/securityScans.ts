@@ -1,8 +1,4 @@
-import type {
-  PendingItem,
-  SecurityScanInfo,
-  SecurityScansResponse,
-} from "../api/client";
+import type { PendingItem, SecurityScanInfo, SecurityScansResponse } from "../api/client";
 
 export type SecurityScanDisplayType =
   | "default"
@@ -93,27 +89,6 @@ export function pendingItemPlatform(item: PendingPlatformSource): string {
     item.platform_architecture,
     item.platform_variant,
   );
-}
-
-export function securityScanMatchesPendingItem(
-  scan: SecurityScanInfo,
-  item: PendingItem,
-): boolean {
-  if (scan.subject.raw !== item.raw || scan.subject.image !== item.image) {
-    return false;
-  }
-  if (
-    normalizeSecurityDigest(scan.subject.reported_digest) !==
-    normalizeSecurityDigest(item.digest)
-  ) {
-    return false;
-  }
-  const itemPlatform = pendingItemPlatform(item);
-  const scanPlatform = scan.subject.platform.trim();
-  if (scan.subject.platform_source === "compose") {
-    return Boolean(scanPlatform);
-  }
-  return !scanPlatform || (Boolean(itemPlatform) && scanPlatform === itemPlatform);
 }
 
 export function securityScanFindingsType(

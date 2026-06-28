@@ -30,7 +30,6 @@ class SecurityScanResult:
     warnings: tuple[str, ...] = ()
     error_code: str = ""
     error_message: str = ""
-    raw_json: str = "{}"
 
 
 class TrivyScanner:
@@ -87,7 +86,6 @@ class TrivyScanner:
         return _result_from_trivy_payload(
             payload,
             scanner_version=self.version(),
-            raw_json=result.stdout,
         )
 
     def version(self) -> str:
@@ -112,7 +110,7 @@ class TrivyScanner:
             "--quiet",
             "--disable-telemetry",
             "--image-src",
-            _trivy_image_source(self.config.mode),
+            "remote",
             "--platform",
             subject.platform,
             "--timeout",
@@ -128,7 +126,6 @@ def _result_from_trivy_payload(
     payload: Mapping[str, Any],
     *,
     scanner_version: str,
-    raw_json: str,
 ) -> SecurityScanResult:
     if not isinstance(payload.get("Results"), list):
         return SecurityScanResult(
@@ -136,7 +133,6 @@ def _result_from_trivy_payload(
             scanner_version=scanner_version,
             error_code="invalid_json",
             error_message="scanner JSON did not include a Results array",
-            raw_json=raw_json or "{}",
         )
     severity_counts = _empty_counts()
     fixable_counts = _empty_counts()
@@ -167,7 +163,6 @@ def _result_from_trivy_payload(
         severity_counts=severity_counts,
         fixable_counts=fixable_counts,
         unfixed_count=unfixed_count,
-        raw_json=raw_json or "{}",
     )
 
 
@@ -213,9 +208,3 @@ def _parse_trivy_version(output: str) -> str:
         if line.lower().startswith("version:"):
             return line.split(":", 1)[1].strip()
     return output.splitlines()[0].strip() if output.splitlines() else ""
-
-
-def _trivy_image_source(mode: str) -> str:
-    if mode == "registry":
-        return "remote"
-    return mode
