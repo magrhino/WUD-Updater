@@ -243,6 +243,7 @@ def _reserve_mutation_state(
     *,
     include_security_scan_jobs: bool = True,
 ) -> str:
+    """Acquire web_apply_condition before nested job-family locks."""
     apply_condition: Condition = state.web_apply_condition
     with apply_condition:
         active_error = _active_mutation_error_unlocked(

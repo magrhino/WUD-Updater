@@ -89,6 +89,13 @@ const EMPTY_SECURITY_COUNTS: SecurityScanSeverityCounts = {
   unknown: 0,
 };
 
+type DemoSecurityScanDecision = {
+  exact: boolean;
+  hasFindings: boolean;
+  state: SecurityScanInfo["state"];
+  verdict: SecurityScanInfo["verdict"];
+};
+
 type PendingLineFixture = {
   line_no: number;
   raw: string;
@@ -839,33 +846,27 @@ export class DemoApiState {
       item.platform.trim() || (item.wud_metadata && platform),
     );
     const platformSource = platformFromWud ? "wud" : "demo";
-    const exact = Boolean(reportedDigest && platform);
-    const hasFindings = index === 0 && exact;
-    const counts =
-      hasFindings
-        ? { critical: 0, high: 1, medium: 2, low: 0, unknown: 0 }
-        : EMPTY_SECURITY_COUNTS;
+    const decision = this.securityScanDecision(reportedDigest, platform, index);
+    const severityCounts = this.securityScanSeverityCounts(decision.hasFindings);
+    const fixableCounts = this.securityScanFixableCounts(decision.hasFindings);
     const [platformOs = "", platformArchitecture = "", platformVariant = ""] =
       platform.split("/");
 
     return {
       line_no: item.line_no,
-      state: exact ? (hasFindings ? "complete" : "not_scanned") : "unsupported",
-      verdict: hasFindings ? "findings" : "unknown",
+      state: decision.state,
+      verdict: decision.verdict,
       scanner: "trivy",
-      scanner_version: hasFindings ? "demo" : "",
-      scanner_schema: hasFindings ? "trivy-json" : "",
-      scanned_at: hasFindings ? DEMO_NOW : "",
+      scanner_version: decision.hasFindings ? "demo" : "",
+      scanner_schema: decision.hasFindings ? "trivy-json" : "",
+      scanned_at: decision.hasFindings ? DEMO_NOW : "",
       db_revision: "",
       db_updated_at: "",
-      severity_counts: { ...counts },
-      fixable_counts:
-        hasFindings
-          ? { critical: 0, high: 1, medium: 1, low: 0, unknown: 0 }
-          : { ...EMPTY_SECURITY_COUNTS },
-      unfixed_count: hasFindings ? 1 : 0,
+      severity_counts: severityCounts,
+      fixable_counts: fixableCounts,
+      unfixed_count: decision.hasFindings ? 1 : 0,
       warnings:
-        hasFindings ? ["Demo finding for candidate-only advisory display."] : [],
+        decision.hasFindings ? ["Demo finding for candidate-only advisory display."] : [],
       error_code: "",
       error_message: "",
       subject: {
@@ -887,10 +888,60 @@ export class DemoApiState {
         platform_architecture: item.platform_architecture || platformArchitecture,
         platform_variant: item.platform_variant || platformVariant,
         platform_source: platformSource,
-        identity_status: exact ? "exact" : "unsupported",
+        identity_status: decision.exact ? "exact" : "unsupported",
         warnings: [],
       },
     };
+  }
+
+  private securityScanDecision(
+    reportedDigest: string,
+    platform: string,
+    index: number,
+  ): DemoSecurityScanDecision {
+    const exact = Boolean(reportedDigest && platform);
+    const hasFindings = exact && index === 0;
+
+    if (!exact) {
+      return {
+        exact,
+        hasFindings,
+        state: "unsupported",
+        verdict: "unknown",
+      };
+    }
+    if (hasFindings) {
+      return {
+        exact,
+        hasFindings,
+        state: "complete",
+        verdict: "findings",
+      };
+    }
+    return {
+      exact,
+      hasFindings,
+      state: "not_scanned",
+      verdict: "unknown",
+    };
+  }
+
+  private securityScanSeverityCounts(
+    hasFindings: boolean,
+  ): SecurityScanSeverityCounts {
+    if (hasFindings) {
+      return { critical: 0, high: 1, medium: 2, low: 0, unknown: 0 };
+    }
+    return { ...EMPTY_SECURITY_COUNTS };
+  }
+
+  private securityScanFixableCounts(
+    hasFindings: boolean,
+  ): SecurityScanSeverityCounts {
+    if (hasFindings) {
+      return { critical: 0, high: 1, medium: 1, low: 0, unknown: 0 };
+    }
+    return { ...EMPTY_SECURITY_COUNTS };
   }
 
   selfUpdate(): SelfUpdateResponse {

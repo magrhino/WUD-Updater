@@ -110,6 +110,12 @@ let clearPreflightHandler: () => void = () => undefined;
 let loadPendingAndReleaseNotesHandler: () => Promise<void> = async () => undefined;
 const showReleaseNotificationModal = ref(false);
 const releaseNotificationSource = ref<ReleaseNotificationSource | null>(null);
+const securityScanRefreshReadOnlyMessage =
+  "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server " +
+  "to refresh candidate security scans.";
+const securityScanRefreshMutationMessage =
+  "Wait for the active WebUI mutation to finish before refreshing candidate " +
+  "security scans.";
 
 const {
   clearSelection,
@@ -312,15 +318,6 @@ const releaseNotificationSendDisabled = computed(
 const securityScanRefreshVisible = computed(
   () => updates.securityScans?.scanning_enabled ?? false,
 );
-const securityScanRefreshDisabled = computed(
-  () => updates.securityScansLoading || auth.session?.mutations_enabled === false,
-);
-const securityScanRefreshDisabledMessage = computed(() => {
-  if (auth.session?.mutations_enabled === false) {
-    return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to refresh candidate security scans.";
-  }
-  return "";
-});
 const securityScanSummary = computed(() =>
   securityScanSummaryDisplay({
     securityScans: updates.securityScans,
@@ -458,6 +455,24 @@ const {
 } = usePendingApplyJob({
   applyJobPanelRef,
   loadPendingAndReleaseNotes: () => loadPendingAndReleaseNotesHandler(),
+});
+const mutationInProgress = computed(
+  () => updates.loading || applyJobActive.value,
+);
+const securityScanRefreshDisabled = computed(
+  () =>
+    updates.securityScansLoading ||
+    auth.session?.mutations_enabled === false ||
+    mutationInProgress.value,
+);
+const securityScanRefreshDisabledMessage = computed(() => {
+  if (auth.session?.mutations_enabled === false) {
+    return securityScanRefreshReadOnlyMessage;
+  }
+  if (mutationInProgress.value) {
+    return securityScanRefreshMutationMessage;
+  }
+  return "";
 });
 
 const {

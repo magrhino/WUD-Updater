@@ -324,7 +324,7 @@ def test_security_scan_refresh_reserves_against_self_update_race(
     def refresh_security_scans() -> None:
         try:
             refresh_response["value"] = web_security.api_refresh_security_scans(request)
-        except Exception as exc:  # pragma: no cover - surfaced after join
+        except Exception as exc:  # noqa: BLE001 - asserted after join.  # pragma: no cover
             refresh_errors.append(exc)
 
     def reserve_self_update() -> None:
@@ -1003,6 +1003,7 @@ class NonBlockingLock:
         return self
 
     def __exit__(self, *_args: object) -> None:
+        # The test double intentionally leaves the context without blocking.
         pass
 
 

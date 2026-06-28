@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SnoozeKind } from "../src/api/client";
 import {
+  applyJobResponse,
   pendingGroupedItem,
   pendingGrouping,
   pendingItem,
@@ -171,6 +172,41 @@ describe("pending view selection actions", () => {
     await cleanupButton?.trigger("click");
 
     expect(cleanupPending).not.toHaveBeenCalled();
+  });
+
+  it("disables security scan refresh while an apply job is active", async () => {
+    const { pinia, settings, updates } = setupStores(true);
+    const pending = pendingResponse();
+    updates.pending = pending;
+    updates.securityScans = {
+      source_file: pending.source_file,
+      source: pending.source,
+      source_hash: pending.source_hash ?? "",
+      scanning_enabled: true,
+      scanner: "trivy",
+      scan_mode: "registry",
+      count: 0,
+      items: [],
+      warnings: [],
+    };
+    updates.applyJob = applyJobResponse({ status: "running" });
+    mockPendingLifecycle(settings, updates);
+    const refreshSecurityScans = vi
+      .spyOn(updates, "refreshSecurityScans")
+      .mockResolvedValue();
+    const wrapper = mountPendingView(pinia);
+
+    const refreshButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Refresh scans"));
+
+    expect(refreshButton?.exists()).toBe(true);
+    expect(refreshButton?.attributes("disabled")).toBeDefined();
+    expect(refreshButton?.attributes("title")).toBe(
+      "Wait for the active WebUI mutation to finish before refreshing candidate security scans.",
+    );
+    await refreshButton?.trigger("click");
+    expect(refreshSecurityScans).not.toHaveBeenCalled();
   });
 
   it("confirms unmatched cleanup before refreshing pending state", async () => {

@@ -84,7 +84,6 @@ function securityScanInfo(
     scanned_at: "",
     db_revision: "",
     db_updated_at: "",
-    severity_counts: severityCounts,
     fixable_counts: {
       critical: 0,
       high: 0,

@@ -768,9 +768,16 @@ describe("demo web API", () => {
     const pending = await api.pending();
     const scans = await api.securityScans();
     const tagOnlyLine = pending.items.find((item) => item.digest === "");
-    const digestLine = pending.items.find((item) =>
-      item.digest.startsWith("sha256:"),
-    );
+    const digestLine = pending.items.find((item) => {
+      const scan = scans.items.find(
+        (candidate) => candidate.line_no === item.line_no,
+      );
+      return (
+        item.digest.startsWith("sha256:") &&
+        scan?.state === "unsupported" &&
+        scan.subject.reported_digest === item.digest
+      );
+    });
 
     expect(tagOnlyLine).toBeDefined();
     expect(digestLine).toBeDefined();
