@@ -4,6 +4,15 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.48.0](https://github.com/magrhino/wudup/compare/v0.47.0...v0.48.0) (2026-06-28)
+
+
+### Features
+
+* **security:** add opt-in scan backend ([#426](https://github.com/magrhino/wudup/issues/426)) ([dc5faae](https://github.com/magrhino/wudup/commit/dc5faaee3597939f2dc64e5f5c01ff2c63b40f55))
+* **security:** resolve candidate scan subjects ([#424](https://github.com/magrhino/wudup/issues/424)) ([8c49f7e](https://github.com/magrhino/wudup/commit/8c49f7e9fb538c913954779ed14dfaa5b428757f))
+* **webui:** surface security scan results and serialize refreshes ([#428](https://github.com/magrhino/wudup/issues/428)) ([f9d9e79](https://github.com/magrhino/wudup/commit/f9d9e791307f47846a8e64c40838eae33db3ad55))
+
 ## [0.47.0](https://github.com/magrhino/wudup/compare/v0.46.6...v0.47.0) (2026-06-28)
 
 
