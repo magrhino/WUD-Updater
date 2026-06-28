@@ -161,41 +161,49 @@ def api_refresh_security_scans(request: Request) -> SecurityScanJobResponse:
         raise HTTPException(status_code=403, detail="security scanning is disabled")
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
-    active_error = web_jobs._active_mutation_error(
-        request,
+
+    state = request.app.state
+    job: WebSecurityScanJob | None = None
+
+    def reserve_scan_job() -> None:
+        nonlocal job
+        with state.web_security_scan_lock:
+            jobs: dict[str, WebSecurityScanJob] = state.web_security_scan_jobs
+            if (
+                _active_security_scan_jobs_unlocked(jobs)
+                >= settings.security_scan.max_concurrency
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="security scan refresh is already running",
+                )
+            job = WebSecurityScanJob(
+                id=secrets.token_urlsafe(18),
+                status="queued",
+            )
+            jobs[job.id] = job
+            _prune_security_scan_jobs_unlocked(jobs)
+
+    active_error = web_jobs._reserve_mutation_state(
+        state,
+        reserve_scan_job,
         include_security_scan_jobs=False,
     )
     if active_error:
         raise HTTPException(status_code=409, detail=active_error)
-
-    state = request.app.state
-    with state.web_security_scan_lock:
-        jobs: dict[str, WebSecurityScanJob] = state.web_security_scan_jobs
-        if (
-            _active_security_scan_jobs_unlocked(jobs)
-            >= settings.security_scan.max_concurrency
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail="security scan refresh is already running",
-            )
-        job = WebSecurityScanJob(
-            id=secrets.token_urlsafe(18),
-            status="queued",
+    assert job is not None
+    try:
+        state.web_security_scan_executor.submit(
+            _run_security_scan_job,
+            state,
+            settings,
+            job.id,
         )
-        jobs[job.id] = job
-        _prune_security_scan_jobs_unlocked(jobs)
-        try:
-            state.web_security_scan_executor.submit(
-                _run_security_scan_job,
-                state,
-                settings,
-                job.id,
-            )
-        except Exception:
-            jobs.pop(job.id, None)
-            raise
-        return _job_response(job)
+    except Exception:
+        with state.web_security_scan_lock:
+            state.web_security_scan_jobs.pop(job.id, None)
+        raise
+    return _job_response(job)
 
 
 def api_security_scan_job(job_id: str, request: Request) -> SecurityScanJobResponse:

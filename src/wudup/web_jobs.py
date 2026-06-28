@@ -7,7 +7,7 @@ import json
 import secrets
 import tempfile
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -237,14 +237,29 @@ def _active_security_scan_error_in_state(state: Any) -> str:
     return ""
 
 
-def _reserve_self_update(state: Any) -> str:
-    apply_lock: Lock = state.web_apply_lock
-    with apply_lock:
-        active_error = _active_mutation_error_unlocked(state)
+def _reserve_mutation_state(
+    state: Any,
+    reserve: Callable[[], None],
+    *,
+    include_security_scan_jobs: bool = True,
+) -> str:
+    apply_condition: Condition = state.web_apply_condition
+    with apply_condition:
+        active_error = _active_mutation_error_unlocked(
+            state,
+            include_security_scan_jobs=include_security_scan_jobs,
+        )
         if active_error:
             return active_error
-        state.web_self_update_running = True
+        reserve()
     return ""
+
+
+def _reserve_self_update(state: Any) -> str:
+    def reserve() -> None:
+        state.web_self_update_running = True
+
+    return _reserve_mutation_state(state, reserve)
 
 
 def _release_self_update(state: Any) -> None:

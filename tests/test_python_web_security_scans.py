@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock, Thread
 from types import SimpleNamespace
 
 import pytest
@@ -18,7 +18,8 @@ from wudup.security_store import (
     upsert_scan_result,
 )
 from wudup.security_subjects import PendingSecurityContext, PendingSecurityRequest
-from wudup import web_jobs
+from wudup import web_jobs, web_security
+from wudup.web_models import WebApplyJob
 from wudup.web_pending_sources import PendingSourceResult
 from wudup.wud_file import parse_wud_text
 
@@ -218,6 +219,115 @@ def test_security_scan_refresh_cleans_up_job_when_executor_submit_fails(
         )
 
     assert client.app.state.web_security_scan_jobs == {}
+
+
+def test_security_scan_refresh_rejects_active_apply_job(tmp_path: Path) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+    client.app.state.web_apply_jobs["job-active"] = WebApplyJob(
+        id="job-active",
+        status="running",
+        selected_line_numbers=(1,),
+    )
+
+    response = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "an apply job is already running"
+
+
+def test_security_scan_refresh_rejects_active_self_update(tmp_path: Path) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+    client.app.state.web_self_update_running = True
+
+    response = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "self-update is already running"
+
+
+def test_security_scan_refresh_reserves_against_self_update_race(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+    executor = QueuedExecutor()
+    insert_started = Event()
+    allow_insert = Event()
+    client.app.state.web_security_scan_executor = executor
+    client.app.state.web_security_scan_lock = NonBlockingLock()
+    client.app.state.web_security_scan_jobs = BlockingSecurityScanJobs(
+        insert_started,
+        allow_insert,
+    )
+    request = SimpleNamespace(app=client.app)
+    refresh_response: dict[str, object] = {}
+    refresh_errors: list[BaseException] = []
+    reservation: dict[str, str] = {}
+    reservation_done = Event()
+    reservation_blocked = False
+
+    def refresh_security_scans() -> None:
+        try:
+            refresh_response["value"] = web_security.api_refresh_security_scans(request)
+        except Exception as exc:  # pragma: no cover - surfaced after join
+            refresh_errors.append(exc)
+
+    def reserve_self_update() -> None:
+        try:
+            reservation["error"] = web_jobs._reserve_self_update(client.app.state)
+        finally:
+            reservation_done.set()
+
+    refresh_thread = Thread(target=refresh_security_scans)
+    reserve_thread: Thread | None = None
+    refresh_thread.start()
+    try:
+        assert insert_started.wait(2.0)
+        assert client.app.state.web_apply_lock.locked() is True
+        reserve_thread = Thread(target=reserve_self_update)
+        reserve_thread.start()
+        reservation_blocked = not reservation_done.wait(0.1)
+    finally:
+        allow_insert.set()
+        refresh_thread.join(2.0)
+        if reserve_thread is not None:
+            reserve_thread.join(2.0)
+
+    assert reservation_blocked is True
+    assert refresh_thread.is_alive() is False
+    assert reserve_thread is not None
+    assert reserve_thread.is_alive() is False
+    assert refresh_errors == []
+    assert refresh_response["value"].status == "queued"
+    assert reservation["error"] == "security scan refresh is already running"
+    assert client.app.state.web_self_update_running is False
+    assert len(executor.calls) == 1
 
 
 def test_active_mutation_error_checks_security_jobs_under_scan_lock() -> None:
@@ -857,6 +967,26 @@ class QueuedExecutor:
 
     def shutdown(self, **_kwargs) -> None:
         pass  # Queued test executor has no background workers to stop.
+
+
+class NonBlockingLock:
+    def __enter__(self) -> "NonBlockingLock":
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        pass
+
+
+class BlockingSecurityScanJobs(dict[str, object]):
+    def __init__(self, insert_started: Event, allow_insert: Event) -> None:
+        super().__init__()
+        self._insert_started = insert_started
+        self._allow_insert = allow_insert
+
+    def __setitem__(self, key: str, value: object) -> None:
+        self._insert_started.set()
+        assert self._allow_insert.wait(2.0), "timed out waiting to insert scan job"
+        super().__setitem__(key, value)
 
 
 class TrackingLock:
