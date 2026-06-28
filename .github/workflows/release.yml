@@ -166,7 +166,7 @@ jobs:
   publish-image:
     name: publish image
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     permissions:
       contents: write
       packages: write
@@ -209,7 +209,7 @@ jobs:
           set -euo pipefail
           printf '%s\n' "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GITHUB_ACTOR" --password-stdin
 
-      - name: Build amd64 smoke image
+      - name: Publish image
         shell: bash
         env:
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
@@ -219,147 +219,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          image="$REGISTRY/$IMAGE_NAME"
-          docker buildx build \
-            --platform linux/amd64 \
-            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
-            --label "org.opencontainers.image.revision=$RELEASE_SHA" \
-            --label "org.opencontainers.image.version=$RELEASE_TAG" \
-            -t "$image:$RELEASE_TAG" \
-            -t "$image:$VERSION" \
-            -t "$image:$MINOR_VERSION" \
-            -t "$image:latest" \
-            --cache-from "$BUILDX_CACHE_FROM" \
-            --cache-to "$BUILDX_CACHE_TO" \
-            --load \
-            .
-
-      - name: Validate amd64 smoke image
-        shell: bash
-        env:
-          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
-        run: |
-          set -euo pipefail
-
-          image="$REGISTRY/$IMAGE_NAME"
-          bash tests/smoke-container-image.sh "$image:$RELEASE_TAG"
-
-      - name: Build amd64 Trivy smoke image
-        shell: bash
-        env:
-          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
-          VERSION: ${{ needs.validate-tag.outputs.version }}
-          MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
-          RELEASE_SHA: ${{ steps.release-commit.outputs.sha }}
-        run: |
-          set -euo pipefail
-
-          image="$REGISTRY/$IMAGE_NAME"
-          docker buildx build \
-            --platform linux/amd64 \
-            --target wudup-trivy \
-            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
-            --label "org.opencontainers.image.revision=$RELEASE_SHA" \
-            --label "org.opencontainers.image.version=$RELEASE_TAG" \
-            -t "$image:$RELEASE_TAG-trivy" \
-            -t "$image:$VERSION-trivy" \
-            -t "$image:$MINOR_VERSION-trivy" \
-            -t "$image:latest-trivy" \
-            --cache-from "$BUILDX_CACHE_FROM" \
-            --cache-to "$BUILDX_CACHE_TO" \
-            --load \
-            .
-
-      - name: Validate amd64 Trivy smoke image
-        shell: bash
-        env:
-          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
-        run: |
-          set -euo pipefail
-
-          image="$REGISTRY/$IMAGE_NAME"
-          bash tests/smoke-container-image.sh "$image:$RELEASE_TAG-trivy"
-          docker run --rm "$image:$RELEASE_TAG-trivy" trivy --version
-
-      - name: Publish multi-arch image
-        shell: bash
-        env:
-          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
-          VERSION: ${{ needs.validate-tag.outputs.version }}
-          MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
-          RELEASE_SHA: ${{ steps.release-commit.outputs.sha }}
-        run: |
-          set -euo pipefail
-
-          image="$REGISTRY/$IMAGE_NAME"
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --provenance=false \
-            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
-            --label "org.opencontainers.image.revision=$RELEASE_SHA" \
-            --label "org.opencontainers.image.version=$RELEASE_TAG" \
-            -t "$image:$RELEASE_TAG" \
-            -t "$image:$VERSION" \
-            -t "$image:$MINOR_VERSION" \
-            -t "$image:latest" \
-            --cache-from "$BUILDX_CACHE_FROM" \
-            --cache-to "$BUILDX_CACHE_TO" \
-            --push \
-            .
-
-      - name: Publish multi-arch Trivy image
-        shell: bash
-        env:
-          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
-          VERSION: ${{ needs.validate-tag.outputs.version }}
-          MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
-          RELEASE_SHA: ${{ steps.release-commit.outputs.sha }}
-        run: |
-          set -euo pipefail
-
-          image="$REGISTRY/$IMAGE_NAME"
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --target wudup-trivy \
-            --provenance=false \
-            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
-            --label "org.opencontainers.image.revision=$RELEASE_SHA" \
-            --label "org.opencontainers.image.version=$RELEASE_TAG" \
-            -t "$image:$RELEASE_TAG-trivy" \
-            -t "$image:$VERSION-trivy" \
-            -t "$image:$MINOR_VERSION-trivy" \
-            -t "$image:latest-trivy" \
-            --cache-from "$BUILDX_CACHE_FROM" \
-            --cache-to "$BUILDX_CACHE_TO" \
-            --push \
-            .
-
-      - name: Validate multi-arch image manifests
-        shell: bash
-        env:
-          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
-          VERSION: ${{ needs.validate-tag.outputs.version }}
-          MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
-        run: |
-          set -euo pipefail
-
-          image="$REGISTRY/$IMAGE_NAME"
-          expected_platforms="linux/amd64 linux/arm64"
-
-          for suffix in "" "-trivy"; do
-            for tag in "$RELEASE_TAG$suffix" "$VERSION$suffix" "$MINOR_VERSION$suffix" "latest$suffix"; do
-              ref="$image:$tag"
-              platforms="$(
-                docker buildx imagetools inspect --raw "$ref" |
-                  jq -r '[.manifests[].platform | "\(.os)/\(.architecture)"] | sort | unique | join(" ")'
-              )"
-
-              if [[ "$platforms" != "$expected_platforms" ]]; then
-                printf 'Expected %s to publish platforms "%s", got "%s"\n' "$ref" "$expected_platforms" "$platforms" >&2
-                exit 1
-              fi
-            done
-          done
+          bash .github/scripts/publish-release-image.sh default
 
       - name: Create or publish GitHub release
         shell: bash
@@ -383,3 +243,61 @@ jobs:
             --verify-tag \
             --generate-notes \
             --title "$RELEASE_TAG"
+
+  publish-trivy-image:
+    name: publish trivy image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    needs:
+      - validate-tag
+      - publish-image
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.validate-tag.outputs.tag }}
+          persist-credentials: false
+
+      - name: Resolve release commit
+        id: release-commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Log in to GHCR
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Publish Trivy image
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          VERSION: ${{ needs.validate-tag.outputs.version }}
+          MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
+          RELEASE_SHA: ${{ steps.release-commit.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          bash .github/scripts/publish-release-image.sh trivy
