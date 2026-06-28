@@ -3,7 +3,9 @@ from __future__ import annotations
 import base64
 import json
 import urllib.parse
+from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -142,28 +144,20 @@ def test_wud_api_watch_uses_longer_timeout_than_metadata_reads(
 ) -> None:
     calls: list[tuple[str, str, float]] = []
 
-    class Response:
-        def __init__(self, payload: object) -> None:
-            self.payload = payload
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
-        def read(self) -> bytes:
-            return json.dumps(self.payload).encode("utf-8")
+    def response(payload: object):
+        return nullcontext(
+            SimpleNamespace(read=lambda: json.dumps(payload).encode("utf-8"))
+        )
 
     def urlopen(request, *, timeout: float):
         path = urllib.parse.urlsplit(request.get_full_url()).path
         calls.append((request.get_method(), path, timeout))
         if path == "/health":
-            return Response({"status": "ok"})
+            return response({"status": "ok"})
         if path == "/api/containers/watch":
-            return Response({"status": "ok"})
+            return response({"status": "ok"})
         if path == "/api/containers":
-            return Response([_container_payload()])
+            return response([_container_payload()])
         raise AssertionError(f"unexpected WUD API URL: {request.get_full_url()}")
 
     monkeypatch.setattr(web_wud_api.urllib.request, "urlopen", urlopen)

@@ -110,7 +110,7 @@ function shortEventDigest(value: string): string {
             <h2>Run metadata</h2>
           </div>
         </div>
-        <pre class="run-metadata-block">{{ runMetadataJson }}</pre>
+        <pre class="log-viewer run-metadata-block">{{ runMetadataJson }}</pre>
       </section>
 
       <section class="section-panel">
@@ -176,18 +176,8 @@ function shortEventDigest(value: string): string {
 
 <style scoped>
 .run-metadata-block {
+  min-height: 0;
   max-height: 18rem;
-  margin: 14px 0 0;
-  padding: 10px;
-  overflow: auto;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 7px;
-  background: var(--color-panel-subtle);
-  color: var(--color-text);
-  font-family: var(--font-mono);
   font-size: 0.82rem;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 </style>
