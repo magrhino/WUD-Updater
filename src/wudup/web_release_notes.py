@@ -20,6 +20,7 @@ from .images import (
     image_matches_resolved_target,
     image_with_tag,
     strip_digest,
+    tag_value_valid,
 )
 from .release_notes import (
     OCI_SOURCE_LABEL,
@@ -331,8 +332,15 @@ def source_label_for_target(
     source_label: SourceLabelReader,
 ) -> tuple[str, CommandError | None]:
     return source_label_from_candidates(
-        source_label_candidates(target.first, tag_token=target.tag_token),
+        source_label_candidates_for_target(target),
         source_label,
+    )
+
+
+def source_label_candidates_for_target(target: WudTarget) -> tuple[str, ...]:
+    return source_label_candidates(
+        target.first,
+        tag_token=target.tag_token or raw_tag_hint(target.raw),
     )
 
 
@@ -362,6 +370,14 @@ def source_label_candidates(image: str, *, tag_token: str = "") -> tuple[str, ..
             candidates.append(image_with_tag(image, tag_token))
     candidates.append(image)
     return tuple(dict.fromkeys(candidate for candidate in candidates if candidate))
+
+
+def raw_tag_hint(raw: str) -> str:
+    tag = ""
+    for token in raw.split()[1:]:
+        if token.startswith("tag="):
+            tag = token.removeprefix("tag=")
+    return tag if tag_value_valid(tag) else ""
 
 
 def running_container_release_source(
