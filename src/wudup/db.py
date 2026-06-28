@@ -14,7 +14,7 @@ from .digest_provenance import (
     digest_provenance_or_empty,
 )
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 ColumnSchema = tuple[str, str, int, str | None, int]
 SchemaDefinition = dict[str, tuple[ColumnSchema, ...]]
@@ -154,6 +154,40 @@ EXPECTED_SCHEMA: SchemaDefinition = {
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
     ),
+    "security_scan_cache": (
+        ("cache_key", "TEXT", 0, None, 1),
+        ("request_key", "TEXT", 1, None, 0),
+        ("subject_id", "TEXT", 1, "''", 0),
+        ("canonical_registry", "TEXT", 1, "''", 0),
+        ("canonical_repository", "TEXT", 1, "''", 0),
+        ("requested_ref", "TEXT", 1, "''", 0),
+        ("reported_digest", "TEXT", 1, "''", 0),
+        ("index_digest", "TEXT", 1, "''", 0),
+        ("manifest_digest", "TEXT", 1, "''", 0),
+        ("platform", "TEXT", 1, "''", 0),
+        ("platform_os", "TEXT", 1, "''", 0),
+        ("platform_architecture", "TEXT", 1, "''", 0),
+        ("platform_variant", "TEXT", 1, "''", 0),
+        ("platform_source", "TEXT", 1, "''", 0),
+        ("identity_status", "TEXT", 1, "''", 0),
+        ("state", "TEXT", 1, None, 0),
+        ("verdict", "TEXT", 1, "''", 0),
+        ("scanner", "TEXT", 1, "''", 0),
+        ("scanner_version", "TEXT", 1, "''", 0),
+        ("scanner_schema", "TEXT", 1, "''", 0),
+        ("db_revision", "TEXT", 1, "''", 0),
+        ("db_updated_at", "TEXT", 1, "''", 0),
+        ("severity_counts_json", "TEXT", 1, "'{}'", 0),
+        ("fixable_counts_json", "TEXT", 1, "'{}'", 0),
+        ("unfixed_count", "INTEGER", 1, "0", 0),
+        ("warnings_json", "TEXT", 1, "'[]'", 0),
+        ("error_code", "TEXT", 1, "''", 0),
+        ("error_message", "TEXT", 1, "''", 0),
+        ("raw_json", "TEXT", 1, "'{}'", 0),
+        ("created_at", "TEXT", 1, None, 0),
+        ("updated_at", "TEXT", 1, None, 0),
+        ("metadata_json", "TEXT", 1, "'{}'", 0),
+    ),
     "tag_exclusion_rules": (
         ("id", "INTEGER", 0, None, 1),
         ("scope", "TEXT", 1, None, 0),
@@ -196,9 +230,15 @@ WEB_SCHEMA_TABLES = frozenset(
     {"schema_migrations", "web_users", "web_sessions", "web_settings"}
 )
 
-EXPECTED_SCHEMA_V7 = {
+EXPECTED_SCHEMA_V8 = {
     name: columns
     for name, columns in EXPECTED_SCHEMA.items()
+    if name != "security_scan_cache"
+}
+
+EXPECTED_SCHEMA_V7 = {
+    name: columns
+    for name, columns in EXPECTED_SCHEMA_V8.items()
     if name != "dependency_snoozes"
 }
 
@@ -259,8 +299,52 @@ _EXPECTED_SCHEMAS_BY_VERSION: dict[int, SchemaDefinition] = {
     5: EXPECTED_SCHEMA_V5,
     6: EXPECTED_SCHEMA_V6,
     7: EXPECTED_SCHEMA_V7,
+    8: EXPECTED_SCHEMA_V8,
     SCHEMA_VERSION: EXPECTED_SCHEMA,
 }
+
+_SECURITY_SCAN_CACHE_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS security_scan_cache (
+    cache_key TEXT PRIMARY KEY,
+    request_key TEXT NOT NULL,
+    subject_id TEXT NOT NULL DEFAULT '',
+    canonical_registry TEXT NOT NULL DEFAULT '',
+    canonical_repository TEXT NOT NULL DEFAULT '',
+    requested_ref TEXT NOT NULL DEFAULT '',
+    reported_digest TEXT NOT NULL DEFAULT '',
+    index_digest TEXT NOT NULL DEFAULT '',
+    manifest_digest TEXT NOT NULL DEFAULT '',
+    platform TEXT NOT NULL DEFAULT '',
+    platform_os TEXT NOT NULL DEFAULT '',
+    platform_architecture TEXT NOT NULL DEFAULT '',
+    platform_variant TEXT NOT NULL DEFAULT '',
+    platform_source TEXT NOT NULL DEFAULT '',
+    identity_status TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL,
+    verdict TEXT NOT NULL DEFAULT '',
+    scanner TEXT NOT NULL DEFAULT '',
+    scanner_version TEXT NOT NULL DEFAULT '',
+    scanner_schema TEXT NOT NULL DEFAULT '',
+    db_revision TEXT NOT NULL DEFAULT '',
+    db_updated_at TEXT NOT NULL DEFAULT '',
+    severity_counts_json TEXT NOT NULL DEFAULT '{}',
+    fixable_counts_json TEXT NOT NULL DEFAULT '{}',
+    unfixed_count INTEGER NOT NULL DEFAULT 0,
+    warnings_json TEXT NOT NULL DEFAULT '[]',
+    error_code TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT '',
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_security_scan_cache_request
+    ON security_scan_cache (request_key, updated_at);
+CREATE INDEX IF NOT EXISTS idx_security_scan_cache_subject
+    ON security_scan_cache (subject_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_security_scan_cache_image_digest_platform
+    ON security_scan_cache (requested_ref, reported_digest, platform, updated_at);
+"""
 
 
 class DatabaseError(RuntimeError):
@@ -536,6 +620,7 @@ def init_db(conn: sqlite3.Connection) -> None:
             );
             """
         )
+        conn.executescript(_SECURITY_SCAN_CACHE_SCHEMA_SQL)
         _validate_schema(conn)
         _backfill_schema_migrations(conn, SCHEMA_VERSION)
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
@@ -1215,6 +1300,7 @@ MIGRATION_NAMES = {
     6: "add auto update schedules",
     7: "add digest tag provenance columns",
     8: "add dependency snoozes",
+    9: "add security scan cache",
 }
 
 
@@ -1535,6 +1621,24 @@ def _migrate_v7_to_v8(conn: sqlite3.Connection) -> None:
     _record_schema_migration(conn, 8)
 
 
+def _migrate_v8_to_v9(conn: sqlite3.Connection) -> None:
+    object_type = _sqlite_object_type(conn, "security_scan_cache")
+    if object_type is not None:
+        if object_type != "table":
+            raise DatabaseError(
+                f"Expected security_scan_cache to be a table, found {object_type}"
+            )
+        _validate_table_columns(
+            conn,
+            "security_scan_cache",
+            EXPECTED_SCHEMA["security_scan_cache"],
+        )
+    with conn:
+        conn.executescript(_SECURITY_SCAN_CACHE_SCHEMA_SQL)
+        conn.execute("PRAGMA user_version = 9")
+    _record_schema_migration(conn, 9)
+
+
 _MIGRATIONS_BY_TARGET_VERSION: dict[int, Migration] = {
     2: _migrate_v1_to_v2,
     3: _migrate_v2_to_v3,
@@ -1543,4 +1647,5 @@ _MIGRATIONS_BY_TARGET_VERSION: dict[int, Migration] = {
     6: _migrate_v5_to_v6,
     7: _migrate_v6_to_v7,
     8: _migrate_v7_to_v8,
+    9: _migrate_v8_to_v9,
 }

@@ -182,22 +182,58 @@ def _active_apply_job_exists_in_state(state: Any) -> bool:
     return _active_mutation_error_in_state(state) != ""
 
 
-def _active_mutation_error(request: Request) -> str:
-    return _active_mutation_error_in_state(request.app.state)
+def _active_mutation_error(
+    request: Request,
+    *,
+    include_security_scan_jobs: bool = True,
+) -> str:
+    return _active_mutation_error_in_state(
+        request.app.state,
+        include_security_scan_jobs=include_security_scan_jobs,
+    )
 
 
-def _active_mutation_error_in_state(state: Any) -> str:
+def _active_mutation_error_in_state(
+    state: Any,
+    *,
+    include_security_scan_jobs: bool = True,
+) -> str:
     apply_lock: Lock = state.web_apply_lock
     with apply_lock:
-        return _active_mutation_error_unlocked(state)
+        return _active_mutation_error_unlocked(
+            state,
+            include_security_scan_jobs=include_security_scan_jobs,
+        )
 
 
-def _active_mutation_error_unlocked(state: Any) -> str:
+def _active_mutation_error_unlocked(
+    state: Any,
+    *,
+    include_security_scan_jobs: bool = True,
+) -> str:
     jobs: dict[str, WebApplyJob] = state.web_apply_jobs
     if any(job.status in {"queued", "running"} for job in jobs.values()):
         return "an apply job is already running"
     if bool(getattr(state, "web_self_update_running", False)):
         return "self-update is already running"
+    if not include_security_scan_jobs:
+        return ""
+    security_scan_error = _active_security_scan_error_in_state(state)
+    if security_scan_error:
+        return security_scan_error
+    return ""
+
+
+def _active_security_scan_error_in_state(state: Any) -> str:
+    security_scan_jobs = getattr(state, "web_security_scan_jobs", {})
+    security_scan_lock: Lock | None = getattr(state, "web_security_scan_lock", None)
+    if security_scan_lock is None:
+        active_jobs = tuple(security_scan_jobs.values())
+    else:
+        with security_scan_lock:
+            active_jobs = tuple(security_scan_jobs.values())
+    if any(getattr(job, "status", "") in {"queued", "running"} for job in active_jobs):
+        return "security scan refresh is already running"
     return ""
 
 

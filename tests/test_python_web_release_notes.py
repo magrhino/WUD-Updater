@@ -32,7 +32,7 @@ def _release_client(tmp_path: Path, env: dict[str, str] | None = None):
     return _client(tmp_path, values)
 
 
-def test_release_notes_get_is_disabled_by_default_without_creating_database(
+def test_release_notes_get_returns_placeholders_by_default_without_creating_database(
     tmp_path: Path,
 ) -> None:
     wud_file = tmp_path / "state" / "images.todo"
@@ -44,12 +44,17 @@ def test_release_notes_get_is_disabled_by_default_without_creating_database(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["enabled"] is False
-    assert body["disabled_reason"] == "Release-note notifications are disabled."
-    assert body["source"]["detail"] == "Release-note notifications are disabled."
-    assert body["count"] == 0
-    assert body["items"] == []
-    assert body["wud_api"]["detail"] == "Release-note notifications are disabled."
+    assert body["enabled"] is True
+    assert body["disabled_reason"] == ""
+    assert body["notifications_enabled"] is False
+    assert (
+        body["notifications_disabled_reason"]
+        == "Release-note notifications are disabled."
+    )
+    assert body["count"] == 1
+    assert body["items"][0]["line_no"] == 1
+    assert body["items"][0]["status"] == "missing"
+    assert body["items"][0]["provider"] == "github"
     assert not db_path.exists()
 
 
@@ -408,11 +413,36 @@ def test_release_notes_refresh_requires_csrf(tmp_path: Path) -> None:
     assert response.status_code == 403
     assert response.json()["detail"] == "csrf token is required"
 
-def test_release_notes_refresh_works_when_mutations_are_disabled(
+
+def test_release_notes_refresh_requires_mutations(
     tmp_path: Path,
 ) -> None:
     wud_file = tmp_path / "state" / "images.todo"
-    client = _release_client(tmp_path)
+    db_path = tmp_path / "state" / "wud.sqlite"
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    wud_file.write_text("docker.io/library/redis:latest\n", encoding="utf-8")
+
+    response = client.post(
+        "/api/v1/release-notes/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "mutations are disabled"
+    assert not db_path.exists()
+
+
+def test_release_notes_refresh_works_when_mutations_are_enabled(
+    tmp_path: Path,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
     wud_file.write_text("docker.io/library/redis:latest\n", encoding="utf-8")
 
     response = client.post(
@@ -422,8 +452,11 @@ def test_release_notes_refresh_works_when_mutations_are_disabled(
 
     assert response.status_code == 200
     body = response.json()
+    assert body["enabled"] is True
+    assert body["notifications_enabled"] is False
     assert body["items"][0]["status"] == "unsupported"
     assert body["items"][0]["error"] == "no supported GitHub release source found"
+
 
 def test_release_note_error_metadata_redacts_configured_secrets(
     tmp_path: Path,
@@ -440,6 +473,7 @@ def test_release_note_error_metadata_redacts_configured_secrets(
             "GITHUB_TOKEN": github_token,
             "DISCORD_RELEASES_WEBHOOK": release_webhook,
             "ADMIN_WEBHOOK": admin_webhook,
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
         },
     )
     wud_file.write_text("ghcr.io/acme/app:1.0.0 tag=2.0.0\n", encoding="utf-8")

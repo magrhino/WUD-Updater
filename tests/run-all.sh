@@ -76,6 +76,9 @@ EOF
     src/wudup/plans.py \
     src/wudup/platforms.py \
     src/wudup/release_notes.py \
+    src/wudup/security_scanner.py \
+    src/wudup/security_store.py \
+    src/wudup/security_subjects.py \
     src/wudup/self_update.py \
     src/wudup/terminal.py \
     src/wudup/truenas.py \
@@ -131,6 +134,7 @@ EOF
     src/wudup/web_startup.py \
     src/wudup/web_state.py \
     src/wudup/web_static.py \
+    src/wudup/web_security.py \
     src/wudup/web_wud_states.py \
     src/wudup/web_wud_config.py \
     src/wudup/web_wud_api.py \
@@ -158,6 +162,8 @@ EOF
     tests/test_python_docker_compose.py \
     tests/test_python_init_config.py \
     tests/test_python_release_notes.py \
+    tests/test_python_security_scanner.py \
+    tests/test_python_security_subjects.py \
     tests/test_python_self_update.py \
     tests/test_python_terminal.py \
     tests/test_python_truenas.py \
@@ -223,6 +229,7 @@ EOF
     tests/test_python_web_self_update_pull.py \
     tests/test_python_web_self_update_restart.py \
     tests/test_python_web_self_update_status.py \
+    tests/test_python_web_security_scans.py \
     tests/test_python_web_state_digest_pin_settings.py \
     tests/test_python_web_state_operations.py \
     tests/test_python_web_state_settings.py \

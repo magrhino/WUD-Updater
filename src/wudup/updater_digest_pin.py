@@ -12,12 +12,10 @@ from .compose_rewrite import (
 )
 from .digest_verifier import DigestResolveResult, DigestVerifier
 from .images import (
-    image_has_tag,
     image_tag,
     image_with_digest,
     image_with_tag,
     normalize_digest,
-    tag_value_valid,
 )
 from .updater_models import (
     DigestPinCandidate,
@@ -26,6 +24,7 @@ from .updater_models import (
     TagUpdate,
     UpdaterError,
 )
+from .wud_file import is_digest_target_line
 
 
 def digest_pin_update_from_values(
@@ -47,10 +46,9 @@ def digest_pin_update_from_values(
 def _digest_pin_match_tag(match: Match) -> str:
     if match.target.desired_tag:
         return match.target.desired_tag
-    if not match.target.digest or not image_has_tag(match.target.first):
+    if not is_digest_target_line(match.target):
         return ""
-    tag = image_tag(match.target.first)
-    return tag if tag_value_valid(tag) else ""
+    return image_tag(match.target.first)
 
 
 def _digest_pin_candidates(

@@ -900,6 +900,8 @@ export function releaseNotesResponse(
     items,
     enabled: true,
     disabled_reason: "",
+    notifications_enabled: true,
+    notifications_disabled_reason: "",
     wud_api: wudApiStatus(),
     warnings: [],
   };

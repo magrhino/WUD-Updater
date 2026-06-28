@@ -13,11 +13,11 @@ from .compose_rewrite import (
     service_resolved_tag_marker,
 )
 from .digest_provenance import DigestTagProvenance, digest_from_image
-from .images import image_has_tag, image_tag, repo_key, tag_value_valid
+from .images import image_tag, repo_key, tag_value_valid
 from .plan_models import DryRunPlanIssue, DryRunPlanSkipped
 from .updater_digest_unpin import digest_unpin_update_from_values
 from .updater_models import ComposeTagRewriteError, DigestUnpinUpdate, Match
-from .wud_file import ParsedWudFile, WudTarget
+from .wud_file import ParsedWudFile, WudTarget, is_digest_target_line
 
 
 @dataclass(frozen=True)
@@ -350,9 +350,7 @@ def _digest_unpin_label_tag(
 
 
 def _digest_unpin_candidate_target(target: WudTarget) -> bool:
-    if not target.digest or not image_has_tag(target.first):
-        return False
-    return tag_value_valid(image_tag(target.first))
+    return is_digest_target_line(target)
 
 
 def _digest_unpin_service_matches_target(image: str, target: WudTarget) -> bool:

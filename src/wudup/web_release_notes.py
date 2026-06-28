@@ -77,8 +77,6 @@ class ReleaseNotesDisabledState:
 
 def api_release_notes(request: Request) -> ReleaseNotesResponse:
     settings = _settings(request)
-    if not effective_release_notes_enabled(settings):
-        return release_notes_disabled_response(settings)
     context = _release_notes_request_context(settings)
     if isinstance(context, ReleaseNotesResponse):
         return context
@@ -118,8 +116,8 @@ def api_release_notes(request: Request) -> ReleaseNotesResponse:
 
 def api_refresh_release_notes(request: Request) -> ReleaseNotesResponse:
     settings = _settings(request)
-    if not effective_release_notes_enabled(settings):
-        return release_notes_disabled_response(settings)
+    if not settings.mutations_enabled:
+        raise HTTPException(status_code=403, detail="mutations are disabled")
     context = _release_notes_request_context(settings)
     if isinstance(context, ReleaseNotesResponse):
         return context
@@ -171,11 +169,16 @@ def _release_notes_request_context(
         ) from exc
     parsed = source.parsed
     if not parsed.targets:
+        notifications_enabled = effective_release_notes_enabled(settings)
         return ReleaseNotesResponse(
             source_file=source.source_file,
             source=source.response_source(),
             count=0,
             items=[],
+            notifications_enabled=notifications_enabled,
+            notifications_disabled_reason=(
+                "" if notifications_enabled else RELEASE_NOTES_DISABLED_DETAIL
+            ),
             wud_api=_wud_api_status(source),
             warnings=list(source.warnings),
         )
@@ -208,11 +211,16 @@ def release_notes_response(
         data = asdict(item)
         data["error"] = _redact_sensitive_text(settings, str(data.get("error", "")))
         redacted_items.append(ReleaseNoteInfo.model_validate(data))
+    notifications_enabled = effective_release_notes_enabled(settings)
     return ReleaseNotesResponse(
         source_file=source.source_file,
         source=source.response_source(),
         count=len(items),
         items=redacted_items,
+        notifications_enabled=notifications_enabled,
+        notifications_disabled_reason=(
+            "" if notifications_enabled else RELEASE_NOTES_DISABLED_DETAIL
+        ),
         wud_api=wud_api,
         warnings=[_redact_sensitive_text(settings, warning) for warning in warnings],
     )
@@ -238,6 +246,8 @@ def release_notes_disabled_response(settings: WebSettings) -> ReleaseNotesRespon
         items=[],
         enabled=False,
         disabled_reason=disabled.reason,
+        notifications_enabled=False,
+        notifications_disabled_reason=disabled.reason,
         wud_api=disabled.wud_api,
         warnings=[],
     )

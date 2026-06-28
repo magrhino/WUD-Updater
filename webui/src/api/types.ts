@@ -421,6 +421,8 @@ export interface ReleaseNotesResponse {
   items: ReleaseNoteInfo[];
   enabled: boolean;
   disabled_reason: string;
+  notifications_enabled: boolean;
+  notifications_disabled_reason: string;
   wud_api: WudApiStatus;
   warnings: string[];
 }

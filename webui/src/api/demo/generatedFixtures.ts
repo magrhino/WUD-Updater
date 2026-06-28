@@ -107168,6 +107168,8 @@ export const generatedFixtures = {
         "upstream_repo": ""
       }
     ],
+    "notifications_disabled_reason": "",
+    "notifications_enabled": true,
     "source": {
       "active": "file",
       "configured": "file",

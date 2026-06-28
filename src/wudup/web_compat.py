@@ -14,6 +14,7 @@ from . import (
     web_retags,
     web_runs,
     web_scheduler,
+    web_security,
     web_settings,
     web_state,
     web_static,
@@ -155,6 +156,9 @@ _EXPORT_TARGETS: dict[str, _ExportTarget] = {
     "_submit_apply_job": (web_plans, "submit_apply_job"),
     "api_release_notes": (web_release_notes, "api_release_notes"),
     "api_refresh_release_notes": (web_release_notes, "api_refresh_release_notes"),
+    "api_security_scans": (web_security, "api_security_scans"),
+    "api_refresh_security_scans": (web_security, "api_refresh_security_scans"),
+    "api_security_scan_job": (web_security, "api_security_scan_job"),
     "_release_notes_response": (web_release_notes, "release_notes_response"),
     "_release_note_source_resolver": (
         web_release_notes,

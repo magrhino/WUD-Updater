@@ -123,6 +123,7 @@ class DatabaseTests(unittest.TestCase):
                     "known_images",
                     "pending_updates",
                     "release_note_cache",
+                    "security_scan_cache",
                     "tag_exclusion_rules",
                     "web_users",
                     "web_sessions",
@@ -169,7 +170,10 @@ class DatabaseTests(unittest.TestCase):
                 """
             ).fetchall()
 
-        self.assertEqual([row[0] for row in rows], [1, 2, 3, 4, 5, 6, 7, 8])
+        self.assertEqual(
+            [row[0] for row in rows],
+            list(range(1, SCHEMA_VERSION + 1)),
+        )
 
     def test_migration_registries_cover_supported_versions(self) -> None:
         self.assertEqual(
@@ -280,7 +284,7 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(version, SCHEMA_VERSION)
         self.assertEqual(run[0], "success")
-        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6, 7, 8])
+        self.assertEqual(migration_versions, list(range(1, SCHEMA_VERSION + 1)))
 
     def test_init_db_migrates_v5_schema_and_preserves_policy_rows(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -344,7 +348,60 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(policy["auto_update"], 0)
         self.assertIsNone(policy["auto_update_time"])
         self.assertEqual(policy["auto_update_days_json"], "[]")
-        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6, 7, 8])
+        self.assertEqual(migration_versions, list(range(1, SCHEMA_VERSION + 1)))
+
+    def test_init_db_migrates_v8_schema_and_adds_security_scan_cache(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            init_db(conn)
+            conn.execute("DROP TABLE security_scan_cache")
+            conn.execute("DELETE FROM schema_migrations WHERE version = 9")
+            conn.execute("PRAGMA user_version = 8")
+
+            init_db(conn)
+
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            table = conn.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name = 'security_scan_cache'
+                """
+            ).fetchone()
+            columns = [
+                row[1]
+                for row in conn.execute("PRAGMA table_info(security_scan_cache)")
+            ]
+            expected_columns = [
+                column[0]
+                for column in _EXPECTED_SCHEMAS_BY_VERSION[SCHEMA_VERSION][
+                    "security_scan_cache"
+                ]
+            ]
+            indexes = [
+                row[1]
+                for row in conn.execute("PRAGMA index_list('security_scan_cache')")
+            ]
+
+        self.assertEqual(version, SCHEMA_VERSION)
+        self.assertIsNotNone(table)
+        self.assertEqual(columns, expected_columns)
+        self.assertIn("idx_security_scan_cache_request", indexes)
+        self.assertIn("idx_security_scan_cache_subject", indexes)
+
+    def test_init_db_rejects_v8_schema_with_conflicting_security_cache(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            init_db(conn)
+            conn.execute("DROP TABLE security_scan_cache")
+            conn.execute("CREATE VIEW security_scan_cache AS SELECT 1 AS dummy_column")
+            conn.execute("DELETE FROM schema_migrations WHERE version = 9")
+            conn.execute("PRAGMA user_version = 8")
+
+            with self.assertRaisesRegex(
+                DatabaseError,
+                "Expected security_scan_cache to be a table, found view",
+            ):
+                init_db(conn)
 
     def test_init_db_migrates_v6_schema_and_preserves_digestless_rows(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -437,7 +494,7 @@ class DatabaseTests(unittest.TestCase):
             self.assertEqual(row["digest_final_image"], "")
             self.assertEqual(row["digest_provenance_source"], "")
             self.assertEqual(row["digest_provenance_confidence"], "")
-        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6, 7, 8])
+        self.assertEqual(migration_versions, list(range(1, SCHEMA_VERSION + 1)))
 
     def test_init_db_rejects_malformed_existing_pending_updates(self) -> None:
         with sqlite3.connect(":memory:") as conn:

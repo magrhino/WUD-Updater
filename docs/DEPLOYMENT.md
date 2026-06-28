@@ -559,8 +559,15 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_WEB_ALLOWED_HOSTS` | loopback, configured public origin, and bind host | Optional comma-separated hostnames or IPs accepted in the HTTP `Host` header in addition to the public origin. Use this for extra LAN aliases or proxy-facing hostnames. |
 | `WUD_WEB_TRUSTED_PROXIES` | unset | Comma-separated proxy IP/CIDR/hostname entries whose `Forwarded` or `X-Forwarded-*` headers are trusted for scheme/host detection. Hostnames resolve once at WebUI startup. |
 | `WUD_WEB_SECURE_COOKIES` | `auto` | Cookie `Secure` mode: `auto` enables it for effective HTTPS origins, `true` always enables it, and `false` disables it for local HTTP testing. |
-| `WUD_WEB_MUTATIONS_ENABLED` | `false` | Enables browser plan/apply update mutations and Settings container restart when set to `true`. Leave unset or `false` for read-only WebUI deployments. |
+| `WUD_WEB_MUTATIONS_ENABLED` | `false` | Enables browser plan/apply update mutations, candidate security scan refresh jobs, and Settings container restart when set to `true`. Leave unset or `false` for read-only WebUI deployments. |
 | `WUD_WEB_RESTART_CONTAINER` | Docker `HOSTNAME` inside a container, otherwise unset | Optional Docker container name or ID restarted from Settings. Set this explicitly only when the auto-detected current container target is unavailable or wrong. |
+| `WUD_SECURITY_SCANNING_ENABLED` | `false` | Enables the opt-in candidate vulnerability advisory prototype. Results are cache-backed WebUI metadata for pending candidates only; they do not gate updates, snooze updates, or mark an image safe. Browser refresh also requires `WUD_WEB_MUTATIONS_ENABLED=true`; read-only deployments can only read cached scan metadata. |
+| `WUD_SECURITY_SCANNER` | `trivy` | Scanner adapter. Only `trivy` is supported. |
+| `WUD_SECURITY_SCAN_MODE` | `registry` | Scan mode. The prototype supports registry scans only and maps this to Trivy remote image source. |
+| `WUD_SECURITY_SCANNER_EXECUTABLE` | `trivy` | Executable used for scan refresh jobs. The published image does not bundle Trivy; provide a compatible executable before enabling scans. |
+| `WUD_SECURITY_SCAN_CACHE_DIR` | unset | Optional Trivy cache directory passed to scan refresh jobs. |
+| `WUD_SECURITY_SCAN_TIMEOUT_SECONDS` | `300` | Per-candidate scanner timeout passed to Trivy. |
+| `WUD_SECURITY_SCAN_MAX_CONCURRENCY` | `1` | Maximum concurrent scan refresh jobs. Keep low for registry rate limits and host resource use. |
 | `WUD_API_BASE_URL` | `http://wud:3000` | Internal WUD API base URL used for best-effort WebUI metadata discovery and experimental API-backed pending source modes. Unavailable or error states are reported as degraded and retried faster on later WebUI requests; auth-required WUD still uses the normal cache TTL. |
 | `WUD_API_STARTUP_WAIT_SECONDS` | `0`, `5` in Compose examples | Seconds to retry the initial WUD API health probe during WebUI startup before reporting degraded WUD API discovery. This startup wait is separate from automatic runtime retries. |
 | `WUD_API_AUTH_BEARER_TOKEN_FILE` / `WUD_API_AUTH_BEARER_TOKEN` | unset | Optional bearer token for WUDup's outbound WUD API calls. Prefer the `_FILE` form in containers; direct values are intended for local development. Do not combine bearer and basic auth. |
@@ -626,12 +633,15 @@ Release-note notification values:
 | `LOG_DIR` | `/out` | Compatibility log directory used when legacy `/wud/tag-manager.sh` is configured. |
 
 WUD supplies callback fields such as `update_available`, `image_name`,
-`image_tag_value`, `name`, `update_kind_kind`, `update_kind_remote_value`, and
-`result_tag`; these are runtime inputs to the mounted scripts, not deployment
-settings you normally set yourself. Provide webhook and GitHub token values
-through the WUDup/WebUI runtime environment for WebUI-sent notifications, or
-through the WUD container environment when using the legacy shell callback path.
-Do not put secrets in this repository or in SQLite.
+`image_tag_value`, `image_os`, `image_architecture`, optional `image_variant`,
+`name`, `update_kind_kind`, `update_kind_remote_value`, and `result_tag`; these
+are runtime inputs to the mounted scripts, not deployment settings you normally
+set yourself. `/wud/append-updates.sh` uses the image platform fields when WUD
+provides them to append `platform=<os>/<arch>[/variant]` metadata to pending
+candidate lines. Provide webhook and GitHub token values through the WUDup/WebUI
+runtime environment for WebUI-sent notifications, through the WUD container
+environment when using the legacy shell callback path, or through another
+host-local secret store. Do not put secrets in this repository or in SQLite.
 
 For the WebUI workflow, keep WUD's append-only callback or API pending source in
 place, enable release-note notifications from Settings or by setting
