@@ -227,7 +227,11 @@ def _finding_from_vulnerability(
 
 def _http_url(value: object) -> str:
     url = str(value or "").strip()
-    return url if url.startswith(("https://", "http://")) else ""
+    if url.startswith("https://"):
+        return url
+    if url.startswith("http://"):
+        return f"https://{url[7:]}"
+    return ""
 
 
 def _parse_trivy_version(output: str) -> str:

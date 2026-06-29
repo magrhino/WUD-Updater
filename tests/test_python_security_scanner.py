@@ -62,7 +62,7 @@ class SecurityScannerTests(unittest.TestCase):
                             "FixedVersion": "",
                             "InstalledVersion": "2.0.0",
                             "PkgName": "openssl",
-                            "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-0001",
+                            "PrimaryURL": "http://avd.aquasec.com/nvd/cve-2026-0001",
                             "Severity": "MEDIUM",
                             "Title": "demo vulnerability",
                             "VulnerabilityID": "CVE-2026-0001",
