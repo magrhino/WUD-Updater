@@ -1137,6 +1137,42 @@ export const generatedFixtures = {
           "restart_required": false,
           "source": "configured",
           "value": "true"
+        },
+        {
+          "allowed_values": [
+            "digest",
+            "per_container"
+          ],
+          "default_value": "digest",
+          "disabled_reason": "",
+          "editable": true,
+          "key": "release_notifications_mode",
+          "restart_required": false,
+          "source": "default",
+          "value": "digest"
+        },
+        {
+          "allowed_values": [
+            "remote_change",
+            "cooldown"
+          ],
+          "default_value": "remote_change",
+          "disabled_reason": "",
+          "editable": true,
+          "key": "release_notifications_resend_policy",
+          "restart_required": false,
+          "source": "default",
+          "value": "remote_change"
+        },
+        {
+          "allowed_values": [],
+          "default_value": "86400",
+          "disabled_reason": "",
+          "editable": true,
+          "key": "release_notifications_cooldown_seconds",
+          "restart_required": false,
+          "source": "default",
+          "value": "86400"
         }
       ],
       "secrets": [
@@ -107046,6 +107082,11 @@ export const generatedFixtures = {
             "url": "https://github.com/home-assistant/core/releases/tag/2026.5.3"
           }
         ],
+        "notification_key": "875413775c1b3abaea3adede0576679d9b39032acc06a5aea530957b530285c9",
+        "notification_last_sent_at": "",
+        "notification_send_count": 0,
+        "notification_skipped_reason": "",
+        "notification_status": "new",
         "provider": "github",
         "published_at": "2026-05-28T12:00:00+00:00",
         "refreshed_at": "2026-05-28T12:00:00+00:00",
@@ -107072,6 +107113,11 @@ export const generatedFixtures = {
             "url": "https://github.com/Radarr/Radarr/releases/tag/v5.22.4"
           }
         ],
+        "notification_key": "593c12b6e808620ef5715ff2c05b11a74fc45bcc0a98193c0897e1487b8c81b0",
+        "notification_last_sent_at": "",
+        "notification_send_count": 0,
+        "notification_skipped_reason": "",
+        "notification_status": "new",
         "provider": "lsio",
         "published_at": "2026-05-28T12:00:00+00:00",
         "refreshed_at": "2026-05-28T12:00:00+00:00",
@@ -107087,6 +107133,11 @@ export const generatedFixtures = {
         "image_repo": "postgres",
         "line_no": 4,
         "links": [],
+        "notification_key": "56f721b210272a5d244461a0bc80aa18296d6a655fe17075470e049299348fe8",
+        "notification_last_sent_at": "",
+        "notification_send_count": 0,
+        "notification_skipped_reason": "",
+        "notification_status": "new",
         "provider": "unsupported",
         "published_at": "",
         "refreshed_at": "",
@@ -107108,6 +107159,11 @@ export const generatedFixtures = {
             "url": "https://github.com/magrhino/wudup/releases/tag/v0.16.1"
           }
         ],
+        "notification_key": "f946fa2d733b56d4d128b447485e022d9e3ecd93b4c7b6356c588747a23c16b1",
+        "notification_last_sent_at": "",
+        "notification_send_count": 0,
+        "notification_skipped_reason": "",
+        "notification_status": "new",
         "provider": "github",
         "published_at": "2026-05-28T12:00:00+00:00",
         "refreshed_at": "2026-05-28T12:00:00+00:00",
@@ -107129,6 +107185,11 @@ export const generatedFixtures = {
             "url": "https://github.com/gethomepage/homepage"
           }
         ],
+        "notification_key": "cb1e522a4e264863bf93c8d2f0c734b36d0804fe91551e95d64421b2844a71a0",
+        "notification_last_sent_at": "",
+        "notification_send_count": 0,
+        "notification_skipped_reason": "",
+        "notification_status": "new",
         "provider": "github",
         "published_at": "",
         "refreshed_at": "2026-05-28T12:00:00+00:00",
@@ -107144,6 +107205,11 @@ export const generatedFixtures = {
         "image_repo": "vaultwarden/server",
         "line_no": 7,
         "links": [],
+        "notification_key": "1e000d607dc913ef3d35d6c829b5be27d07ba02d3474713de62e850347b0b5ad",
+        "notification_last_sent_at": "",
+        "notification_send_count": 0,
+        "notification_skipped_reason": "",
+        "notification_status": "new",
         "provider": "unsupported",
         "published_at": "",
         "refreshed_at": "",
@@ -107159,6 +107225,11 @@ export const generatedFixtures = {
         "image_repo": "containrrr/watchtower",
         "line_no": 8,
         "links": [],
+        "notification_key": "73a3be95cb7f2d5450810616cb9ebabe0d7e1e94162aa00063135a40833b5cbf",
+        "notification_last_sent_at": "",
+        "notification_send_count": 0,
+        "notification_skipped_reason": "",
+        "notification_status": "new",
         "provider": "unsupported",
         "published_at": "",
         "refreshed_at": "",
@@ -121970,6 +122041,42 @@ export const generatedFixtures = {
         "restart_required": false,
         "source": "configured",
         "value": "true"
+      },
+      {
+        "allowed_values": [
+          "digest",
+          "per_container"
+        ],
+        "default_value": "digest",
+        "disabled_reason": "",
+        "editable": true,
+        "key": "release_notifications_mode",
+        "restart_required": false,
+        "source": "default",
+        "value": "digest"
+      },
+      {
+        "allowed_values": [
+          "remote_change",
+          "cooldown"
+        ],
+        "default_value": "remote_change",
+        "disabled_reason": "",
+        "editable": true,
+        "key": "release_notifications_resend_policy",
+        "restart_required": false,
+        "source": "default",
+        "value": "remote_change"
+      },
+      {
+        "allowed_values": [],
+        "default_value": "86400",
+        "disabled_reason": "",
+        "editable": true,
+        "key": "release_notifications_cooldown_seconds",
+        "restart_required": false,
+        "source": "default",
+        "value": "86400"
       }
     ],
     "secrets": [
