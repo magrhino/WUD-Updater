@@ -17,7 +17,8 @@ from .command import CommandRunner
 from .config import ConfigError, parse_bool_env
 from .db import DatabaseError, init_db, open_db, utc_timestamp
 from .digest_verifier import ResolvedImageSubject
-from .security_scanner import SecurityScanResult, TrivyScanner
+from .security_scanner import SecurityScanResult, TrivyScanner, _http_url
+from .security_severity import normalize_security_severity
 from .security_store import (
     cached_scan_by_request,
     cached_scan_by_request_or_unambiguous_platform,
@@ -41,7 +42,9 @@ from .web_database import (
     connect_readonly_db as _connect_readonly_db,
 )
 from .web_models import (
+    DEFAULT_SECURITY_SCAN_CACHE_DIR,
     SecurityScanConfig,
+    SecurityScanFinding,
     SecurityScanInfo,
     SecurityScanJobResponse,
     SecurityScanSeverityCounts,
@@ -80,7 +83,10 @@ def configured_security_scan_config(
         executable=(
             environ.get(WUD_SECURITY_SCANNER_EXECUTABLE_ENV, "").strip() or "trivy"
         ),
-        cache_dir=environ.get(WUD_SECURITY_SCAN_CACHE_DIR_ENV, "").strip(),
+        cache_dir=(
+            environ.get(WUD_SECURITY_SCAN_CACHE_DIR_ENV, "").strip()
+            or DEFAULT_SECURITY_SCAN_CACHE_DIR
+        ),
         timeout_seconds=_parse_positive_int(
             WUD_SECURITY_SCAN_TIMEOUT_SECONDS_ENV,
             environ.get(WUD_SECURITY_SCAN_TIMEOUT_SECONDS_ENV),
@@ -286,6 +292,10 @@ def _scan_request(
     verifier: Any,
     request: PendingSecurityRequest,
 ) -> SecurityScanInfo:
+    cached = cached_scan_by_request(conn, request)
+    # ponytail: demo fixtures use synthetic digests; keep them stable on refresh.
+    if cached is not None and cached.scanner_version == "demo":
+        return cached
     if request.identity_status != "pending":
         subject = resolve_security_subject(request, verifier)
         return _cache_subject_resolution(settings, conn, request, subject)
@@ -400,6 +410,18 @@ def _result_info(
         severity_counts=_counts_model(result.severity_counts),
         fixable_counts=_counts_model(result.fixable_counts),
         unfixed_count=result.unfixed_count,
+        findings=[
+            SecurityScanFinding(
+                vulnerability_id=finding.vulnerability_id,
+                package_name=finding.package_name,
+                installed_version=finding.installed_version,
+                fixed_version=finding.fixed_version,
+                severity=normalize_security_severity(finding.severity),
+                title=finding.title,
+                primary_url=finding.primary_url,
+            )
+            for finding in result.findings
+        ],
         warnings=[*subject.warnings, *result.warnings],
         error_code=result.error_code,
         error_message=result.error_message,
@@ -450,8 +472,28 @@ def _sanitize_scan_info(
 ) -> SecurityScanInfo:
     return info.model_copy(
         update={
+            "findings": [
+                _sanitize_scan_finding(settings, finding)
+                for finding in info.findings
+            ],
             "warnings": [_sanitize_text(settings, item) for item in info.warnings],
             "error_message": _sanitize_text(settings, info.error_message),
+        },
+    )
+
+
+def _sanitize_scan_finding(
+    settings: WebSettings,
+    finding: SecurityScanFinding,
+) -> SecurityScanFinding:
+    return finding.model_copy(
+        update={
+            "vulnerability_id": _sanitize_text(settings, finding.vulnerability_id),
+            "package_name": _sanitize_text(settings, finding.package_name),
+            "installed_version": _sanitize_text(settings, finding.installed_version),
+            "fixed_version": _sanitize_text(settings, finding.fixed_version),
+            "title": _sanitize_text(settings, finding.title),
+            "primary_url": _http_url(_sanitize_text(settings, finding.primary_url)),
         },
     )
 

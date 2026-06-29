@@ -6,6 +6,7 @@ import type {
   PendingItem,
   PendingStackGroup,
   ReleaseNoteInfo,
+  SecurityScanInfo,
 } from "../../api/client";
 import type { SnoozedPendingItem } from "../../views/pending/snoozeSelection";
 import {
@@ -26,6 +27,7 @@ defineProps<{
   releaseNoteReason: (note: ReleaseNoteInfo | null) => string;
   releaseNoteStatus: (note: ReleaseNoteInfo | null) => string;
   riskCues: (item: PendingGroupedItem) => SafetyCue[];
+  securityScanFor: (item: PendingGroupedItem) => SecurityScanInfo | null;
   selectedLineSet: Set<number>;
   showSetupLink: boolean;
   snoozedItems: SnoozedPendingItem[];
@@ -62,6 +64,7 @@ const emit = defineEmits<{
       :release-note-reason="releaseNoteReason"
       :release-note-status="releaseNoteStatus"
       :risk-cues="riskCues"
+      :security-scan-for="securityScanFor"
       :selected-line-set="selectedLineSet"
       :stack-has-selection="stackHasSelection(group)"
       :stack-indeterminate="stackIndeterminate(group)"
@@ -109,6 +112,7 @@ const emit = defineEmits<{
             status-label="Snoozed"
             status-tag-type="default"
             :risk-cues="riskCues(item)"
+            :security-scan="securityScanFor(item)"
             :show-diagnostic="false"
             :show-release-notes="false"
             :tag-override-value="tagOverrideValue(item)"
@@ -155,6 +159,7 @@ const emit = defineEmits<{
             :status-label="staleDiagnosticLabel(item)"
             status-tag-type="warning"
             :risk-cues="[]"
+            :security-scan="securityScanFor(item)"
             :meta-detail="staleDiagnosticDetail(item)"
             :show-diagnostic="Boolean(item.diagnostic)"
             :show-release-notes="false"

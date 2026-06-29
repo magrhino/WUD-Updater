@@ -14,11 +14,18 @@ from .digest_provenance import (
     digest_provenance_or_empty,
 )
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 ColumnSchema = tuple[str, str, int, str | None, int]
 SchemaDefinition = dict[str, tuple[ColumnSchema, ...]]
 Migration = Callable[[sqlite3.Connection], None]
+SECURITY_SCAN_CACHE_FINDINGS_COLUMN: ColumnSchema = (
+    "findings_json",
+    "TEXT",
+    1,
+    "'[]'",
+    0,
+)
 
 EXPECTED_SCHEMA: SchemaDefinition = {
     "schema_migrations": (
@@ -186,6 +193,7 @@ EXPECTED_SCHEMA: SchemaDefinition = {
         ("created_at", "TEXT", 1, None, 0),
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
+        SECURITY_SCAN_CACHE_FINDINGS_COLUMN,
     ),
     "tag_exclusion_rules": (
         ("id", "INTEGER", 0, None, 1),
@@ -229,7 +237,14 @@ WEB_SCHEMA_TABLES = frozenset(
     {"schema_migrations", "web_users", "web_sessions", "web_settings"}
 )
 
-EXPECTED_SCHEMA_V8 = {
+EXPECTED_SCHEMA_V9: SchemaDefinition = dict(EXPECTED_SCHEMA)
+EXPECTED_SCHEMA_V9["security_scan_cache"] = tuple(
+    column
+    for column in EXPECTED_SCHEMA["security_scan_cache"]
+    if column[0] != SECURITY_SCAN_CACHE_FINDINGS_COLUMN[0]
+)
+
+EXPECTED_SCHEMA_V8: SchemaDefinition = {
     name: columns
     for name, columns in EXPECTED_SCHEMA.items()
     if name != "security_scan_cache"
@@ -299,10 +314,11 @@ _EXPECTED_SCHEMAS_BY_VERSION: dict[int, SchemaDefinition] = {
     6: EXPECTED_SCHEMA_V6,
     7: EXPECTED_SCHEMA_V7,
     8: EXPECTED_SCHEMA_V8,
+    9: EXPECTED_SCHEMA_V9,
     SCHEMA_VERSION: EXPECTED_SCHEMA,
 }
 
-_SECURITY_SCAN_CACHE_SCHEMA_SQL = """
+_SECURITY_SCAN_CACHE_SCHEMA_V9_SQL = """
 CREATE TABLE IF NOT EXISTS security_scan_cache (
     cache_key TEXT PRIMARY KEY,
     request_key TEXT NOT NULL,
@@ -336,11 +352,55 @@ CREATE TABLE IF NOT EXISTS security_scan_cache (
     updated_at TEXT NOT NULL,
     metadata_json TEXT NOT NULL DEFAULT '{}'
 );
+"""
+
+_SECURITY_SCAN_CACHE_SCHEMA_V10_SQL = """
+CREATE TABLE IF NOT EXISTS security_scan_cache (
+    cache_key TEXT PRIMARY KEY,
+    request_key TEXT NOT NULL,
+    subject_id TEXT NOT NULL DEFAULT '',
+    canonical_registry TEXT NOT NULL DEFAULT '',
+    canonical_repository TEXT NOT NULL DEFAULT '',
+    requested_ref TEXT NOT NULL DEFAULT '',
+    reported_digest TEXT NOT NULL DEFAULT '',
+    index_digest TEXT NOT NULL DEFAULT '',
+    manifest_digest TEXT NOT NULL DEFAULT '',
+    platform TEXT NOT NULL DEFAULT '',
+    platform_os TEXT NOT NULL DEFAULT '',
+    platform_architecture TEXT NOT NULL DEFAULT '',
+    platform_variant TEXT NOT NULL DEFAULT '',
+    platform_source TEXT NOT NULL DEFAULT '',
+    identity_status TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL,
+    verdict TEXT NOT NULL DEFAULT '',
+    scanner TEXT NOT NULL DEFAULT '',
+    scanner_version TEXT NOT NULL DEFAULT '',
+    scanner_schema TEXT NOT NULL DEFAULT '',
+    db_revision TEXT NOT NULL DEFAULT '',
+    db_updated_at TEXT NOT NULL DEFAULT '',
+    severity_counts_json TEXT NOT NULL DEFAULT '{}',
+    fixable_counts_json TEXT NOT NULL DEFAULT '{}',
+    unfixed_count INTEGER NOT NULL DEFAULT 0,
+    warnings_json TEXT NOT NULL DEFAULT '[]',
+    error_code TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    findings_json TEXT NOT NULL DEFAULT '[]'
+);
+"""
+
+_SECURITY_SCAN_CACHE_INDEXES_SQL = """
 CREATE INDEX IF NOT EXISTS idx_security_scan_cache_request
     ON security_scan_cache (request_key, updated_at);
 CREATE INDEX IF NOT EXISTS idx_security_scan_cache_image_digest_platform
     ON security_scan_cache (requested_ref, reported_digest, platform, updated_at);
 """
+
+_SECURITY_SCAN_CACHE_SCHEMA_V9_SQL += _SECURITY_SCAN_CACHE_INDEXES_SQL
+_SECURITY_SCAN_CACHE_SCHEMA_V10_SQL += _SECURITY_SCAN_CACHE_INDEXES_SQL
+_SECURITY_SCAN_CACHE_SCHEMA_SQL = _SECURITY_SCAN_CACHE_SCHEMA_V10_SQL
 
 
 class DatabaseError(RuntimeError):
@@ -1297,6 +1357,7 @@ MIGRATION_NAMES = {
     7: "add digest tag provenance columns",
     8: "add dependency snoozes",
     9: "add security scan cache",
+    10: "add security scan findings",
 }
 
 
@@ -1627,12 +1688,29 @@ def _migrate_v8_to_v9(conn: sqlite3.Connection) -> None:
         _validate_table_columns(
             conn,
             "security_scan_cache",
-            EXPECTED_SCHEMA["security_scan_cache"],
+            EXPECTED_SCHEMA_V9["security_scan_cache"],
         )
     with conn:
-        conn.executescript(_SECURITY_SCAN_CACHE_SCHEMA_SQL)
+        conn.executescript(_SECURITY_SCAN_CACHE_SCHEMA_V9_SQL)
         conn.execute("PRAGMA user_version = 9")
     _record_schema_migration(conn, 9)
+
+
+def _migrate_v9_to_v10(conn: sqlite3.Connection) -> None:
+    _validate_table_columns(
+        conn,
+        "security_scan_cache",
+        EXPECTED_SCHEMA_V9["security_scan_cache"],
+    )
+    with conn:
+        conn.execute(
+            """
+            ALTER TABLE security_scan_cache
+                ADD COLUMN findings_json TEXT NOT NULL DEFAULT '[]'
+            """
+        )
+        conn.execute("PRAGMA user_version = 10")
+    _record_schema_migration(conn, 10)
 
 
 _MIGRATIONS_BY_TARGET_VERSION: dict[int, Migration] = {
@@ -1644,4 +1722,5 @@ _MIGRATIONS_BY_TARGET_VERSION: dict[int, Migration] = {
     7: _migrate_v6_to_v7,
     8: _migrate_v7_to_v8,
     9: _migrate_v8_to_v9,
+    10: _migrate_v9_to_v10,
 }

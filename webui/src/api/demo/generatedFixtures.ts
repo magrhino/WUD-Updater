@@ -455,9 +455,9 @@ export const generatedFixtures = {
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "key": "postgres:16",
                 "line_no": 4,
-                "platform": "",
-                "platform_architecture": "",
-                "platform_os": "",
+                "platform": "linux/amd64",
+                "platform_architecture": "amd64",
+                "platform_os": "linux",
                 "platform_variant": "",
                 "raw": "",
                 "repo": "postgres",
@@ -476,9 +476,9 @@ export const generatedFixtures = {
                   "local_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
                   "local_tag": "16",
                   "name": "postgres",
-                  "platform": "",
-                  "platform_architecture": "",
-                  "platform_os": "",
+                  "platform": "linux/amd64",
+                  "platform_architecture": "amd64",
+                  "platform_os": "linux",
                   "platform_variant": "",
                   "remote_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
                   "remote_tag": "",
@@ -926,9 +926,9 @@ export const generatedFixtures = {
           "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
           "key": "postgres:16",
           "line_no": 4,
-          "platform": "",
-          "platform_architecture": "",
-          "platform_os": "",
+          "platform": "linux/amd64",
+          "platform_architecture": "amd64",
+          "platform_os": "linux",
           "platform_variant": "",
           "raw": "",
           "repo": "postgres",
@@ -942,9 +942,9 @@ export const generatedFixtures = {
             "local_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "local_tag": "16",
             "name": "postgres",
-            "platform": "",
-            "platform_architecture": "",
-            "platform_os": "",
+            "platform": "linux/amd64",
+            "platform_architecture": "amd64",
+            "platform_os": "linux",
             "platform_variant": "",
             "remote_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "remote_tag": "",
@@ -1063,7 +1063,7 @@ export const generatedFixtures = {
         "label": "Pending file"
       },
       "source_file": "<WUD_OUT_FILE>",
-      "source_hash": "bb3e6e58a3184bdf0005e5fa97801df5def609ac25caee5d92c81f2b062752d8",
+      "source_hash": "fa74558726d072ba0601a425cbf83317f52dea5f68a946e89350b31950e03c99",
       "warnings": [],
       "wud_api": {
         "available": true,
@@ -2054,11 +2054,11 @@ export const generatedFixtures = {
               "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
               "key": "postgres:16",
               "line_no": 4,
-              "platform": "",
-              "platform_architecture": "",
-              "platform_os": "",
+              "platform": "linux/amd64",
+              "platform_architecture": "amd64",
+              "platform_os": "linux",
               "platform_variant": "",
-              "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+              "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
               "repo": "postgres",
               "resolved_image": "postgres:16",
               "services": [
@@ -2075,9 +2075,9 @@ export const generatedFixtures = {
                 "local_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "local_tag": "16",
                 "name": "postgres",
-                "platform": "",
-                "platform_architecture": "",
-                "platform_os": "",
+                "platform": "linux/amd64",
+                "platform_architecture": "amd64",
+                "platform_os": "linux",
                 "platform_variant": "",
                 "remote_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "remote_tag": "",
@@ -2525,11 +2525,11 @@ export const generatedFixtures = {
         "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "key": "postgres:16",
         "line_no": 4,
-        "platform": "",
-        "platform_architecture": "",
-        "platform_os": "",
+        "platform": "linux/amd64",
+        "platform_architecture": "amd64",
+        "platform_os": "linux",
         "platform_variant": "",
-        "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
         "repo": "postgres",
         "source": "file",
         "source_id": "file:4",
@@ -2541,9 +2541,9 @@ export const generatedFixtures = {
           "local_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
           "local_tag": "16",
           "name": "postgres",
-          "platform": "",
-          "platform_architecture": "",
-          "platform_os": "",
+          "platform": "linux/amd64",
+          "platform_architecture": "amd64",
+          "platform_os": "linux",
           "platform_variant": "",
           "remote_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
           "remote_tag": "",
@@ -2662,7 +2662,7 @@ export const generatedFixtures = {
       "label": "Pending file"
     },
     "source_file": "demo/out/images.todo",
-    "source_hash": "bb3e6e58a3184bdf0005e5fa97801df5def609ac25caee5d92c81f2b062752d8",
+    "source_hash": "fa74558726d072ba0601a425cbf83317f52dea5f68a946e89350b31950e03c99",
     "warnings": [],
     "wud_api": {
       "available": true,
@@ -3722,7 +3722,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -3759,7 +3759,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           }
         ]
@@ -3955,7 +3955,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -3992,7 +3992,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           }
         ]
@@ -6509,7 +6509,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -6556,7 +6556,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           }
         ]
@@ -6761,7 +6761,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -6915,7 +6915,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           }
         ]
@@ -9476,7 +9476,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -9523,7 +9523,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           }
         ]
@@ -9728,7 +9728,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -9882,7 +9882,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           }
         ]
@@ -12368,7 +12368,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -12405,7 +12405,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -12620,7 +12620,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -12764,7 +12764,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -13031,7 +13031,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -13068,7 +13068,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -13350,7 +13350,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -13387,7 +13387,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -13654,7 +13654,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -13691,7 +13691,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -13973,7 +13973,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -14010,7 +14010,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -14277,7 +14277,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -14314,7 +14314,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -14596,7 +14596,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -14633,7 +14633,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -18362,7 +18362,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -18419,7 +18419,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           }
         ]
@@ -18632,7 +18632,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -18903,7 +18903,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           }
         ]
@@ -22049,7 +22049,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -22096,7 +22096,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -22319,7 +22319,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -22580,7 +22580,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -22871,7 +22871,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -22918,7 +22918,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -23208,7 +23208,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -23362,7 +23362,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -23653,7 +23653,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -23700,7 +23700,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -23990,7 +23990,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -24144,7 +24144,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -24435,7 +24435,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -24482,7 +24482,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -24772,7 +24772,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -24926,7 +24926,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -29605,7 +29605,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -29652,7 +29652,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -29874,7 +29874,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -30061,7 +30061,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -30352,7 +30352,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -30399,7 +30399,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -30689,7 +30689,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -30843,7 +30843,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -31134,7 +31134,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -31181,7 +31181,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -31471,7 +31471,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -31625,7 +31625,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -31916,7 +31916,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -31963,7 +31963,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -32253,7 +32253,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -32407,7 +32407,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -36895,7 +36895,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -36932,7 +36932,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -37232,7 +37232,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -37376,7 +37376,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -37677,7 +37677,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -37714,7 +37714,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -38014,7 +38014,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -38158,7 +38158,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -38459,7 +38459,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -38496,7 +38496,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -38796,7 +38796,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -38940,7 +38940,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -39274,7 +39274,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -39311,7 +39311,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -39675,7 +39675,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -39712,7 +39712,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -40046,7 +40046,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -40083,7 +40083,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -40447,7 +40447,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -40484,7 +40484,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -40818,7 +40818,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -40855,7 +40855,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -41219,7 +41219,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -41256,7 +41256,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -44463,7 +44463,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -44520,7 +44520,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -44750,7 +44750,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -45054,7 +45054,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -45369,7 +45369,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -45426,7 +45426,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -45724,7 +45724,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -45995,7 +45995,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -46310,7 +46310,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -46367,7 +46367,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -46665,7 +46665,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -46936,7 +46936,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -47251,7 +47251,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -47308,7 +47308,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -47606,7 +47606,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -47877,7 +47877,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -53343,7 +53343,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -53390,7 +53390,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -53698,7 +53698,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -53959,7 +53959,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -54284,7 +54284,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -54331,7 +54331,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -54639,7 +54639,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -54900,7 +54900,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -55225,7 +55225,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -55272,7 +55272,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -55580,7 +55580,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -55841,7 +55841,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -56199,7 +56199,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -56246,7 +56246,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -56618,7 +56618,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -56772,7 +56772,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -57130,7 +57130,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -57177,7 +57177,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -57549,7 +57549,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -57703,7 +57703,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -58061,7 +58061,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -58108,7 +58108,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -58480,7 +58480,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -58634,7 +58634,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -62513,7 +62513,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -62560,7 +62560,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -62867,7 +62867,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -63054,7 +63054,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -63379,7 +63379,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -63426,7 +63426,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -63733,7 +63733,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -63920,7 +63920,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -64245,7 +64245,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -64292,7 +64292,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -64599,7 +64599,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -64786,7 +64786,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -65144,7 +65144,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -65191,7 +65191,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -65563,7 +65563,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -65717,7 +65717,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -66075,7 +66075,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -66122,7 +66122,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -66494,7 +66494,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -66648,7 +66648,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -67006,7 +67006,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -67053,7 +67053,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -67425,7 +67425,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -67579,7 +67579,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -71266,7 +71266,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -71303,7 +71303,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -71685,7 +71685,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -71829,7 +71829,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -72197,7 +72197,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -72234,7 +72234,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -72616,7 +72616,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -72760,7 +72760,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -73128,7 +73128,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -73165,7 +73165,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -73547,7 +73547,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -73691,7 +73691,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -74092,7 +74092,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -74129,7 +74129,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -74575,7 +74575,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -74612,7 +74612,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -75847,7 +75847,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -75904,7 +75904,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -76219,7 +76219,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -76523,7 +76523,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -76872,7 +76872,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -76929,7 +76929,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -77244,7 +77244,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -77548,7 +77548,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -77897,7 +77897,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -77954,7 +77954,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -78269,7 +78269,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -78573,7 +78573,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -78955,7 +78955,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -79012,7 +79012,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -79392,7 +79392,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -79663,7 +79663,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -80045,7 +80045,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -80102,7 +80102,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -80482,7 +80482,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -80753,7 +80753,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -81135,7 +81135,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -81192,7 +81192,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -81572,7 +81572,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -81843,7 +81843,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -86190,7 +86190,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -86237,7 +86237,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -86627,7 +86627,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -86888,7 +86888,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -87280,7 +87280,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -87327,7 +87327,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -87717,7 +87717,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -87978,7 +87978,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -88370,7 +88370,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -88417,7 +88417,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -88807,7 +88807,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -89068,7 +89068,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -89493,7 +89493,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -89540,7 +89540,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -89994,7 +89994,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -90148,7 +90148,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -91580,7 +91580,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -91627,7 +91627,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -92016,7 +92016,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -92203,7 +92203,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -92595,7 +92595,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -92642,7 +92642,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -93031,7 +93031,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -93218,7 +93218,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -93610,7 +93610,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -93657,7 +93657,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -94046,7 +94046,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -94233,7 +94233,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -94658,7 +94658,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -94705,7 +94705,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -95159,7 +95159,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -95313,7 +95313,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -96703,7 +96703,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -96740,7 +96740,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -97204,7 +97204,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -97348,7 +97348,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -97769,7 +97769,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -97826,7 +97826,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -98223,7 +98223,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -98527,7 +98527,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -98943,7 +98943,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -99000,7 +99000,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -99397,7 +99397,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -99701,7 +99701,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -100117,7 +100117,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -100174,7 +100174,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -100571,7 +100571,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -100875,7 +100875,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -101324,7 +101324,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -101381,7 +101381,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -101843,7 +101843,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -102114,7 +102114,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -103687,7 +103687,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -103734,7 +103734,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -104206,7 +104206,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -104467,7 +104467,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -104926,7 +104926,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -104973,7 +104973,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -105444,7 +105444,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -105631,7 +105631,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -106109,7 +106109,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -106166,7 +106166,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -106645,7 +106645,7 @@ export const generatedFixtures = {
                 "digest_provenance": null,
                 "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
                 "line_no": 4,
-                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
                 "resolved_image": "postgres:16",
                 "service": "postgres",
                 "target_image": "postgres:16"
@@ -106949,7 +106949,7 @@ export const generatedFixtures = {
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
             "matched": true,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64",
             "resolved_image": "postgres:16"
           },
           {
@@ -107255,7 +107255,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           }
         ],
         "removal_id": "demo-removal-lines-4",
@@ -107422,7 +107422,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           }
         ],
         "removal_id": "demo-removal-lines-2-4",
@@ -107592,7 +107592,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           }
         ],
         "removal_id": "demo-removal-lines-3-4",
@@ -107755,7 +107755,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -107789,7 +107789,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -107823,7 +107823,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "1.32.0",
@@ -107857,7 +107857,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "1.7.2",
@@ -108110,7 +108110,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           }
         ],
         "removal_id": "demo-removal-lines-2-3-4",
@@ -108318,7 +108318,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -108361,7 +108361,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -108404,7 +108404,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "1.32.0",
@@ -108447,7 +108447,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "1.7.2",
@@ -108748,7 +108748,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -108791,7 +108791,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -108834,7 +108834,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "1.32.0",
@@ -108877,7 +108877,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "1.7.2",
@@ -109171,7 +109171,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -109214,7 +109214,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -109257,7 +109257,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -109300,7 +109300,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -109343,7 +109343,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -109386,7 +109386,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "1.32.0",
@@ -109616,7 +109616,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -109668,7 +109668,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -109720,7 +109720,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "1.32.0",
@@ -109772,7 +109772,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "1.7.2",
@@ -110129,7 +110129,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -110181,7 +110181,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -110233,7 +110233,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -110285,7 +110285,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -110337,7 +110337,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -110389,7 +110389,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "1.32.0",
@@ -110649,7 +110649,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -110701,7 +110701,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -110753,7 +110753,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -110805,7 +110805,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -110857,7 +110857,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -110909,7 +110909,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "1.32.0",
@@ -111162,7 +111162,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -111214,7 +111214,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -111266,7 +111266,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -111318,7 +111318,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -111437,7 +111437,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -111498,7 +111498,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -111559,7 +111559,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -111620,7 +111620,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -111681,7 +111681,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -111742,7 +111742,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "1.32.0",
@@ -112040,7 +112040,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -112101,7 +112101,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -112162,7 +112162,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -112223,7 +112223,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -112345,7 +112345,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -112406,7 +112406,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -112467,7 +112467,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -112528,7 +112528,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -112643,7 +112643,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -112719,7 +112719,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -112789,7 +112789,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -112859,7 +112859,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -112929,7 +112929,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.10.9",
@@ -113062,7 +113062,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -113132,7 +113132,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",
@@ -113210,7 +113210,7 @@ export const generatedFixtures = {
             "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "image": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "line_no": 4,
-            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111 platform=linux/amd64"
           },
           {
             "desired_tag": "v0.16.1",

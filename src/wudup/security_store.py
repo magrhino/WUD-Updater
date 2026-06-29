@@ -6,11 +6,14 @@ import hashlib
 import json
 import sqlite3
 from collections.abc import Mapping
+from dataclasses import asdict
 
 from .digest_verifier import ResolvedImageSubject
 from .security_scanner import SecurityScanResult
+from .security_severity import normalize_security_severity
 from .security_subjects import PendingSecurityRequest, subject_id
 from .web_models import (
+    SecurityScanFinding,
     SecurityScanInfo,
     SecurityScanSeverityCounts,
 )
@@ -141,9 +144,10 @@ def upsert_scan_result(
                 error_code,
                 error_message,
                 created_at,
-                updated_at
+                updated_at,
+                findings_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 cache_key,
@@ -176,6 +180,7 @@ def upsert_scan_result(
                 result.error_message,
                 timestamp,
                 timestamp,
+                _findings_json(result),
             ),
         )
         _prune_cache_rows(conn, request.request_key)
@@ -198,6 +203,7 @@ def row_to_scan_info(
         severity_counts=_counts(str(row["severity_counts_json"])),
         fixable_counts=_counts(str(row["fixable_counts_json"])),
         unfixed_count=_safe_int(row["unfixed_count"]),
+        findings=_findings(str(row["findings_json"])),
         warnings=_json_string_list(str(row["warnings_json"])),
         error_code=str(row["error_code"]),
         error_message=str(row["error_message"]),
@@ -221,6 +227,35 @@ def _json_object(value: str) -> Mapping[str, object]:
     except json.JSONDecodeError:
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _findings_json(result: SecurityScanResult) -> str:
+    return json.dumps([asdict(finding) for finding in result.findings], sort_keys=True)
+
+
+def _findings(value: str) -> list[SecurityScanFinding]:
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    findings: list[SecurityScanFinding] = []
+    for item in parsed:
+        if not isinstance(item, Mapping):
+            continue
+        findings.append(
+            SecurityScanFinding(
+                vulnerability_id=str(item.get("vulnerability_id") or ""),
+                package_name=str(item.get("package_name") or ""),
+                installed_version=str(item.get("installed_version") or ""),
+                fixed_version=str(item.get("fixed_version") or ""),
+                severity=normalize_security_severity(item.get("severity")),
+                title=str(item.get("title") or ""),
+                primary_url=str(item.get("primary_url") or ""),
+            )
+        )
+    return findings
 
 
 def _json_string_list(value: str) -> list[str]:

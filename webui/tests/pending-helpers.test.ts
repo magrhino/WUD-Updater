@@ -6,6 +6,7 @@ import type { PendingItem, SecurityScanInfo } from "../src/api/client";
 import PendingCleanupModal from "../src/components/pending/PendingCleanupModal.vue";
 import PendingPlanReviewModal from "../src/components/pending/PendingPlanReviewModal.vue";
 import PendingRemovalModal from "../src/components/pending/PendingRemovalModal.vue";
+import PendingSecurityScanDetails from "../src/components/pending/PendingSecurityScanDetails.vue";
 import {
   digestProvenanceDisplay,
   displayDigest,
@@ -92,6 +93,7 @@ function securityScanInfo(
       unknown: 0,
     },
     unfixed_count: 0,
+    findings: [],
     warnings: [],
     error_code: "",
     error_message: "",
@@ -455,6 +457,53 @@ describe("pending helper modules", () => {
     ).toEqual([]);
   });
 
+  it("renders candidate security scan vulnerability rows", () => {
+    const wrapper = mountPendingModal(PendingSecurityScanDetails, {
+      scan: securityScanInfo({
+        state: "complete",
+        verdict: "findings",
+        scanned_at: "2026-06-26T00:00:00+00:00",
+        scanner_version: "0.71.2",
+        severity_counts: {
+          critical: 0,
+          high: 1,
+          medium: 0,
+          low: 0,
+          unknown: 0,
+        },
+        fixable_counts: {
+          critical: 0,
+          high: 1,
+          medium: 0,
+          low: 0,
+          unknown: 0,
+        },
+        findings: [
+          {
+            vulnerability_id: "CVE-2026-0001",
+            package_name: "openssl",
+            installed_version: "1.0.0",
+            fixed_version: "1.0.1",
+            severity: "high",
+            title: "demo vulnerability",
+            primary_url: "https://avd.aquasec.com/nvd/cve-2026-0001",
+          },
+        ],
+      }),
+    });
+
+    expect(wrapper.text()).toContain("1 finding");
+    expect(wrapper.text()).toContain("1 High");
+    expect(wrapper.text()).toContain("1 fixable finding");
+    expect(wrapper.text()).toContain("CVE-2026-0001");
+    expect(wrapper.text()).toContain("openssl");
+    expect(wrapper.text()).toContain("1.0.0");
+    expect(wrapper.text()).toContain("1.0.1");
+    expect(wrapper.find("a").attributes("href")).toBe(
+      "https://avd.aquasec.com/nvd/cve-2026-0001",
+    );
+  });
+
   it("summarizes candidate security scans with shared severity semantics", () => {
     const highImpactScan = securityScanInfo({
       line_no: 1,
@@ -533,6 +582,13 @@ describe("pending helper modules", () => {
         items: [lowerSeverityScan],
       }),
     ).toEqual({ label: "1 candidate with findings", type: "warning" });
+    expect(
+      securityScanSummaryDisplay({
+        securityScans: { scanning_enabled: true },
+        securityScansCurrent: true,
+        items: [highImpactScan, lowerSeverityScan],
+      }),
+    ).toEqual({ label: "2 candidates with findings", type: "error" });
     expect(
       securityScanSummaryDisplay({
         securityScans: { scanning_enabled: true },

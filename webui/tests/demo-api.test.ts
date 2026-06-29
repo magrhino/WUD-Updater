@@ -768,43 +768,36 @@ describe("demo web API", () => {
     );
   });
 
-  it("reports demo security scans only for supported exact subjects", async () => {
-    const api = createDemoWebApi();
-    const pending = await api.pending();
-    const scans = await api.securityScans();
-    const tagOnlyLine = pending.items.find((item) => item.digest === "");
-    const digestLine = pending.items.find((item) => {
-      const scan = scans.items.find(
-        (candidate) => candidate.line_no === item.line_no,
-      );
-      return (
-        item.digest.startsWith("sha256:") &&
-        scan?.state === "unsupported"
-      );
-    });
+  it("reports demo security scans only for supported exact subjects", () => {
+    const pendingFixture = generatedFixtures.pending as { items: PendingItem[] };
+    const originalItems = pendingFixture.items;
+    const [tagOnlyExample, digestExample] = originalItems;
 
-    expect(tagOnlyLine).toBeDefined();
-    expect(digestLine).toBeDefined();
-    if (!tagOnlyLine || !digestLine) {
+    expect(tagOnlyExample).toBeDefined();
+    expect(digestExample).toBeDefined();
+    if (!tagOnlyExample || !digestExample) {
       throw new Error("Expected demo pending fixture to include scan examples");
     }
 
-    const tagOnlyScan = scans.items.find(
-      (scan) => scan.line_no === tagOnlyLine.line_no,
-    );
-    const digestScan = scans.items.find(
-      (scan) => scan.line_no === digestLine.line_no,
-    );
+    pendingFixture.items = [
+      { ...tagOnlyExample, digest: "", platform: "" },
+      { ...digestExample, digest: postgresDigest, platform: "" },
+    ];
+    try {
+      const [tagOnlyScan, digestScan] = new DemoApiState().securityScans().items;
 
-    expect(tagOnlyScan).toMatchObject({
-      state: "unsupported",
-      verdict: "unknown",
-      severity_counts: { high: 0, medium: 0 },
-    });
-    expect(digestScan).toMatchObject({
-      state: "unsupported",
-      verdict: "unknown",
-    });
+      expect(tagOnlyScan).toMatchObject({
+        state: "unsupported",
+        verdict: "unknown",
+        severity_counts: { high: 0, medium: 0 },
+      });
+      expect(digestScan).toMatchObject({
+        state: "unsupported",
+        verdict: "unknown",
+      });
+    } finally {
+      pendingFixture.items = originalItems;
+    }
   });
 
   it("uses the first supported exact demo security scan as the findings candidate", () => {
@@ -820,7 +813,7 @@ describe("demo web API", () => {
     }
 
     pendingFixture.items = [
-      { ...unsupported, digest: "", platform: "" },
+      { ...unsupported, digest: postgresDigest, platform: "" },
       { ...firstExact, digest: postgresDigest, platform: "linux/amd64" },
       { ...laterExact, digest: wudupDigest, platform: "linux/arm64" },
     ];

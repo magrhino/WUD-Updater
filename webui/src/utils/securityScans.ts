@@ -165,7 +165,10 @@ export function securityScanSummaryDisplay({
   );
   if (findings.length > 0) {
     return {
-      label: pluralize(findings.length, "candidate with findings"),
+      label:
+        findings.length === 1
+          ? "1 candidate with findings"
+          : `${findings.length} candidates with findings`,
       type: findings.some((display) => display.type === "error")
         ? "error"
         : "warning",

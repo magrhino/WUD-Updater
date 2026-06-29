@@ -7,6 +7,7 @@ import type {
   PendingItem,
   PendingStackGroup,
   ReleaseNoteInfo,
+  SecurityScanInfo,
 } from "../../api/client";
 import { displayDigest } from "../../utils/digestProvenance";
 import {
@@ -33,6 +34,7 @@ const props = defineProps<{
   releaseNoteReason: (note: ReleaseNoteInfo | null) => string;
   releaseNoteStatus: (note: ReleaseNoteInfo | null) => string;
   riskCues: (item: PendingGroupedItem) => SafetyCue[];
+  securityScanFor: (item: PendingGroupedItem) => SecurityScanInfo | null;
   selectedLineSet: Set<number>;
   stackHasSelection: boolean;
   stackIndeterminate: boolean;
@@ -179,6 +181,7 @@ const emit = defineEmits<{
           :release-note="releaseNoteFor(item)"
           :release-note-status="releaseNoteStatus(releaseNoteFor(item))"
           :release-note-reason="releaseNoteReason(releaseNoteFor(item))"
+          :security-scan="securityScanFor(item)"
           show-release-notes
           :show-diagnostic="Boolean(item.diagnostic)"
           :tag-override-value="tagOverrideValue(item)"

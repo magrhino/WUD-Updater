@@ -801,14 +801,15 @@ export class DemoApiState {
 
   securityScans(): SecurityScansResponse {
     const pending = this.pendingResponse();
-    let seenExact = false;
+    let seenReviewCandidate = false;
     const items = pending.items.map((item) => {
-      const exact = Boolean(
+      const exactCandidate = Boolean(
         normalizeSecurityDigest(item.digest) && pendingItemPlatform(item),
       );
-      const firstExact = exact && !seenExact;
-      seenExact ||= exact;
-      return this.securityScanInfo(item, firstExact);
+      const reviewCandidate =
+        exactCandidate && !seenReviewCandidate;
+      seenReviewCandidate ||= reviewCandidate;
+      return this.securityScanInfo(item, reviewCandidate);
     });
     return {
       source_file: pending.source_file,
@@ -857,7 +858,20 @@ export class DemoApiState {
       db_updated_at: "",
       severity_counts: severityCounts,
       fixable_counts: fixableCounts,
-      unfixed_count: decision.hasFindings ? 1 : 0,
+      unfixed_count: 0,
+      findings: decision.hasFindings
+        ? [
+            {
+              vulnerability_id: "CVE-2026-0001",
+              package_name: "demo-package",
+              installed_version: "1.0.0",
+              fixed_version: "1.0.1",
+              severity: "high",
+              title: "Demo vulnerability for candidate advisory review",
+              primary_url: "https://avd.aquasec.com/nvd/cve-2026-0001",
+            },
+          ]
+        : [],
       warnings:
         decision.hasFindings ? ["Demo finding for candidate-only advisory display."] : [],
       error_code: "",
@@ -868,23 +882,24 @@ export class DemoApiState {
   private securityScanDecision(
     reportedDigest: string,
     platform: string,
-    firstExact: boolean,
+    reviewCandidate: boolean,
   ): DemoSecurityScanDecision {
     const exact = Boolean(reportedDigest && platform);
-    const hasFindings = exact && firstExact;
+    const hasFindings = reviewCandidate && exact;
+
+    if (hasFindings) {
+      return {
+        hasFindings,
+        state: "complete",
+        verdict: "findings",
+      };
+    }
 
     if (!exact) {
       return {
         hasFindings,
         state: "unsupported",
         verdict: "unknown",
-      };
-    }
-    if (hasFindings) {
-      return {
-        hasFindings,
-        state: "complete",
-        verdict: "findings",
       };
     }
     return {
@@ -898,7 +913,7 @@ export class DemoApiState {
     hasFindings: boolean,
   ): SecurityScanSeverityCounts {
     if (hasFindings) {
-      return { critical: 0, high: 1, medium: 2, low: 0, unknown: 0 };
+      return { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 };
     }
     return { ...EMPTY_SECURITY_COUNTS };
   }
@@ -907,7 +922,7 @@ export class DemoApiState {
     hasFindings: boolean,
   ): SecurityScanSeverityCounts {
     if (hasFindings) {
-      return { critical: 0, high: 1, medium: 1, low: 0, unknown: 0 };
+      return { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 };
     }
     return { ...EMPTY_SECURITY_COUNTS };
   }

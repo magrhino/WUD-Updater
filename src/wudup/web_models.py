@@ -38,6 +38,7 @@ __all__ = (
     "CreateSnoozeOperation",
     "CsrfResponse",
     "DEFAULT_CORE_UPDATE_TOUR_STEP",
+    "DEFAULT_SECURITY_SCAN_CACHE_DIR",
     "DeleteDependencySnoozeOperation",
     "DeleteServicePolicyOperation",
     "DeleteSnoozeOperation",
@@ -138,6 +139,7 @@ __all__ = (
     "RunVerificationSummary",
     "RunVerificationWudStatus",
     "SecurityScanConfig",
+    "SecurityScanFinding",
     "SecurityScanInfo",
     "SecurityScanJobResponse",
     "SecurityScanSeverityCounts",
@@ -279,11 +281,14 @@ class WudApiClientConfig:
         return bool(self.header_items)
 
 
+DEFAULT_SECURITY_SCAN_CACHE_DIR = "/logs/trivy-cache"
+
+
 @dataclass(frozen=True)
 class SecurityScanConfig:
     enabled: bool = False
     executable: str = "trivy"
-    cache_dir: str = ""
+    cache_dir: str = DEFAULT_SECURITY_SCAN_CACHE_DIR
     timeout_seconds: int = 300
 
 
@@ -1086,6 +1091,16 @@ class SecurityScanSeverityCounts(BaseModel):
     unknown: int = 0
 
 
+class SecurityScanFinding(BaseModel):
+    vulnerability_id: str = ""
+    package_name: str = ""
+    installed_version: str = ""
+    fixed_version: str = ""
+    severity: Literal["critical", "high", "medium", "low", "unknown"] = "unknown"
+    title: str = ""
+    primary_url: str = ""
+
+
 class SecurityScanInfo(BaseModel):
     line_no: int
     state: SecurityScanState
@@ -1103,6 +1118,7 @@ class SecurityScanInfo(BaseModel):
         default_factory=SecurityScanSeverityCounts
     )
     unfixed_count: int = 0
+    findings: list[SecurityScanFinding] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     error_code: str = ""
     error_message: str = ""

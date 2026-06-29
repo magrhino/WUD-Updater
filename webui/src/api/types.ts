@@ -247,6 +247,16 @@ export interface SecurityScanSeverityCounts {
   unknown: number;
 }
 
+export interface SecurityScanFinding {
+  vulnerability_id: string;
+  package_name: string;
+  installed_version: string;
+  fixed_version: string;
+  severity: "critical" | "high" | "medium" | "low" | "unknown";
+  title: string;
+  primary_url: string;
+}
+
 export interface SecurityScanInfo {
   line_no: number;
   state: SecurityScanState;
@@ -260,6 +270,7 @@ export interface SecurityScanInfo {
   severity_counts: SecurityScanSeverityCounts;
   fixable_counts: SecurityScanSeverityCounts;
   unfixed_count: number;
+  findings: SecurityScanFinding[];
   warnings: string[];
   error_code: string;
   error_message: string;

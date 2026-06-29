@@ -2,8 +2,13 @@
 import type { InputHTMLAttributes } from "vue";
 import { NAlert, NCheckbox, NInput, NTag } from "naive-ui";
 
-import type { PendingGroupedItem, ReleaseNoteInfo } from "../../api/client";
+import type {
+  PendingGroupedItem,
+  ReleaseNoteInfo,
+  SecurityScanInfo,
+} from "../../api/client";
 import PendingReleaseNotes from "./PendingReleaseNotes.vue";
+import PendingSecurityScanDetails from "./PendingSecurityScanDetails.vue";
 
 type TagType = "default" | "error" | "info" | "success" | "warning";
 
@@ -25,6 +30,7 @@ withDefaults(defineProps<{
   releaseNote?: ReleaseNoteInfo | null;
   releaseNoteStatus?: string;
   releaseNoteReason?: string;
+  securityScan?: SecurityScanInfo | null;
   showReleaseNotes?: boolean;
   showDiagnostic?: boolean;
   metaDetail?: string;
@@ -38,6 +44,7 @@ withDefaults(defineProps<{
   releaseNote: null,
   releaseNoteStatus: "",
   releaseNoteReason: "",
+  securityScan: null,
   showReleaseNotes: false,
   showDiagnostic: false,
   metaDetail: "",
@@ -105,6 +112,10 @@ function groupedItemTarget(item: PendingGroupedItem): string {
         :release-note-reason="releaseNoteReason"
       />
     </div>
+    <PendingSecurityScanDetails
+      v-if="securityScan"
+      :scan="securityScan"
+    />
     <div v-if="showDiagnostic && item.diagnostic" class="pending-update-diagnostic">
       <n-alert type="warning" :title="item.diagnostic.message">
         {{ item.diagnostic.hint }}

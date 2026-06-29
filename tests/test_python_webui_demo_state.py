@@ -8,11 +8,21 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from wudup.platforms import ImagePlatform
+from wudup.security_subjects import pending_security_context
+from wudup.web import load_web_settings
+from wudup.web_security import security_scans_response
+
 
 class WebuiDemoStateTests(unittest.TestCase):
     def test_demo_state_seed_is_idempotent(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         script = repo_root / "webui" / "scripts" / "seed_demo_state.py"
+        seeded_scan_ref = (
+            "postgres:16@sha256:"
+            "1111111111111111111111111111111111111111111111111111111111111111"
+        )
+        seeded_finding_id = "CVE-2026-0001"
         with tempfile.TemporaryDirectory(prefix="wud-webui-demo.") as tmpdir:
             root = Path(tmpdir) / "local-dev"
 
@@ -161,6 +171,57 @@ class WebuiDemoStateTests(unittest.TestCase):
                     WHERE service_key = 'media/wudup'
                     """
                 ).fetchall()
+                security_scan = conn.execute(
+                    """
+                    SELECT requested_ref, reported_digest, platform, state, verdict,
+                           findings_json
+                    FROM security_scan_cache
+                    WHERE requested_ref = ?
+                    """,
+                    (seeded_scan_ref,),
+                ).fetchone()
+            static_dir = root / "static"
+            static_dir.mkdir()
+            settings = load_web_settings(
+                {
+                    "DOCKER_BASE": str(docker_base),
+                    "HOST_DOCKER_BASE": str(docker_base),
+                    "WUD_OUT_FILE": str(wud_file),
+                    "WUD_LOG_DIR": str(root / "logs"),
+                    "WUD_DB_PATH": str(db_path),
+                    "WUD_WEB_STATIC_DIR": str(static_dir),
+                    "WUD_SECURITY_SCANNING_ENABLED": "true",
+                }
+            )
+            security_scans = security_scans_response(settings)
+            scan_context = pending_security_context(
+                settings,
+                include_compose=False,
+                include_wud_metadata=False,
+            )
+            finding_scan = next(
+                (
+                    item
+                    for item in security_scans.items
+                    if any(
+                        finding.vulnerability_id == seeded_finding_id
+                        for finding in item.findings
+                    )
+                ),
+                None,
+            )
+            seeded_finding = next(
+                (
+                    finding
+                    for item in security_scans.items
+                    for finding in item.findings
+                    if finding.vulnerability_id == seeded_finding_id
+                ),
+                None,
+            )
+            scan_request = next(
+                request for request in scan_context.requests if request.line_no == 4
+            )
 
         self.assertEqual(run_count[0], 6)
         self.assertEqual(pending_count[0], 4)
@@ -191,6 +252,26 @@ class WebuiDemoStateTests(unittest.TestCase):
                 "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             ),
         )
+        self.assertIsNotNone(security_scan)
+        self.assertEqual(
+            security_scan[:5],
+            (
+                seeded_scan_ref,
+                "sha256:"
+                "1111111111111111111111111111111111111111111111111111111111111111",
+                "linux/amd64",
+                "complete",
+                "findings",
+            ),
+        )
+        self.assertIn(seeded_finding_id, security_scan[5])
+        self.assertIsNotNone(finding_scan)
+        self.assertEqual(finding_scan.line_no, 4)
+        self.assertIsNotNone(seeded_finding)
+        self.assertEqual(seeded_finding.vulnerability_id, seeded_finding_id)
+        self.assertEqual(scan_request.platform, ImagePlatform("linux", "amd64"))
+        self.assertEqual(scan_request.identity_status, "pending")
+        self.assertEqual(scan_request.error, "")
 
 
 if __name__ == "__main__":

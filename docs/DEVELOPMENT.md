@@ -114,8 +114,9 @@ backend and updater code paths without using the host Docker daemon. You can
 open `http://127.0.0.1:5173/#/pending`, select stack updates, preview the dry-run
 plan, apply it, and then inspect the new run detail and log records. The
 policies, snoozes, and tag exclusions pages also seed editable SQLite demo
-records. Use `make webui-demo-state` when you only need to refresh the
-disposable fixtures without starting the servers.
+records, and the pending view includes a cached example security finding. Use
+`make webui-demo-state` when you only need to refresh the disposable fixtures
+without starting the servers.
 
 Useful WebUI development variables:
 
@@ -140,7 +141,7 @@ Useful WebUI development variables:
 | `WUD_WEB_SECURE_COOKIES` | Cookie Secure mode: `auto`, `true`, or `false`; keep `auto` outside local HTTP tests. |
 | `WUD_API_BASE_URL` | Internal WUD API URL for best-effort WebUI metadata discovery; defaults to `http://wud:3000`. Runtime discovery retries automatically on later WebUI requests after transient WUD API outages. |
 | `WUD_API_STARTUP_WAIT_SECONDS` | Seconds to retry the initial WUD API health probe during WebUI startup; defaults to `0`. This startup wait is separate from automatic runtime retries. |
-| `WUD_SECURITY_SCANNING_ENABLED` | Enables the opt-in Trivy candidate advisory prototype for local testing. Keep disabled unless a Trivy executable is available to the backend process. |
+| `WUD_SECURITY_SCANNING_ENABLED` | Enables the opt-in Trivy candidate advisory prototype for local testing. Refresh jobs require a Trivy executable in the backend process. |
 
 For manual backend-only testing with a built SPA:
 
