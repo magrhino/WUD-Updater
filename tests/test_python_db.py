@@ -391,9 +391,14 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("idx_security_scan_cache_image_digest_platform", indexes)
 
     def test_init_db_migrates_v8_with_existing_v9_security_cache(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with (
+            tempfile.TemporaryDirectory(prefix="wud-python-db.") as tmpdir,
+            sqlite3.connect(Path(tmpdir) / "wudup.sqlite") as conn,
+        ):
             init_db(conn)
-            conn.execute("ALTER TABLE security_scan_cache RENAME TO old_security_scan_cache")
+            conn.execute(
+                "ALTER TABLE security_scan_cache RENAME TO old_security_scan_cache"
+            )
             conn.executescript(_SECURITY_SCAN_CACHE_SCHEMA_V9_SQL)
             conn.execute("DROP TABLE old_security_scan_cache")
             conn.execute("DELETE FROM schema_migrations WHERE version >= 9")
@@ -411,9 +416,14 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("findings_json", columns)
 
     def test_init_db_migrates_v9_security_cache_and_preserves_rows(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with (
+            tempfile.TemporaryDirectory(prefix="wud-python-db.") as tmpdir,
+            sqlite3.connect(Path(tmpdir) / "wudup.sqlite") as conn,
+        ):
             init_db(conn)
-            conn.execute("ALTER TABLE security_scan_cache RENAME TO old_security_scan_cache")
+            conn.execute(
+                "ALTER TABLE security_scan_cache RENAME TO old_security_scan_cache"
+            )
             conn.executescript(_SECURITY_SCAN_CACHE_SCHEMA_V9_SQL)
             conn.execute(
                 """

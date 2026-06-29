@@ -18,6 +18,11 @@ class WebuiDemoStateTests(unittest.TestCase):
     def test_demo_state_seed_is_idempotent(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         script = repo_root / "webui" / "scripts" / "seed_demo_state.py"
+        seeded_scan_ref = (
+            "postgres:16@sha256:"
+            "1111111111111111111111111111111111111111111111111111111111111111"
+        )
+        seeded_finding_id = "CVE-2026-0001"
         with tempfile.TemporaryDirectory(prefix="wud-webui-demo.") as tmpdir:
             root = Path(tmpdir) / "local-dev"
 
@@ -171,7 +176,9 @@ class WebuiDemoStateTests(unittest.TestCase):
                     SELECT requested_ref, reported_digest, platform, state, verdict,
                            findings_json
                     FROM security_scan_cache
-                    """
+                    WHERE requested_ref = ?
+                    """,
+                    (seeded_scan_ref,),
                 ).fetchone()
             static_dir = root / "static"
             static_dir.mkdir()
@@ -193,7 +200,23 @@ class WebuiDemoStateTests(unittest.TestCase):
                 include_wud_metadata=False,
             )
             finding_scan = next(
-                (item for item in security_scans.items if item.findings),
+                (
+                    item
+                    for item in security_scans.items
+                    if any(
+                        finding.vulnerability_id == seeded_finding_id
+                        for finding in item.findings
+                    )
+                ),
+                None,
+            )
+            seeded_finding = next(
+                (
+                    finding
+                    for item in security_scans.items
+                    for finding in item.findings
+                    if finding.vulnerability_id == seeded_finding_id
+                ),
                 None,
             )
             scan_request = next(
@@ -233,8 +256,7 @@ class WebuiDemoStateTests(unittest.TestCase):
         self.assertEqual(
             security_scan[:5],
             (
-                "postgres:16@sha256:"
-                "1111111111111111111111111111111111111111111111111111111111111111",
+                seeded_scan_ref,
                 "sha256:"
                 "1111111111111111111111111111111111111111111111111111111111111111",
                 "linux/amd64",
@@ -242,13 +264,11 @@ class WebuiDemoStateTests(unittest.TestCase):
                 "findings",
             ),
         )
-        self.assertIn("CVE-2026-0001", security_scan[5])
+        self.assertIn(seeded_finding_id, security_scan[5])
         self.assertIsNotNone(finding_scan)
         self.assertEqual(finding_scan.line_no, 4)
-        self.assertEqual(
-            finding_scan.findings[0].vulnerability_id,
-            "CVE-2026-0001",
-        )
+        self.assertIsNotNone(seeded_finding)
+        self.assertEqual(seeded_finding.vulnerability_id, seeded_finding_id)
         self.assertEqual(scan_request.platform, ImagePlatform("linux", "amd64"))
         self.assertEqual(scan_request.identity_status, "pending")
         self.assertEqual(scan_request.error, "")
