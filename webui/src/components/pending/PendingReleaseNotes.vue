@@ -5,6 +5,10 @@ import { NButton, NTag } from "naive-ui";
 
 import type { ReleaseNoteInfo } from "../../api/client";
 import { useUpdatesStore } from "../../stores/updates";
+import {
+  notificationStatusLabel as releaseNotificationStatusLabel,
+  notificationStatusType as releaseNotificationStatusType,
+} from "./releaseNotificationStatus";
 
 const props = withDefaults(defineProps<{
   releaseNote?: ReleaseNoteInfo | null;
@@ -33,41 +37,12 @@ const changelogProblem = computed(() =>
 const readChangelogLabel = computed(() =>
   changelogReady.value ? "Changelog loaded" : "Read changelog",
 );
-const notificationStatusLabel = computed(() => {
-  const status = props.releaseNote?.notification_status ?? "";
-  if (status === "skipped_duplicate") {
-    return "Already notified";
-  }
-  if (status === "skipped_cooldown") {
-    return "Cooldown active";
-  }
-  if (status === "cooldown_ready") {
-    return "Cooldown elapsed";
-  }
-  if (status === "manual_resend") {
-    return "Manual resend";
-  }
-  if (status === "sent") {
-    return "Notified";
-  }
-  if (status === "failure") {
-    return "Last send failed";
-  }
-  return "Not notified";
-});
-const notificationStatusType = computed(() => {
-  const status = props.releaseNote?.notification_status ?? "";
-  if (status === "skipped_duplicate" || status === "sent") {
-    return "success";
-  }
-  if (status === "failure") {
-    return "error";
-  }
-  if (status === "skipped_cooldown") {
-    return "warning";
-  }
-  return "default";
-});
+const notificationStatusLabel = computed(() =>
+  releaseNotificationStatusLabel(props.releaseNote?.notification_status ?? ""),
+);
+const notificationStatusType = computed(() =>
+  releaseNotificationStatusType(props.releaseNote?.notification_status ?? ""),
+);
 const notificationStatusDetail = computed(() => {
   const reason = props.releaseNote?.notification_skipped_reason ?? "";
   if (reason) {

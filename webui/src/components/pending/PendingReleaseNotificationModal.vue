@@ -8,6 +8,10 @@ import type {
   ReleaseNotificationResponse,
 } from "../../api/client";
 import { pluralize } from "../../views/pending/utils";
+import {
+  notificationStatusLabel,
+  notificationStatusType,
+} from "./releaseNotificationStatus";
 
 const props = defineProps<{
   error: string;
@@ -47,43 +51,6 @@ function handleModalShowUpdate(value: boolean): void {
   if (!value) {
     emit("close");
   }
-}
-
-function notificationStatusLabel(status: string): string {
-  if (status === "skipped_duplicate") {
-    return "Already notified";
-  }
-  if (status === "skipped_cooldown") {
-    return "Cooldown active";
-  }
-  if (status === "cooldown_ready") {
-    return "Cooldown elapsed";
-  }
-  if (status === "manual_resend") {
-    return "Manual resend";
-  }
-  if (status === "sent") {
-    return "Notified";
-  }
-  if (status === "failure") {
-    return "Last send failed";
-  }
-  return "Not notified";
-}
-
-function notificationStatusType(
-  status: string,
-): "default" | "success" | "warning" | "error" {
-  if (status === "skipped_duplicate" || status === "sent") {
-    return "success";
-  }
-  if (status === "failure") {
-    return "error";
-  }
-  if (status === "skipped_cooldown") {
-    return "warning";
-  }
-  return "default";
 }
 
 function notificationDetail(item: ReleaseNotificationItem): string {
