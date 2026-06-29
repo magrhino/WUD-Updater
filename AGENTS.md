@@ -123,7 +123,7 @@ Use the shell already used by the target script.
 ## Maintenance Notes
 
 - When adding a top-level file, script, test harness, workflow, or user-facing config surface, update the root path map and repo-wide commands/validation only when they add useful routing not already owned by a scoped `AGENTS.md`.
-- When adding, removing, or renaming Python source files, Python tests, or Python helper scripts, update only the explicit `py_compile` list in `tests/run-all.sh` as the narrow companion change unless the task explicitly asks to redesign validation.
+- Python syntax coverage uses `compileall` in `tests/run-all.sh`; no manifest update is needed when adding, removing, or renaming Python files under the checked directories.
 - When creating a new backend module or frontend surface, update the closest scoped `AGENTS.md` if ownership or validation guidance changes.
 - During release prep, draft `CHANGELOG.md` from commits since the previous tag and group entries by user-visible impact (`Added`, `Changed`, `Fixed`, `Docs`, `Removed`, or `Internal` as appropriate).
 

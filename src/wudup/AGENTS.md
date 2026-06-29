@@ -45,7 +45,7 @@ If the exact owner does not exist yet, create the narrowest reasonable module in
 
 ## Tests
 
-- Add new Python modules and Python test files to the explicit `py_compile` list in `tests/run-all.sh`; keep this as the smallest targeted harness update rather than replacing the list with broader discovery or runner rewrites unless explicitly requested.
+- Python syntax coverage uses `compileall` in `tests/run-all.sh`; no manifest update is needed for new Python files under the checked directories.
 - Prefer focused WebUI backend tests such as `tests/test_python_web_auth_*.py`, `tests/test_python_web_pending_*.py`, `tests/test_python_web_jobs.py`, `tests/test_python_web_scheduler_*.py`, and `tests/test_python_web_self_update_*.py`.
 - Until focused files exist, keep behavior covered in `tests/test_python_web.py` without adding unrelated cases.
 - Prefer temp-dir tests, fake Docker/Compose, and targeted unittest/pytest coverage over broad fixtures or real Docker.

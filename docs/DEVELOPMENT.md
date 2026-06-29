@@ -33,7 +33,7 @@ ruff check .
 shellcheck install.sh bin/updates bin/docker-update-from-wud wud/*.sh
 bash -n install.sh bin/updates bin/docker-update-from-wud wud/http.sh wud/release-notes-to-discord.sh wud/github-release-embed.sh wud/tag-manager.sh
 sh -n wud/on-update.sh wud/append-updates.sh
-python3 -m py_compile src/wudup/*.py tests/test_python_*.py
+python3 -m compileall -q src tests webui/scripts
 python -m pytest tests/test_python_*.py
 tests/run-all.sh --python
 tests/run-all.sh --shell
