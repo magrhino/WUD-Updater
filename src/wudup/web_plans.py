@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import secrets
+from collections.abc import Callable
 from dataclasses import asdict, replace
-from typing import Protocol
 
 from fastapi import HTTPException, Request
 
@@ -35,10 +35,7 @@ from .web_models import (
 )
 
 
-class EffectiveConfigLoader(Protocol):
-    def __call__(self, settings: WebSettings) -> UpdaterConfig: ...
-
-
+EffectiveConfigLoader = Callable[[WebSettings], UpdaterConfig]
 _effective_config_loader: EffectiveConfigLoader | None = None
 
 

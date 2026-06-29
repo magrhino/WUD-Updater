@@ -1,23 +1,18 @@
-import { defineConfig, loadEnv, type PluginOption } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import vue from "@vitejs/plugin-vue";
-import vueDevTools from "vite-plugin-vue-devtools";
 
 export default defineConfig(({ command, mode, isPreview }) => {
-  const plugins: PluginOption[] = [vue()];
   const devEnv = loadEnv(mode, ".", "WUD_WEB_DEV_");
   const viteEnv = loadEnv(mode, ".", "VITE_");
   const backendPort = devEnv.WUD_WEB_DEV_BACKEND_PORT ?? "7417";
   const demoMode = mode === "demo" || viteEnv.VITE_WUD_DEMO_MODE === "true";
-  if (command === "serve") {
-    plugins.push(vueDevTools());
-  }
 
   return {
     base:
       (command === "build" || isPreview) && demoMode
         ? (viteEnv.VITE_WUD_PAGES_BASE ?? "/wudup/")
         : "/",
-    plugins,
+    plugins: [vue()],
     server: {
       host: "127.0.0.1",
       port: 5173,
