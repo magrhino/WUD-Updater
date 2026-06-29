@@ -803,8 +803,11 @@ export class DemoApiState {
     const pending = this.pendingResponse();
     let seenReviewCandidate = false;
     const items = pending.items.map((item) => {
+      const exactCandidate = Boolean(
+        normalizeSecurityDigest(item.digest) && pendingItemPlatform(item),
+      );
       const reviewCandidate =
-        Boolean(normalizeSecurityDigest(item.digest)) && !seenReviewCandidate;
+        exactCandidate && !seenReviewCandidate;
       seenReviewCandidate ||= reviewCandidate;
       return this.securityScanInfo(item, reviewCandidate);
     });
@@ -882,7 +885,7 @@ export class DemoApiState {
     reviewCandidate: boolean,
   ): DemoSecurityScanDecision {
     const exact = Boolean(reportedDigest && platform);
-    const hasFindings = reviewCandidate && Boolean(reportedDigest);
+    const hasFindings = reviewCandidate && exact;
 
     if (hasFindings) {
       return {

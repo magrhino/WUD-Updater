@@ -92,7 +92,9 @@ function findingTitle(finding: SecurityScanFinding): string {
       >
         {{ item.count }} {{ titleCase(item.severity) }}
       </n-tag>
-      <span class="security-count-note">{{ pluralize(fixableTotal, "fixable") }}</span>
+      <span class="security-count-note">
+        {{ pluralize(fixableTotal, "fixable finding") }}
+      </span>
       <span v-if="scan.unfixed_count" class="security-count-note">
         {{ pluralize(scan.unfixed_count, "unfixed") }}
       </span>
@@ -123,8 +125,8 @@ function findingTitle(finding: SecurityScanFinding): string {
 
     <div v-if="scan.findings.length" class="security-finding-list">
       <article
-        v-for="finding in scan.findings"
-        :key="`${finding.vulnerability_id}-${finding.package_name}-${finding.installed_version}`"
+        v-for="(finding, index) in scan.findings"
+        :key="`${finding.vulnerability_id}-${finding.package_name}-${finding.installed_version}-${finding.primary_url}-${index}`"
         class="security-finding-row"
       >
         <div class="security-finding-heading">

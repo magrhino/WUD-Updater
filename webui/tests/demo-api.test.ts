@@ -820,7 +820,7 @@ describe("demo web API", () => {
     }
 
     pendingFixture.items = [
-      { ...unsupported, digest: "", platform: "" },
+      { ...unsupported, digest: postgresDigest, platform: "" },
       { ...firstExact, digest: postgresDigest, platform: "linux/amd64" },
       { ...laterExact, digest: wudupDigest, platform: "linux/arm64" },
     ];

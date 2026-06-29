@@ -494,7 +494,7 @@ describe("pending helper modules", () => {
 
     expect(wrapper.text()).toContain("1 finding");
     expect(wrapper.text()).toContain("1 High");
-    expect(wrapper.text()).toContain("1 fixable");
+    expect(wrapper.text()).toContain("1 fixable finding");
     expect(wrapper.text()).toContain("CVE-2026-0001");
     expect(wrapper.text()).toContain("openssl");
     expect(wrapper.text()).toContain("1.0.0");
