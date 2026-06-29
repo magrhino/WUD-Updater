@@ -4,7 +4,11 @@ import { SETTINGS_NAV_GROUPS } from "./settingsDisplay";
 </script>
 
 <template>
-  <nav class="settings-map" aria-label="Settings sections">
+  <nav
+    class="settings-map"
+    aria-label="Settings sections"
+    data-test="settings-jump-nav"
+  >
     <div class="settings-map-heading">
       <strong>Settings map</strong>
     </div>
@@ -14,19 +18,27 @@ import { SETTINGS_NAV_GROUPS } from "./settingsDisplay";
         :key="group.id"
         class="settings-map-group"
         :aria-labelledby="`settings-map-${group.id}`"
+        :data-test="`settings-nav-group-${group.id}`"
       >
         <div class="settings-map-group-heading">
           <h2 :id="`settings-map-${group.id}`">{{ group.label }}</h2>
         </div>
-        <button
-          v-for="link in group.links"
-          :key="link.id"
-          type="button"
-          class="settings-map-link"
-          @click="scrollToElementId(link.id)"
-        >
-          <span>{{ link.label }}</span>
-        </button>
+        <ul class="settings-map-group-list">
+          <li
+            v-for="link in group.links"
+            :key="link.id"
+            class="settings-map-group-list-item"
+            :data-test="`settings-nav-item-${link.id}`"
+          >
+            <button
+              type="button"
+              class="settings-map-link"
+              @click="scrollToElementId(link.id)"
+            >
+              <span>{{ link.label }}</span>
+            </button>
+          </li>
+        </ul>
       </section>
     </div>
   </nav>
@@ -70,6 +82,20 @@ import { SETTINGS_NAV_GROUPS } from "./settingsDisplay";
 .settings-map-group {
   display: grid;
   gap: 6px;
+  min-width: 0;
+}
+
+.settings-map-group-list {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-map-group-list-item {
+  display: grid;
   min-width: 0;
 }
 

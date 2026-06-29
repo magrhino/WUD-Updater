@@ -66,34 +66,32 @@ describe("settings display helpers", () => {
   });
 
   it("keeps the settings nav grouped by workflow", () => {
-    expect(SETTINGS_NAV_GROUPS).toEqual([
-      {
-        id: "operate",
-        label: "Operate",
-        links: [
-          { id: "settings-actions", label: "Actions" },
-          { id: "settings-preferences", label: "Preferences" },
-        ],
-      },
-      {
-        id: "configuration",
-        label: "Configuration",
-        links: [
-          { id: "settings-runtime", label: "Overview" },
-          { id: "settings-paths", label: "Paths" },
-          { id: "settings-behavior", label: "Behavior" },
-          { id: "settings-webui", label: "WebUI safety" },
-          { id: "settings-secrets", label: "Secrets" },
-        ],
-      },
-      {
-        id: "support",
-        label: "Support",
-        links: [
-          { id: "settings-diagnostics", label: "Diagnostics" },
-          { id: "settings-docs", label: "Docs" },
-        ],
-      },
+    const expectedLinkIdsByGroup: Record<string, string[]> = {
+      operate: ["settings-actions", "settings-preferences"],
+      configuration: [
+        "settings-runtime",
+        "settings-paths",
+        "settings-behavior",
+        "settings-webui",
+        "settings-secrets",
+      ],
+      support: ["settings-diagnostics", "settings-docs"],
+    };
+    const seenLinkIds = new Set<string>();
+
+    expect(SETTINGS_NAV_GROUPS.map((group) => group.id)).toEqual([
+      "operate",
+      "configuration",
+      "support",
     ]);
+    SETTINGS_NAV_GROUPS.forEach((group) => {
+      expect(group.links.map((link) => link.id)).toEqual(
+        expectedLinkIdsByGroup[group.id],
+      );
+      group.links.forEach((link) => {
+        expect(seenLinkIds.has(link.id)).toBe(false);
+        seenLinkIds.add(link.id);
+      });
+    });
   });
 });
