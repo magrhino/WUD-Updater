@@ -14,51 +14,14 @@ from .digest_provenance import (
 )
 
 from .db_schema import (
-    EXPECTED_SCHEMA as EXPECTED_SCHEMA,
-    EXPECTED_SCHEMA_V1 as EXPECTED_SCHEMA_V1,
-    EXPECTED_SCHEMA_V2 as EXPECTED_SCHEMA_V2,
-    EXPECTED_SCHEMA_V3 as EXPECTED_SCHEMA_V3,
-    EXPECTED_SCHEMA_V4 as EXPECTED_SCHEMA_V4,
-    EXPECTED_SCHEMA_V5 as EXPECTED_SCHEMA_V5,
-    EXPECTED_SCHEMA_V6 as EXPECTED_SCHEMA_V6,
-    EXPECTED_SCHEMA_V7 as EXPECTED_SCHEMA_V7,
-    EXPECTED_SCHEMA_V8 as EXPECTED_SCHEMA_V8,
-    EXPECTED_SCHEMA_V9 as EXPECTED_SCHEMA_V9,
-    MIGRATION_NAMES as MIGRATION_NAMES,
     SCHEMA_VERSION as SCHEMA_VERSION,
-    SECURITY_SCAN_CACHE_FINDINGS_COLUMN as SECURITY_SCAN_CACHE_FINDINGS_COLUMN,
-    WEB_SCHEMA_TABLES as WEB_SCHEMA_TABLES,
-    ColumnSchema as ColumnSchema,
     DatabaseError as DatabaseError,
-    Migration as Migration,
-    SchemaDefinition as SchemaDefinition,
-    _backfill_schema_migrations as _backfill_schema_migrations,
-    _ensure_schema_migrations as _ensure_schema_migrations,
     _EXPECTED_SCHEMAS_BY_VERSION as _EXPECTED_SCHEMAS_BY_VERSION,
-    _format_column_names as _format_column_names,
     _MIGRATIONS_BY_TARGET_VERSION as _MIGRATIONS_BY_TARGET_VERSION,
-    _migrate_v1_to_v2 as _migrate_v1_to_v2,
-    _migrate_v2_to_v3 as _migrate_v2_to_v3,
-    _migrate_v3_to_v4 as _migrate_v3_to_v4,
-    _migrate_v4_to_v5 as _migrate_v4_to_v5,
-    _migrate_v5_to_v6 as _migrate_v5_to_v6,
-    _migrate_v6_to_v7 as _migrate_v6_to_v7,
-    _migrate_v7_to_v8 as _migrate_v7_to_v8,
-    _migrate_v8_to_v9 as _migrate_v8_to_v9,
-    _migrate_v9_to_v10 as _migrate_v9_to_v10,
-    _quote_identifier as _quote_identifier,
-    _record_schema_migration as _record_schema_migration,
-    _SECURITY_SCAN_CACHE_INDEXES_SQL as _SECURITY_SCAN_CACHE_INDEXES_SQL,
-    _SECURITY_SCAN_CACHE_SCHEMA_SQL as _SECURITY_SCAN_CACHE_SCHEMA_SQL,
     _SECURITY_SCAN_CACHE_SCHEMA_V9_SQL as _SECURITY_SCAN_CACHE_SCHEMA_V9_SQL,
-    _SECURITY_SCAN_CACHE_SCHEMA_V10_SQL as _SECURITY_SCAN_CACHE_SCHEMA_V10_SQL,
-    _sqlite_object_type as _sqlite_object_type,
-    _table_columns as _table_columns,
     _user_version as _user_version,
-    _validate_existing_schema_objects as _validate_existing_schema_objects,
     _validate_schema as _validate_schema,
-    _validate_table_columns as _validate_table_columns,
-    init_schema as _init_schema,
+    init_schema as init_db,  # noqa: F401 - compatibility re-export
     utc_timestamp as utc_timestamp,
 )
 
@@ -90,12 +53,6 @@ def open_db(path: str | Path) -> Generator[sqlite3.Connection, None, None]:
         yield conn
     finally:
         conn.close()
-
-
-def init_db(conn: sqlite3.Connection) -> None:
-    """Create or validate the current database schema."""
-
-    _init_schema(conn)
 
 
 def insert_update_run(
