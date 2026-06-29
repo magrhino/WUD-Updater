@@ -9,7 +9,7 @@ from contextlib import closing
 from dataclasses import dataclass, replace
 from threading import Lock
 import secrets
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -18,6 +18,7 @@ from .config import ConfigError, parse_bool_env
 from .db import DatabaseError, init_db, open_db, utc_timestamp
 from .digest_verifier import ResolvedImageSubject
 from .security_scanner import SecurityScanResult, TrivyScanner
+from .security_severity import normalize_security_severity
 from .security_store import (
     cached_scan_by_request,
     cached_scan_by_request_or_unambiguous_platform,
@@ -411,7 +412,7 @@ def _result_info(
                 package_name=finding.package_name,
                 installed_version=finding.installed_version,
                 fixed_version=finding.fixed_version,
-                severity=_finding_severity(finding.severity),
+                severity=normalize_security_severity(finding.severity),
                 title=finding.title,
                 primary_url=finding.primary_url,
             )
@@ -505,21 +506,6 @@ def _counts_model(values: Mapping[str, int]) -> SecurityScanSeverityCounts:
         low=int(values.get("low", 0)),
         unknown=int(values.get("unknown", 0)),
     )
-
-
-def _finding_severity(
-    value: str,
-) -> Literal["critical", "high", "medium", "low", "unknown"]:
-    severity = value.strip().lower()
-    if severity == "critical":
-        return "critical"
-    if severity == "high":
-        return "high"
-    if severity == "medium":
-        return "medium"
-    if severity == "low":
-        return "low"
-    return "unknown"
 
 
 def _job_response(job: WebSecurityScanJob) -> SecurityScanJobResponse:

@@ -9,10 +9,8 @@ from typing import Any
 
 from .command import CommandRunner
 from .digest_verifier import ResolvedImageSubject
+from .security_severity import SECURITY_SEVERITIES, normalize_security_severity
 from .web_models import SecurityScanConfig
-
-
-SEVERITIES = ("critical", "high", "medium", "low", "unknown")
 
 
 @dataclass(frozen=True)
@@ -151,7 +149,7 @@ def _result_from_trivy_payload(
     unfixed_count = 0
     findings: list[SecurityScanFinding] = []
     for vuln in _vulnerabilities(payload):
-        severity = _severity(vuln.get("Severity"))
+        severity = normalize_security_severity(vuln.get("Severity"))
         severity_counts[severity] += 1
         fixed_version = str(vuln.get("FixedVersion") or "").strip()
         if fixed_version:
@@ -209,7 +207,7 @@ def _db_metadata(payload: Mapping[str, Any]) -> Mapping[str, Any]:
 
 
 def _empty_counts() -> dict[str, int]:
-    return dict.fromkeys(SEVERITIES, 0)
+    return dict.fromkeys(SECURITY_SEVERITIES, 0)
 
 
 def _finding_from_vulnerability(
@@ -230,11 +228,6 @@ def _finding_from_vulnerability(
 def _http_url(value: object) -> str:
     url = str(value or "").strip()
     return url if url.startswith(("https://", "http://")) else ""
-
-
-def _severity(value: object) -> str:
-    severity = str(value or "").strip().lower()
-    return severity if severity in SEVERITIES else "unknown"
 
 
 def _parse_trivy_version(output: str) -> str:

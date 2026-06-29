@@ -7,10 +7,10 @@ import json
 import sqlite3
 from collections.abc import Mapping
 from dataclasses import asdict
-from typing import Literal
 
 from .digest_verifier import ResolvedImageSubject
 from .security_scanner import SecurityScanResult
+from .security_severity import normalize_security_severity
 from .security_subjects import PendingSecurityRequest, subject_id
 from .web_models import (
     SecurityScanFinding,
@@ -250,7 +250,7 @@ def _findings(value: str) -> list[SecurityScanFinding]:
                 package_name=str(item.get("package_name") or ""),
                 installed_version=str(item.get("installed_version") or ""),
                 fixed_version=str(item.get("fixed_version") or ""),
-                severity=_severity(str(item.get("severity") or "")),
+                severity=normalize_security_severity(item.get("severity")),
                 title=str(item.get("title") or ""),
                 primary_url=str(item.get("primary_url") or ""),
             )
@@ -273,19 +273,6 @@ def _safe_int(value: object) -> int:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
-
-
-def _severity(value: str) -> Literal["critical", "high", "medium", "low", "unknown"]:
-    severity = value.strip().lower()
-    if severity == "critical":
-        return "critical"
-    if severity == "high":
-        return "high"
-    if severity == "medium":
-        return "medium"
-    if severity == "low":
-        return "low"
-    return "unknown"
 
 
 def _cache_key(*parts: str) -> str:

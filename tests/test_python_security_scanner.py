@@ -7,6 +7,7 @@ import unittest
 from wudup.command import CommandResult
 from wudup.digest_verifier import ResolvedImageSubject
 from wudup.security_scanner import TrivyScanner
+from wudup.security_severity import normalize_security_severity
 from wudup.web_models import SecurityScanConfig
 
 
@@ -41,6 +42,11 @@ class FakeRunner:
 
 
 class SecurityScannerTests(unittest.TestCase):
+    def test_security_severity_normalization_is_shared(self) -> None:
+        self.assertEqual(normalize_security_severity(" HIGH "), "high")
+        self.assertEqual(normalize_security_severity("negligible"), "unknown")
+        self.assertEqual(normalize_security_severity(None), "unknown")
+
     def test_trivy_registry_scan_uses_fixed_remote_argv_and_normalizes_counts(self) -> None:
         payload = {
             "SchemaVersion": 2,

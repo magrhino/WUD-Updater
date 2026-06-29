@@ -19,6 +19,13 @@ SCHEMA_VERSION = 10
 ColumnSchema = tuple[str, str, int, str | None, int]
 SchemaDefinition = dict[str, tuple[ColumnSchema, ...]]
 Migration = Callable[[sqlite3.Connection], None]
+SECURITY_SCAN_CACHE_FINDINGS_COLUMN: ColumnSchema = (
+    "findings_json",
+    "TEXT",
+    1,
+    "'[]'",
+    0,
+)
 
 EXPECTED_SCHEMA: SchemaDefinition = {
     "schema_migrations": (
@@ -186,7 +193,7 @@ EXPECTED_SCHEMA: SchemaDefinition = {
         ("created_at", "TEXT", 1, None, 0),
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
-        ("findings_json", "TEXT", 1, "'[]'", 0),
+        SECURITY_SCAN_CACHE_FINDINGS_COLUMN,
     ),
     "tag_exclusion_rules": (
         ("id", "INTEGER", 0, None, 1),
@@ -230,20 +237,16 @@ WEB_SCHEMA_TABLES = frozenset(
     {"schema_migrations", "web_users", "web_sessions", "web_settings"}
 )
 
-EXPECTED_SCHEMA_V9 = {
-    name: (
-        tuple(
-            column
-            for column in columns
-            if name != "security_scan_cache" or column[0] != "findings_json"
-        )
-    )
-    for name, columns in EXPECTED_SCHEMA.items()
-}
+EXPECTED_SCHEMA_V9: SchemaDefinition = dict(EXPECTED_SCHEMA)
+EXPECTED_SCHEMA_V9["security_scan_cache"] = tuple(
+    column
+    for column in EXPECTED_SCHEMA["security_scan_cache"]
+    if column[0] != SECURITY_SCAN_CACHE_FINDINGS_COLUMN[0]
+)
 
-EXPECTED_SCHEMA_V8 = {
+EXPECTED_SCHEMA_V8: SchemaDefinition = {
     name: columns
-    for name, columns in EXPECTED_SCHEMA_V9.items()
+    for name, columns in EXPECTED_SCHEMA.items()
     if name != "security_scan_cache"
 }
 
@@ -349,17 +352,55 @@ CREATE TABLE IF NOT EXISTS security_scan_cache (
     updated_at TEXT NOT NULL,
     metadata_json TEXT NOT NULL DEFAULT '{}'
 );
+"""
+
+_SECURITY_SCAN_CACHE_SCHEMA_V10_SQL = """
+CREATE TABLE IF NOT EXISTS security_scan_cache (
+    cache_key TEXT PRIMARY KEY,
+    request_key TEXT NOT NULL,
+    subject_id TEXT NOT NULL DEFAULT '',
+    canonical_registry TEXT NOT NULL DEFAULT '',
+    canonical_repository TEXT NOT NULL DEFAULT '',
+    requested_ref TEXT NOT NULL DEFAULT '',
+    reported_digest TEXT NOT NULL DEFAULT '',
+    index_digest TEXT NOT NULL DEFAULT '',
+    manifest_digest TEXT NOT NULL DEFAULT '',
+    platform TEXT NOT NULL DEFAULT '',
+    platform_os TEXT NOT NULL DEFAULT '',
+    platform_architecture TEXT NOT NULL DEFAULT '',
+    platform_variant TEXT NOT NULL DEFAULT '',
+    platform_source TEXT NOT NULL DEFAULT '',
+    identity_status TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL,
+    verdict TEXT NOT NULL DEFAULT '',
+    scanner TEXT NOT NULL DEFAULT '',
+    scanner_version TEXT NOT NULL DEFAULT '',
+    scanner_schema TEXT NOT NULL DEFAULT '',
+    db_revision TEXT NOT NULL DEFAULT '',
+    db_updated_at TEXT NOT NULL DEFAULT '',
+    severity_counts_json TEXT NOT NULL DEFAULT '{}',
+    fixable_counts_json TEXT NOT NULL DEFAULT '{}',
+    unfixed_count INTEGER NOT NULL DEFAULT 0,
+    warnings_json TEXT NOT NULL DEFAULT '[]',
+    error_code TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    findings_json TEXT NOT NULL DEFAULT '[]'
+);
+"""
+
+_SECURITY_SCAN_CACHE_INDEXES_SQL = """
 CREATE INDEX IF NOT EXISTS idx_security_scan_cache_request
     ON security_scan_cache (request_key, updated_at);
 CREATE INDEX IF NOT EXISTS idx_security_scan_cache_image_digest_platform
     ON security_scan_cache (requested_ref, reported_digest, platform, updated_at);
 """
 
-_SECURITY_SCAN_CACHE_SCHEMA_SQL = _SECURITY_SCAN_CACHE_SCHEMA_V9_SQL.replace(
-    "metadata_json TEXT NOT NULL DEFAULT '{}'\n);",
-    "metadata_json TEXT NOT NULL DEFAULT '{}',\n"
-    "    findings_json TEXT NOT NULL DEFAULT '[]'\n);",
-)
+_SECURITY_SCAN_CACHE_SCHEMA_V9_SQL += _SECURITY_SCAN_CACHE_INDEXES_SQL
+_SECURITY_SCAN_CACHE_SCHEMA_V10_SQL += _SECURITY_SCAN_CACHE_INDEXES_SQL
+_SECURITY_SCAN_CACHE_SCHEMA_SQL = _SECURITY_SCAN_CACHE_SCHEMA_V10_SQL
 
 
 class DatabaseError(RuntimeError):

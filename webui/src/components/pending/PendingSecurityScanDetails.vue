@@ -125,8 +125,8 @@ function findingTitle(finding: SecurityScanFinding): string {
 
     <div v-if="scan.findings.length" class="security-finding-list">
       <article
-        v-for="(finding, index) in scan.findings"
-        :key="`${finding.vulnerability_id}-${finding.package_name}-${finding.installed_version}-${finding.primary_url}-${index}`"
+        v-for="finding in scan.findings"
+        :key="`${finding.vulnerability_id}-${finding.package_name}`"
         class="security-finding-row"
       >
         <div class="security-finding-heading">
