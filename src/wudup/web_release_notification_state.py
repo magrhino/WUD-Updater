@@ -43,29 +43,18 @@ def notification_identity(
     note: Any,
     metadata: Any | None = None,
 ) -> NotificationIdentity:
-    link = _first_link_url(note) or _value(metadata, "link")
     payload = {
-        "watcher": _value(metadata, "watcher"),
-        "container_id": _value(metadata, "id"),
-        "container_name": _value(metadata, "name"),
         "service_key": _value(target, "key"),
         "image": _value(target, "first"),
         "image_repo": _value(note, "image_repo") or _value(target, "repo"),
-        "update_kind": _value(metadata, "update_kind"),
-        "local_value": _value(metadata, "local_tag") or _value(target, "tag_token"),
+        "local_value": _value(target, "tag_token"),
         "remote_value": (
-            _value(metadata, "remote_tag")
-            or _value(metadata, "remote_digest")
-            or _value(note, "release_tag")
+            _value(note, "release_tag")
             or _value(target, "desired_tag")
             or _value(target, "digest")
         ),
-        "digest": (
-            _value(metadata, "remote_digest")
-            or _value(target, "digest")
-            or _value(metadata, "local_digest")
-        ),
-        "release_link": link,
+        "digest": _value(target, "digest"),
+        "release_link": _first_link_url(note),
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return NotificationIdentity(

@@ -712,6 +712,83 @@ def test_release_notification_send_records_history_and_skips_duplicate_preview(
     assert "webhook-secret" not in history["metadata_json"]
 
 
+def test_release_notification_duplicate_key_survives_missing_wud_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _fake_release_refresh(monkeypatch)
+    _install_wud_api(
+        monkeypatch,
+        containers=[
+            _wud_api_container(
+                image="ghcr.io/acme/app",
+                tag="1.0.0",
+                remote_tag="2.0.0",
+            )
+        ],
+        triggers={"docker.local.app": (200, [])},
+    )
+    monkeypatch.setattr(
+        notifications_module,
+        "_post_discord_payload",
+        lambda _url, _payload: None,
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_RELEASE_NOTES_ENABLED": "true",
+            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
+            "WUD_API_BASE_URL": "https://wud.release-notifications.test:3000",
+        },
+    )
+    raw = "ghcr.io/acme/app:1.0.0 tag=2.0.0"
+    (tmp_path / "state" / "images.todo").write_text(f"{raw}\n", encoding="utf-8")
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        init_db(conn)
+        run_id = insert_update_run(
+            conn,
+            started_at="2026-05-27T12:00:00+00:00",
+            status="success",
+            dry_run=False,
+            mode="stop",
+            wud_file="/out/images.todo",
+        )
+        insert_pending_update(
+            conn,
+            run_id=run_id,
+            line_no=1,
+            raw=raw,
+            image="ghcr.io/acme/app:1.0.0",
+            desired_tag="2.0.0",
+            service_key="media/app",
+            status="resolved",
+            status_reason="updated",
+        )
+    headers = _csrf_headers(client)
+
+    sent = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "confirmation": "send-release-notes"},
+        headers=headers,
+    )
+    run_preview = client.post(
+        "/api/v1/release-notifications/preview",
+        json={"run_id": run_id},
+        headers=headers,
+    )
+
+    assert sent.status_code == 200
+    assert run_preview.status_code == 200
+    assert run_preview.json()["sendable_count"] == 0
+    assert run_preview.json()["items"][0]["notification_key"] == sent.json()["items"][0][
+        "notification_key"
+    ]
+    assert run_preview.json()["items"][0]["notification_status"] == "skipped_duplicate"
+
+
 def test_release_notification_remote_change_gets_new_key(
     tmp_path: Path,
     monkeypatch,
