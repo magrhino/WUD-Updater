@@ -648,7 +648,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
         conn.executescript(_SECURITY_SCAN_CACHE_SCHEMA_SQL)
         _validate_schema(conn)
         _backfill_schema_migrations(conn, SCHEMA_VERSION)
-        conn.execute("PRAGMA user_version = 10")
+        conn.execute(  # nosemgrep: PRAGMA needs a literal internal version.
+            "PRAGMA user_version = 10"
+        )
 
 
 
@@ -756,7 +758,9 @@ def _sqlite_object_type(conn: sqlite3.Connection, name: str) -> str | None:
 def _quote_identifier(value: str) -> str:
     if value not in _SCHEMA_IDENTIFIERS:
         raise DatabaseError(f"Unexpected schema identifier: {value}")
-    return '"' + value.replace('"', '""') + '"'
+    return (  # nosemgrep: value is schema-allowlisted before quoting.
+        '"' + value.replace('"', '""') + '"'
+    )
 
 
 def _format_column_names(names: tuple[str, ...]) -> str:
@@ -1061,7 +1065,9 @@ def _migrate_v6_to_v7(conn: sqlite3.Connection) -> None:
                         "TEXT NOT NULL DEFAULT ''",
                     )
                 )
-                conn.execute(statement)
+                conn.execute(  # nosemgrep: allowlisted tables, fixed columns.
+                    statement
+                )
         conn.execute("PRAGMA user_version = 7")
     _record_schema_migration(conn, 7)
 
