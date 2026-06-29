@@ -569,8 +569,8 @@ describe("settings mutation views", () => {
     const wrapper = mountWithApp(SettingsView, { pinia });
     await flushPromises();
     await wrapper.find('input[role="switch"]').setValue(true);
-    emitSelectValue(wrapper, 3, "per_container");
-    emitSelectValue(wrapper, 4, "cooldown");
+    emitSelectValue(wrapper, 1, "per_container");
+    emitSelectValue(wrapper, 2, "cooldown");
     await wrapper
       .find('input[aria-label="Release notification cooldown seconds"]')
       .setValue("60");

@@ -1053,7 +1053,7 @@ describe("demo web API", () => {
       image: "ghcr.io/home-assistant/home-assistant:2026.5.1",
       service_key: "home-assistant/home-assistant:2026.5.1",
       status: "ready",
-      notification_key: "demo-release-notification-2",
+      notification_key: "875413775c1b3abaea3adede0576679d9b39032acc06a5aea530957b530285c9",
       notification_status: "new",
       skipped_reason: "",
       triggers: [
