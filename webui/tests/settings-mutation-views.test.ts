@@ -505,6 +505,7 @@ describe("settings mutation views", () => {
               editable: true,
               allowed_values: ["system", "light", "dark"],
               restart_required: false,
+              disabled_reason: "",
             },
             settingsResponse().managed[1],
           ],
@@ -542,11 +543,25 @@ describe("settings mutation views", () => {
       .spyOn(settings, "updateManagedSettings")
       .mockResolvedValue({
         managed: settingsResponse({
-          managed: settingsResponse().managed.map((entry) =>
-            entry.key === "release_notes_enabled"
-              ? { ...entry, value: "true", source: "configured" as const }
-              : entry,
-          ),
+          managed: settingsResponse().managed.map((entry) => {
+            if (entry.key === "release_notes_enabled") {
+              return { ...entry, value: "true", source: "configured" as const };
+            }
+            if (entry.key === "release_notifications_mode") {
+              return {
+                ...entry,
+                value: "per_container",
+                source: "configured" as const,
+              };
+            }
+            if (entry.key === "release_notifications_resend_policy") {
+              return { ...entry, value: "cooldown", source: "configured" as const };
+            }
+            if (entry.key === "release_notifications_cooldown_seconds") {
+              return { ...entry, value: "60", source: "configured" as const };
+            }
+            return entry;
+          }),
         }).managed,
         audit_run_id: 78,
       });
@@ -554,6 +569,11 @@ describe("settings mutation views", () => {
     const wrapper = mountWithApp(SettingsView, { pinia });
     await flushPromises();
     await wrapper.find('input[role="switch"]').setValue(true);
+    emitSelectValue(wrapper, 3, "per_container");
+    emitSelectValue(wrapper, 4, "cooldown");
+    await wrapper
+      .find('input[aria-label="Release notification cooldown seconds"]')
+      .setValue("60");
     const saveButton = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Save preferences"));
@@ -562,6 +582,9 @@ describe("settings mutation views", () => {
 
     expect(updateManagedSettings).toHaveBeenCalledWith({
       release_notes_enabled: "true",
+      release_notifications_mode: "per_container",
+      release_notifications_resend_policy: "cooldown",
+      release_notifications_cooldown_seconds: "60",
     });
     expect(wrapper.text()).toContain("Preferences saved. Audit run #78.");
   });

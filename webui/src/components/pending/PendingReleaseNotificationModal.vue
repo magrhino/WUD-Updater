@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { Send } from "@lucide/vue";
+import { computed } from "vue";
+import { RotateCcw, Send } from "@lucide/vue";
 import { NAlert, NButton, NFlex, NModal, NTag } from "naive-ui";
 
-import type { ReleaseNotificationResponse } from "../../api/client";
+import type {
+  ReleaseNotificationItem,
+  ReleaseNotificationResponse,
+} from "../../api/client";
 import { pluralize } from "../../views/pending/utils";
 
-defineProps<{
+const props = defineProps<{
   error: string;
   loading: boolean;
   response: ReleaseNotificationResponse | null;
@@ -16,13 +20,79 @@ defineProps<{
 
 const emit = defineEmits<{
   (event: "close"): void;
+  (event: "resendPreview"): void;
   (event: "send"): void;
 }>();
+
+const resendPreviewAvailable = computed(
+  () =>
+    Boolean(props.response) &&
+    props.response?.sent === false &&
+    (props.response?.skipped_count ?? 0) > 0,
+);
+const notificationModeLabel = computed(() => {
+  if (props.response?.mode === "per_container") {
+    return "Per container";
+  }
+  return "Digest";
+});
+const resendPolicyLabel = computed(() => {
+  if (props.response?.resend_policy === "cooldown") {
+    return "Cooldown";
+  }
+  return "Remote changes";
+});
 
 function handleModalShowUpdate(value: boolean): void {
   if (!value) {
     emit("close");
   }
+}
+
+function notificationStatusLabel(status: string): string {
+  if (status === "skipped_duplicate") {
+    return "Already notified";
+  }
+  if (status === "skipped_cooldown") {
+    return "Cooldown active";
+  }
+  if (status === "cooldown_ready") {
+    return "Cooldown elapsed";
+  }
+  if (status === "manual_resend") {
+    return "Manual resend";
+  }
+  if (status === "sent") {
+    return "Notified";
+  }
+  if (status === "failure") {
+    return "Last send failed";
+  }
+  return "Not notified";
+}
+
+function notificationStatusType(
+  status: string,
+): "default" | "success" | "warning" | "error" {
+  if (status === "skipped_duplicate" || status === "sent") {
+    return "success";
+  }
+  if (status === "failure") {
+    return "error";
+  }
+  if (status === "skipped_cooldown") {
+    return "warning";
+  }
+  return "default";
+}
+
+function notificationDetail(item: ReleaseNotificationItem): string {
+  if (item.skipped_reason) {
+    return item.skipped_reason;
+  }
+  return item.notification_last_sent_at
+    ? `Last sent ${item.notification_last_sent_at}`
+    : "";
 }
 </script>
 
@@ -131,6 +201,11 @@ function handleModalShowUpdate(value: boolean): void {
             </strong>
             <em>{{ response?.batch_count ?? 0 }} Discord message batch(es)</em>
           </div>
+          <div class="list-row">
+            <span>Mode</span>
+            <strong>{{ notificationModeLabel }}</strong>
+            <em>{{ resendPolicyLabel }} resend policy</em>
+          </div>
         </div>
       </section>
 
@@ -157,7 +232,14 @@ function handleModalShowUpdate(value: boolean): void {
                 <span aria-hidden="true"> - </span>
                 {{ item.triggers.map((trigger) => trigger.name || trigger.type || trigger.id).join(", ") }}
               </template>
+              <template v-if="notificationDetail(item)">
+                <span aria-hidden="true"> - </span>
+                {{ notificationDetail(item) }}
+              </template>
             </em>
+            <n-tag size="small" :type="notificationStatusType(item.notification_status)">
+              {{ notificationStatusLabel(item.notification_status) }}
+            </n-tag>
           </div>
         </div>
       </section>
@@ -165,6 +247,18 @@ function handleModalShowUpdate(value: boolean): void {
       <n-flex class="preflight-footer" justify="flex-end" :size="8">
         <n-button size="small" quaternary @click="emit('close')">
           Cancel
+        </n-button>
+        <n-button
+          size="small"
+          secondary
+          :disabled="loading || !resendPreviewAvailable"
+          :loading="loading"
+          @click="emit('resendPreview')"
+        >
+          <template #icon>
+            <RotateCcw :size="16" />
+          </template>
+          Preview resend
         </n-button>
         <n-button
           type="primary"

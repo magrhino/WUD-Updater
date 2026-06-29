@@ -426,6 +426,77 @@ describe("pending view selection actions", () => {
     );
   });
 
+  it("previews manual resend for skipped Discord release-note duplicates", async () => {
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = pendingResponse();
+    updates.releaseNotes = releaseNotesResponse();
+    mockPendingLifecycle(settings, updates);
+    const previewReleaseNotifications = vi
+      .spyOn(updates, "previewReleaseNotifications")
+      .mockImplementation(async (source) => {
+        const response =
+          source.resend === true
+            ? releaseNotificationResponse({
+                sendable_count: 1,
+                skipped_count: 0,
+                items: [
+                  {
+                    ...releaseNotificationResponse().items[0],
+                    notification_status: "manual_resend",
+                    skipped_reason: "",
+                  },
+                ],
+              })
+            : releaseNotificationResponse({
+                sendable_count: 0,
+                skipped_count: 1,
+                items: [
+                  {
+                    ...releaseNotificationResponse().items[0],
+                    notification_status: "skipped_duplicate",
+                    notification_last_sent_at: "2026-01-02T00:00:00Z",
+                    notification_send_count: 1,
+                    skipped_reason: "Already sent for this update.",
+                  },
+                ],
+              });
+        updates.releaseNotification = response;
+        return response;
+      });
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview release notes"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.find("dialog").text()).toContain("Already notified");
+    expect(wrapper.find("dialog").text()).toContain(
+      "Duplicate notifications are skipped. Preview resend to send them again.",
+    );
+
+    await wrapper
+      .find("dialog")
+      .findAll("button")
+      .find((button) => button.text().includes("Preview resend"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(previewReleaseNotifications).toHaveBeenNthCalledWith(1, {
+      line_numbers: [1],
+    });
+    expect(previewReleaseNotifications).toHaveBeenNthCalledWith(2, {
+      line_numbers: [1],
+      resend: true,
+    });
+    expect(wrapper.find("dialog").text()).toContain("Manual resend");
+  });
+
   it("keeps Discord release-note send disabled when preview fails", async () => {
     const { pinia, settings, updates } = setupStores(true);
     updates.pending = pendingResponse();

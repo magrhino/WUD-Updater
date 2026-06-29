@@ -305,6 +305,9 @@ const releaseNotificationSendDisabledMessage = computed(() => {
     return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to send notifications.";
   }
   if (!response.sendable_count) {
+    if (response.skipped_count) {
+      return "Duplicate notifications are skipped. Preview resend to send them again.";
+    }
     return "No release-note notifications are available to send.";
   }
   return "";
@@ -562,6 +565,17 @@ async function previewReleaseNotifications(
   releaseNotificationSource.value = source;
   showReleaseNotificationModal.value = true;
   await updates.previewReleaseNotifications(source).catch(() => undefined);
+}
+
+async function previewReleaseNotificationResend(): Promise<void> {
+  if (releaseNotificationSource.value === null) {
+    return;
+  }
+  const source = {
+    ...releaseNotificationSource.value,
+    resend: true,
+  } as ReleaseNotificationSource;
+  await previewReleaseNotifications(source);
 }
 
 function closeReleaseNotificationModal(): void {
@@ -1004,6 +1018,7 @@ onMounted(() => {
       :send-disabled="releaseNotificationSendDisabled"
       :send-disabled-message="releaseNotificationSendDisabledMessage"
       @close="closeReleaseNotificationModal"
+      @resend-preview="previewReleaseNotificationResend"
       @send="sendReleaseNotifications"
     />
   </section>

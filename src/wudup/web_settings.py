@@ -54,6 +54,7 @@ from .web_models import (
     WebSettings,
 )
 from .web_onboarding import ONBOARDING_DISMISSED_AT_KEY
+from .web_release_notification_state import ReleaseNotificationConfig
 from .web_state import _insert_managed_settings_audit
 from .web_static import (
     resolve_static_dir as _resolve_static_dir,
@@ -71,11 +72,30 @@ MANAGED_DIGEST_PIN_UPDATES_DB_KEY = "compose.digest_pin_updates"
 RELEASE_NOTES_ENABLED_ENV = "WUD_RELEASE_NOTES_ENABLED"
 MANAGED_RELEASE_NOTES_ENABLED_KEY = "release_notes_enabled"
 MANAGED_RELEASE_NOTES_ENABLED_DB_KEY = "release_notes.enabled"
+MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY = "release_notifications_mode"
+MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY = "release_notifications.mode"
+MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_KEY = (
+    "release_notifications_resend_policy"
+)
+MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_DB_KEY = (
+    "release_notifications.resend_policy"
+)
+MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_KEY = (
+    "release_notifications_cooldown_seconds"
+)
+MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY = (
+    "release_notifications.cooldown_seconds"
+)
 THEME_PREFERENCE_VALUES = ("system", "light", "dark")
 ONBOARDING_CHECKLIST_VALUES = ("visible", "dismissed")
 DIGEST_PIN_UPDATES_VALUES = ("false", "true")
 RELEASE_NOTES_ENABLED_VALUES = ("false", "true")
+RELEASE_NOTIFICATIONS_MODE_VALUES = ("digest", "per_container")
+RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES = ("remote_change", "cooldown")
 DEFAULT_RELEASE_NOTES_ENABLED = False
+DEFAULT_RELEASE_NOTIFICATIONS_MODE = "digest"
+DEFAULT_RELEASE_NOTIFICATIONS_RESEND_POLICY = "remote_change"
+DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS = 86_400
 
 
 def api_settings(request: Request) -> SettingsResponse:
@@ -244,6 +264,36 @@ def effective_release_notes_enabled(settings: WebSettings) -> bool:
     return enabled
 
 
+def effective_release_notification_config(
+    settings: WebSettings,
+) -> ReleaseNotificationConfig:
+    try:
+        with closing(_connect_readonly_db(settings)) as conn:
+            values = _managed_settings_db_values(conn)
+    except ReadOnlyDatabaseMissing:
+        values = {}
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read release notification settings",
+                exc,
+            ),
+        ) from exc
+    try:
+        return _release_notification_config_from_values(values)
+    except ConfigError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read release notification settings",
+                exc,
+            ),
+        ) from exc
+
+
 def _effective_release_notes_enabled_state(settings: WebSettings) -> tuple[bool, bool]:
     if _release_notes_enabled_env_configured(settings):
         return bool(settings.release_notes_enabled_env), True
@@ -356,7 +406,7 @@ def _managed_settings_db_values(conn: sqlite3.Connection) -> dict[str, str]:
         """
         SELECT key, value
         FROM web_settings
-        WHERE key IN (?, ?, ?, ?, ?)
+        WHERE key IN (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             MANAGED_THEME_PREFERENCE_DB_KEY,
@@ -364,6 +414,9 @@ def _managed_settings_db_values(conn: sqlite3.Connection) -> dict[str, str]:
             MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY,
             MANAGED_DIGEST_PIN_UPDATES_DB_KEY,
             MANAGED_RELEASE_NOTES_ENABLED_DB_KEY,
+            MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY,
+            MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_DB_KEY,
+            MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY,
         ),
     ).fetchall()
     return {str(row["key"]): str(row["value"]) for row in rows}
@@ -413,6 +466,16 @@ def _managed_settings_entries_from_values(
             values.get(MANAGED_RELEASE_NOTES_ENABLED_DB_KEY, ""),
             default=DEFAULT_RELEASE_NOTES_ENABLED,
         )
+    release_notification_config = _release_notification_config_from_values(values)
+    release_notifications_mode_configured = (
+        MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY in values
+    )
+    release_notifications_resend_policy_configured = (
+        MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_DB_KEY in values
+    )
+    release_notifications_cooldown_configured = (
+        MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY in values
+    )
     return [
         ManagedSettingEntry(
             key=MANAGED_THEME_PREFERENCE_KEY,
@@ -462,6 +525,45 @@ def _managed_settings_entries_from_values(
             restart_required=False,
             disabled_reason=release_notes_disabled_reason,
         ),
+        ManagedSettingEntry(
+            key=MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY,
+            value=release_notification_config.mode,
+            default_value=DEFAULT_RELEASE_NOTIFICATIONS_MODE,
+            source=(
+                "configured"
+                if release_notifications_mode_configured
+                else "default"
+            ),
+            editable=True,
+            allowed_values=list(RELEASE_NOTIFICATIONS_MODE_VALUES),
+            restart_required=False,
+        ),
+        ManagedSettingEntry(
+            key=MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_KEY,
+            value=release_notification_config.resend_policy,
+            default_value=DEFAULT_RELEASE_NOTIFICATIONS_RESEND_POLICY,
+            source=(
+                "configured"
+                if release_notifications_resend_policy_configured
+                else "default"
+            ),
+            editable=True,
+            allowed_values=list(RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES),
+            restart_required=False,
+        ),
+        ManagedSettingEntry(
+            key=MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_KEY,
+            value=str(release_notification_config.cooldown_seconds),
+            default_value=str(DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS),
+            source=(
+                "configured"
+                if release_notifications_cooldown_configured
+                else "default"
+            ),
+            editable=True,
+            allowed_values=[],
+            restart_required=False,
+        ),
     ]
 
 
@@ -480,6 +582,10 @@ def _validated_managed_setting_updates(
         MANAGED_ONBOARDING_CHECKLIST_KEY: ONBOARDING_CHECKLIST_VALUES,
         MANAGED_DIGEST_PIN_UPDATES_KEY: DIGEST_PIN_UPDATES_VALUES,
         MANAGED_RELEASE_NOTES_ENABLED_KEY: RELEASE_NOTES_ENABLED_VALUES,
+        MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY: RELEASE_NOTIFICATIONS_MODE_VALUES,
+        MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_KEY: (
+            RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES
+        ),
     }
     updates: dict[str, str] = {}
     for key, raw_value in payload.values.items():
@@ -512,6 +618,18 @@ def _validated_managed_setting_updates(
                 status_code=422,
                 detail=_release_notes_enabled_disabled_reason(settings),
             )
+        if key == MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_KEY:
+            try:
+                updates[key] = str(
+                    _parse_positive_int_setting(
+                        key,
+                        raw_value,
+                        DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS,
+                    )
+                )
+            except ConfigError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            continue
         if key not in allowed_values:
             raise HTTPException(
                 status_code=422,
@@ -551,12 +669,70 @@ def _apply_managed_setting_updates(
             _set_web_setting(conn, MANAGED_DIGEST_PIN_UPDATES_DB_KEY, value)
         elif key == MANAGED_RELEASE_NOTES_ENABLED_KEY:
             _set_web_setting(conn, MANAGED_RELEASE_NOTES_ENABLED_DB_KEY, value)
+        elif key == MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY:
+            _set_web_setting(conn, MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY, value)
+        elif key == MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_KEY:
+            _set_web_setting(
+                conn,
+                MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_DB_KEY,
+                value,
+            )
+        elif key == MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_KEY:
+            _set_web_setting(
+                conn,
+                MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY,
+                value,
+            )
 
 
 def _managed_settings_audit_values(
     entries: Sequence[ManagedSettingEntry],
 ) -> dict[str, str]:
     return {entry.key: entry.value for entry in entries}
+
+
+def _release_notification_config_from_values(
+    values: Mapping[str, str],
+) -> ReleaseNotificationConfig:
+    mode = values.get(
+        MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY,
+        DEFAULT_RELEASE_NOTIFICATIONS_MODE,
+    )
+    if mode not in RELEASE_NOTIFICATIONS_MODE_VALUES:
+        options = ", ".join(RELEASE_NOTIFICATIONS_MODE_VALUES)
+        raise ConfigError(f"{MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY} must be one of: {options}")
+    resend_policy = values.get(
+        MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_DB_KEY,
+        DEFAULT_RELEASE_NOTIFICATIONS_RESEND_POLICY,
+    )
+    if resend_policy not in RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES:
+        options = ", ".join(RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES)
+        raise ConfigError(
+            f"{MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_KEY} must be one of: {options}"
+        )
+    cooldown_seconds = _parse_positive_int_setting(
+        MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_KEY,
+        values.get(MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY, ""),
+        DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS,
+    )
+    return ReleaseNotificationConfig(
+        mode=mode,
+        resend_policy=resend_policy,
+        cooldown_seconds=cooldown_seconds,
+    )
+
+
+def _parse_positive_int_setting(name: str, value: str, default: int) -> int:
+    raw_value = value.strip()
+    if not raw_value:
+        return default
+    try:
+        parsed = int(raw_value)
+    except ValueError as exc:
+        raise ConfigError(f"{name} must be a positive integer") from exc
+    if parsed <= 0:
+        raise ConfigError(f"{name} must be a positive integer")
+    return parsed
 
 
 def _updater_settings_entries(settings: WebSettings) -> list[SettingsEntry]:

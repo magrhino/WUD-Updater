@@ -126,6 +126,7 @@ class DatabaseTests(unittest.TestCase):
                     "known_images",
                     "pending_updates",
                     "release_note_cache",
+                    "release_notification_history",
                     "security_scan_cache",
                     "tag_exclusion_rules",
                     "web_users",
@@ -487,6 +488,43 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(version, SCHEMA_VERSION)
         self.assertEqual(row[0], "[]")
         self.assertIn("findings_json", columns)
+
+    def test_init_db_migrates_v10_and_adds_release_notification_history(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            init_db(conn)
+            conn.execute("DROP TABLE release_notification_history")
+            conn.execute("DELETE FROM schema_migrations WHERE version = 11")
+            conn.execute("PRAGMA user_version = 10")
+
+            init_db(conn)
+
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            table = conn.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name = 'release_notification_history'
+                """
+            ).fetchone()
+            columns = [
+                column[1]
+                for column in conn.execute(
+                    "PRAGMA table_info(release_notification_history)"
+                )
+            ]
+
+        self.assertEqual(version, SCHEMA_VERSION)
+        self.assertIsNotNone(table)
+        self.assertEqual(
+            columns,
+            [
+                column[0]
+                for column in _EXPECTED_SCHEMAS_BY_VERSION[SCHEMA_VERSION][
+                    "release_notification_history"
+                ]
+            ],
+        )
 
     def test_init_db_rejects_v8_schema_with_conflicting_security_cache(self) -> None:
         with sqlite3.connect(":memory:") as conn:

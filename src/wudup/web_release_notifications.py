@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, Request
 
-from . import web_pending_sources, web_wud_api
+from . import web_pending_sources, web_release_notification_state, web_wud_api
 from .config import VALID_UPDATE_MODES
 from .db import DatabaseError, init_db, open_db, utc_timestamp
 from .release_notes import refresh_release_notes
@@ -39,7 +39,10 @@ from .web_models import (
     WudApiStatus,
 )
 from .web_release_notes import release_note_source_resolver, release_notes_disabled_state
-from .web_settings import effective_release_notes_enabled
+from .web_settings import (
+    effective_release_notification_config,
+    effective_release_notes_enabled,
+)
 from .wud_file import WudTarget, parse_wud_text
 
 DISCORD_EMBEDS_PER_MESSAGE = 10
@@ -106,16 +109,26 @@ def api_send_release_notifications(
     sent_batch_count = 0
     sent_count = 0
     try:
+        sent_items: list[ReleaseNotificationItem] = []
         audit_run_id = _insert_release_notification_audit_start(
             settings,
             request,
             payload,
             response,
         )
-        for batch in _payload_batches(response.items):
+        for batch in _payload_batches(response.items, response.mode):
             _post_discord_payload(webhook.value, batch["payload"])
             sent_batch_count += 1
             sent_count += int(batch.get("count") or 0)
+            batch_items = list(batch.get("items") or [])
+            sent_items.extend(batch_items)
+            _record_release_notification_history(
+                settings,
+                batch_items,
+                response,
+                audit_run_id,
+                status="sent",
+            )
         _finish_release_notification_audit(
             settings,
             audit_run_id,
@@ -133,6 +146,19 @@ def api_send_release_notifications(
             exc,
         )
         if audit_run_id:
+            sent_keys = {item.notification_key for item in sent_items}
+            remaining_items = [
+                item
+                for item in response.items
+                if not item.skipped_reason and item.notification_key not in sent_keys
+            ]
+            _safe_record_release_notification_history(
+                settings,
+                remaining_items,
+                response,
+                audit_run_id,
+                status="failure",
+            )
             _safe_finish_release_notification_audit_failure(
                 settings,
                 audit_run_id,
@@ -157,11 +183,14 @@ def _notification_response(
     sent: bool,
 ) -> ReleaseNotificationResponse:
     enabled = effective_release_notes_enabled(settings)
+    notification_config = effective_release_notification_config(settings)
     destination = _release_notification_destination(settings)
     if not enabled:
         disabled = release_notes_disabled_state(settings)
         return ReleaseNotificationResponse(
             enabled=False,
+            mode=notification_config.mode,
+            resend_policy=notification_config.resend_policy,
             destination=destination,
             source_file=str(settings.config.wud_out_file),
             source=disabled.source,
@@ -174,6 +203,8 @@ def _notification_response(
     if not source.targets:
         return ReleaseNotificationResponse(
             enabled=True,
+            mode=notification_config.mode,
+            resend_policy=notification_config.resend_policy,
             destination=destination,
             source=source.source,
             source_file=source.source_file,
@@ -183,17 +214,25 @@ def _notification_response(
         )
 
     notes = _release_note_infos(settings, source)
-    items, warnings = _notification_items(settings, source, notes)
+    items, warnings = _notification_items(
+        settings,
+        source,
+        notes,
+        config=notification_config,
+        resend=payload.resend,
+    )
     sendable_count = sum(1 for item in items if not item.skipped_reason)
     return ReleaseNotificationResponse(
         enabled=True,
+        mode=notification_config.mode,
+        resend_policy=notification_config.resend_policy,
         destination=destination,
         source=source.source,
         source_file=source.source_file,
         count=len(items),
         sendable_count=sendable_count,
         skipped_count=len(items) - sendable_count,
-        batch_count=_payload_batch_count(sendable_count),
+        batch_count=_payload_batch_count(sendable_count, notification_config.mode),
         items=items,
         wud_api=source.wud_api,
         warnings=[*source.warnings, *warnings],
@@ -392,8 +431,13 @@ def _notification_items(
     settings: WebSettings,
     source: _NotificationSource,
     notes: Mapping[int, ReleaseNoteInfo],
+    *,
+    config: web_release_notification_state.ReleaseNotificationConfig,
+    resend: bool,
 ) -> tuple[list[ReleaseNotificationItem], list[str]]:
-    items: list[ReleaseNotificationItem] = []
+    candidates: list[
+        tuple[ReleaseNotificationItem, web_release_notification_state.NotificationIdentity]
+    ] = []
     warnings: list[str] = []
     trigger_cache: dict[str, tuple[list[ReleaseNotificationTrigger], str]] = {}
     for target in source.targets:
@@ -401,6 +445,12 @@ def _notification_items(
         if note is None:
             warnings.append(f"Line {target.target.line_no} has no release-note metadata.")
             continue
+        metadata = source.metadata_by_line.get(target.target.line_no)
+        identity = web_release_notification_state.notification_identity(
+            target.target,
+            note,
+            metadata,
+        )
         triggers: list[ReleaseNotificationTrigger] = []
         if target.wud_container_id:
             if target.wud_container_id not in trigger_cache:
@@ -415,7 +465,7 @@ def _notification_items(
                     f"{trigger_warning}"
                 )
         title, description = _notification_copy(settings, target, note, triggers)
-        items.append(
+        candidates.append((
             ReleaseNotificationItem(
                 line_no=target.target.line_no,
                 image=target.target.first,
@@ -427,9 +477,58 @@ def _notification_items(
                 upstream_repo=note.upstream_repo,
                 links=_release_note_links(note),
                 triggers=triggers,
+                notification_key=identity.notification_key,
+            ),
+            identity,
+        ))
+    histories = _notification_histories(
+        settings,
+        {identity.notification_key for _item, identity in candidates},
+    )
+    items: list[ReleaseNotificationItem] = []
+    for item, identity in candidates:
+        history = histories.get(identity.notification_key)
+        notification_status, skipped_reason = (
+            web_release_notification_state.notification_decision(
+                config,
+                identity,
+                history,
+                resend=resend,
+            )
+        )
+        items.append(
+            item.model_copy(
+                update={
+                    "notification_status": notification_status,
+                    "notification_last_sent_at": ""
+                    if history is None
+                    else history.last_sent_at,
+                    "notification_send_count": 0 if history is None else history.send_count,
+                    "skipped_reason": skipped_reason,
+                }
             )
         )
     return items, warnings
+
+
+def _notification_histories(
+    settings: WebSettings,
+    keys: set[str],
+) -> dict[str, web_release_notification_state.NotificationHistory]:
+    try:
+        with closing(connect_readonly_db(settings)) as conn:
+            return web_release_notification_state.notification_history_by_key(conn, keys)
+    except (AttributeError, ReadOnlyDatabaseMissing):
+        return {}
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read release notification history",
+                exc,
+            ),
+        ) from exc
 
 
 def _release_note_links(note: ReleaseNoteInfo) -> list[ReleaseNoteLink]:
@@ -490,11 +589,15 @@ def _trigger_label(trigger: ReleaseNotificationTrigger) -> str:
     return trigger.name or trigger.type or trigger.id
 
 
-def _payload_batches(items: Sequence[ReleaseNotificationItem]) -> list[dict[str, object]]:
+def _payload_batches(
+    items: Sequence[ReleaseNotificationItem],
+    mode: str = "digest",
+) -> list[dict[str, object]]:
     batches: list[dict[str, object]] = []
     sendable = [item for item in items if not item.skipped_reason]
-    for index in range(0, len(sendable), DISCORD_EMBEDS_PER_MESSAGE):
-        batch_items = sendable[index : index + DISCORD_EMBEDS_PER_MESSAGE]
+    batch_size = 1 if mode == "per_container" else DISCORD_EMBEDS_PER_MESSAGE
+    for index in range(0, len(sendable), batch_size):
+        batch_items = sendable[index : index + batch_size]
         payload = {
             "username": "WUDup Release Notes",
             "allowed_mentions": {"parse": []},
@@ -504,14 +607,16 @@ def _payload_batches(items: Sequence[ReleaseNotificationItem]) -> list[dict[str,
             {
                 "index": len(batches) + 1,
                 "count": len(batch_items),
+                "items": batch_items,
                 "payload": payload,
             }
         )
     return batches
 
 
-def _payload_batch_count(sendable_count: int) -> int:
-    return (sendable_count + DISCORD_EMBEDS_PER_MESSAGE - 1) // DISCORD_EMBEDS_PER_MESSAGE
+def _payload_batch_count(sendable_count: int, mode: str = "digest") -> int:
+    batch_size = 1 if mode == "per_container" else DISCORD_EMBEDS_PER_MESSAGE
+    return (sendable_count + batch_size - 1) // batch_size
 
 
 def _discord_embed(item: ReleaseNotificationItem) -> dict[str, object]:
@@ -733,6 +838,64 @@ def _safe_finish_release_notification_audit_failure(
         LOGGER.exception("failed to finalize Discord release-note notification audit")
 
 
+def _record_release_notification_history(
+    settings: WebSettings,
+    items: Sequence[ReleaseNotificationItem],
+    response: ReleaseNotificationResponse,
+    audit_run_id: int,
+    *,
+    status: str,
+) -> None:
+    config = web_release_notification_state.ReleaseNotificationConfig(
+        mode=response.mode,
+        resend_policy=response.resend_policy,
+    )
+    with open_db(settings.config.db_path) as conn:
+        init_db(conn)
+        with conn:
+            for item in items:
+                if not item.notification_key:
+                    continue
+                identity = web_release_notification_state.NotificationIdentity(
+                    notification_key=item.notification_key,
+                    metadata={
+                        "line_no": item.line_no,
+                        "image": item.image,
+                        "service_key": item.service_key,
+                        "status": item.status,
+                        "release_tag": item.release_tag,
+                        "upstream_repo": item.upstream_repo,
+                    },
+                )
+                web_release_notification_state.upsert_notification_history(
+                    conn,
+                    identity=identity,
+                    config=config,
+                    status=status,
+                    audit_run_id=audit_run_id,
+                )
+
+
+def _safe_record_release_notification_history(
+    settings: WebSettings,
+    items: Sequence[ReleaseNotificationItem],
+    response: ReleaseNotificationResponse,
+    audit_run_id: int,
+    *,
+    status: str,
+) -> None:
+    try:
+        _record_release_notification_history(
+            settings,
+            items,
+            response,
+            audit_run_id,
+            status=status,
+        )
+    except (OSError, sqlite3.Error, DatabaseError):
+        LOGGER.exception("failed to record Discord release-note notification history")
+
+
 def _release_notification_audit_metadata(
     settings: WebSettings,
     request: Request,
@@ -757,6 +920,9 @@ def _release_notification_audit_metadata(
         "resource_id": "discord",
         "status": status,
         "target": target,
+        "mode": response.mode,
+        "resend_policy": response.resend_policy,
+        "resend": payload.resend,
         "destination": {
             "type": response.destination.type,
             "source": response.destination.source,
@@ -781,6 +947,10 @@ def _audit_items(items: Sequence[ReleaseNotificationItem]) -> list[dict[str, obj
             "release_tag": item.release_tag,
             "upstream_repo": item.upstream_repo,
             "trigger_count": len(item.triggers),
+            "notification_key": item.notification_key,
+            "notification_status": item.notification_status,
+            "notification_last_sent_at": item.notification_last_sent_at,
+            "notification_send_count": item.notification_send_count,
             "skipped_reason": item.skipped_reason,
         }
         for item in items

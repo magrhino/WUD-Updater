@@ -13,7 +13,7 @@ from fastapi import HTTPException, Request
 
 from .command import CommandError, CommandRunner
 from .db import DatabaseError, init_db, open_db
-from . import web_pending_sources, web_wud_api
+from . import web_pending_sources, web_release_notification_state, web_wud_api
 from .docker_cli import ContainerImage, DockerCli
 from .images import (
     image_has_tag,
@@ -49,7 +49,10 @@ from .web_models import (
     WebSettings,
     WudApiStatus,
 )
-from .web_settings import effective_release_notes_enabled
+from .web_settings import (
+    effective_release_notification_config,
+    effective_release_notes_enabled,
+)
 from .wud_file import WudTarget
 
 
@@ -212,6 +215,7 @@ def release_notes_response(
         data = asdict(item)
         data["error"] = _redact_sensitive_text(settings, str(data.get("error", "")))
         redacted_items.append(ReleaseNoteInfo.model_validate(data))
+    redacted_items = _annotate_notification_state(settings, redacted_items, source)
     notifications_enabled = effective_release_notes_enabled(settings)
     return ReleaseNotesResponse(
         source_file=source.source_file,
@@ -225,6 +229,72 @@ def release_notes_response(
         wud_api=wud_api,
         warnings=[_redact_sensitive_text(settings, warning) for warning in warnings],
     )
+
+
+def _annotate_notification_state(
+    settings: WebSettings,
+    items: list[ReleaseNoteInfo],
+    source: web_pending_sources.PendingSourceResult,
+) -> list[ReleaseNoteInfo]:
+    targets_by_line = {target.line_no: target for target in source.parsed.targets}
+    identities: dict[int, web_release_notification_state.NotificationIdentity] = {}
+    for item in items:
+        target = targets_by_line.get(item.line_no)
+        if target is None:
+            continue
+        identities[item.line_no] = web_release_notification_state.notification_identity(
+            target,
+            item,
+            (source.metadata_by_line or {}).get(item.line_no),
+        )
+    if not identities:
+        return items
+    config = effective_release_notification_config(settings)
+    try:
+        with closing(_connect_readonly_db(settings)) as conn:
+            histories = web_release_notification_state.notification_history_by_key(
+                conn,
+                {identity.notification_key for identity in identities.values()},
+            )
+    except ReadOnlyDatabaseMissing:
+        histories = {}
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read release notification history",
+                exc,
+            ),
+        ) from exc
+
+    annotated: list[ReleaseNoteInfo] = []
+    for item in items:
+        identity = identities.get(item.line_no)
+        if identity is None:
+            annotated.append(item)
+            continue
+        history = histories.get(identity.notification_key)
+        status, skipped_reason = web_release_notification_state.notification_decision(
+            config,
+            identity,
+            history,
+            resend=False,
+        )
+        annotated.append(
+            item.model_copy(
+                update={
+                    "notification_key": identity.notification_key,
+                    "notification_status": status,
+                    "notification_last_sent_at": ""
+                    if history is None
+                    else history.last_sent_at,
+                    "notification_send_count": 0 if history is None else history.send_count,
+                    "notification_skipped_reason": skipped_reason,
+                }
+            )
+        )
+    return annotated
 
 
 def _wud_api_status(source: web_pending_sources.PendingSourceResult) -> WudApiStatus:

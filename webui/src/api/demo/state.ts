@@ -129,6 +129,10 @@ function sameNumbers(left: number[], right: number[]): boolean {
   );
 }
 
+function demoNotificationKey(lineNo: number): string {
+  return `demo-release-notification-${lineNo}`;
+}
+
 function sameRetagChoices(
   left: RetagChoiceRequest[],
   right: RetagChoiceRequest[],
@@ -510,6 +514,21 @@ export class DemoApiState {
       (entry) => entry.key === "release_notes_enabled",
     )?.value ?? "false";
   releaseNotesEnabledConfigured = false;
+  releaseNotificationMode =
+    fixtures.settings.managed.find(
+      (entry) => entry.key === "release_notifications_mode",
+    )?.value ?? "digest";
+  releaseNotificationModeConfigured = false;
+  releaseNotificationResendPolicy =
+    fixtures.settings.managed.find(
+      (entry) => entry.key === "release_notifications_resend_policy",
+    )?.value ?? "remote_change";
+  releaseNotificationResendPolicyConfigured = false;
+  releaseNotificationCooldownSeconds =
+    fixtures.settings.managed.find(
+      (entry) => entry.key === "release_notifications_cooldown_seconds",
+    )?.value ?? "86400";
+  releaseNotificationCooldownSecondsConfigured = false;
   coreUpdateTour: CoreUpdateTourResponse = {
     status: "not_started",
     step: "dashboard",
@@ -544,6 +563,22 @@ export class DemoApiState {
 
   settings(): SettingsResponse {
     const settings = clone(fixtures.settings);
+    this.ensureManagedEntry(settings, "release_notifications_mode", "digest", [
+      "digest",
+      "per_container",
+    ]);
+    this.ensureManagedEntry(
+      settings,
+      "release_notifications_resend_policy",
+      "remote_change",
+      ["remote_change", "cooldown"],
+    );
+    this.ensureManagedEntry(
+      settings,
+      "release_notifications_cooldown_seconds",
+      "86400",
+      [],
+    );
     this.updateManagedEntry(settings, "theme_preference", this.themePreference, this.themePreferenceConfigured);
     this.updateManagedEntry(
       settings,
@@ -569,7 +604,46 @@ export class DemoApiState {
       this.releaseNotesEnabled,
       this.releaseNotesEnabledConfigured,
     );
+    this.updateManagedEntry(
+      settings,
+      "release_notifications_mode",
+      this.releaseNotificationMode,
+      this.releaseNotificationModeConfigured,
+    );
+    this.updateManagedEntry(
+      settings,
+      "release_notifications_resend_policy",
+      this.releaseNotificationResendPolicy,
+      this.releaseNotificationResendPolicyConfigured,
+    );
+    this.updateManagedEntry(
+      settings,
+      "release_notifications_cooldown_seconds",
+      this.releaseNotificationCooldownSeconds,
+      this.releaseNotificationCooldownSecondsConfigured,
+    );
     return settings;
+  }
+
+  private ensureManagedEntry(
+    settings: SettingsResponse,
+    key: string,
+    defaultValue: string,
+    allowedValues: string[],
+  ): void {
+    if (settings.managed.some((item) => item.key === key)) {
+      return;
+    }
+    settings.managed.push({
+      key,
+      value: defaultValue,
+      default_value: defaultValue,
+      source: "default",
+      editable: true,
+      allowed_values: allowedValues,
+      restart_required: false,
+      disabled_reason: "",
+    });
   }
 
   private updateManagedEntry(
@@ -679,6 +753,31 @@ export class DemoApiState {
         this.releaseNotesEnabled = value;
         this.releaseNotesEnabledConfigured = true;
         return;
+      case "release_notifications_mode":
+        if (!["digest", "per_container"].includes(value)) {
+          throw new Error("release_notifications_mode must be digest or per_container");
+        }
+        this.releaseNotificationMode = value;
+        this.releaseNotificationModeConfigured = true;
+        return;
+      case "release_notifications_resend_policy":
+        if (!["remote_change", "cooldown"].includes(value)) {
+          throw new Error(
+            "release_notifications_resend_policy must be remote_change or cooldown",
+          );
+        }
+        this.releaseNotificationResendPolicy = value;
+        this.releaseNotificationResendPolicyConfigured = true;
+        return;
+      case "release_notifications_cooldown_seconds":
+        if (!Number.isInteger(Number(value)) || Number(value) <= 0) {
+          throw new Error(
+            "release_notifications_cooldown_seconds must be a positive integer",
+          );
+        }
+        this.releaseNotificationCooldownSeconds = value;
+        this.releaseNotificationCooldownSecondsConfigured = true;
+        return;
       default:
         throw new Error(`managed setting is not editable: ${key}`);
     }
@@ -733,8 +832,21 @@ export class DemoApiState {
 
   releaseNotes(): ReleaseNotesResponse {
     const activeLines = activeLineNumbers(this.activePendingLineKeys);
-    const response = clone(fixtures.releaseNotes);
-    response.items = response.items.filter((item) => activeLines.has(item.line_no));
+    const fixture = clone(fixtures.releaseNotes);
+    const response: ReleaseNotesResponse = {
+      ...fixture,
+      items: [],
+    };
+    response.items = fixture.items
+      .filter((item) => activeLines.has(item.line_no))
+      .map((item) => ({
+        ...item,
+        notification_key: item.notification_key || demoNotificationKey(item.line_no),
+        notification_status: item.notification_status || "new",
+        notification_last_sent_at: item.notification_last_sent_at || "",
+        notification_send_count: item.notification_send_count || 0,
+        notification_skipped_reason: item.notification_skipped_reason || "",
+      }));
     response.count = response.items.length;
     return response;
   }
@@ -756,6 +868,7 @@ export class DemoApiState {
       .map((item) => {
         const pending = pendingByLine.get(item.line_no);
         const serviceKey = pending?.key ?? "";
+        const skippedReason = item.status === "ready" ? "" : item.error || item.status;
         return {
           line_no: item.line_no,
           image: pending?.image || item.image_repo,
@@ -773,12 +886,24 @@ export class DemoApiState {
               name: "releases",
             },
           ],
-          skipped_reason: item.status === "ready" ? "" : item.error || item.status,
+          notification_key: item.notification_key || demoNotificationKey(item.line_no),
+          notification_status: sent
+            ? "sent"
+            : source.resend === true
+              ? "manual_resend"
+              : item.notification_status || "new",
+          notification_last_sent_at: sent ? DEMO_NOW : item.notification_last_sent_at || "",
+          notification_send_count: sent
+            ? Math.max(item.notification_send_count || 0, 1)
+            : item.notification_send_count || 0,
+          skipped_reason: skippedReason,
         };
       });
     const sendableCount = items.filter((item) => !item.skipped_reason).length;
     return {
       enabled: true,
+      mode: this.releaseNotificationMode,
+      resend_policy: this.releaseNotificationResendPolicy,
       destination: {
         type: "discord",
         configured: true,
@@ -789,7 +914,10 @@ export class DemoApiState {
       count: items.length,
       sendable_count: sendableCount,
       skipped_count: items.length - sendableCount,
-      batch_count: Math.ceil(sendableCount / 10),
+      batch_count:
+        this.releaseNotificationMode === "per_container"
+          ? sendableCount
+          : Math.ceil(sendableCount / 10),
       items,
       wud_api: releaseNotes.wud_api,
       warnings: releaseNotes.warnings,

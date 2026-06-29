@@ -1033,6 +1033,8 @@ describe("demo web API", () => {
 
     expect(preview).toMatchObject({
       enabled: true,
+      mode: "digest",
+      resend_policy: "remote_change",
       sent: false,
       audit_run_id: 0,
       source_file: "demo/out/images.todo",
@@ -1051,6 +1053,8 @@ describe("demo web API", () => {
       image: "ghcr.io/home-assistant/home-assistant:2026.5.1",
       service_key: "home-assistant/home-assistant:2026.5.1",
       status: "ready",
+      notification_key: "demo-release-notification-2",
+      notification_status: "new",
       skipped_reason: "",
       triggers: [
         {
@@ -1071,6 +1075,16 @@ describe("demo web API", () => {
       skipped_reason: "not_found",
     });
     expect(preview.batch_count).toBe(1);
+
+    const resendPreview = await api.previewReleaseNotifications(
+      { line_numbers: selected, resend: true },
+      "csrf",
+    );
+
+    expect(resendPreview.items[0]).toMatchObject({
+      line_no: 2,
+      notification_status: "manual_resend",
+    });
 
     const sent = await api.sendReleaseNotifications(
       { line_numbers: selected },

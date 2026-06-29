@@ -746,6 +746,11 @@ class ReleaseNoteInfo(BaseModel):
     links: list[ReleaseNoteLink] = Field(default_factory=list)
     refreshed_at: str = ""
     error: str = ""
+    notification_key: str = ""
+    notification_status: str = "new"
+    notification_last_sent_at: str = ""
+    notification_send_count: int = 0
+    notification_skipped_reason: str = ""
 
 class ReleaseNotesResponse(BaseModel):
     source_file: str
@@ -769,6 +774,7 @@ class ReleaseNotesResponse(BaseModel):
 class ReleaseNotificationPreviewRequest(BaseModel):
     line_numbers: list[LineNumber] = Field(default_factory=list)
     run_id: int | None = Field(default=None, ge=1)
+    resend: bool = False
 
     @model_validator(mode="after")
     def exactly_one_source(self) -> "ReleaseNotificationPreviewRequest":
@@ -800,10 +806,16 @@ class ReleaseNotificationItem(BaseModel):
     upstream_repo: str = ""
     links: list[ReleaseNoteLink] = Field(default_factory=list)
     triggers: list[ReleaseNotificationTrigger] = Field(default_factory=list)
+    notification_key: str = ""
+    notification_status: str = "new"
+    notification_last_sent_at: str = ""
+    notification_send_count: int = 0
     skipped_reason: str = ""
 
 class ReleaseNotificationResponse(BaseModel):
     enabled: bool
+    mode: str = "digest"
+    resend_policy: str = "remote_change"
     destination: ReleaseNotificationDestination = Field(
         default_factory=ReleaseNotificationDestination
     )
