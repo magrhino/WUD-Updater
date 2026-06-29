@@ -21,7 +21,8 @@ const {
         <p class="eyebrow">Diagnostics</p>
         <h2>Support Bundle</h2>
         <p class="section-copy">
-          Generate a redacted support bundle containing application settings, update state, and recent logs for troubleshooting. Raw environment variables, private paths, and secrets are automatically scrubbed.
+          Download or copy a redacted bundle for troubleshooting. Environment
+          variables, paths, and secrets are scrubbed.
         </p>
       </div>
       <FileJson :size="20" class="section-heading-icon" />

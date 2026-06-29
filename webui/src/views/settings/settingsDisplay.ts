@@ -24,17 +24,44 @@ export const BEHAVIOR_ENTRY_NAMES = new Set([
   "WUD_DIGEST_PIN_UPDATES",
 ]);
 
-export const SETTINGS_SECTION_LINKS = [
-  { id: "settings-actions", label: "Actions" },
-  { id: "settings-preferences", label: "Preferences" },
-  { id: "settings-runtime", label: "Runtime" },
-  { id: "settings-paths", label: "Paths" },
-  { id: "settings-behavior", label: "Behavior" },
-  { id: "settings-webui", label: "WebUI safety" },
-  { id: "settings-secrets", label: "Secrets" },
-  { id: "settings-diagnostics", label: "Diagnostics" },
-  { id: "settings-docs", label: "Docs" },
-] as const;
+type SettingsNavLink = {
+  readonly id: string;
+  readonly label: string;
+};
+
+type SettingsNavGroup = SettingsNavLink & {
+  readonly links: readonly SettingsNavLink[];
+};
+
+function navLink(id: string, label: string): SettingsNavLink {
+  return { id, label };
+}
+
+function navGroup(
+  id: string,
+  label: string,
+  links: readonly SettingsNavLink[],
+): SettingsNavGroup {
+  return { id, label, links };
+}
+
+export const SETTINGS_NAV_GROUPS: readonly SettingsNavGroup[] = [
+  navGroup("operate", "Operate", [
+    navLink("settings-actions", "Actions"),
+    navLink("settings-preferences", "Preferences"),
+  ]),
+  navGroup("configuration", "Configuration", [
+    navLink("settings-runtime", "Overview"),
+    navLink("settings-paths", "Paths"),
+    navLink("settings-behavior", "Behavior"),
+    navLink("settings-webui", "WebUI safety"),
+    navLink("settings-secrets", "Secrets"),
+  ]),
+  navGroup("support", "Support", [
+    navLink("settings-diagnostics", "Diagnostics"),
+    navLink("settings-docs", "Docs"),
+  ]),
+];
 
 export const THEME_PREFERENCE_LABELS: Record<string, string> = {
   system: "System theme",

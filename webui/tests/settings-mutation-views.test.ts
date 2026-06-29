@@ -5,8 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import PoliciesView from "../src/views/PoliciesView.vue";
 import SettingsView from "../src/views/SettingsView.vue";
+import SettingsJumpNav from "../src/views/settings/SettingsJumpNav.vue";
 import SnoozesView from "../src/views/SnoozesView.vue";
 import TagExclusionsView from "../src/views/TagExclusionsView.vue";
+import { SETTINGS_NAV_GROUPS } from "../src/views/settings/settingsDisplay";
 import {
   coreUpdateTourResponse,
   onboardingChecklistResponse,
@@ -384,11 +386,38 @@ describe("settings mutation views", () => {
 
     const wrapper = mountWithApp(SettingsView, { pinia });
     await flushPromises();
-    const text = wrapper.text();
 
+    expect(wrapper.findComponent(SettingsJumpNav).exists()).toBe(true);
+    SETTINGS_NAV_GROUPS.forEach((group) => {
+      const groupElement = wrapper.find(
+        `[data-test="settings-nav-group-${group.id}"]`,
+      );
+      expect(groupElement.exists()).toBe(true);
+      expect(groupElement.find("ul").exists()).toBe(true);
+      expect(groupElement.find("h2").text()).toBe(group.label);
+      group.links.forEach((link) => {
+        const itemElement = groupElement.find(
+          `[data-test="settings-nav-item-${link.id}"]`,
+        );
+        expect(itemElement.exists()).toBe(true);
+        expect(itemElement.element.tagName).toBe("LI");
+        expect(itemElement.text()).toContain(link.label);
+      });
+    });
+
+    const text = wrapper.text();
+    expect(text).toContain("Settings map");
     expect(text).toContain("Runtime settings");
     expect(text).toContain("DOCKER_BASE");
     expect(text).toContain("WUD_WEB_PUBLIC_ORIGIN");
+    expect(text).toContain(
+      "Download or copy a redacted bundle for troubleshooting.",
+    );
+    expect(text).toContain(
+      "Environment variables, paths, and secrets are scrubbed.",
+    );
+    expect(text).not.toContain("Generate a redacted support bundle");
+    expect(text).not.toContain("Raw environment variables, private paths");
     expect(text).toContain("GITHUB_TOKEN");
     expect(text).toContain("Configured");
     expect(text).toContain("Not configured");

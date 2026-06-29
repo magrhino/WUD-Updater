@@ -57,8 +57,8 @@ const {
           <p class="eyebrow">Managed preferences</p>
           <h2>WebUI preferences</h2>
           <p class="section-copy">
-            Browser-facing preferences persisted in SQLite. Runtime configuration,
-            paths, and secrets stay controlled by server config.
+            WebUI choices stored in SQLite. Server config still owns runtime
+            paths and secrets.
           </p>
         </div>
         <Save :size="20" class="section-heading-icon" />
@@ -79,161 +79,187 @@ const {
       >
         {{ preferencesError }}
       </n-alert>
-      <div class="settings-preference-list">
-        <div class="settings-preference-row">
-          <div>
-            <strong class="wrap-anywhere">Theme preference</strong>
-            <span class="wrap-anywhere">
-              Source:
-              {{ managedSourceLabel(themePreferenceEntry) }}
-            </span>
+      <div class="settings-preference-groups">
+        <section class="settings-preference-group" aria-labelledby="settings-interface-heading">
+          <div class="settings-preference-group-heading">
+            <h3 id="settings-interface-heading">Interface</h3>
+            <p>Display defaults and browser-facing notifications.</p>
           </div>
-          <n-select
-            v-model:value="themePreferenceValue"
-            :options="themePreferenceOptions"
-            :disabled="preferenceControlsDisabled"
-            aria-label="Theme preference"
-          />
-        </div>
-        <div class="settings-preference-row">
-          <div>
-            <strong class="wrap-anywhere">Onboarding checklist</strong>
-            <span class="wrap-anywhere">
-              Source:
-              {{ managedSourceLabel(onboardingChecklistEntry) }}
-            </span>
+          <div class="settings-preference-list">
+            <div class="settings-preference-row">
+              <div>
+                <strong class="wrap-anywhere">Theme preference</strong>
+                <span class="wrap-anywhere">
+                  Source:
+                  {{ managedSourceLabel(themePreferenceEntry) }}
+                </span>
+              </div>
+              <n-select
+                v-model:value="themePreferenceValue"
+                :options="themePreferenceOptions"
+                :disabled="preferenceControlsDisabled"
+                aria-label="Theme preference"
+              />
+            </div>
+            <div class="settings-preference-row">
+              <div>
+                <strong class="wrap-anywhere">Release-note notifications</strong>
+                <span class="wrap-anywhere">
+                  Source:
+                  {{ managedSourceLabel(releaseNotesEnabledEntry) }}
+                </span>
+              </div>
+              <div class="settings-preference-controls">
+                <n-switch
+                  v-model:value="releaseNotesEnabledValue"
+                  :disabled="preferenceControlsDisabled || !releaseNotesEnabledEditable"
+                  aria-label="Release-note notifications"
+                />
+                <n-alert
+                  v-if="releaseNotesEnabledEntry?.disabled_reason"
+                  type="info"
+                  :show-icon="false"
+                  class="settings-action-alert"
+                >
+                  {{ releaseNotesEnabledEntry.disabled_reason }}
+                </n-alert>
+              </div>
+            </div>
           </div>
-          <div class="settings-preference-controls">
-            <n-select
-              v-model:value="onboardingChecklistValue"
-              :options="onboardingChecklistOptions"
-              :disabled="preferenceControlsDisabled"
-              aria-label="Onboarding checklist"
-            />
-            <n-button
-              size="small"
-              :disabled="preferenceControlsDisabled"
-              :loading="settings.loading"
-              @click="relaunchOnboardingChecklist"
-            >
-              <template #icon>
-                <RotateCcw :size="16" />
-              </template>
-              Relaunch onboarding
-            </n-button>
+        </section>
+
+        <section class="settings-preference-group" aria-labelledby="settings-update-heading">
+          <div class="settings-preference-group-heading">
+            <h3 id="settings-update-heading">Update behavior</h3>
+            <p>Managed update defaults that do not require a container restart.</p>
           </div>
-        </div>
-        <div class="settings-preference-row">
-          <div>
-            <strong class="wrap-anywhere">Compose ignore paths</strong>
-            <span class="wrap-anywhere">
-              Source:
-              {{ managedSourceLabel(composeIgnorePathsEntry) }}
-            </span>
+          <div class="settings-preference-list">
+            <div class="settings-preference-row">
+              <div>
+                <strong class="wrap-anywhere">Compose ignore paths</strong>
+                <span class="wrap-anywhere">
+                  Source:
+                  {{ managedSourceLabel(composeIgnorePathsEntry) }}
+                </span>
+              </div>
+              <div class="settings-preference-controls settings-textarea-controls">
+                <n-input
+                  v-model:value="composeIgnorePathsValue"
+                  type="textarea"
+                  :autosize="{ minRows: 2, maxRows: 4 }"
+                  :disabled="preferenceControlsDisabled || !composeIgnorePathsEditable"
+                  placeholder="old, archive/disabled"
+                  aria-label="Compose ignore paths"
+                />
+                <n-alert
+                  v-if="composeIgnorePathsEntry?.disabled_reason"
+                  type="info"
+                  :show-icon="false"
+                  class="settings-action-alert"
+                >
+                  {{ composeIgnorePathsEntry.disabled_reason }}
+                </n-alert>
+              </div>
+            </div>
+            <div class="settings-preference-row">
+              <div>
+                <strong class="wrap-anywhere">Digest-pin updates</strong>
+                <span class="wrap-anywhere">
+                  Source:
+                  {{ managedSourceLabel(digestPinUpdatesEntry) }}
+                </span>
+              </div>
+              <div class="settings-preference-controls">
+                <n-select
+                  v-model:value="digestPinUpdatesValue"
+                  :options="digestPinUpdatesOptions"
+                  :disabled="preferenceControlsDisabled || !digestPinUpdatesEditable"
+                  aria-label="Digest-pin updates"
+                />
+                <n-alert
+                  v-if="digestPinUpdatesEntry?.disabled_reason"
+                  type="info"
+                  :show-icon="false"
+                  class="settings-action-alert"
+                >
+                  {{ digestPinUpdatesEntry.disabled_reason }}
+                </n-alert>
+              </div>
+            </div>
           </div>
-          <div class="settings-preference-controls settings-textarea-controls">
-            <n-input
-              v-model:value="composeIgnorePathsValue"
-              type="textarea"
-              :autosize="{ minRows: 2, maxRows: 4 }"
-              :disabled="preferenceControlsDisabled || !composeIgnorePathsEditable"
-              placeholder="old, archive/disabled"
-              aria-label="Compose ignore paths"
-            />
-            <n-alert
-              v-if="composeIgnorePathsEntry?.disabled_reason"
-              type="info"
-              :show-icon="false"
-              class="settings-action-alert"
-            >
-              {{ composeIgnorePathsEntry.disabled_reason }}
-            </n-alert>
+        </section>
+
+        <section class="settings-preference-group" aria-labelledby="settings-guidance-heading">
+          <div class="settings-preference-group-heading">
+            <h3 id="settings-guidance-heading">Guidance</h3>
+            <p>First-run checklist and core update tour state.</p>
           </div>
-        </div>
-        <div class="settings-preference-row">
-          <div>
-            <strong class="wrap-anywhere">Digest-pin updates</strong>
-            <span class="wrap-anywhere">
-              Source:
-              {{ managedSourceLabel(digestPinUpdatesEntry) }}
-            </span>
+          <div class="settings-preference-list">
+            <div class="settings-preference-row">
+              <div>
+                <strong class="wrap-anywhere">Onboarding checklist</strong>
+                <span class="wrap-anywhere">
+                  Source:
+                  {{ managedSourceLabel(onboardingChecklistEntry) }}
+                </span>
+              </div>
+              <div class="settings-preference-controls">
+                <n-select
+                  v-model:value="onboardingChecklistValue"
+                  :options="onboardingChecklistOptions"
+                  :disabled="preferenceControlsDisabled"
+                  aria-label="Onboarding checklist"
+                />
+                <n-button
+                  size="small"
+                  :disabled="preferenceControlsDisabled"
+                  :loading="settings.loading"
+                  @click="relaunchOnboardingChecklist"
+                >
+                  <template #icon>
+                    <RotateCcw :size="16" />
+                  </template>
+                  Relaunch onboarding
+                </n-button>
+              </div>
+            </div>
+            <div class="settings-preference-row">
+              <div>
+                <strong class="wrap-anywhere">Core update tour</strong>
+                <span class="wrap-anywhere">
+                  State: {{ coreUpdateTourStatus }}. Step:
+                  {{ coreUpdateTourStep }}.
+                </span>
+              </div>
+              <n-flex
+                class="settings-button-group"
+                :justify="compact ? 'flex-start' : 'flex-end'"
+                :size="8"
+              >
+                <n-button
+                  size="small"
+                  :disabled="preferenceControlsDisabled"
+                  :loading="settings.loading"
+                  @click="dismissCoreUpdateTour"
+                >
+                  Dismiss tour
+                </n-button>
+                <n-button
+                  size="small"
+                  type="primary"
+                  :disabled="preferenceControlsDisabled"
+                  :loading="settings.loading"
+                  @click="replayCoreUpdateTour"
+                >
+                  <template #icon>
+                    <RotateCcw :size="16" />
+                  </template>
+                  Replay tour
+                </n-button>
+              </n-flex>
+            </div>
           </div>
-          <div class="settings-preference-controls">
-            <n-select
-              v-model:value="digestPinUpdatesValue"
-              :options="digestPinUpdatesOptions"
-              :disabled="preferenceControlsDisabled || !digestPinUpdatesEditable"
-              aria-label="Digest-pin updates"
-            />
-            <n-alert
-              v-if="digestPinUpdatesEntry?.disabled_reason"
-              type="info"
-              :show-icon="false"
-              class="settings-action-alert"
-            >
-              {{ digestPinUpdatesEntry.disabled_reason }}
-            </n-alert>
-          </div>
-        </div>
-        <div class="settings-preference-row">
-          <div>
-            <strong class="wrap-anywhere">Release-note notifications</strong>
-            <span class="wrap-anywhere">
-              Source:
-              {{ managedSourceLabel(releaseNotesEnabledEntry) }}
-            </span>
-          </div>
-          <div class="settings-preference-controls">
-            <n-switch
-              v-model:value="releaseNotesEnabledValue"
-              :disabled="preferenceControlsDisabled || !releaseNotesEnabledEditable"
-              aria-label="Release-note notifications"
-            />
-            <n-alert
-              v-if="releaseNotesEnabledEntry?.disabled_reason"
-              type="info"
-              :show-icon="false"
-              class="settings-action-alert"
-            >
-              {{ releaseNotesEnabledEntry.disabled_reason }}
-            </n-alert>
-          </div>
-        </div>
-        <div class="settings-preference-row">
-          <div>
-            <strong class="wrap-anywhere">Core update tour</strong>
-            <span class="wrap-anywhere">
-              State: {{ coreUpdateTourStatus }}. Step:
-              {{ coreUpdateTourStep }}.
-            </span>
-          </div>
-          <n-flex
-            class="settings-button-group"
-            :justify="compact ? 'flex-start' : 'flex-end'"
-            :size="8"
-          >
-            <n-button
-              size="small"
-              :disabled="preferenceControlsDisabled"
-              :loading="settings.loading"
-              @click="dismissCoreUpdateTour"
-            >
-              Dismiss tour
-            </n-button>
-            <n-button
-              size="small"
-              type="primary"
-              :disabled="preferenceControlsDisabled"
-              :loading="settings.loading"
-              @click="replayCoreUpdateTour"
-            >
-              <template #icon>
-                <RotateCcw :size="16" />
-              </template>
-              Replay tour
-            </n-button>
-          </n-flex>
-        </div>
+        </section>
       </div>
       <div class="settings-action-row settings-preference-actions">
         <div>
@@ -315,20 +341,57 @@ const {
   line-height: 1.45;
 }
 
+.settings-preference-groups {
+  display: grid;
+  gap: 18px;
+  margin-top: 14px;
+}
+
+.settings-preference-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-preference-group-heading {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-preference-group-heading h3,
+.settings-preference-group-heading p {
+  margin: 0;
+}
+
+.settings-preference-group-heading h3 {
+  color: var(--color-ink);
+  font-size: 0.96rem;
+  line-height: 1.25;
+}
+
+.settings-preference-group-heading p {
+  max-width: 72ch;
+  color: var(--color-muted-text);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
 .settings-preference-list {
   display: grid;
-  gap: 10px;
-  margin-top: 14px;
 }
 
 .settings-preference-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
   align-items: center;
   gap: 14px;
-  padding: 12px;
-  border: 1px solid var(--color-border-subtle);
-  background: var(--color-panel-tint);
+  padding: 10px 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.settings-preference-row:first-child {
+  border-top: 0;
 }
 
 .settings-preference-row>div {
