@@ -13,6 +13,7 @@ from wudup.db import (
     _EXPECTED_SCHEMAS_BY_VERSION,
     _MIGRATIONS_BY_TARGET_VERSION,
     _SECURITY_SCAN_CACHE_SCHEMA_V9_SQL,
+    _validate_schema,
     active_dependency_snooze_rows,
     active_snooze,
     active_tag_exclusion_rules,
@@ -29,6 +30,7 @@ from wudup.db import (
     update_pending_update,
     upsert_known_image,
 )
+from wudup.db_schema import _quote_identifier
 from wudup.digest_provenance import (
     DIGEST_PROVENANCE_SQL_COLUMNS,
     DigestTagProvenance,
@@ -185,6 +187,32 @@ class DatabaseTests(unittest.TestCase):
             set(_MIGRATIONS_BY_TARGET_VERSION),
             set(range(2, SCHEMA_VERSION + 1)),
         )
+
+    def test_schema_validation_treats_table_name_as_pragma_value(self) -> None:
+        table_name = 'safe"; DROP TABLE update_runs; --'
+        quoted_table_name = '"' + table_name.replace('"', '""') + '"'
+        with sqlite3.connect(":memory:") as conn:
+            conn.execute("CREATE TABLE update_runs (id INTEGER)")
+            conn.execute(f"CREATE TABLE {quoted_table_name} (id TEXT NOT NULL)")
+
+            _validate_schema(
+                conn,
+                expected_schema={table_name: (("id", "TEXT", 1, None, 0),)},
+            )
+            existing = conn.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name = 'update_runs'
+                """
+            ).fetchone()
+
+        self.assertIsNotNone(existing)
+
+    def test_quote_identifier_rejects_unknown_schema_identifier(self) -> None:
+        with self.assertRaisesRegex(DatabaseError, "Unexpected schema identifier"):
+            _quote_identifier('known_images"; DROP TABLE update_runs; --')
 
     def test_init_db_accepts_matching_version_zero_table(self) -> None:
         with sqlite3.connect(":memory:") as conn:

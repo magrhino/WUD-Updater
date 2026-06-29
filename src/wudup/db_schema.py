@@ -312,6 +312,9 @@ _EXPECTED_SCHEMAS_BY_VERSION: dict[int, SchemaDefinition] = {
     9: EXPECTED_SCHEMA_V9,
     SCHEMA_VERSION: EXPECTED_SCHEMA,
 }
+_SCHEMA_IDENTIFIERS = frozenset(EXPECTED_SCHEMA) | frozenset(
+    column[0] for columns in EXPECTED_SCHEMA.values() for column in columns
+)
 
 _SECURITY_SCAN_CACHE_SCHEMA_V9_SQL = """
 CREATE TABLE IF NOT EXISTS security_scan_cache (
@@ -645,7 +648,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
         conn.executescript(_SECURITY_SCAN_CACHE_SCHEMA_SQL)
         _validate_schema(conn)
         _backfill_schema_migrations(conn, SCHEMA_VERSION)
-        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        conn.execute("PRAGMA user_version = 10")
 
 
 
@@ -712,14 +715,23 @@ def _table_columns(
     conn: sqlite3.Connection,
     table_name: str,
 ) -> tuple[ColumnSchema, ...]:
-    with closing(conn.execute(f"PRAGMA table_info({_quote_identifier(table_name)})")) as cursor:
+    with closing(
+        conn.execute(
+            """
+            SELECT name, type, "notnull", dflt_value, pk
+            FROM pragma_table_info(?)
+            ORDER BY cid
+            """,
+            (table_name,),
+        )
+    ) as cursor:
         return tuple(
             (
-                str(row[1]),
-                str(row[2]).upper(),
-                int(row[3]),
-                None if row[4] is None else str(row[4]),
-                int(row[5]),
+                str(row[0]),
+                str(row[1]).upper(),
+                int(row[2]),
+                None if row[3] is None else str(row[3]),
+                int(row[4]),
             )
             for row in cursor.fetchall()
         )
@@ -742,6 +754,8 @@ def _sqlite_object_type(conn: sqlite3.Connection, name: str) -> str | None:
 
 
 def _quote_identifier(value: str) -> str:
+    if value not in _SCHEMA_IDENTIFIERS:
+        raise DatabaseError(f"Unexpected schema identifier: {value}")
     return '"' + value.replace('"', '""') + '"'
 
 
@@ -1038,13 +1052,16 @@ def _migrate_v6_to_v7(conn: sqlite3.Connection) -> None:
     with conn:
         for table_name in ("pending_updates", "update_events", "known_images"):
             for column in DIGEST_PROVENANCE_SQL_COLUMNS:
-                conn.execute(
-                    f"""
-                    ALTER TABLE {_quote_identifier(table_name)}
-                        ADD COLUMN {_quote_identifier(column)}
-                        TEXT NOT NULL DEFAULT ''
-                    """
+                statement = " ".join(
+                    (
+                        "ALTER TABLE",
+                        _quote_identifier(table_name),
+                        "ADD COLUMN",
+                        _quote_identifier(column),
+                        "TEXT NOT NULL DEFAULT ''",
+                    )
                 )
+                conn.execute(statement)
         conn.execute("PRAGMA user_version = 7")
     _record_schema_migration(conn, 7)
 
