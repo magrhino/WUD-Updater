@@ -12,6 +12,7 @@ from wudup.db import (
     SCHEMA_VERSION,
     _EXPECTED_SCHEMAS_BY_VERSION,
     _MIGRATIONS_BY_TARGET_VERSION,
+    _SECURITY_SCAN_CACHE_SCHEMA_V9_SQL,
     active_dependency_snooze_rows,
     active_snooze,
     active_tag_exclusion_rules,
@@ -388,6 +389,46 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(columns, expected_columns)
         self.assertIn("idx_security_scan_cache_request", indexes)
         self.assertIn("idx_security_scan_cache_image_digest_platform", indexes)
+
+    def test_init_db_migrates_v9_security_cache_and_preserves_rows(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            init_db(conn)
+            conn.execute("ALTER TABLE security_scan_cache RENAME TO old_security_scan_cache")
+            conn.executescript(_SECURITY_SCAN_CACHE_SCHEMA_V9_SQL)
+            conn.execute(
+                """
+                INSERT INTO security_scan_cache (
+                    cache_key,
+                    request_key,
+                    state,
+                    created_at,
+                    updated_at
+                )
+                VALUES ('cache', 'request', 'complete', 'now', 'now')
+                """
+            )
+            conn.execute("DROP TABLE old_security_scan_cache")
+            conn.execute("DELETE FROM schema_migrations WHERE version = 10")
+            conn.execute("PRAGMA user_version = 9")
+
+            init_db(conn)
+
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            row = conn.execute(
+                """
+                SELECT findings_json
+                FROM security_scan_cache
+                WHERE cache_key = 'cache'
+                """
+            ).fetchone()
+            columns = [
+                column[1]
+                for column in conn.execute("PRAGMA table_info(security_scan_cache)")
+            ]
+
+        self.assertEqual(version, SCHEMA_VERSION)
+        self.assertEqual(row[0], "[]")
+        self.assertIn("findings_json", columns)
 
     def test_init_db_rejects_v8_schema_with_conflicting_security_cache(self) -> None:
         with sqlite3.connect(":memory:") as conn:

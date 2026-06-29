@@ -10,7 +10,7 @@ import pytest
 from wudup.db import init_db, utc_timestamp
 from wudup.digest_verifier import ResolvedImageSubject
 from wudup.platforms import ImagePlatform, platform_value
-from wudup.security_scanner import SecurityScanResult
+from wudup.security_scanner import SecurityScanFinding, SecurityScanResult
 from wudup.security_store import (
     cached_scan_by_request,
     cached_scan_by_request_or_unambiguous_platform,
@@ -472,6 +472,8 @@ def test_security_scan_refresh_scans_caches_and_reads_back_result(
     assert item["state"] == "complete"
     assert item["verdict"] == "findings"
     assert item["severity_counts"]["high"] == 1
+    assert item["findings"][0]["vulnerability_id"] == "CVE-2026-0001"
+    assert item["findings"][0]["package_name"] == "openssl"
     assert item["warnings"] == ["subject warning"]
 
     cached = client.get("/api/v1/security-scans")
@@ -481,6 +483,8 @@ def test_security_scan_refresh_scans_caches_and_reads_back_result(
     assert cached_item["state"] == "complete"
     assert cached_item["verdict"] == "findings"
     assert cached_item["severity_counts"]["high"] == 1
+    assert cached_item["findings"][0]["vulnerability_id"] == "CVE-2026-0001"
+    assert cached_item["findings"][0]["package_name"] == "openssl"
     assert cached_item["warnings"] == ["subject warning"]
 
 
@@ -532,6 +536,7 @@ def test_security_scan_cache_readback_uses_unambiguous_cached_platform(
     assert item["state"] == "complete"
     assert item["verdict"] == "findings"
     assert item["severity_counts"]["high"] == 1
+    assert item["findings"][0]["vulnerability_id"] == "CVE-2026-0001"
 
 
 def test_security_scan_cache_readback_does_not_cross_platform_request_keys(
@@ -667,6 +672,48 @@ def test_security_scan_cache_corrupt_counts_degrade_to_zero() -> None:
     assert info.fixable_counts.high == 0
     assert info.unfixed_count == 0
     assert info.warnings == ["subject warning", "scan warning"]
+
+
+def test_security_scan_cache_round_trips_vulnerability_findings() -> None:
+    request = _single_security_request()
+    subject = _exact_subject()
+    result = SecurityScanResult(
+        state="complete",
+        verdict="findings",
+        severity_counts={"critical": 1},
+        findings=(
+            SecurityScanFinding(
+                vulnerability_id="CVE-2026-0001",
+                package_name="openssl",
+                installed_version="1.0.0",
+                fixed_version="1.0.1",
+                severity="critical",
+                title="demo vulnerability",
+                primary_url="https://avd.aquasec.com/nvd/cve-2026-0001",
+            ),
+        ),
+    )
+    with sqlite3.connect(":memory:") as conn:
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        upsert_scan_result(
+            conn,
+            request,
+            subject,
+            result,
+            timestamp=utc_timestamp(),
+        )
+        cached = cached_scan_by_request(conn, request)
+
+    assert cached is not None
+    assert len(cached.findings) == 1
+    assert cached.findings[0].vulnerability_id == "CVE-2026-0001"
+    assert cached.findings[0].package_name == "openssl"
+    assert cached.findings[0].installed_version == "1.0.0"
+    assert cached.findings[0].fixed_version == "1.0.1"
+    assert cached.findings[0].severity == "critical"
+    assert cached.findings[0].title == "demo vulnerability"
+    assert cached.findings[0].primary_url == "https://avd.aquasec.com/nvd/cve-2026-0001"
 
 
 def test_security_scan_cache_platform_fallback_rejects_ambiguous_platforms() -> None:
@@ -895,6 +942,17 @@ class FakeScanner:
             scanner_schema="2",
             severity_counts={"high": 1},
             fixable_counts={"high": 1},
+            findings=(
+                SecurityScanFinding(
+                    vulnerability_id="CVE-2026-0001",
+                    package_name="openssl",
+                    installed_version="1.0.0",
+                    fixed_version="1.0.1",
+                    severity="high",
+                    title="demo vulnerability",
+                    primary_url="https://avd.aquasec.com/nvd/cve-2026-0001",
+                ),
+            ),
         )
 
 

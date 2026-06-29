@@ -139,6 +139,7 @@ __all__ = (
     "RunVerificationSummary",
     "RunVerificationWudStatus",
     "SecurityScanConfig",
+    "SecurityScanFinding",
     "SecurityScanInfo",
     "SecurityScanJobResponse",
     "SecurityScanSeverityCounts",
@@ -1090,6 +1091,16 @@ class SecurityScanSeverityCounts(BaseModel):
     unknown: int = 0
 
 
+class SecurityScanFinding(BaseModel):
+    vulnerability_id: str = ""
+    package_name: str = ""
+    installed_version: str = ""
+    fixed_version: str = ""
+    severity: Literal["critical", "high", "medium", "low", "unknown"] = "unknown"
+    title: str = ""
+    primary_url: str = ""
+
+
 class SecurityScanInfo(BaseModel):
     line_no: int
     state: SecurityScanState
@@ -1107,6 +1118,7 @@ class SecurityScanInfo(BaseModel):
         default_factory=SecurityScanSeverityCounts
     )
     unfixed_count: int = 0
+    findings: list[SecurityScanFinding] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     error_code: str = ""
     error_message: str = ""

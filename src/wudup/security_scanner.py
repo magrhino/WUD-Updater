@@ -16,6 +16,17 @@ SEVERITIES = ("critical", "high", "medium", "low", "unknown")
 
 
 @dataclass(frozen=True)
+class SecurityScanFinding:
+    vulnerability_id: str = ""
+    package_name: str = ""
+    installed_version: str = ""
+    fixed_version: str = ""
+    severity: str = "unknown"
+    title: str = ""
+    primary_url: str = ""
+
+
+@dataclass(frozen=True)
 class SecurityScanResult:
     state: str
     verdict: str = "unknown"
@@ -27,6 +38,7 @@ class SecurityScanResult:
     severity_counts: Mapping[str, int] = field(default_factory=dict)
     fixable_counts: Mapping[str, int] = field(default_factory=dict)
     unfixed_count: int = 0
+    findings: tuple[SecurityScanFinding, ...] = ()
     warnings: tuple[str, ...] = ()
     error_code: str = ""
     error_message: str = ""
@@ -137,6 +149,7 @@ def _result_from_trivy_payload(
     severity_counts = _empty_counts()
     fixable_counts = _empty_counts()
     unfixed_count = 0
+    findings: list[SecurityScanFinding] = []
     for vuln in _vulnerabilities(payload):
         severity = _severity(vuln.get("Severity"))
         severity_counts[severity] += 1
@@ -145,6 +158,7 @@ def _result_from_trivy_payload(
             fixable_counts[severity] += 1
         else:
             unfixed_count += 1
+        findings.append(_finding_from_vulnerability(vuln, severity))
     total = sum(severity_counts.values())
     db = _db_metadata(payload)
     return SecurityScanResult(
@@ -163,6 +177,7 @@ def _result_from_trivy_payload(
         severity_counts=severity_counts,
         fixable_counts=fixable_counts,
         unfixed_count=unfixed_count,
+        findings=tuple(findings),
     )
 
 
@@ -195,6 +210,26 @@ def _db_metadata(payload: Mapping[str, Any]) -> Mapping[str, Any]:
 
 def _empty_counts() -> dict[str, int]:
     return dict.fromkeys(SEVERITIES, 0)
+
+
+def _finding_from_vulnerability(
+    vuln: Mapping[str, Any],
+    severity: str,
+) -> SecurityScanFinding:
+    return SecurityScanFinding(
+        vulnerability_id=str(vuln.get("VulnerabilityID") or "").strip(),
+        package_name=str(vuln.get("PkgName") or "").strip(),
+        installed_version=str(vuln.get("InstalledVersion") or "").strip(),
+        fixed_version=str(vuln.get("FixedVersion") or "").strip(),
+        severity=severity,
+        title=str(vuln.get("Title") or "").strip(),
+        primary_url=_http_url(vuln.get("PrimaryURL")),
+    )
+
+
+def _http_url(value: object) -> str:
+    url = str(value or "").strip()
+    return url if url.startswith(("https://", "http://")) else ""
 
 
 def _severity(value: object) -> str:

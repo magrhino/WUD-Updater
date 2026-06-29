@@ -34,6 +34,7 @@ export type {
   SecurityScanState,
   SecurityScanVerdict,
   SecurityScanSeverityCounts,
+  SecurityScanFinding,
   SecurityScanInfo,
   SecurityScansResponse,
   SecurityScanJobResponse,

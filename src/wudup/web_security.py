@@ -9,7 +9,7 @@ from contextlib import closing
 from dataclasses import dataclass, replace
 from threading import Lock
 import secrets
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -43,6 +43,7 @@ from .web_database import (
 from .web_models import (
     DEFAULT_SECURITY_SCAN_CACHE_DIR,
     SecurityScanConfig,
+    SecurityScanFinding,
     SecurityScanInfo,
     SecurityScanJobResponse,
     SecurityScanSeverityCounts,
@@ -404,6 +405,18 @@ def _result_info(
         severity_counts=_counts_model(result.severity_counts),
         fixable_counts=_counts_model(result.fixable_counts),
         unfixed_count=result.unfixed_count,
+        findings=[
+            SecurityScanFinding(
+                vulnerability_id=finding.vulnerability_id,
+                package_name=finding.package_name,
+                installed_version=finding.installed_version,
+                fixed_version=finding.fixed_version,
+                severity=_finding_severity(finding.severity),
+                title=finding.title,
+                primary_url=finding.primary_url,
+            )
+            for finding in result.findings
+        ],
         warnings=[*subject.warnings, *result.warnings],
         error_code=result.error_code,
         error_message=result.error_message,
@@ -454,8 +467,28 @@ def _sanitize_scan_info(
 ) -> SecurityScanInfo:
     return info.model_copy(
         update={
+            "findings": [
+                _sanitize_scan_finding(settings, finding)
+                for finding in info.findings
+            ],
             "warnings": [_sanitize_text(settings, item) for item in info.warnings],
             "error_message": _sanitize_text(settings, info.error_message),
+        },
+    )
+
+
+def _sanitize_scan_finding(
+    settings: WebSettings,
+    finding: SecurityScanFinding,
+) -> SecurityScanFinding:
+    return finding.model_copy(
+        update={
+            "vulnerability_id": _sanitize_text(settings, finding.vulnerability_id),
+            "package_name": _sanitize_text(settings, finding.package_name),
+            "installed_version": _sanitize_text(settings, finding.installed_version),
+            "fixed_version": _sanitize_text(settings, finding.fixed_version),
+            "title": _sanitize_text(settings, finding.title),
+            "primary_url": _sanitize_text(settings, finding.primary_url),
         },
     )
 
@@ -472,6 +505,21 @@ def _counts_model(values: Mapping[str, int]) -> SecurityScanSeverityCounts:
         low=int(values.get("low", 0)),
         unknown=int(values.get("unknown", 0)),
     )
+
+
+def _finding_severity(
+    value: str,
+) -> Literal["critical", "high", "medium", "low", "unknown"]:
+    severity = value.strip().lower()
+    if severity == "critical":
+        return "critical"
+    if severity == "high":
+        return "high"
+    if severity == "medium":
+        return "medium"
+    if severity == "low":
+        return "low"
+    return "unknown"
 
 
 def _job_response(job: WebSecurityScanJob) -> SecurityScanJobResponse:

@@ -121,6 +121,7 @@ function securityScanInfo(
     severity_counts: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
     fixable_counts: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
     unfixed_count: 0,
+    findings: [],
     warnings: [],
     error_code: "",
     error_message: "",

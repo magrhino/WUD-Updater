@@ -52,7 +52,21 @@ class SecurityScannerTests(unittest.TestCase):
                 {
                     "Vulnerabilities": [
                         {"Severity": "HIGH", "FixedVersion": "1.2.3"},
-                        {"Severity": "MEDIUM", "FixedVersion": ""},
+                        {
+                            "FixedVersion": "",
+                            "InstalledVersion": "2.0.0",
+                            "PkgName": "openssl",
+                            "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-0001",
+                            "Severity": "MEDIUM",
+                            "Title": "demo vulnerability",
+                            "VulnerabilityID": "CVE-2026-0001",
+                        },
+                        {
+                            "PkgName": "ignored-url",
+                            "PrimaryURL": "javascript:alert(1)",
+                            "Severity": "LOW",
+                            "VulnerabilityID": "CVE-2026-0002",
+                        },
                     ],
                 }
             ],
@@ -77,8 +91,20 @@ class SecurityScannerTests(unittest.TestCase):
         self.assertEqual(result.db_revision, "2026-06-26")
         self.assertEqual(result.severity_counts["high"], 1)
         self.assertEqual(result.severity_counts["medium"], 1)
+        self.assertEqual(result.severity_counts["low"], 1)
         self.assertEqual(result.fixable_counts["high"], 1)
-        self.assertEqual(result.unfixed_count, 1)
+        self.assertEqual(result.unfixed_count, 2)
+        self.assertEqual(result.findings[1].vulnerability_id, "CVE-2026-0001")
+        self.assertEqual(result.findings[1].package_name, "openssl")
+        self.assertEqual(result.findings[1].installed_version, "2.0.0")
+        self.assertEqual(result.findings[1].fixed_version, "")
+        self.assertEqual(result.findings[1].severity, "medium")
+        self.assertEqual(result.findings[1].title, "demo vulnerability")
+        self.assertEqual(
+            result.findings[1].primary_url,
+            "https://avd.aquasec.com/nvd/cve-2026-0001",
+        )
+        self.assertEqual(result.findings[2].primary_url, "")
         scan_args, scan_timeout = runner.calls[0]
         self.assertEqual(scan_timeout, 35.0)
         self.assertEqual(

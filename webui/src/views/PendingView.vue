@@ -843,6 +843,7 @@ onMounted(() => {
         :release-note-reason="releaseNoteReason"
         :release-note-status="releaseNoteStatus"
         :risk-cues="riskCues"
+        :security-scan-for="updates.securityScanFor"
         :selected-line-set="selectedLineSet"
         :show-setup-link="showSetupLink"
         :snoozed-items="filteredSnoozedItems"
