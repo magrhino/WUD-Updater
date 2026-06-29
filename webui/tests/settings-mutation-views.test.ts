@@ -386,6 +386,10 @@ describe("settings mutation views", () => {
     await flushPromises();
     const text = wrapper.text();
 
+    expect(text).toContain("Settings map");
+    expect(text).toContain("Operate");
+    expect(text).toContain("Configuration");
+    expect(text).toContain("Support");
     expect(text).toContain("Runtime settings");
     expect(text).toContain("DOCKER_BASE");
     expect(text).toContain("WUD_WEB_PUBLIC_ORIGIN");

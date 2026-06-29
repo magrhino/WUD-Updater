@@ -24,16 +24,34 @@ export const BEHAVIOR_ENTRY_NAMES = new Set([
   "WUD_DIGEST_PIN_UPDATES",
 ]);
 
-export const SETTINGS_SECTION_LINKS = [
-  { id: "settings-actions", label: "Actions" },
-  { id: "settings-preferences", label: "Preferences" },
-  { id: "settings-runtime", label: "Runtime" },
-  { id: "settings-paths", label: "Paths" },
-  { id: "settings-behavior", label: "Behavior" },
-  { id: "settings-webui", label: "WebUI safety" },
-  { id: "settings-secrets", label: "Secrets" },
-  { id: "settings-diagnostics", label: "Diagnostics" },
-  { id: "settings-docs", label: "Docs" },
+export const SETTINGS_NAV_GROUPS = [
+  {
+    id: "operate",
+    label: "Operate",
+    links: [
+      { id: "settings-actions", label: "Actions" },
+      { id: "settings-preferences", label: "Preferences" },
+    ],
+  },
+  {
+    id: "configuration",
+    label: "Configuration",
+    links: [
+      { id: "settings-runtime", label: "Overview" },
+      { id: "settings-paths", label: "Paths" },
+      { id: "settings-behavior", label: "Behavior" },
+      { id: "settings-webui", label: "WebUI safety" },
+      { id: "settings-secrets", label: "Secrets" },
+    ],
+  },
+  {
+    id: "support",
+    label: "Support",
+    links: [
+      { id: "settings-diagnostics", label: "Diagnostics" },
+      { id: "settings-docs", label: "Docs" },
+    ],
+  },
 ] as const;
 
 export const THEME_PREFERENCE_LABELS: Record<string, string> = {

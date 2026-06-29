@@ -64,17 +64,44 @@ async function refreshSettings(): Promise<void> {
     </n-alert>
 
     <SettingsSafetyStrip v-if="settingsData" />
-    <SettingsJumpNav v-if="settingsData" />
-    <SettingsActionsSection
-      v-if="settingsData"
-      :compact="compactSettingsLayout"
-    />
-    <SettingsPreferencesSection
-      v-if="settingsData"
-      :compact="compactSettingsLayout"
-    />
-    <SettingsRuntimeSections :compact="compactSettingsLayout" />
-    <SettingsDiagnosticsSection />
-    <SettingsDocsSection />
+    <div class="settings-layout" :class="{ 'has-settings-map': settingsData }">
+      <SettingsJumpNav v-if="settingsData" />
+      <div class="settings-main content-stack">
+        <SettingsActionsSection
+          v-if="settingsData"
+          :compact="compactSettingsLayout"
+        />
+        <SettingsPreferencesSection
+          v-if="settingsData"
+          :compact="compactSettingsLayout"
+        />
+        <SettingsRuntimeSections :compact="compactSettingsLayout" />
+        <SettingsDiagnosticsSection />
+        <SettingsDocsSection />
+      </div>
+    </div>
   </section>
 </template>
+
+<style scoped>
+.settings-layout {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.settings-layout.has-settings-map {
+  grid-template-columns: minmax(190px, 230px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.settings-main {
+  min-width: 0;
+}
+
+@media (--wud-app-shell) {
+  .settings-layout.has-settings-map {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
