@@ -7,6 +7,7 @@ import {
   entryCountLabel,
   managedOptions,
   secretRows,
+  SETTINGS_NAV_GROUPS,
   settingRows,
   sourceLabel,
   sourceTagType,
@@ -62,5 +63,37 @@ describe("settings display helpers", () => {
     ]);
     expect(coreUpdateTourStatusLabel("completed")).toBe("Completed");
     expect(coreUpdateTourStepLabel("runs_history")).toBe("History");
+  });
+
+  it("keeps the settings nav grouped by workflow", () => {
+    expect(SETTINGS_NAV_GROUPS).toEqual([
+      {
+        id: "operate",
+        label: "Operate",
+        links: [
+          { id: "settings-actions", label: "Actions" },
+          { id: "settings-preferences", label: "Preferences" },
+        ],
+      },
+      {
+        id: "configuration",
+        label: "Configuration",
+        links: [
+          { id: "settings-runtime", label: "Overview" },
+          { id: "settings-paths", label: "Paths" },
+          { id: "settings-behavior", label: "Behavior" },
+          { id: "settings-webui", label: "WebUI safety" },
+          { id: "settings-secrets", label: "Secrets" },
+        ],
+      },
+      {
+        id: "support",
+        label: "Support",
+        links: [
+          { id: "settings-diagnostics", label: "Diagnostics" },
+          { id: "settings-docs", label: "Docs" },
+        ],
+      },
+    ]);
   });
 });
