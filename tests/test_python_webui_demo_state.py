@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from wudup.platforms import ImagePlatform
+from wudup.security_subjects import pending_security_context
 from wudup.web import load_web_settings
 from wudup.web_security import security_scans_response
 
@@ -173,22 +175,29 @@ class WebuiDemoStateTests(unittest.TestCase):
                 ).fetchone()
             static_dir = root / "static"
             static_dir.mkdir()
-            security_scans = security_scans_response(
-                load_web_settings(
-                    {
-                        "DOCKER_BASE": str(docker_base),
-                        "HOST_DOCKER_BASE": str(docker_base),
-                        "WUD_OUT_FILE": str(wud_file),
-                        "WUD_LOG_DIR": str(root / "logs"),
-                        "WUD_DB_PATH": str(db_path),
-                        "WUD_WEB_STATIC_DIR": str(static_dir),
-                        "WUD_SECURITY_SCANNING_ENABLED": "true",
-                    }
-                )
+            settings = load_web_settings(
+                {
+                    "DOCKER_BASE": str(docker_base),
+                    "HOST_DOCKER_BASE": str(docker_base),
+                    "WUD_OUT_FILE": str(wud_file),
+                    "WUD_LOG_DIR": str(root / "logs"),
+                    "WUD_DB_PATH": str(db_path),
+                    "WUD_WEB_STATIC_DIR": str(static_dir),
+                    "WUD_SECURITY_SCANNING_ENABLED": "true",
+                }
+            )
+            security_scans = security_scans_response(settings)
+            scan_context = pending_security_context(
+                settings,
+                include_compose=False,
+                include_wud_metadata=False,
             )
             finding_scan = next(
                 (item for item in security_scans.items if item.findings),
                 None,
+            )
+            scan_request = next(
+                request for request in scan_context.requests if request.line_no == 4
             )
 
         self.assertEqual(run_count[0], 6)
@@ -240,6 +249,9 @@ class WebuiDemoStateTests(unittest.TestCase):
             finding_scan.findings[0].vulnerability_id,
             "CVE-2026-0001",
         )
+        self.assertEqual(scan_request.platform, ImagePlatform("linux", "amd64"))
+        self.assertEqual(scan_request.identity_status, "pending")
+        self.assertEqual(scan_request.error, "")
 
 
 if __name__ == "__main__":

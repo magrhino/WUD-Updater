@@ -185,6 +185,8 @@ DEMO_POSTGRES_IMAGE = "postgres:16"
 DEMO_POSTGRES_DIGEST = (
     "sha256:1111111111111111111111111111111111111111111111111111111111111111"
 )
+DEMO_POSTGRES_PENDING_IMAGE = f"{DEMO_POSTGRES_IMAGE}@{DEMO_POSTGRES_DIGEST}"
+DEMO_POSTGRES_PLATFORM = "linux/amd64"
 DEMO_RADARR_SERVICE_KEY = "media/radarr"
 DEMO_SOURCE_METADATA_JSON = '{"source":"demo"}'
 DEMO_CREATED_AT = "2026-05-28T12:00:00+00:00"
@@ -193,7 +195,7 @@ PENDING_LINES = (
     "# Demo WUD pending update file for local WebUI development.",
     "ghcr.io/home-assistant/home-assistant:2026.5.1 tag=2026.5.3",
     "lscr.io/linuxserver/radarr:5.21.1 tag=5.22.4",
-    f"{DEMO_POSTGRES_IMAGE}@{DEMO_POSTGRES_DIGEST}",
+    f"{DEMO_POSTGRES_PENDING_IMAGE} platform={DEMO_POSTGRES_PLATFORM}",
     f"{DEMO_WUDUP_LATEST_IMAGE} tag={DEMO_WUDUP_TARGET_TAG}",
     "ghcr.io/gethomepage/homepage:v0.9.12 tag=v0.10.9",
     "vaultwarden/server:1.31.0 tag=1.32.0",
@@ -1678,6 +1680,7 @@ def _seed_wud_api_snapshot(settings: WebSettings) -> None:
             link="",
             error="",
             labels={},
+            platform=ImagePlatform("linux", "amd64"),
         ),
         web_wud_api.WudApiContainer(
             id="cid-media-wudup",
@@ -2294,22 +2297,20 @@ def _write_demo_management_state(conn) -> None:
 
 
 def _seed_demo_security_scan_cache(conn) -> None:
-    raw = f"{DEMO_POSTGRES_IMAGE}@{DEMO_POSTGRES_DIGEST}"
-    # The demo WUD line has no platform token; one cached platform lets the
-    # read path use its fallback.
+    raw = f"{DEMO_POSTGRES_PENDING_IMAGE} platform={DEMO_POSTGRES_PLATFORM}"
     request = PendingSecurityRequest(
         line_no=4,
         raw=raw,
-        image=raw,
-        candidate_image=raw,
+        image=DEMO_POSTGRES_PENDING_IMAGE,
+        candidate_image=DEMO_POSTGRES_PENDING_IMAGE,
         reported_digest=DEMO_POSTGRES_DIGEST,
         platform=ImagePlatform("linux", "amd64"),
-        platform_source="demo",
+        platform_source="wud",
     )
     subject = ResolvedImageSubject(
         canonical_registry="docker.io",
         canonical_repository="library/postgres",
-        requested_ref=raw,
+        requested_ref=DEMO_POSTGRES_PENDING_IMAGE,
         reported_digest=DEMO_POSTGRES_DIGEST,
         index_digest=DEMO_POSTGRES_DIGEST,
         manifest_digest=(
