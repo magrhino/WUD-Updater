@@ -17,7 +17,7 @@ from .command import CommandRunner
 from .config import ConfigError, parse_bool_env
 from .db import DatabaseError, init_db, open_db, utc_timestamp
 from .digest_verifier import ResolvedImageSubject
-from .security_scanner import SecurityScanResult, TrivyScanner
+from .security_scanner import SecurityScanResult, TrivyScanner, _http_url
 from .security_severity import normalize_security_severity
 from .security_store import (
     cached_scan_by_request,
@@ -489,7 +489,7 @@ def _sanitize_scan_finding(
             "installed_version": _sanitize_text(settings, finding.installed_version),
             "fixed_version": _sanitize_text(settings, finding.fixed_version),
             "title": _sanitize_text(settings, finding.title),
-            "primary_url": _sanitize_text(settings, finding.primary_url),
+            "primary_url": _http_url(_sanitize_text(settings, finding.primary_url)),
         },
     )
 

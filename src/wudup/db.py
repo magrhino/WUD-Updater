@@ -1688,7 +1688,7 @@ def _migrate_v8_to_v9(conn: sqlite3.Connection) -> None:
         _validate_table_columns(
             conn,
             "security_scan_cache",
-            EXPECTED_SCHEMA["security_scan_cache"],
+            EXPECTED_SCHEMA_V9["security_scan_cache"],
         )
     with conn:
         conn.executescript(_SECURITY_SCAN_CACHE_SCHEMA_V9_SQL)

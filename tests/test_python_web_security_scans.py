@@ -474,6 +474,7 @@ def test_security_scan_refresh_scans_caches_and_reads_back_result(
     assert item["severity_counts"]["high"] == 1
     assert item["findings"][0]["vulnerability_id"] == "CVE-2026-0001"
     assert item["findings"][0]["package_name"] == "openssl"
+    assert item["findings"][0]["primary_url"] == FakeScanner.primary_url
     assert item["warnings"] == ["subject warning"]
 
     cached = client.get("/api/v1/security-scans")
@@ -485,7 +486,53 @@ def test_security_scan_refresh_scans_caches_and_reads_back_result(
     assert cached_item["severity_counts"]["high"] == 1
     assert cached_item["findings"][0]["vulnerability_id"] == "CVE-2026-0001"
     assert cached_item["findings"][0]["package_name"] == "openssl"
+    assert cached_item["findings"][0]["primary_url"] == FakeScanner.primary_url
     assert cached_item["warnings"] == ["subject warning"]
+
+
+def test_security_scan_cache_readback_drops_unsafe_finding_primary_url(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    context = _single_security_context(tmp_path)
+    monkeypatch.setattr(
+        "wudup.web_security.pending_security_context",
+        lambda _settings, **_kwargs: context,
+    )
+    monkeypatch.setattr(
+        "wudup.web_security.default_digest_verifier",
+        lambda _settings: FakeVerifier(),
+    )
+    monkeypatch.setattr(FakeScanner, "primary_url", "javascript:alert(1)")
+    monkeypatch.setattr("wudup.web_security.TrivyScanner", FakeScanner)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+
+    queued = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert queued.status_code == 200
+    job_id = queued.json()["job_id"]
+    result = _poll_until(
+        lambda: _completed_security_job(client, job_id),
+        timeout_message="security scan job did not complete",
+    )
+    item = result["result"]["items"][0]
+    assert item["findings"][0]["primary_url"] == ""
+
+    cached = client.get("/api/v1/security-scans")
+
+    assert cached.status_code == 200
+    cached_item = cached.json()["items"][0]
+    assert cached_item["findings"][0]["primary_url"] == ""
 
 
 def test_security_scan_cache_readback_uses_unambiguous_cached_platform(
@@ -930,6 +977,8 @@ class StaleVerifier:
 
 
 class FakeScanner:
+    primary_url = "https://avd.aquasec.com/nvd/cve-2026-0001"
+
     def __init__(self, *_args, **_kwargs) -> None:
         pass  # Test double accepts the production scanner constructor signature.
 
@@ -950,7 +999,7 @@ class FakeScanner:
                     fixed_version="1.0.1",
                     severity="high",
                     title="demo vulnerability",
-                    primary_url="https://avd.aquasec.com/nvd/cve-2026-0001",
+                    primary_url=self.primary_url,
                 ),
             ),
         )

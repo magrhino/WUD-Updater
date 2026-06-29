@@ -390,6 +390,26 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("idx_security_scan_cache_request", indexes)
         self.assertIn("idx_security_scan_cache_image_digest_platform", indexes)
 
+    def test_init_db_migrates_v8_with_existing_v9_security_cache(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            init_db(conn)
+            conn.execute("ALTER TABLE security_scan_cache RENAME TO old_security_scan_cache")
+            conn.executescript(_SECURITY_SCAN_CACHE_SCHEMA_V9_SQL)
+            conn.execute("DROP TABLE old_security_scan_cache")
+            conn.execute("DELETE FROM schema_migrations WHERE version >= 9")
+            conn.execute("PRAGMA user_version = 8")
+
+            init_db(conn)
+
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            columns = [
+                column[1]
+                for column in conn.execute("PRAGMA table_info(security_scan_cache)")
+            ]
+
+        self.assertEqual(version, SCHEMA_VERSION)
+        self.assertIn("findings_json", columns)
+
     def test_init_db_migrates_v9_security_cache_and_preserves_rows(self) -> None:
         with sqlite3.connect(":memory:") as conn:
             init_db(conn)
