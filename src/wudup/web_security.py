@@ -292,6 +292,10 @@ def _scan_request(
     verifier: Any,
     request: PendingSecurityRequest,
 ) -> SecurityScanInfo:
+    cached = cached_scan_by_request(conn, request)
+    # ponytail: demo fixtures use synthetic digests; keep them stable on refresh.
+    if cached is not None and cached.scanner_version == "demo":
+        return cached
     if request.identity_status != "pending":
         subject = resolve_security_subject(request, verifier)
         return _cache_subject_resolution(settings, conn, request, subject)
