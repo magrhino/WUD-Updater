@@ -50,8 +50,18 @@ from wudup.db import (  # noqa: E402
     upsert_tag_exclusion_rule,
 )
 from wudup import command as command_module  # noqa: E402
-from wudup.digest_verifier import DigestResolveResult  # noqa: E402
+from wudup.digest_verifier import (  # noqa: E402
+    DigestResolveResult,
+    ResolvedImageSubject,
+)
 from wudup.digest_provenance import DigestTagProvenance  # noqa: E402
+from wudup.platforms import ImagePlatform  # noqa: E402
+from wudup.security_scanner import (  # noqa: E402
+    SecurityScanFinding,
+    SecurityScanResult,
+)
+from wudup.security_store import upsert_scan_result  # noqa: E402
+from wudup.security_subjects import PendingSecurityRequest  # noqa: E402
 from wudup.web_retag_identity import retag_target_id  # noqa: E402
 
 
@@ -2121,6 +2131,7 @@ def seed_demo_state(root: Path) -> dict[str, Path]:
     with open_db(db_path) as conn:
         init_db(conn)
         _write_demo_management_state(conn)
+        _seed_demo_security_scan_cache(conn)
         for entry in RUNS:
             log_name = str(entry["log"])
             if log_name:
@@ -2280,6 +2291,59 @@ def _write_demo_management_state(conn) -> None:
             metadata_json=DEMO_SOURCE_METADATA_JSON,
             digest_provenance=known["digest_provenance"],
         )
+
+
+def _seed_demo_security_scan_cache(conn) -> None:
+    raw = f"{DEMO_POSTGRES_IMAGE}@{DEMO_POSTGRES_DIGEST}"
+    # The demo WUD line has no platform token; one cached platform lets the
+    # read path use its fallback.
+    request = PendingSecurityRequest(
+        line_no=4,
+        raw=raw,
+        image=raw,
+        candidate_image=raw,
+        reported_digest=DEMO_POSTGRES_DIGEST,
+        platform=ImagePlatform("linux", "amd64"),
+        platform_source="demo",
+    )
+    subject = ResolvedImageSubject(
+        canonical_registry="docker.io",
+        canonical_repository="library/postgres",
+        requested_ref=raw,
+        reported_digest=DEMO_POSTGRES_DIGEST,
+        index_digest=DEMO_POSTGRES_DIGEST,
+        manifest_digest=(
+            "sha256:"
+            "2222222222222222222222222222222222222222222222222222222222222222"
+        ),
+        os="linux",
+        architecture="amd64",
+        platform_source="demo",
+        identity_status="exact",
+    )
+    result = SecurityScanResult(
+        state="complete",
+        verdict="findings",
+        scanner_version="demo",
+        scanner_schema="trivy-json",
+        db_revision="demo",
+        db_updated_at=DEMO_CREATED_AT,
+        severity_counts={"high": 1},
+        fixable_counts={"high": 1},
+        findings=(
+            SecurityScanFinding(
+                vulnerability_id="CVE-2026-0001",
+                package_name="demo-package",
+                installed_version="1.0.0",
+                fixed_version="1.0.1",
+                severity="high",
+                title="Demo vulnerability for candidate advisory review",
+                primary_url="https://avd.aquasec.com/nvd/cve-2026-0001",
+            ),
+        ),
+        warnings=("Demo finding for candidate-only advisory display.",),
+    )
+    upsert_scan_result(conn, request, subject, result, timestamp=DEMO_CREATED_AT)
 
 
 def _reset_directory(path: Path) -> None:

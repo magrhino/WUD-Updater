@@ -55,6 +55,7 @@ const backend = spawn(
       WUD_WEB_MUTATIONS_ENABLED: "true",
       WUD_WEB_RESTART_CONTAINER: "demo-wudup",
       WUD_WEB_DEMO_SELF_UPDATE: "true",
+      WUD_SECURITY_SCANNING_ENABLED: "true",
       WUD_WEB_ALLOWED_ORIGINS: `http://${frontendHost}:${frontendPort},http://localhost:${frontendPort}`,
     },
   },

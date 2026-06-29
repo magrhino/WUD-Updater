@@ -8,6 +8,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from wudup.web import load_web_settings
+from wudup.web_security import security_scans_response
+
 
 class WebuiDemoStateTests(unittest.TestCase):
     def test_demo_state_seed_is_idempotent(self) -> None:
@@ -161,6 +164,32 @@ class WebuiDemoStateTests(unittest.TestCase):
                     WHERE service_key = 'media/wudup'
                     """
                 ).fetchall()
+                security_scan = conn.execute(
+                    """
+                    SELECT requested_ref, reported_digest, platform, state, verdict,
+                           findings_json
+                    FROM security_scan_cache
+                    """
+                ).fetchone()
+            static_dir = root / "static"
+            static_dir.mkdir()
+            security_scans = security_scans_response(
+                load_web_settings(
+                    {
+                        "DOCKER_BASE": str(docker_base),
+                        "HOST_DOCKER_BASE": str(docker_base),
+                        "WUD_OUT_FILE": str(wud_file),
+                        "WUD_LOG_DIR": str(root / "logs"),
+                        "WUD_DB_PATH": str(db_path),
+                        "WUD_WEB_STATIC_DIR": str(static_dir),
+                        "WUD_SECURITY_SCANNING_ENABLED": "true",
+                    }
+                )
+            )
+            finding_scan = next(
+                (item for item in security_scans.items if item.findings),
+                None,
+            )
 
         self.assertEqual(run_count[0], 6)
         self.assertEqual(pending_count[0], 4)
@@ -190,6 +219,26 @@ class WebuiDemoStateTests(unittest.TestCase):
                 "ghcr.io/magrhino/wudup@sha256:"
                 "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             ),
+        )
+        self.assertIsNotNone(security_scan)
+        self.assertEqual(
+            security_scan[:5],
+            (
+                "postgres:16@sha256:"
+                "1111111111111111111111111111111111111111111111111111111111111111",
+                "sha256:"
+                "1111111111111111111111111111111111111111111111111111111111111111",
+                "linux/amd64",
+                "complete",
+                "findings",
+            ),
+        )
+        self.assertIn("CVE-2026-0001", security_scan[5])
+        self.assertIsNotNone(finding_scan)
+        self.assertEqual(finding_scan.line_no, 4)
+        self.assertEqual(
+            finding_scan.findings[0].vulnerability_id,
+            "CVE-2026-0001",
         )
 
 
