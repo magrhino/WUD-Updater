@@ -18,13 +18,12 @@ Configure a Discord webhook from Settings, or set `DISCORD_WEBHOOK` in the
 WUDup runtime environment. Environment webhooks override and disable the
 WebUI-managed webhook field.
 
-Use WUD's append-only callback (`/wud/on-update.sh`) or the WUD API pending
-source to populate pending updates, then choose **Preview release notes** from
-selected pending updates or from a completed apply job. The WebUI sender builds
-Discord payloads in Python, previews the notification summary without the webhook
-URL, and posts one embed per update in Discord-sized batches. It reads WUD
-trigger summaries when WUD API metadata is available, but it does not call WUD
-trigger POST endpoints.
+Use the WUD API pending source when available, or keep WUD's append-only
+callback as fallback/import compatibility. The WebUI sender builds Discord
+payloads in Python from the shared pending-line representation, previews the
+notification summary without the webhook URL, and posts one embed per update in
+Discord-sized batches. It reads WUD trigger summaries when WUD API metadata is
+available, but it does not call WUD trigger POST endpoints.
 
 If a legacy shell release-note callback is also configured, Discord can receive
 duplicate notifications for the same WUD update. Keep only one notification path
@@ -51,9 +50,10 @@ With summary verbosity, WUDup keeps the message to the release summary and
 links. With full verbosity, the release body is appended and truncated to
 Discord's embed limits.
 
-## Default Callback
+## Legacy Shell Callback
 
-`/wud/on-update.sh` always calls `/wud/append-updates.sh` first. When
+`/wud/on-update.sh` remains available for existing shell-notification
+deployments. It always calls `/wud/append-updates.sh` first. When
 `update_available=true`, it also calls:
 
 ```bash
@@ -113,8 +113,9 @@ Compatibility entrypoints remain available for existing WUD configurations:
 /wud/tag-manager.sh
 ```
 
-New configurations should call `/wud/release-notes-to-discord.sh` directly.
-The compatibility wrappers delegate to the canonical helper.
+New WebUI-focused configurations should not use these shell notification
+wrappers. Keep them only for existing WUD callback setups that intentionally
+send release notes outside the WebUI.
 
 ## LinuxServer.io Mapping
 

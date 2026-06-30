@@ -14,16 +14,15 @@ optional plan-first apply flow.
 _Check out the demo: https://magrhino.github.io/wudup/_
 
 The WebUI container serves the FastAPI backend and packaged Vue SPA from the
-same image. WUD records pending image updates into a shared todo file, and the
-WebUI reads that file to show pending updates and prepare apply plans. When WUD
-shares the Compose app network, the WebUI also probes WUD's internal API for
-display metadata. Experimental WebUI-only `WUD_PENDING_SOURCE=api|auto` modes
-can derive pending entries from that API, but the callback todo file remains the
-default source of truth and the host CLI stays file-based.
+same image. The WebUI normalizes both the callback todo file and WUD's internal
+API metadata into the same pending-line format before planning or applying
+updates. New WebUI deployments should treat `WUD_PENDING_SOURCE=api|auto` as
+the forward path once their WUD API access is healthy; the callback todo file
+remains the default fallback/import source and the host CLI stays file-based.
 
 ```text
 WUD detects an image update
--> /wud/on-update.sh records it in /out/images.todo
+-> WUD API or /wud/append-updates.sh produces pending lines
 -> the WebUI shows pending updates, checks readiness, and builds an apply plan
 -> approved plans run docker-update-from-wud and clean successful todo lines
 ```
@@ -84,10 +83,11 @@ commands:
 | Docker script runner | You want short-lived `docker compose run` commands for `doctor`, dry runs, and applies without a persistent WebUI. | [Docker script runner](docs/DEPLOYMENT.md#docker-script-runner) |
 | Host install | You want `updates` and `docker-update-from-wud` on the host `PATH` with host-managed WUD script mounts. | [Host install](docs/DEPLOYMENT.md#host-install) |
 
-The WebUI/API is the primary supported workflow. The `updates` CLI is retained
-as an admin convenience for host and helper-container operators; CLI/WebUI
-feature parity is not a project goal. New review and interactive features
-should generally go to the WebUI/API first.
+The WebUI/API is the primary supported workflow. The `updates` and
+`docker-update-from-wud` CLI paths are retained as legacy file-mode conveniences
+for host and helper-container operators; API mode and CLI/WebUI feature parity
+are not project goals. New review and interactive features should go to the
+WebUI/API first.
 
 ## Documentation
 

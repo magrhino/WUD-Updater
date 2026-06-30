@@ -23,11 +23,14 @@ http://127.0.0.1:7417
 ```
 
 The same stack also starts WUD and syncs packaged callback scripts into the
-shared `wud-scripts` volume. Configure WUD to call:
+shared `wud-scripts` volume. For file-mode fallback, configure WUD to call:
 
 ```text
-/wud/on-update.sh
+/wud/append-updates.sh
 ```
+
+Use `/wud/on-update.sh` only when you intentionally keep the legacy shell
+release-note notification path.
 
 ## First Login
 

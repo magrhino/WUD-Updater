@@ -1,8 +1,8 @@
 # Container Script Sync
 
 Container-first deployments can let the helper image manage the scripts mounted
-into the WUD container. This keeps `/wud/on-update.sh` and related helpers in
-sync with the image version.
+into the WUD container. This keeps `/wud/append-updates.sh`,
+`/wud/on-update.sh`, and related helpers in sync with the image version.
 
 ## How It Works
 
@@ -31,8 +31,11 @@ Set `WUD_SYNC_SCRIPTS=false` to opt out of startup sync. Set
 After the first sync, configure WUD to call:
 
 ```text
-/wud/on-update.sh
+/wud/append-updates.sh
 ```
+
+Use `/wud/on-update.sh` only when you intentionally keep the legacy shell
+release-note notification path.
 
 ## Safety Rules
 
@@ -59,7 +62,7 @@ Run a one-shot sync with:
 docker compose -f docs/examples/docker-compose.example.yml run --rm wudup sync-wud-scripts
 ```
 
-Run this once before relying on `/wud/on-update.sh` when you intentionally
+Run this once before relying on `/wud/append-updates.sh` when you intentionally
 disabled startup sync. During upgrades, recreating `wudup` refreshes the
 scripts automatically when the managed script volume is mounted.
 

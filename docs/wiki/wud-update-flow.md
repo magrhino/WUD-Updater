@@ -1,15 +1,19 @@
 # WUD Update Flow
 
-WUDup is built around a shared, line-oriented todo file. WUD writes update
-events into that file, and the host or helper container later applies selected
-entries.
+WUDup is built around shared, line-oriented pending entries. The legacy CLI reads
+those entries from `images.todo` only. The WebUI can either read that file or
+render WUD API container metadata into the same pending-line format before
+planning, applying, or previewing release notes.
 
 ## Callback Flow
 
+This is the legacy file-mode flow used by `updates` and `docker-update-from-wud`.
+
 1. WUD detects an available image update.
-2. WUD calls `/wud/on-update.sh`.
-3. `on-update.sh` calls `/wud/append-updates.sh`.
-4. `append-updates.sh` appends or replaces one line in `${WUD_OUT_FILE}`.
+2. WUD calls `/wud/append-updates.sh`.
+3. `append-updates.sh` appends or replaces one line in `${WUD_OUT_FILE}`.
+4. Legacy `/wud/on-update.sh` remains available when shell release-note
+   notifications are intentional; it delegates to `append-updates.sh` first.
 5. `updates` displays the file and asks whether to run `docker-update-from-wud`.
 6. `docker-update-from-wud` discovers Compose projects under `DOCKER_BASE`,
    pulls matching images, recreates matching services or stacks, waits for
@@ -17,6 +21,10 @@ entries.
 
 The default WUD output path is `/out/images.todo` inside the WUD container. Host
 installs commonly map that to `$HOME/docker/wud/out/images.todo`.
+
+For WebUI deployments, `WUD_PENDING_SOURCE=api` skips the callback file and
+derives the same pending lines from WUD `/api/containers`; `auto` uses that API
+when available and falls back to `WUD_OUT_FILE`.
 
 ## Todo File Format
 

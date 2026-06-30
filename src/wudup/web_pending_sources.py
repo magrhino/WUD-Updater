@@ -116,7 +116,8 @@ def _file_source(
     wud_snapshot: web_wud_api.WudApiSnapshot | None = None,
 ) -> PendingSourceResult:
     path = settings.config.wud_out_file
-    exists, text, parsed = _read_pending_file(path)
+    exists, text = _read_pending_file(path)
+    parsed, source_hash = _parse_pending_source_text(text)
     snapshot = wud_snapshot
     metadata_by_line: dict[int, web_wud_api.WudApiContainer] = {}
     if include_wud_metadata:
@@ -141,7 +142,7 @@ def _file_source(
         exists=exists,
         parsed=parsed,
         text=text,
-        source_hash=_sha256(text),
+        source_hash=source_hash,
         fresh=not degraded,
         degraded=degraded,
         fallback_reason=fallback_reason,
@@ -183,7 +184,7 @@ def _api_source(
 
     lines = _api_pending_lines(snapshot.containers)
     text = _pending_text(line.raw for line in lines)
-    parsed = parse_wud_text(text)
+    parsed, source_hash = _parse_pending_source_text(text)
     metadata_by_line = {
         line_no: line.container for line_no, line in enumerate(lines, start=1)
     }
@@ -201,7 +202,7 @@ def _api_source(
         exists=True,
         parsed=parsed,
         text=text,
-        source_hash=_sha256(text),
+        source_hash=source_hash,
         warnings=parsed.warnings,
         wud_snapshot=snapshot,
         metadata_by_line=metadata_by_line,
@@ -219,15 +220,16 @@ def _empty_api_source(
     warnings: tuple[str, ...],
 ) -> PendingSourceResult:
     text = ""
+    parsed, source_hash = _parse_pending_source_text(text)
     return PendingSourceResult(
         configured=configured,
         active="api",
         label=API_SOURCE_FILE_LABEL,
         source_file=API_SOURCE_FILE_LABEL,
         exists=False,
-        parsed=ParsedWudFile(lines=(), targets=(), warnings=()),
+        parsed=parsed,
         text=text,
-        source_hash=_sha256(text),
+        source_hash=source_hash,
         fresh=not degraded,
         degraded=degraded,
         fallback_reason="" if configured == "api" else detail,
@@ -331,12 +333,16 @@ def _container_sort_key(
     )
 
 
-def _read_pending_file(path: Path) -> tuple[bool, str, ParsedWudFile]:
+def _read_pending_file(path: Path) -> tuple[bool, str]:
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return False, "", ParsedWudFile(lines=(), targets=(), warnings=())
-    return True, text, parse_wud_text(text)
+        return False, ""
+    return True, text
+
+
+def _parse_pending_source_text(text: str) -> tuple[ParsedWudFile, str]:
+    return parse_wud_text(text), _sha256(text)
 
 
 def _pending_text(lines: Iterable[str]) -> str:
