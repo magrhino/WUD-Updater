@@ -1,18 +1,22 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { NTag } from "naive-ui";
+import { computed, ref, watch } from "vue";
+import { NPagination, NSelect, NTag } from "naive-ui";
 
 import type { SecurityScanFinding, SecurityScanInfo } from "../../api/client";
 import { pluralize } from "../../views/pending/utils";
 
 type TagType = "default" | "error" | "info" | "success" | "warning";
 type Severity = SecurityScanFinding["severity"];
+type SeverityFilter = Severity | "all";
 
 const props = defineProps<{
   scan: SecurityScanInfo;
 }>();
 
+const findingPageSize = 10;
 const severityOrder: Severity[] = ["critical", "high", "medium", "low", "unknown"];
+const selectedSeverity = ref<SeverityFilter>("all");
+const findingPage = ref(1);
 
 const visible = computed(
   () =>
@@ -42,6 +46,54 @@ const findingCount = computed(
   () =>
     props.scan.findings.length ||
     severityItems.value.reduce((total, item) => total + item.count, 0),
+);
+const severityFilterItems = computed(() =>
+  severityOrder
+    .map((severity) => ({
+      count: props.scan.findings.filter((finding) => finding.severity === severity).length,
+      severity,
+    }))
+    .filter((item) => item.count > 0),
+);
+const severityFilterOptions = computed(() => [
+  {
+    label: `All categories (${props.scan.findings.length})`,
+    value: "all",
+  },
+  ...severityFilterItems.value.map((item) => ({
+    label: `${titleCase(item.severity)} (${item.count})`,
+    value: item.severity,
+  })),
+]);
+const filteredFindings = computed(() =>
+  selectedSeverity.value === "all"
+    ? props.scan.findings
+    : props.scan.findings.filter((finding) => finding.severity === selectedSeverity.value),
+);
+const pagedFindings = computed(() => {
+  const start = (findingPage.value - 1) * findingPageSize;
+  return filteredFindings.value.slice(start, start + findingPageSize);
+});
+const findingPageCount = computed(() =>
+  Math.max(1, Math.ceil(filteredFindings.value.length / findingPageSize)),
+);
+const findingPageStart = computed(() =>
+  filteredFindings.value.length ? (findingPage.value - 1) * findingPageSize + 1 : 0,
+);
+const findingPageEnd = computed(() =>
+  Math.min(findingPage.value * findingPageSize, filteredFindings.value.length),
+);
+const showFindingControls = computed(
+  () =>
+    severityFilterItems.value.length > 1 ||
+    filteredFindings.value.length > findingPageSize,
+);
+
+watch(
+  [selectedSeverity, () => props.scan.findings],
+  () => {
+    findingPage.value = 1;
+  },
 );
 
 function severityType(severity: Severity): TagType {
@@ -123,9 +175,24 @@ function findingTitle(finding: SecurityScanFinding): string {
       This cached scan only has summary counts. Refresh scans to collect vulnerability rows.
     </p>
 
+    <div v-if="scan.findings.length && showFindingControls" class="security-finding-controls">
+      <n-select
+        v-if="severityFilterItems.length > 1"
+        v-model:value="selectedSeverity"
+        class="security-finding-filter"
+        size="small"
+        :options="severityFilterOptions"
+        aria-label="Security finding category filter"
+      />
+      <span class="security-review-meta">
+        Showing {{ findingPageStart }}-{{ findingPageEnd }} of
+        {{ pluralize(filteredFindings.length, "finding") }}
+      </span>
+    </div>
+
     <div v-if="scan.findings.length" class="security-finding-list">
       <article
-        v-for="finding in scan.findings"
+        v-for="finding in pagedFindings"
         :key="`${finding.vulnerability_id}-${finding.package_name}`"
         class="security-finding-row"
       >
@@ -163,6 +230,14 @@ function findingTitle(finding: SecurityScanFinding): string {
         </dl>
       </article>
     </div>
+
+    <n-pagination
+      v-if="filteredFindings.length > findingPageSize"
+      v-model:page="findingPage"
+      size="small"
+      :page-count="findingPageCount"
+      :page-slot="5"
+    />
   </section>
 </template>
 
@@ -178,12 +253,21 @@ function findingTitle(finding: SecurityScanFinding): string {
 
 .security-review-header,
 .security-counts,
+.security-finding-controls,
 .security-finding-heading {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 8px;
   min-width: 0;
+}
+
+.security-finding-controls {
+  justify-content: space-between;
+}
+
+.security-finding-filter {
+  width: 180px;
 }
 
 .security-count-note,

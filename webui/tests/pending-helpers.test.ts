@@ -2,7 +2,11 @@ import { mount, type VueWrapper } from "@vue/test-utils";
 import { defineComponent, h, type Component, type VNodeChild } from "vue";
 import { describe, expect, it, vi } from "vitest";
 
-import type { PendingItem, SecurityScanInfo } from "../src/api/client";
+import type {
+  PendingItem,
+  SecurityScanFinding,
+  SecurityScanInfo,
+} from "../src/api/client";
 import PendingCleanupModal from "../src/components/pending/PendingCleanupModal.vue";
 import PendingPlanReviewModal from "../src/components/pending/PendingPlanReviewModal.vue";
 import PendingRemovalModal from "../src/components/pending/PendingRemovalModal.vue";
@@ -100,6 +104,45 @@ function securityScanInfo(
     ...overrides,
     severity_counts: severityCounts,
   };
+}
+
+function securityFinding(
+  index: number,
+  severity: SecurityScanFinding["severity"] = "high",
+  overrides: Partial<SecurityScanFinding> = {},
+): SecurityScanFinding {
+  const id = String(index).padStart(4, "0");
+  return {
+    vulnerability_id: `CVE-2026-${id}`,
+    package_name: `package-${id}`,
+    installed_version: "1.0.0",
+    fixed_version: "1.0.1",
+    severity,
+    title: `${severity} vulnerability ${id}`,
+    primary_url: "",
+    ...overrides,
+  };
+}
+
+function securityScanWithFindings(
+  findings: SecurityScanFinding[],
+): SecurityScanInfo {
+  const severity_counts = {
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+    unknown: 0,
+  };
+  for (const finding of findings) {
+    severity_counts[finding.severity] += 1;
+  }
+  return securityScanInfo({
+    state: "complete",
+    verdict: "findings",
+    findings,
+    severity_counts,
+  });
 }
 
 function pendingPlanReviewModalProps(
@@ -502,6 +545,62 @@ describe("pending helper modules", () => {
     expect(wrapper.find("a").attributes("href")).toBe(
       "https://avd.aquasec.com/nvd/cve-2026-0001",
     );
+  });
+
+  it("filters candidate security scan findings by present severity categories", async () => {
+    const wrapper = mountPendingModal(PendingSecurityScanDetails, {
+      scan: securityScanWithFindings([
+        securityFinding(1, "critical"),
+        securityFinding(2, "high"),
+        securityFinding(3, "high"),
+        securityFinding(4, "low"),
+      ]),
+    });
+
+    const options = wrapper
+      .find('select[aria-label="Security finding category filter"]')
+      .findAll("option")
+      .map((option) => option.text());
+
+    expect(options).toEqual([
+      "All categories (4)",
+      "Critical (1)",
+      "High (2)",
+      "Low (1)",
+    ]);
+    expect(options).not.toContain("Medium (0)");
+    expect(options).not.toContain("Unknown (0)");
+
+    await wrapper
+      .find('select[aria-label="Security finding category filter"]')
+      .setValue("high");
+
+    expect(wrapper.text()).toContain("CVE-2026-0002");
+    expect(wrapper.text()).toContain("CVE-2026-0003");
+    expect(wrapper.text()).not.toContain("CVE-2026-0001");
+    expect(wrapper.text()).not.toContain("CVE-2026-0004");
+  });
+
+  it("paginates candidate security scan findings", async () => {
+    const wrapper = mountPendingModal(PendingSecurityScanDetails, {
+      scan: securityScanWithFindings(
+        Array.from({ length: 12 }, (_, index) => securityFinding(index + 1)),
+      ),
+    });
+
+    expect(wrapper.text()).toContain("Showing 1-10 of 12 findings");
+    expect(wrapper.text()).toContain("CVE-2026-0001");
+    expect(wrapper.text()).toContain("CVE-2026-0010");
+    expect(wrapper.text()).not.toContain("CVE-2026-0011");
+
+    const pageTwo = wrapper.findAll("button").find((button) => button.text() === "2");
+    expect(pageTwo).toBeTruthy();
+    await pageTwo?.trigger("click");
+
+    expect(wrapper.text()).toContain("Showing 11-12 of 12 findings");
+    expect(wrapper.text()).not.toContain("CVE-2026-0001");
+    expect(wrapper.text()).toContain("CVE-2026-0011");
+    expect(wrapper.text()).toContain("CVE-2026-0012");
   });
 
   it("summarizes candidate security scans with shared severity semantics", () => {
