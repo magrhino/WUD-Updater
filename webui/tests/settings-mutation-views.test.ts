@@ -698,6 +698,52 @@ describe("settings mutation views", () => {
     expect(wrapper.text()).toContain("Test webhook sent. Audit run #80.");
   });
 
+  it("shows an error when sending the test webhook fails", async () => {
+    const { pinia, settings } = setupStores(true);
+    settings.settings = settingsResponse({
+      webui: settingsResponse().webui.map((entry) =>
+        entry.name === "WUD_WEB_MUTATIONS_ENABLED"
+          ? { ...entry, value: "true", configured: true, source: "configured" as const }
+          : entry,
+      ),
+      managed: settingsResponse().managed.map((entry) =>
+        entry.key === "release_notifications_discord_webhook"
+          ? { ...entry, configured: true, source: "configured" as const }
+          : entry,
+      ),
+    });
+    settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    const testWebhook = vi
+      .spyOn(settings, "testReleaseNotificationWebhook")
+      .mockRejectedValue(
+        new Error("Discord release-note webhook is not configured"),
+      );
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+    const sendButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Send test"));
+    await sendButton?.trigger("click");
+
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.text()).toContain("Send test webhook");
+
+    const confirmButton = dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Send test"));
+    await confirmButton?.trigger("click");
+    await flushPromises();
+
+    expect(testWebhook).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    expect(wrapper.find('[role="alert"]').text()).toContain(
+      "Discord release-note webhook is not configured",
+    );
+    expect(wrapper.text()).not.toContain("Test webhook sent");
+  });
+
   it("blocks test webhook while dirty, unconfigured, or read-only", async () => {
     const { pinia, settings } = setupStores(true);
     settings.settings = settingsResponse({
