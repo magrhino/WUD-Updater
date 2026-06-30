@@ -92,6 +92,12 @@ const showFindingControls = computed(
 watch(
   [selectedSeverity, () => props.scan.findings],
   () => {
+    if (
+      selectedSeverity.value !== "all" &&
+      !props.scan.findings.some((finding) => finding.severity === selectedSeverity.value)
+    ) {
+      selectedSeverity.value = "all";
+    }
     findingPage.value = 1;
   },
 );

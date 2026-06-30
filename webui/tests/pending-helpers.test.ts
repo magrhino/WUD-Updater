@@ -581,6 +581,25 @@ describe("pending helper modules", () => {
     expect(wrapper.text()).not.toContain("CVE-2026-0004");
   });
 
+  it("clears stale security scan severity filters after scan refresh", async () => {
+    const wrapper = mountPendingModal(PendingSecurityScanDetails, {
+      scan: securityScanWithFindings([
+        securityFinding(1, "critical"),
+        securityFinding(2, "high"),
+      ]),
+    });
+
+    await wrapper
+      .find('select[aria-label="Security finding category filter"]')
+      .setValue("critical");
+    await wrapper.setProps({
+      scan: securityScanWithFindings([securityFinding(3, "high")]),
+    });
+
+    expect(wrapper.text()).toContain("CVE-2026-0003");
+    expect(wrapper.text()).not.toContain("CVE-2026-0001");
+  });
+
   it("paginates candidate security scan findings", async () => {
     const wrapper = mountPendingModal(PendingSecurityScanDetails, {
       scan: securityScanWithFindings(
