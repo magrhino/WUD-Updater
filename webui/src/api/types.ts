@@ -485,6 +485,11 @@ export interface ReleaseNoteInfo {
   links: ReleaseNoteLink[];
   refreshed_at: string;
   error: string;
+  notification_key: string;
+  notification_status: string;
+  notification_last_sent_at: string;
+  notification_send_count: number;
+  notification_skipped_reason: string;
 }
 
 export interface ReleaseNotesResponse {
@@ -523,15 +528,21 @@ export interface ReleaseNotificationItem {
   upstream_repo: string;
   links: ReleaseNoteLink[];
   triggers: ReleaseNotificationTrigger[];
+  notification_key: string;
+  notification_status: string;
+  notification_last_sent_at: string;
+  notification_send_count: number;
   skipped_reason: string;
 }
 
 export type ReleaseNotificationSource =
-  | { line_numbers: number[] }
-  | { run_id: number };
+  | { line_numbers: number[]; resend?: boolean }
+  | { run_id: number; resend?: boolean };
 
 export interface ReleaseNotificationResponse {
   enabled: boolean;
+  mode: "digest" | "per_container";
+  resend_policy: "remote_change" | "cooldown";
   destination: ReleaseNotificationDestination;
   source: PendingSourceInfo;
   source_file: string;

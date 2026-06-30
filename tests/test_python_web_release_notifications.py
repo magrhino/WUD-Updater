@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import urllib.error
 from pathlib import Path
+from types import SimpleNamespace
 
 from wudup import web_release_notifications as notifications_module
 from wudup.db import init_db, insert_pending_update, insert_update_run, open_db
@@ -15,6 +16,13 @@ from tests.web_test_helpers import (
     _install_wud_api,
     _wud_api_container,
 )
+
+_RELEASE_NOTIFICATION_ENV = {
+    "WUD_WEB_DEV_NO_AUTH": "true",
+    "WUD_WEB_MUTATIONS_ENABLED": "true",
+    "WUD_RELEASE_NOTES_ENABLED": "true",
+    "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
+}
 
 
 def _fake_release_refresh(monkeypatch) -> None:
@@ -49,6 +57,189 @@ def _fake_release_refresh(monkeypatch) -> None:
         "refresh_release_notes",
         fake_refresh_release_notes,
     )
+
+
+def _capture_discord_posts(
+    monkeypatch,
+    *,
+    fail_on: int | None = None,
+) -> list[tuple[str, object]]:
+    posted: list[tuple[str, object]] = []
+
+    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
+        posted.append((webhook_url, payload))
+        if fail_on is not None and len(posted) == fail_on:
+            raise urllib.error.HTTPError(
+                webhook_url,
+                500,
+                "Discord webhook request failed webhook-secret",
+                {},
+                None,
+            )
+
+    monkeypatch.setattr(
+        notifications_module,
+        "_post_discord_payload",
+        fake_post_discord_payload,
+    )
+    return posted
+
+
+def _release_notification_client(tmp_path: Path, monkeypatch):
+    _fake_release_refresh(monkeypatch)
+    posted = _capture_discord_posts(monkeypatch)
+    return _client(tmp_path, _RELEASE_NOTIFICATION_ENV), posted
+
+
+def _write_pending_lines(tmp_path: Path, lines: list[str]) -> None:
+    (tmp_path / "state" / "images.todo").write_text(
+        "\n".join(lines) + "\n",
+        encoding="utf-8",
+    )
+
+
+def test_notification_identity_includes_wud_metadata() -> None:
+    target = notifications_module.WudTarget(
+        line_no=1,
+        raw="ghcr.io/acme/app:1.0.0 tag=2.0.0",
+        first="ghcr.io/acme/app:1.0.0",
+        key="app",
+        repo="ghcr.io/acme/app",
+        has_tag=True,
+        allow_repo=True,
+        digest="",
+        desired_tag="2.0.0",
+        tag_token="1.0.0",
+    )
+    note = notifications_module.ReleaseNoteInfo(
+        line_no=1,
+        status="ready",
+        provider="github",
+        image_repo="ghcr.io/acme/app",
+        upstream_repo="acme/app",
+        release_tag="2.0.0",
+        title="v2.0.0",
+    )
+    metadata = SimpleNamespace(
+        local_digest="sha256:local",
+        remote_tag="2.0.0",
+        remote_digest="sha256:remote-a",
+        link="https://github.com/acme/app",
+        labels={
+            "org.opencontainers.image.source": "https://github.com/acme/app",
+            "ignored": "not persisted",
+        },
+    )
+
+    first = notifications_module.web_release_notification_state.notification_identity(
+        target,
+        note,
+        metadata,
+    )
+
+    assert first.metadata["metadata"] == {
+        "local_digest": "sha256:local",
+        "remote_tag": "2.0.0",
+        "remote_digest": "sha256:remote-a",
+        "link": "https://github.com/acme/app",
+        "source_label": "https://github.com/acme/app",
+    }
+    mapped_metadata = notifications_module.web_release_notification_state.notification_identity(
+        target,
+        note,
+        {"watcher": "docker.local", "container": "app-a", "update_kind": "tag"},
+    )
+    changed_mapped_metadata = notifications_module.web_release_notification_state.notification_identity(
+        target,
+        note,
+        {"watcher": "docker.local", "container": "app-b", "update_kind": "tag"},
+    )
+
+    assert mapped_metadata.notification_key != changed_mapped_metadata.notification_key
+
+    unresolved_target = notifications_module.WudTarget(
+        line_no=1,
+        raw="ghcr.io/acme/app:1.0.0",
+        first="ghcr.io/acme/app:1.0.0",
+        key="app",
+        repo="ghcr.io/acme/app",
+        has_tag=True,
+        allow_repo=True,
+        digest="",
+        desired_tag="",
+        tag_token="1.0.0",
+    )
+    unresolved_note = note.model_copy(update={"release_tag": ""})
+    first_fallback = notifications_module.web_release_notification_state.notification_identity(
+        unresolved_target,
+        unresolved_note,
+        metadata,
+    )
+    changed_fallback = notifications_module.web_release_notification_state.notification_identity(
+        unresolved_target,
+        unresolved_note,
+        SimpleNamespace(**{**metadata.__dict__, "remote_digest": "sha256:remote-b"}),
+    )
+
+    assert first_fallback.notification_key != changed_fallback.notification_key
+
+
+def test_failed_notification_history_with_prior_send_is_skipped() -> None:
+    state = notifications_module.web_release_notification_state
+    identity = state.NotificationIdentity(
+        notification_key="notification-a",
+        metadata={},
+    )
+    history = state.NotificationHistory(
+        notification_key=identity.notification_key,
+        mode="digest",
+        status="failure",
+        last_attempted_at="2026-01-02T00:00:00+00:00",
+        last_sent_at="2026-01-01T00:00:00+00:00",
+        send_count=1,
+        last_audit_run_id=1,
+        metadata={},
+    )
+
+    assert state.notification_decision(
+        state.ReleaseNotificationConfig(),
+        identity,
+        history,
+        resend=False,
+    ) == ("skipped_duplicate", "Already sent for this update.")
+    assert state.notification_decision(
+        state.ReleaseNotificationConfig(),
+        identity,
+        history,
+        resend=True,
+    ) == ("manual_resend", "")
+
+
+def test_notification_history_by_key_binds_keys(tmp_path: Path) -> None:
+    db_path = tmp_path / "state" / "wud.sqlite"
+    hostile_key = "abc') OR 1=1 --"
+    with open_db(db_path) as conn:
+        init_db(conn)
+        with conn:
+            for key in (hostile_key, "other-key"):
+                notifications_module.web_release_notification_state.upsert_notification_history(
+                    conn,
+                    identity=notifications_module.web_release_notification_state.NotificationIdentity(
+                        notification_key=key,
+                        metadata={},
+                    ),
+                    config=notifications_module.web_release_notification_state.ReleaseNotificationConfig(),
+                    status="sent",
+                    audit_run_id=1,
+                    now="2026-06-01T00:00:00+00:00",
+                )
+
+        histories = notifications_module.web_release_notification_state.notification_history_by_key(
+            conn,
+            {hostile_key},
+        )
+
+    assert set(histories) == {hostile_key}
 
 
 def test_release_notification_preview_includes_wud_triggers(
@@ -185,6 +376,8 @@ def test_notification_items_cache_wud_trigger_lookup_by_container(
         object(),
         source,
         notes,
+        config=notifications_module.web_release_notification_state.ReleaseNotificationConfig(),
+        resend=False,
     )
 
     assert calls == ["docker.local.app"]
@@ -520,34 +713,14 @@ def test_release_notification_preview_and_send_redact_cached_errors(
             for target in targets
         ]
 
-    posted: list[tuple[str, object]] = []
-
-    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
-        posted.append((webhook_url, payload))
-
     monkeypatch.setattr(
         notifications_module,
         "refresh_release_notes",
         fake_refresh_release_notes,
     )
-    monkeypatch.setattr(
-        notifications_module,
-        "_post_discord_payload",
-        fake_post_discord_payload,
-    )
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
-        },
-    )
-    (tmp_path / "state" / "images.todo").write_text(
-        "ghcr.io/acme/app:1.0.0 tag=2.0.0\n",
-        encoding="utf-8",
-    )
+    posted = _capture_discord_posts(monkeypatch)
+    client = _client(tmp_path, _RELEASE_NOTIFICATION_ENV)
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
 
     preview = client.post(
         "/api/v1/release-notifications/preview",
@@ -571,30 +744,8 @@ def test_release_notification_send_posts_discord_payload_and_audits(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _fake_release_refresh(monkeypatch)
-    posted: list[tuple[str, object]] = []
-
-    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
-        posted.append((webhook_url, payload))
-
-    monkeypatch.setattr(
-        notifications_module,
-        "_post_discord_payload",
-        fake_post_discord_payload,
-    )
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
-        },
-    )
-    (tmp_path / "state" / "images.todo").write_text(
-        "ghcr.io/acme/app:1.0.0 tag=2.0.0\n",
-        encoding="utf-8",
-    )
+    client, posted = _release_notification_client(tmp_path, monkeypatch)
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
 
     response = client.post(
         "/api/v1/release-notifications/send",
@@ -633,20 +784,81 @@ def test_release_notification_send_posts_discord_payload_and_audits(
     assert "webhook-secret" not in serialized
 
 
-def test_release_notification_send_batches_discord_embeds(
+def test_release_notification_send_records_history_and_skips_duplicate_preview(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client, posted = _release_notification_client(tmp_path, monkeypatch)
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
+    headers = _csrf_headers(client)
+
+    sent = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "confirmation": "send-release-notes"},
+        headers=headers,
+    )
+    preview = client.post(
+        "/api/v1/release-notifications/preview",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+    duplicate_send = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "confirmation": "send-release-notes"},
+        headers=headers,
+    )
+
+    sent_body = sent.json()
+    preview_body = preview.json()
+    assert sent.status_code == 200
+    assert sent_body["items"][0]["notification_status"] == "new"
+    assert sent_body["items"][0]["notification_key"]
+    assert preview.status_code == 200
+    assert preview_body["sendable_count"] == 0
+    assert preview_body["skipped_count"] == 1
+    assert preview_body["items"][0]["notification_status"] == "skipped_duplicate"
+    assert preview_body["items"][0]["notification_send_count"] == 1
+    assert preview_body["items"][0]["skipped_reason"] == "Already sent for this update."
+    assert duplicate_send.status_code == 422
+    assert len(posted) == 1
+
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        history = conn.execute(
+            """
+            SELECT *
+            FROM release_notification_history
+            WHERE notification_key = ?
+            """,
+            (sent_body["items"][0]["notification_key"],),
+        ).fetchone()
+
+    assert history["status"] == "sent"
+    assert history["send_count"] == 1
+    assert history["last_audit_run_id"] == sent_body["audit_run_id"]
+    assert "webhook-secret" not in history["metadata_json"]
+
+
+def test_release_notification_duplicate_key_survives_missing_wud_metadata(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     _fake_release_refresh(monkeypatch)
-    posted: list[tuple[str, object]] = []
-
-    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
-        posted.append((webhook_url, payload))
-
+    _install_wud_api(
+        monkeypatch,
+        containers=[
+            _wud_api_container(
+                image="ghcr.io/acme/app",
+                tag="1.0.0",
+                remote_tag="2.0.0",
+            )
+        ],
+        triggers={"docker.local.app": (200, [])},
+    )
     monkeypatch.setattr(
         notifications_module,
         "_post_discord_payload",
-        fake_post_discord_payload,
+        lambda _url, _payload: None,
     )
     client = _client(
         tmp_path,
@@ -655,16 +867,207 @@ def test_release_notification_send_batches_discord_embeds(
             "WUD_WEB_MUTATIONS_ENABLED": "true",
             "WUD_RELEASE_NOTES_ENABLED": "true",
             "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
+            "WUD_API_BASE_URL": "https://wud.release-notifications.test:3000",
         },
     )
+    raw = "ghcr.io/acme/app:1.0.0 tag=2.0.0"
+    (tmp_path / "state" / "images.todo").write_text(f"{raw}\n", encoding="utf-8")
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        init_db(conn)
+        run_id = insert_update_run(
+            conn,
+            started_at="2026-05-27T12:00:00+00:00",
+            status="success",
+            dry_run=False,
+            mode="stop",
+            wud_file="/out/images.todo",
+        )
+        insert_pending_update(
+            conn,
+            run_id=run_id,
+            line_no=1,
+            raw=raw,
+            image="ghcr.io/acme/app:1.0.0",
+            desired_tag="2.0.0",
+            service_key="media/app",
+            status="resolved",
+            status_reason="updated",
+        )
+    headers = _csrf_headers(client)
+
+    sent = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "confirmation": "send-release-notes"},
+        headers=headers,
+    )
+    run_preview = client.post(
+        "/api/v1/release-notifications/preview",
+        json={"run_id": run_id},
+        headers=headers,
+    )
+
+    assert sent.status_code == 200
+    assert run_preview.status_code == 200
+    assert run_preview.json()["sendable_count"] == 0
+    assert run_preview.json()["items"][0]["notification_key"] == sent.json()["items"][0][
+        "notification_key"
+    ]
+    assert run_preview.json()["items"][0]["notification_status"] == "skipped_duplicate"
+
+
+def test_release_notification_remote_change_gets_new_key(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client, _ = _release_notification_client(tmp_path, monkeypatch)
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
+    headers = _csrf_headers(client)
+
+    sent = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "confirmation": "send-release-notes"},
+        headers=headers,
+    )
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.1.0"])
+    preview = client.post(
+        "/api/v1/release-notifications/preview",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+
+    assert sent.status_code == 200
+    assert preview.status_code == 200
+    assert preview.json()["sendable_count"] == 1
+    assert preview.json()["items"][0]["notification_status"] == "new"
+    assert preview.json()["items"][0]["notification_key"] != sent.json()["items"][0][
+        "notification_key"
+    ]
+
+
+def test_release_notification_cooldown_policy_allows_after_cooldown(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client, _ = _release_notification_client(tmp_path, monkeypatch)
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        init_db(conn)
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO web_settings (key, value, updated_at)
+                VALUES
+                    (
+                        'release_notifications.resend_policy',
+                        'cooldown',
+                        '2026-06-01T00:00:00+00:00'
+                    ),
+                    (
+                        'release_notifications.cooldown_seconds',
+                        '60',
+                        '2026-06-01T00:00:00+00:00'
+                    )
+                """
+            )
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
+    headers = _csrf_headers(client)
+    sent = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "confirmation": "send-release-notes"},
+        headers=headers,
+    )
+    notification_key = sent.json()["items"][0]["notification_key"]
+
+    with open_db(db_path) as conn:
+        with conn:
+            conn.execute(
+                """
+                UPDATE release_notification_history
+                SET last_sent_at = '2999-01-01T00:00:00+00:00'
+                WHERE notification_key = ?
+                """,
+                (notification_key,),
+            )
+    blocked = client.post(
+        "/api/v1/release-notifications/preview",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+    with open_db(db_path) as conn:
+        with conn:
+            conn.execute(
+                """
+                UPDATE release_notification_history
+                SET last_sent_at = '2026-01-01T00:00:00+00:00'
+                WHERE notification_key = ?
+                """,
+                (notification_key,),
+            )
+    allowed = client.post(
+        "/api/v1/release-notifications/preview",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+
+    assert sent.status_code == 200
+    assert blocked.json()["sendable_count"] == 0
+    assert blocked.json()["items"][0]["notification_status"] == "skipped_cooldown"
+    assert allowed.json()["sendable_count"] == 1
+    assert allowed.json()["items"][0]["notification_status"] == "cooldown_ready"
+
+
+def test_release_notification_manual_resend_increments_history(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client, _ = _release_notification_client(tmp_path, monkeypatch)
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
+    headers = _csrf_headers(client)
+    first = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "confirmation": "send-release-notes"},
+        headers=headers,
+    )
+    preview = client.post(
+        "/api/v1/release-notifications/preview",
+        json={"line_numbers": [1], "resend": True},
+        headers=headers,
+    )
+    second = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "resend": True, "confirmation": "send-release-notes"},
+        headers=headers,
+    )
+
+    assert first.status_code == 200
+    assert preview.status_code == 200
+    assert preview.json()["sendable_count"] == 1
+    assert preview.json()["items"][0]["notification_status"] == "manual_resend"
+    assert second.status_code == 200
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        history = conn.execute(
+            """
+            SELECT send_count
+            FROM release_notification_history
+            WHERE notification_key = ?
+            """,
+            (first.json()["items"][0]["notification_key"],),
+        ).fetchone()
+    assert history["send_count"] == 2
+
+
+def test_release_notification_send_batches_discord_embeds(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client, posted = _release_notification_client(tmp_path, monkeypatch)
     lines = [
         f"ghcr.io/acme/app{i}:1.0.0 tag=2.0.0"
         for i in range(1, 12)
     ]
-    (tmp_path / "state" / "images.todo").write_text(
-        "\n".join(lines) + "\n",
-        encoding="utf-8",
-    )
+    _write_pending_lines(tmp_path, lines)
 
     response = client.post(
         "/api/v1/release-notifications/send",
@@ -687,41 +1090,13 @@ def test_release_notification_send_audits_partial_discord_failure(
     monkeypatch,
 ) -> None:
     _fake_release_refresh(monkeypatch)
-    posted: list[tuple[str, object]] = []
-
-    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
-        posted.append((webhook_url, payload))
-        if len(posted) == 2:
-            raise urllib.error.HTTPError(
-                webhook_url,
-                500,
-                "Discord webhook request failed webhook-secret",
-                {},
-                None,
-            )
-
-    monkeypatch.setattr(
-        notifications_module,
-        "_post_discord_payload",
-        fake_post_discord_payload,
-    )
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
-        },
-    )
+    posted = _capture_discord_posts(monkeypatch, fail_on=2)
+    client = _client(tmp_path, _RELEASE_NOTIFICATION_ENV)
     lines = [
         f"ghcr.io/acme/app{i}:1.0.0 tag=2.0.0"
         for i in range(1, 12)
     ]
-    (tmp_path / "state" / "images.todo").write_text(
-        "\n".join(lines) + "\n",
-        encoding="utf-8",
-    )
+    _write_pending_lines(tmp_path, lines)
 
     response = client.post(
         "/api/v1/release-notifications/send",
@@ -748,6 +1123,18 @@ def test_release_notification_send_audits_partial_discord_failure(
             "SELECT * FROM update_events WHERE run_id = ?",
             (run["id"],),
         ).fetchone()
+        history_rows = conn.execute(
+            """
+            SELECT status, COUNT(*) AS count
+            FROM release_notification_history
+            GROUP BY status
+            ORDER BY status
+            """
+        ).fetchall()
+        history_metadata = [
+            row["metadata_json"]
+            for row in conn.execute("SELECT metadata_json FROM release_notification_history")
+        ]
 
     run_metadata = json.loads(run["metadata_json"])
     event_metadata = json.loads(event["metadata_json"])
@@ -757,5 +1144,10 @@ def test_release_notification_send_audits_partial_discord_failure(
     assert run_metadata["sent_batch_count"] == 1
     assert run_metadata["batch_count"] == 2
     assert event_metadata["items"][0]["line_no"] == 1
+    assert [(row["status"], row["count"]) for row in history_rows] == [
+        ("failure", 1),
+        ("sent", 10),
+    ]
     serialized = json.dumps({"run": run_metadata, "event": event_metadata})
     assert "webhook-secret" not in serialized
+    assert "webhook-secret" not in json.dumps(history_metadata)

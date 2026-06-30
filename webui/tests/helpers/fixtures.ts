@@ -40,6 +40,72 @@ import type {
   WudContainerMetadata,
 } from "../../src/api/client";
 
+type SettingsEntryFixture = SettingsResponse["updater"][number];
+type ManagedSettingFixture = SettingsResponse["managed"][number];
+type ApplyPreflightCheckFixture = ApplyPreflightResponse["checks"][number];
+
+function settingsEntry(
+  name: string,
+  value: string,
+  overrides: Partial<SettingsEntryFixture> = {},
+): SettingsEntryFixture {
+  return {
+    name,
+    value,
+    default_value: value,
+    configured: false,
+    source: "default",
+    ...overrides,
+  };
+}
+
+function configuredSettingsEntry(
+  name: string,
+  value: string,
+  overrides: Partial<SettingsEntryFixture> = {},
+): SettingsEntryFixture {
+  return settingsEntry(name, value, {
+    configured: true,
+    source: "configured",
+    ...overrides,
+  });
+}
+
+function managedSettingEntry(
+  key: string,
+  value: string,
+  allowedValues: string[] = [],
+  overrides: Partial<ManagedSettingFixture> = {},
+): ManagedSettingFixture {
+  return {
+    key,
+    value,
+    default_value: value,
+    source: "default",
+    editable: true,
+    allowed_values: allowedValues,
+    restart_required: false,
+    disabled_reason: "",
+    ...overrides,
+  };
+}
+
+function applyPreflightCheck(
+  code: string,
+  label: string,
+  sourceCheckCodes: string[],
+  overrides: Partial<ApplyPreflightCheckFixture> = {},
+): ApplyPreflightCheckFixture {
+  return {
+    status: "PASS",
+    code,
+    label,
+    detail: "",
+    source_check_codes: sourceCheckCodes,
+    ...overrides,
+  };
+}
+
 export function wudApiStatus(
   overrides: Partial<WudApiStatus> = {},
 ): WudApiStatus {
@@ -194,120 +260,43 @@ export function settingsResponse(
 ): SettingsResponse {
   return {
     updater: [
-      {
-        name: "DOCKER_BASE",
-        value: "/srv/docker",
-        default_value: "/srv/docker",
-        configured: true,
-        source: "configured",
-      },
-      {
-        name: "HOST_DOCKER_BASE",
-        value: "/srv/docker",
+      configuredSettingsEntry("DOCKER_BASE", "/srv/docker"),
+      configuredSettingsEntry("HOST_DOCKER_BASE", "/srv/docker", {
         default_value: "",
-        configured: true,
-        source: "configured",
-      },
-      {
-        name: "WUD_OUT_FILE",
-        value: "/out/images.todo",
+      }),
+      configuredSettingsEntry("WUD_OUT_FILE", "/out/images.todo", {
         default_value: "/srv/docker/wud/out/images.todo",
-        configured: true,
-        source: "configured",
-      },
-      {
-        name: "WUD_LOG_DIR",
-        value: "/logs",
+      }),
+      configuredSettingsEntry("WUD_LOG_DIR", "/logs", {
         default_value: "./logs",
-        configured: true,
-        source: "configured",
-      },
-      {
-        name: "WUD_DB_PATH",
-        value: "/logs/wudup.sqlite",
-        default_value: "/logs/wudup.sqlite",
-        configured: true,
-        source: "configured",
-      },
-      {
-        name: "WUD_UPDATE_MODE",
-        value: "stop",
-        default_value: "stop",
-        configured: false,
-        source: "default",
-      },
-      {
-        name: "WUD_MAX_WAIT",
-        value: "180",
-        default_value: "180",
-        configured: false,
-        source: "default",
-      },
-      {
-        name: "WUD_LOCK_TIMEOUT",
-        value: "30",
-        default_value: "30",
-        configured: false,
-        source: "default",
-      },
-      {
-        name: "WUD_TIMEZONE",
-        value: "UTC",
-        default_value: "UTC",
-        configured: false,
-        source: "default",
-      },
+      }),
+      configuredSettingsEntry("WUD_DB_PATH", "/logs/wudup.sqlite"),
+      settingsEntry("WUD_UPDATE_MODE", "stop"),
+      settingsEntry("WUD_MAX_WAIT", "180"),
+      settingsEntry("WUD_LOCK_TIMEOUT", "30"),
+      settingsEntry("WUD_TIMEZONE", "UTC"),
     ],
     webui: [
-      {
-        name: "WUD_WEB_AUTH_REQUIRED",
-        value: "true",
-        default_value: "true",
-        configured: false,
-        source: "derived",
-      },
-      {
-        name: "WUD_WEB_DEV_NO_AUTH",
-        value: "false",
-        default_value: "false",
-        configured: false,
-        source: "default",
-      },
-      {
-        name: "WUD_WEB_PUBLIC_ORIGIN",
-        value: "https://wud.example.test",
-        default_value: "",
-        configured: true,
-        source: "configured",
-      },
-      {
-        name: "WUD_WEB_ALLOWED_HOSTS",
-        value: "127.0.0.1, localhost, wud.example.test",
-        default_value: "127.0.0.1, localhost, wud.example.test",
-        configured: false,
-        source: "derived",
-      },
-      {
-        name: "WUD_WEB_SECURE_COOKIES_EFFECTIVE",
-        value: "true",
-        default_value: "true",
-        configured: false,
+      settingsEntry("WUD_WEB_AUTH_REQUIRED", "true", { source: "derived" }),
+      settingsEntry("WUD_WEB_DEV_NO_AUTH", "false"),
+      configuredSettingsEntry(
+        "WUD_WEB_PUBLIC_ORIGIN",
+        "https://wud.example.test",
+        { default_value: "" },
+      ),
+      settingsEntry(
+        "WUD_WEB_ALLOWED_HOSTS",
+        "127.0.0.1, localhost, wud.example.test",
+        { source: "derived" },
+      ),
+      settingsEntry("WUD_WEB_SECURE_COOKIES_EFFECTIVE", "true", {
         source: "request",
-      },
-      {
-        name: "WUD_WEB_MUTATIONS_ENABLED",
-        value: "false",
-        default_value: "false",
-        configured: false,
-        source: "default",
-      },
-      {
-        name: "WUD_WEB_RESTART_CONTAINER",
-        value: "wudup",
+      }),
+      settingsEntry("WUD_WEB_MUTATIONS_ENABLED", "false"),
+      settingsEntry("WUD_WEB_RESTART_CONTAINER", "wudup", {
         default_value: "",
-        configured: false,
         source: "derived",
-      },
+      }),
     ],
     secrets: [
       { name: "WUD_WEB_TOKEN", configured: false },
@@ -315,33 +304,26 @@ export function settingsResponse(
       { name: "DISCORD_RELEASES_WEBHOOK", configured: false },
     ],
     managed: [
-      {
-        key: "theme_preference",
-        value: "system",
-        default_value: "system",
-        source: "default",
-        editable: true,
-        allowed_values: ["system", "light", "dark"],
-        restart_required: false,
-      },
-      {
-        key: "onboarding_checklist",
-        value: "visible",
-        default_value: "visible",
-        source: "default",
-        editable: true,
-        allowed_values: ["visible", "dismissed"],
-        restart_required: false,
-      },
-      {
-        key: "release_notes_enabled",
-        value: "false",
-        default_value: "false",
-        source: "default",
-        editable: true,
-        allowed_values: ["false", "true"],
-        restart_required: false,
-      },
+      managedSettingEntry("theme_preference", "system", [
+        "system",
+        "light",
+        "dark",
+      ]),
+      managedSettingEntry("onboarding_checklist", "visible", [
+        "visible",
+        "dismissed",
+      ]),
+      managedSettingEntry("release_notes_enabled", "false", ["false", "true"]),
+      managedSettingEntry("release_notifications_mode", "digest", [
+        "digest",
+        "per_container",
+      ]),
+      managedSettingEntry(
+        "release_notifications_resend_policy",
+        "remote_change",
+        ["remote_change", "cooldown"],
+      ),
+      managedSettingEntry("release_notifications_cooldown_seconds", "86400"),
     ],
     ...overrides,
   };
@@ -886,6 +868,11 @@ export function releaseNoteInfo(
     ],
     refreshed_at: "2026-01-02T00:00:00Z",
     error: "",
+    notification_key: "notification-key-1",
+    notification_status: "new",
+    notification_last_sent_at: "",
+    notification_send_count: 0,
+    notification_skipped_reason: "",
     ...overrides,
   };
 }
@@ -912,6 +899,8 @@ export function releaseNotificationResponse(
 ): ReleaseNotificationResponse {
   return {
     enabled: true,
+    mode: "digest",
+    resend_policy: "remote_change",
     destination: {
       type: "discord",
       configured: true,
@@ -941,6 +930,10 @@ export function releaseNotificationResponse(
             name: "releases",
           },
         ],
+        notification_key: "notification-key-1",
+        notification_status: "new",
+        notification_last_sent_at: "",
+        notification_send_count: 0,
         skipped_reason: "",
       },
     ],
@@ -961,67 +954,32 @@ export function applyPreflightResponse(
     failures: 0,
     warnings: 0,
     checks: [
-      {
-        status: "PASS",
-        code: "docker-reachable",
-        label: "Docker reachable",
-        detail: "",
-        source_check_codes: [
-          "docker-socket",
-          "docker-daemon-version",
-          "docker-daemon-info",
-          "docker-container-listing",
-        ],
-      },
-      {
-        status: "PASS",
-        code: "compose-renders",
-        label: "Compose renders",
-        detail: "",
-        source_check_codes: ["compose-discovery"],
-      },
-      {
-        status: "PASS",
-        code: "wud-file-writable",
-        label: "WUD file writable",
-        detail: "",
-        source_check_codes: ["wud-out-file-directory", "wud-out-file"],
-      },
-      {
-        status: "PASS",
-        code: "database-ready",
-        label: "Database ready",
-        detail: "",
-        source_check_codes: ["webui-database"],
-      },
-      {
-        status: "PASS",
-        code: "logs-writable",
-        label: "Logs writable",
-        detail: "",
-        source_check_codes: ["wud-log-dir"],
-      },
-      {
-        status: "PASS",
-        code: "mutations-enabled",
-        label: "Mutations enabled",
-        detail: "",
-        source_check_codes: ["webui-mutation-gate"],
-      },
-      {
-        status: "PASS",
-        code: "bind-mounts-safe",
-        label: "Bind mounts safe",
-        detail: "",
-        source_check_codes: ["bind-mount-path-invalid"],
-      },
-      {
-        status: "PASS",
-        code: "selected-services-matched",
-        label: "Selected services matched",
-        detail: "",
-        source_check_codes: ["selected-services"],
-      },
+      applyPreflightCheck("docker-reachable", "Docker reachable", [
+        "docker-socket",
+        "docker-daemon-version",
+        "docker-daemon-info",
+        "docker-container-listing",
+      ]),
+      applyPreflightCheck("compose-renders", "Compose renders", [
+        "compose-discovery",
+      ]),
+      applyPreflightCheck("wud-file-writable", "WUD file writable", [
+        "wud-out-file-directory",
+        "wud-out-file",
+      ]),
+      applyPreflightCheck("database-ready", "Database ready", ["webui-database"]),
+      applyPreflightCheck("logs-writable", "Logs writable", ["wud-log-dir"]),
+      applyPreflightCheck("mutations-enabled", "Mutations enabled", [
+        "webui-mutation-gate",
+      ]),
+      applyPreflightCheck("bind-mounts-safe", "Bind mounts safe", [
+        "bind-mount-path-invalid",
+      ]),
+      applyPreflightCheck(
+        "selected-services-matched",
+        "Selected services matched",
+        ["selected-services"],
+      ),
     ],
     ...overrides,
   };

@@ -79,6 +79,16 @@ export const DIGEST_PIN_UPDATES_LABELS: Record<string, string> = {
   true: "Enabled",
 };
 
+export const RELEASE_NOTIFICATION_MODE_LABELS: Record<string, string> = {
+  digest: "Digest",
+  per_container: "Per container",
+};
+
+export const RELEASE_NOTIFICATION_RESEND_POLICY_LABELS: Record<string, string> = {
+  remote_change: "Remote changes",
+  cooldown: "Cooldown",
+};
+
 const CORE_UPDATE_TOUR_STATUS_LABELS: Record<CoreUpdateTourStatus, string> = {
   not_started: "Not started",
   in_progress: "In progress",

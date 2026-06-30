@@ -9,7 +9,7 @@ from typing import Callable
 
 from .digest_provenance import DIGEST_PROVENANCE_SQL_COLUMNS
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 ColumnSchema = tuple[str, str, int, str | None, int]
 SchemaDefinition = dict[str, tuple[ColumnSchema, ...]]
@@ -20,6 +20,9 @@ SECURITY_SCAN_CACHE_FINDINGS_COLUMN: ColumnSchema = (
     1,
     "'[]'",
     0,
+)
+DIGEST_PROVENANCE_COLUMN_SCHEMA: tuple[ColumnSchema, ...] = tuple(
+    (column, "TEXT", 1, "''", 0) for column in DIGEST_PROVENANCE_SQL_COLUMNS
 )
 
 EXPECTED_SCHEMA: SchemaDefinition = {
@@ -53,13 +56,7 @@ EXPECTED_SCHEMA: SchemaDefinition = {
         ("new_digest", "TEXT", 1, "''", 0),
         ("status", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
-        ("digest_source_image", "TEXT", 1, "''", 0),
-        ("digest_resolved_tag", "TEXT", 1, "''", 0),
-        ("digest_watch_tag", "TEXT", 1, "''", 0),
-        ("digest_target_digest", "TEXT", 1, "''", 0),
-        ("digest_final_image", "TEXT", 1, "''", 0),
-        ("digest_provenance_source", "TEXT", 1, "''", 0),
-        ("digest_provenance_confidence", "TEXT", 1, "''", 0),
+        *DIGEST_PROVENANCE_COLUMN_SCHEMA,
     ),
     "snoozes": (
         ("id", "INTEGER", 0, None, 1),
@@ -105,13 +102,7 @@ EXPECTED_SCHEMA: SchemaDefinition = {
         ("digest", "TEXT", 1, "''", 0),
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
-        ("digest_source_image", "TEXT", 1, "''", 0),
-        ("digest_resolved_tag", "TEXT", 1, "''", 0),
-        ("digest_watch_tag", "TEXT", 1, "''", 0),
-        ("digest_target_digest", "TEXT", 1, "''", 0),
-        ("digest_final_image", "TEXT", 1, "''", 0),
-        ("digest_provenance_source", "TEXT", 1, "''", 0),
-        ("digest_provenance_confidence", "TEXT", 1, "''", 0),
+        *DIGEST_PROVENANCE_COLUMN_SCHEMA,
     ),
     "pending_updates": (
         ("id", "INTEGER", 0, None, 1),
@@ -129,13 +120,7 @@ EXPECTED_SCHEMA: SchemaDefinition = {
         ("created_at", "TEXT", 1, None, 0),
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
-        ("digest_source_image", "TEXT", 1, "''", 0),
-        ("digest_resolved_tag", "TEXT", 1, "''", 0),
-        ("digest_watch_tag", "TEXT", 1, "''", 0),
-        ("digest_target_digest", "TEXT", 1, "''", 0),
-        ("digest_final_image", "TEXT", 1, "''", 0),
-        ("digest_provenance_source", "TEXT", 1, "''", 0),
-        ("digest_provenance_confidence", "TEXT", 1, "''", 0),
+        *DIGEST_PROVENANCE_COLUMN_SCHEMA,
     ),
     "release_note_cache": (
         ("cache_key", "TEXT", 0, None, 1),
@@ -154,6 +139,16 @@ EXPECTED_SCHEMA: SchemaDefinition = {
         ("error", "TEXT", 1, "''", 0),
         ("created_at", "TEXT", 1, None, 0),
         ("updated_at", "TEXT", 1, None, 0),
+        ("metadata_json", "TEXT", 1, "'{}'", 0),
+    ),
+    "release_notification_history": (
+        ("notification_key", "TEXT", 0, None, 1),
+        ("mode", "TEXT", 1, "''", 0),
+        ("status", "TEXT", 1, None, 0),
+        ("last_attempted_at", "TEXT", 1, None, 0),
+        ("last_sent_at", "TEXT", 1, "''", 0),
+        ("send_count", "INTEGER", 1, "0", 0),
+        ("last_audit_run_id", "INTEGER", 1, "0", 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
     ),
     "security_scan_cache": (
@@ -232,16 +227,22 @@ WEB_SCHEMA_TABLES = frozenset(
     {"schema_migrations", "web_users", "web_sessions", "web_settings"}
 )
 
-EXPECTED_SCHEMA_V9: SchemaDefinition = dict(EXPECTED_SCHEMA)
+EXPECTED_SCHEMA_V10: SchemaDefinition = {
+    name: columns
+    for name, columns in EXPECTED_SCHEMA.items()
+    if name != "release_notification_history"
+}
+
+EXPECTED_SCHEMA_V9: SchemaDefinition = dict(EXPECTED_SCHEMA_V10)
 EXPECTED_SCHEMA_V9["security_scan_cache"] = tuple(
     column
-    for column in EXPECTED_SCHEMA["security_scan_cache"]
+    for column in EXPECTED_SCHEMA_V10["security_scan_cache"]
     if column[0] != SECURITY_SCAN_CACHE_FINDINGS_COLUMN[0]
 )
 
 EXPECTED_SCHEMA_V8: SchemaDefinition = {
     name: columns
-    for name, columns in EXPECTED_SCHEMA.items()
+    for name, columns in EXPECTED_SCHEMA_V9.items()
     if name != "security_scan_cache"
 }
 
@@ -310,6 +311,7 @@ _EXPECTED_SCHEMAS_BY_VERSION: dict[int, SchemaDefinition] = {
     7: EXPECTED_SCHEMA_V7,
     8: EXPECTED_SCHEMA_V8,
     9: EXPECTED_SCHEMA_V9,
+    10: EXPECTED_SCHEMA_V10,
     SCHEMA_VERSION: EXPECTED_SCHEMA,
 }
 _SCHEMA_IDENTIFIERS = frozenset(EXPECTED_SCHEMA) | frozenset(
@@ -596,6 +598,19 @@ def init_schema(conn: sqlite3.Connection) -> None:
             CREATE INDEX IF NOT EXISTS idx_release_note_cache_updated_at
                 ON release_note_cache (updated_at);
 
+            CREATE TABLE IF NOT EXISTS release_notification_history (
+                notification_key TEXT PRIMARY KEY,
+                mode TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL,
+                last_attempted_at TEXT NOT NULL,
+                last_sent_at TEXT NOT NULL DEFAULT '',
+                send_count INTEGER NOT NULL DEFAULT 0,
+                last_audit_run_id INTEGER NOT NULL DEFAULT 0,
+                metadata_json TEXT NOT NULL DEFAULT '{}'
+            );
+            CREATE INDEX IF NOT EXISTS idx_release_notification_history_status
+                ON release_notification_history (status, last_sent_at);
+
             CREATE TABLE IF NOT EXISTS tag_exclusion_rules (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 scope TEXT NOT NULL,
@@ -649,7 +664,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
         _validate_schema(conn)
         _backfill_schema_migrations(conn, SCHEMA_VERSION)
         conn.execute(  # nosemgrep: PRAGMA needs a literal internal version.
-            "PRAGMA user_version = 10"
+            "PRAGMA user_version = 11"
         )
 
 
@@ -780,6 +795,7 @@ MIGRATION_NAMES = {
     8: "add dependency snoozes",
     9: "add security scan cache",
     10: "add security scan findings",
+    11: "add release notification history",
 }
 
 
@@ -1140,6 +1156,39 @@ def _migrate_v9_to_v10(conn: sqlite3.Connection) -> None:
     _record_schema_migration(conn, 10)
 
 
+def _migrate_v10_to_v11(conn: sqlite3.Connection) -> None:
+    object_type = _sqlite_object_type(conn, "release_notification_history")
+    if object_type is not None:
+        if object_type != "table":
+            raise DatabaseError(
+                f"Expected release_notification_history to be a table, found {object_type}"
+            )
+        _validate_table_columns(
+            conn,
+            "release_notification_history",
+            EXPECTED_SCHEMA["release_notification_history"],
+        )
+    with conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS release_notification_history (
+                notification_key TEXT PRIMARY KEY,
+                mode TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL,
+                last_attempted_at TEXT NOT NULL,
+                last_sent_at TEXT NOT NULL DEFAULT '',
+                send_count INTEGER NOT NULL DEFAULT 0,
+                last_audit_run_id INTEGER NOT NULL DEFAULT 0,
+                metadata_json TEXT NOT NULL DEFAULT '{}'
+            );
+            CREATE INDEX IF NOT EXISTS idx_release_notification_history_status
+                ON release_notification_history (status, last_sent_at);
+            """
+        )
+        conn.execute("PRAGMA user_version = 11")
+    _record_schema_migration(conn, 11)
+
+
 _MIGRATIONS_BY_TARGET_VERSION: dict[int, Migration] = {
     2: _migrate_v1_to_v2,
     3: _migrate_v2_to_v3,
@@ -1150,4 +1199,5 @@ _MIGRATIONS_BY_TARGET_VERSION: dict[int, Migration] = {
     8: _migrate_v7_to_v8,
     9: _migrate_v8_to_v9,
     10: _migrate_v9_to_v10,
+    11: _migrate_v10_to_v11,
 }

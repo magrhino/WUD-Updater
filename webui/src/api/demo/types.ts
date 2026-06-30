@@ -9,6 +9,7 @@ import type {
   PendingRemovalPlanResponse,
   PendingResponse,
   PlanResponse,
+  ReleaseNoteInfo,
   ReleaseNotesResponse,
   RetagChoiceRequest,
   RetagPreviewJobResponse,
@@ -97,6 +98,21 @@ export type DemoRetagCase = {
   jobTemplate?: DemoGeneratedJobFixture;
 };
 
+type ReleaseNoteNotificationFields =
+  | "notification_key"
+  | "notification_status"
+  | "notification_last_sent_at"
+  | "notification_send_count"
+  | "notification_skipped_reason";
+
+export type DemoReleaseNoteInfo =
+  Omit<ReleaseNoteInfo, ReleaseNoteNotificationFields> &
+  Partial<Pick<ReleaseNoteInfo, ReleaseNoteNotificationFields>>;
+
+export type DemoReleaseNotesResponse = Omit<ReleaseNotesResponse, "items"> & {
+  items: DemoReleaseNoteInfo[];
+};
+
 export type DemoGeneratedFixtures = {
   auth: {
     session: AuthSessionResponse;
@@ -112,7 +128,7 @@ export type DemoGeneratedFixtures = {
   removalCases: DemoRemovalCase[];
   retagTargets: RetagTargetsResponse;
   retagCases: DemoRetagCase[];
-  releaseNotes: ReleaseNotesResponse;
+  releaseNotes: DemoReleaseNotesResponse;
   selfUpdate: SelfUpdateResponse;
   selfUpdatePlan: SelfUpdatePlanResponse;
   diagnostics: Omit<

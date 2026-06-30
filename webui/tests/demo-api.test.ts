@@ -1033,12 +1033,14 @@ describe("demo web API", () => {
 
     expect(preview).toMatchObject({
       enabled: true,
+      mode: "digest",
+      resend_policy: "remote_change",
       sent: false,
       audit_run_id: 0,
       source_file: "demo/out/images.todo",
       count: 3,
-      sendable_count: 1,
-      skipped_count: 2,
+      sendable_count: 3,
+      skipped_count: 0,
       destination: {
         type: "discord",
         configured: true,
@@ -1051,6 +1053,8 @@ describe("demo web API", () => {
       image: "ghcr.io/home-assistant/home-assistant:2026.5.1",
       service_key: "home-assistant/home-assistant:2026.5.1",
       status: "ready",
+      notification_key: "875413775c1b3abaea3adede0576679d9b39032acc06a5aea530957b530285c9",
+      notification_status: "new",
       skipped_reason: "",
       triggers: [
         {
@@ -1063,14 +1067,24 @@ describe("demo web API", () => {
     expect(preview.items[1]).toMatchObject({
       line_no: 4,
       status: "unsupported",
-      skipped_reason: "no supported GitHub release source found",
+      skipped_reason: "",
     });
     expect(preview.items[2]).toMatchObject({
       line_no: 6,
       status: "not_found",
-      skipped_reason: "not_found",
+      skipped_reason: "",
     });
     expect(preview.batch_count).toBe(1);
+
+    const resendPreview = await api.previewReleaseNotifications(
+      { line_numbers: selected, resend: true },
+      "csrf",
+    );
+
+    expect(resendPreview.items[0]).toMatchObject({
+      line_no: 2,
+      notification_status: "manual_resend",
+    });
 
     const sent = await api.sendReleaseNotifications(
       { line_numbers: selected },
@@ -1083,6 +1097,32 @@ describe("demo web API", () => {
       count: preview.count,
       sendable_count: preview.sendable_count,
       skipped_count: preview.skipped_count,
+    });
+    expect(sent.items[0]).toMatchObject({
+      line_no: 2,
+      notification_status: "sent",
+      notification_send_count: 1,
+    });
+    await expect(
+      api.previewReleaseNotifications({ line_numbers: [2] }, "csrf"),
+    ).resolves.toMatchObject({
+      sendable_count: 0,
+      skipped_count: 1,
+      items: [
+        expect.objectContaining({
+          line_no: 2,
+          notification_status: "skipped_duplicate",
+          notification_send_count: 1,
+          skipped_reason: "Already sent for this update.",
+        }),
+      ],
+    });
+    expect(
+      (await api.releaseNotes()).items.find((item) => item.line_no === 2),
+    ).toMatchObject({
+      notification_status: "skipped_duplicate",
+      notification_send_count: 1,
+      notification_skipped_reason: "Already sent for this update.",
     });
     expect((await api.pending()).items.map((item) => item.line_no)).toEqual([
       2,

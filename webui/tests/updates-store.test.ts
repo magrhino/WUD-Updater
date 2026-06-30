@@ -1484,7 +1484,7 @@ describe("connection store focused coverage", () => {
     expect(updates.loading).toBe(false);
   });
 
-  it("previews and sends release notifications with csrf", async () => {
+  it("previews and sends release notifications with csrf and resend intent", async () => {
     const fetchMock = mockFetch(releaseNotificationResponse());
     const auth = useAuthStore();
     const ensureCsrf = vi
@@ -1492,8 +1492,11 @@ describe("connection store focused coverage", () => {
       .mockResolvedValue("csrf-release");
     const updates = useUpdatesStore();
 
-    await updates.previewReleaseNotifications({ line_numbers: [1, 2] });
-    await updates.sendReleaseNotifications({ run_id: 14 });
+    await updates.previewReleaseNotifications({
+      line_numbers: [1, 2],
+      resend: true,
+    });
+    await updates.sendReleaseNotifications({ run_id: 14, resend: true });
 
     expect(ensureCsrf).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0][0]).toBe(
@@ -1506,12 +1509,14 @@ describe("connection store focused coverage", () => {
     ).toBe("csrf-release");
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       line_numbers: [1, 2],
+      resend: true,
     });
     expect(fetchMock.mock.calls[1][0]).toBe(
       "/api/v1/release-notifications/send",
     );
     expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual({
       run_id: 14,
+      resend: true,
       confirmation: "send-release-notes",
     });
     expect(updates.releaseNotification?.sendable_count).toBe(1);

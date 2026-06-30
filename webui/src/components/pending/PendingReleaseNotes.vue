@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { AlertTriangle, ExternalLink, FileText } from "@lucide/vue";
-import { NButton } from "naive-ui";
+import { NButton, NTag } from "naive-ui";
 
 import type { ReleaseNoteInfo } from "../../api/client";
 import { useUpdatesStore } from "../../stores/updates";
+import {
+  notificationStatusLabel as releaseNotificationStatusLabel,
+  notificationStatusType as releaseNotificationStatusType,
+} from "./releaseNotificationStatus";
 
 const props = withDefaults(defineProps<{
   releaseNote?: ReleaseNoteInfo | null;
@@ -33,6 +37,20 @@ const changelogProblem = computed(() =>
 const readChangelogLabel = computed(() =>
   changelogReady.value ? "Changelog loaded" : "Read changelog",
 );
+const notificationStatusLabel = computed(() =>
+  releaseNotificationStatusLabel(props.releaseNote?.notification_status ?? ""),
+);
+const notificationStatusType = computed(() =>
+  releaseNotificationStatusType(props.releaseNote?.notification_status ?? ""),
+);
+const notificationStatusDetail = computed(() => {
+  const reason = props.releaseNote?.notification_skipped_reason ?? "";
+  if (reason) {
+    return reason;
+  }
+  const sentAt = props.releaseNote?.notification_last_sent_at ?? "";
+  return sentAt ? `Last sent ${sentAt}` : "";
+});
 
 function readChangelog(): Promise<void> {
   return updates.loadReleaseChangelog(props.releaseNote);
@@ -108,6 +126,18 @@ function readChangelog(): Promise<void> {
     </span>
     <span v-if="releaseNoteReason" class="release-notes-reason">
       {{ releaseNoteReason }}
+    </span>
+  </span>
+  <span v-if="releaseNote" class="release-notes-cell">
+    <n-tag
+      size="small"
+      :type="notificationStatusType"
+      :title="notificationStatusDetail || undefined"
+    >
+      {{ notificationStatusLabel }}
+    </n-tag>
+    <span v-if="notificationStatusDetail" class="release-notes-reason">
+      {{ notificationStatusDetail }}
     </span>
   </span>
 </template>

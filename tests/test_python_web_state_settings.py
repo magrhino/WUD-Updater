@@ -346,6 +346,16 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
         json={"values": {"release_notes_enabled": "maybe"}},
         headers=headers,
     )
+    invalid_notification_mode = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"release_notifications_mode": "automatic"}},
+        headers=headers,
+    )
+    invalid_notification_cooldown = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"release_notifications_cooldown_seconds": "0"}},
+        headers=headers,
+    )
     empty_payload = client.post(
         "/api/v1/settings/managed",
         json={"values": {}},
@@ -367,6 +377,14 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
     assert invalid_release_notes.status_code == 422
     assert invalid_release_notes.json()["detail"] == (
         "release_notes_enabled must be one of: false, true"
+    )
+    assert invalid_notification_mode.status_code == 422
+    assert invalid_notification_mode.json()["detail"] == (
+        "release_notifications_mode must be one of: digest, per_container"
+    )
+    assert invalid_notification_cooldown.status_code == 422
+    assert invalid_notification_cooldown.json()["detail"] == (
+        "release_notifications_cooldown_seconds must be a positive integer"
     )
     assert empty_payload.status_code == 422
     assert empty_payload.json()["detail"] == "at least one managed setting is required"
@@ -573,6 +591,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
                 "compose_ignore_paths": "old, archive/disabled",
                 "digest_pin_updates": "true",
                 "release_notes_enabled": "true",
+                "release_notifications_mode": "per_container",
+                "release_notifications_resend_policy": "cooldown",
+                "release_notifications_cooldown_seconds": "60",
             }
         },
         headers=headers,
@@ -592,6 +613,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert managed["digest_pin_updates"]["source"] == "configured"
     assert managed["release_notes_enabled"]["value"] == "true"
     assert managed["release_notes_enabled"]["source"] == "configured"
+    assert managed["release_notifications_mode"]["value"] == "per_container"
+    assert managed["release_notifications_resend_policy"]["value"] == "cooldown"
+    assert managed["release_notifications_cooldown_seconds"]["value"] == "60"
 
     db_path = tmp_path / "state" / "wud.sqlite"
     with open_db(db_path) as conn:
@@ -610,6 +634,23 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         release_notes_enabled = conn.execute(
             "SELECT value FROM web_settings WHERE key = 'release_notes.enabled'"
         ).fetchone()
+        release_notifications_mode = conn.execute(
+            "SELECT value FROM web_settings WHERE key = 'release_notifications.mode'"
+        ).fetchone()
+        release_notifications_resend_policy = conn.execute(
+            """
+            SELECT value
+            FROM web_settings
+            WHERE key = 'release_notifications.resend_policy'
+            """
+        ).fetchone()
+        release_notifications_cooldown = conn.execute(
+            """
+            SELECT value
+            FROM web_settings
+            WHERE key = 'release_notifications.cooldown_seconds'
+            """
+        ).fetchone()
         run = conn.execute(
             "SELECT * FROM update_runs WHERE id = ?",
             (body["audit_run_id"],),
@@ -626,6 +667,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert compose_ignore_paths["value"] == "old, archive/disabled"
     assert digest_pin_updates["value"] == "true"
     assert release_notes_enabled["value"] == "true"
+    assert release_notifications_mode["value"] == "per_container"
+    assert release_notifications_resend_policy["value"] == "cooldown"
+    assert release_notifications_cooldown["value"] == "60"
     assert run["mode"] == "web-settings"
     assert run_metadata["operation"] == "update_managed_settings"
     assert run_metadata["target"] == {
@@ -634,6 +678,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
             "digest_pin_updates",
             "onboarding_checklist",
             "release_notes_enabled",
+            "release_notifications_cooldown_seconds",
+            "release_notifications_mode",
+            "release_notifications_resend_policy",
             "theme_preference",
         ]
     }
@@ -643,6 +690,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         "compose_ignore_paths": "old",
         "digest_pin_updates": "false",
         "release_notes_enabled": "false",
+        "release_notifications_mode": "digest",
+        "release_notifications_resend_policy": "remote_change",
+        "release_notifications_cooldown_seconds": "86400",
     }
     assert event_metadata["after"] == {
         "theme_preference": "dark",
@@ -650,6 +700,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         "compose_ignore_paths": "old, archive/disabled",
         "digest_pin_updates": "true",
         "release_notes_enabled": "true",
+        "release_notifications_mode": "per_container",
+        "release_notifications_resend_policy": "cooldown",
+        "release_notifications_cooldown_seconds": "60",
     }
 
     reset = client.post(

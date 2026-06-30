@@ -15,11 +15,17 @@ const {
   composeIgnorePathsEntry,
   digestPinUpdatesEntry,
   releaseNotesEnabledEntry,
+  releaseNotificationModeEntry,
+  releaseNotificationResendPolicyEntry,
+  releaseNotificationCooldownEntry,
   themePreferenceValue,
   onboardingChecklistValue,
   composeIgnorePathsValue,
   digestPinUpdatesValue,
   releaseNotesEnabledValue,
+  releaseNotificationModeValue,
+  releaseNotificationResendPolicyValue,
+  releaseNotificationCooldownValue,
   preferencesMessage,
   preferencesError,
   preferencesDisabledReason,
@@ -27,11 +33,16 @@ const {
   composeIgnorePathsEditable,
   digestPinUpdatesEditable,
   releaseNotesEnabledEditable,
+  releaseNotificationModeEditable,
+  releaseNotificationResendPolicyEditable,
+  releaseNotificationCooldownEditable,
   preferencesDirty,
   preferenceSaveDisabled,
   themePreferenceOptions,
   onboardingChecklistOptions,
   digestPinUpdatesOptions,
+  releaseNotificationModeOptions,
+  releaseNotificationResendPolicyOptions,
   coreUpdateTourStatus,
   coreUpdateTourStep,
   managedSourceLabel,
@@ -122,6 +133,87 @@ const {
                   class="settings-action-alert"
                 >
                   {{ releaseNotesEnabledEntry.disabled_reason }}
+                </n-alert>
+              </div>
+            </div>
+            <div class="settings-preference-row">
+              <div>
+                <strong class="wrap-anywhere">Notification mode</strong>
+                <span class="wrap-anywhere">
+                  Source:
+                  {{ managedSourceLabel(releaseNotificationModeEntry) }}
+                </span>
+              </div>
+              <div class="settings-preference-controls">
+                <n-select
+                  v-model:value="releaseNotificationModeValue"
+                  :options="releaseNotificationModeOptions"
+                  :disabled="preferenceControlsDisabled || !releaseNotificationModeEditable"
+                  aria-label="Release notification mode"
+                />
+                <n-alert
+                  v-if="releaseNotificationModeEntry?.disabled_reason"
+                  type="info"
+                  :show-icon="false"
+                  class="settings-action-alert"
+                >
+                  {{ releaseNotificationModeEntry.disabled_reason }}
+                </n-alert>
+              </div>
+            </div>
+            <div class="settings-preference-row">
+              <div>
+                <strong class="wrap-anywhere">Resend policy</strong>
+                <span class="wrap-anywhere">
+                  Source:
+                  {{ managedSourceLabel(releaseNotificationResendPolicyEntry) }}
+                </span>
+              </div>
+              <div class="settings-preference-controls">
+                <n-select
+                  v-model:value="releaseNotificationResendPolicyValue"
+                  :options="releaseNotificationResendPolicyOptions"
+                  :disabled="
+                    preferenceControlsDisabled ||
+                    !releaseNotificationResendPolicyEditable
+                  "
+                  aria-label="Release notification resend policy"
+                />
+                <n-alert
+                  v-if="releaseNotificationResendPolicyEntry?.disabled_reason"
+                  type="info"
+                  :show-icon="false"
+                  class="settings-action-alert"
+                >
+                  {{ releaseNotificationResendPolicyEntry.disabled_reason }}
+                </n-alert>
+              </div>
+            </div>
+            <div class="settings-preference-row">
+              <div>
+                <strong class="wrap-anywhere">Notification cooldown</strong>
+                <span class="wrap-anywhere">
+                  Source:
+                  {{ managedSourceLabel(releaseNotificationCooldownEntry) }}
+                </span>
+              </div>
+              <div class="settings-preference-controls">
+                <n-input
+                  v-model:value="releaseNotificationCooldownValue"
+                  :disabled="
+                    preferenceControlsDisabled ||
+                    !releaseNotificationCooldownEditable
+                  "
+                  inputmode="numeric"
+                  aria-label="Release notification cooldown seconds"
+                />
+                <n-alert
+                  v-if="releaseNotificationCooldownEntry?.disabled_reason"
+                  type="info"
+                  :show-icon="false"
+                  class="settings-action-alert"
+                >
+                  {{ releaseNotificationCooldownEntry.disabled_reason }}
                 </n-alert>
               </div>
             </div>
