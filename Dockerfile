@@ -10,6 +10,7 @@ COPY webui/package*.json /webui/
 RUN npm ci
 
 COPY webui/ /webui/
+COPY src/wudup/discord_webhook_policy.json /src/wudup/discord_webhook_policy.json
 RUN npm run build
 
 
