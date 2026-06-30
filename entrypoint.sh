@@ -54,11 +54,6 @@ env_auto_enabled(){
 startup_sync_status(){
   local command="${1:-}"
 
-  if legacy_wud_scripts_disabled; then
-    printf 'legacy-disabled\n'
-    return
-  fi
-
   case "$command" in
     sync-wud-scripts)
       printf 'manual-command\n'
@@ -201,11 +196,6 @@ sync_wud_scripts(){
   local dst="$wud_scripts_dir"
   local dst_canon app_canon docker_base_canon out_dir_canon out_dir marker legacy_marker
 
-  if legacy_wud_scripts_disabled; then
-    printf 'Legacy WUD scripts are disabled by WUDUP_LEGACY_SCRIPTS=false\n' >&2
-    return 1
-  fi
-
   if [[ -z "$dst" ]]; then
     refuse_unsafe_wud_scripts_dir
     return 1
@@ -252,7 +242,12 @@ sync_wud_scripts(){
   fi
 
   find "$dst_canon" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-  cp -R "$src"/. "$dst_canon"/
+  if legacy_wud_scripts_disabled; then
+    cp "$src/http-trigger.sh" "$dst_canon"/
+  else
+    cp -R "$src"/. "$dst_canon"/
+    rm -f "$dst_canon/http-trigger.sh"
+  fi
   find "$dst_canon" -type f -name '*.sh' -exec chmod +x {} +
   : > "$marker"
   printf 'Synced WUD scripts to %s\n' "$dst"

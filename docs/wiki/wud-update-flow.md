@@ -30,7 +30,9 @@ For API-first release-note notifications, WUD can instead call WUDup's
 `POST /api/v1/wud/triggers/update` endpoint through a WUD HTTP trigger. WUDup
 uses that event as a wake-up signal, refreshes `/api/containers`, and sends the
 matching WebUI release-note notification. Set `WUDUP_LEGACY_SCRIPTS=false` only
-after removing legacy WUD command triggers and recreating WUD.
+after removing legacy WUD command triggers and recreating the stack. In that
+mode managed script sync mounts `/wud/http-trigger.sh` instead of the legacy
+file-mode callbacks.
 
 ## Todo File Format
 

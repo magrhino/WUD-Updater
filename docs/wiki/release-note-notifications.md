@@ -122,7 +122,7 @@ to WUDup at `/api/v1/wud/triggers/update` with bearer auth matching
 `WUDUP_TRIGGER_TOKEN` or `WUDUP_TRIGGER_TOKEN_FILE`. Once WUD API metadata is
 healthy, set `WUDUP_LEGACY_SCRIPTS=false` and `WUD_PENDING_SOURCE=api`, then
 remove WUD command triggers that call `/wud/append-updates.sh`,
-`/wud/on-update.sh`, or `/wud/tag-manager.sh` before recreating WUD.
+`/wud/on-update.sh`, or `/wud/tag-manager.sh` before recreating the stack.
 
 ## LinuxServer.io Mapping
 

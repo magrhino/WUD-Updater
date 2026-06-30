@@ -27,8 +27,10 @@ services:
 Set `WUD_SYNC_SCRIPTS=false` to opt out of startup sync. Set
 `WUD_SYNC_SCRIPTS=true` to force sync, including when using a custom
 `WUD_SCRIPTS_DIR`. Set `WUDUP_LEGACY_SCRIPTS=false` for API-first WebUI
-deployments; that disables startup sync and makes `sync-wud-scripts` fail
-clearly instead of refreshing legacy WUD callbacks.
+deployments; that syncs only `/wud/http-trigger.sh` instead of refreshing
+legacy WUD callbacks. Remove WUD command triggers for `/wud/append-updates.sh`,
+`/wud/on-update.sh`, and `/wud/tag-manager.sh`, then recreate the stack before
+disabling legacy mode.
 
 After the first sync, configure WUD to call:
 
@@ -37,7 +39,15 @@ After the first sync, configure WUD to call:
 ```
 
 Use `/wud/on-update.sh` only when you intentionally keep the legacy shell
-release-note notification path.
+release-note notification path. API-first command-trigger deployments can call:
+
+```text
+/wud/http-trigger.sh
+```
+
+That helper reads `WUDUP_TRIGGER_TOKEN` or `WUDUP_TRIGGER_TOKEN_FILE` from the
+WUD container and posts to `WUDUP_TRIGGER_URL`, defaulting to WUDup on the
+Compose network.
 
 ## Safety Rules
 
@@ -64,9 +74,10 @@ Run a one-shot sync with:
 docker compose -f docs/examples/docker-compose.example.yml run --rm wudup sync-wud-scripts
 ```
 
-Run this once before relying on `/wud/append-updates.sh` when you intentionally
-disabled startup sync. During upgrades, recreating `wudup` refreshes the
-scripts automatically when the managed script volume is mounted.
+Run this once before relying on `/wud/append-updates.sh` or
+`/wud/http-trigger.sh` when you intentionally disabled startup sync. During
+upgrades, recreating `wudup` refreshes the scripts automatically when the
+managed script volume is mounted.
 
 For local image development, use
 `docs/examples/docker-compose.build.yml` instead of the deployment example.

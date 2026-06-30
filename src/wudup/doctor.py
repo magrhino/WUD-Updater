@@ -534,7 +534,7 @@ class Doctor:
             self._record(
                 "WARN",
                 "WUD script sync",
-                "WUDUP_LEGACY_SCRIPTS is disabled",
+                "legacy WUD callbacks are disabled",
             )
             return
         if self.options.sync_scripts == "disabled":

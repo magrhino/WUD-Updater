@@ -131,7 +131,7 @@ class DoctorTests(unittest.TestCase):
 
         self.assertEqual(status, 0, stdout)
         self.assertIn(
-            "[WARN] WUD script sync: WUDUP_LEGACY_SCRIPTS is disabled",
+            "[WARN] WUD script sync: legacy WUD callbacks are disabled",
             stdout,
         )
 

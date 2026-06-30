@@ -263,10 +263,10 @@ the host `updates` CLI and `docker-update-from-wud` remain legacy file-mode
 helpers and will not grow API mode.
 Set `WUDUP_LEGACY_SCRIPTS=false` only after WUD API access is healthy and after
 removing WUD command triggers that call `/wud/append-updates.sh`,
-`/wud/on-update.sh`, or `/wud/tag-manager.sh`; recreate WUD so stale trigger
-environment is gone. In that mode the WebUI forces API pending source behavior,
-skips managed WUD script sync, and the API-first WUD HTTP trigger can wake
-release-note notifications without touching `images.todo`.
+`/wud/on-update.sh`, or `/wud/tag-manager.sh`; recreate the stack so stale
+trigger environment is gone. In that mode the WebUI forces API pending source
+behavior and managed sync installs only the HTTP trigger helper, so WUD has the
+API callback script mounted without the legacy file-mode callbacks.
 For LAN or reverse-proxy exposure, set `WUD_WEB_PUBLIC_ORIGIN`; use
 `WUD_WEB_ALLOWED_HOSTS` only for extra host aliases, and review
 `WUD_WEB_TRUSTED_PROXIES` plus `WUD_WEB_SECURE_COOKIES` for reverse proxies.
@@ -353,7 +353,9 @@ volumes:
 
 When the managed script volume is mounted at `/managed-wud`, the container
 automatically copies packaged WUD scripts from `/app/wud` before normal command
-execution. Set `WUD_SYNC_SCRIPTS=false` to opt out, or set
+execution. With `WUDUP_LEGACY_SCRIPTS=false`, sync copies only
+`/wud/http-trigger.sh`; remove legacy WUD command triggers and recreate the
+stack before using that mode. Set `WUD_SYNC_SCRIPTS=false` to opt out, or set
 `WUD_SYNC_SCRIPTS=true` to force a sync when using a custom destination.
 
 The sync refuses unsafe destinations:
@@ -368,10 +370,12 @@ Managed directories are marked with `.wudup-managed`. Sync removes the
 previous managed contents, copies the packaged scripts, marks `*.sh` executable,
 and writes the marker again.
 
-Start or recreate `wudup` once before relying on `/wud/append-updates.sh` in a
-fresh empty script volume. Use `/wud/on-update.sh` only when you intentionally
-keep legacy shell release-note notifications. You can also run the sync
-directly:
+Start or recreate `wudup` once before relying on `/wud/append-updates.sh` or
+`/wud/http-trigger.sh` in a fresh empty script volume. Use `/wud/on-update.sh`
+only when you intentionally keep legacy shell release-note notifications. You
+can also run the sync directly. The HTTP helper reads `WUDUP_TRIGGER_TOKEN` or
+`WUDUP_TRIGGER_TOKEN_FILE` from the WUD container and posts to
+`WUDUP_TRIGGER_URL`, defaulting to WUDup on the Compose network.
 
 ```bash
 docker compose -f docs/examples/docker-compose.example.yml run --rm wudup sync-wud-scripts
@@ -601,8 +605,9 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_API_AUTH_BASIC_USER` + `WUD_API_AUTH_BASIC_PASSWORD_FILE` / `WUD_API_AUTH_BASIC_PASSWORD` | unset | Optional basic auth credentials for WUDup's outbound WUD API calls. The user and one password source must be set together. Prefer the `_FILE` password form in containers. |
 | `WUD_API_HEADERS_FILE` | unset | Optional UTF-8 JSON object of static WUD API request headers, such as `{"X-Api-Key":"example"}`. Header names and values are validated, values are redacted, and an `Authorization` header cannot be combined with bearer or basic auth. |
 | `WUD_PENDING_SOURCE` | `file` | WebUI pending-update source: `file` reads `WUD_OUT_FILE`, `api` derives pending lines from WUD `/api/containers`, and `auto` uses API metadata when usable before falling back to `WUD_OUT_FILE`. Host CLI update commands remain legacy file-mode only. |
-| `WUDUP_LEGACY_SCRIPTS` | `true` | Set `false` to disable WebUI `images.todo` fallback and managed WUD script sync. This forces API pending source behavior for the WebUI and the WUD trigger endpoint; host CLI update commands remain legacy file-mode only. |
+| `WUDUP_LEGACY_SCRIPTS` | `true` | Set `false` to disable WebUI `images.todo` fallback and sync only `/wud/http-trigger.sh` into the managed WUD script directory. Remove WUD command triggers for legacy scripts and recreate the stack before disabling legacy mode. This forces API pending source behavior for the WebUI and the WUD trigger endpoint; host CLI update commands remain legacy file-mode only. |
 | `WUDUP_TRIGGER_TOKEN_FILE` / `WUDUP_TRIGGER_TOKEN` | unset | Shared bearer token accepted by `POST /api/v1/wud/triggers/update`. Prefer the `_FILE` form in containers. Configure the WUD HTTP trigger to send the same token. |
+| `WUDUP_TRIGGER_URL` | `http://wudup:7417/api/v1/wud/triggers/update` | Optional endpoint override used only by the mounted `/wud/http-trigger.sh` command-trigger helper. Native WUD HTTP triggers can set the URL directly in WUD. |
 | `WUD_RELEASE_NOTES_ENABLED` | unset | Optional env override for WebUI Discord release-note notifications. Leave unset to manage the setting from Settings; set `true` or `false` only when the deployment should force the value and make the Settings toggle read-only. |
 | `WUD_WEB_HOST` | Host/direct app: `127.0.0.1`; container image: `0.0.0.0` | Host passed to Uvicorn when running `wudup web`. The image default makes published Docker ports reachable; Compose still controls host-side exposure with `WEBUI_HTTP_BIND`. |
 | `WUD_WEB_PORT` | `7417` | Port passed to Uvicorn when running `wudup web`. |
@@ -688,8 +693,9 @@ to `http://wudup:7417/api/v1/wud/triggers/update` with bearer auth matching
 `WUDUP_TRIGGER_TOKEN` or `WUDUP_TRIGGER_TOKEN_FILE`. Set
 `WUDUP_LEGACY_SCRIPTS=false` and `WUD_PENDING_SOURCE=api` once WUD API metadata
 is healthy. Remove legacy WUD command triggers for `/wud/append-updates.sh`,
-`/wud/on-update.sh`, and `/wud/tag-manager.sh`; otherwise old WUD containers can
-keep sending file-mode or shell release-note notifications until recreated.
+`/wud/on-update.sh`, and `/wud/tag-manager.sh`, then recreate the stack;
+otherwise old WUD containers can keep sending file-mode or shell release-note
+notifications until recreated.
 
 Do not keep a legacy WUD shell release-note callback enabled unless you still
 want that separate path. Running both the shell helper and WebUI sender for the

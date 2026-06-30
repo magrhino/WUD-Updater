@@ -84,6 +84,7 @@ EOF
     tests/test-release-notes-to-discord.sh \
     tests/test-tag-manager.sh \
     tests/test-upstreams-map.sh \
+    tests/test-wud-http-trigger.sh \
     tests/test-wud-append-updates.sh \
     tests/test-install.sh \
     tests/test-updates-wrapper.sh \
@@ -91,7 +92,8 @@ EOF
 
   run sh -n \
     wud/on-update.sh \
-    wud/append-updates.sh
+    wud/append-updates.sh \
+    wud/http-trigger.sh
 
   run shellcheck \
     entrypoint.sh \
@@ -100,6 +102,7 @@ EOF
     bin/docker-update-from-wud \
     wud/on-update.sh \
     wud/append-updates.sh \
+    wud/http-trigger.sh \
     wud/http.sh \
     wud/release-parser.sh \
     wud/release-notes-to-discord.sh \
@@ -116,6 +119,7 @@ EOF
     tests/test-release-notes-to-discord.sh \
     tests/test-tag-manager.sh \
     tests/test-upstreams-map.sh \
+    tests/test-wud-http-trigger.sh \
     tests/test-wud-append-updates.sh \
     tests/test-install.sh \
     tests/test-updates-wrapper.sh \
