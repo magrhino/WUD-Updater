@@ -114,6 +114,81 @@ describe("demo web API", () => {
         }),
       ]),
     });
+    await expect(
+      api.updateManagedSettings(
+        {
+          release_notifications_discord_webhook:
+            "https://discord.com/api/webhooks/123/token-secret",
+        },
+        "csrf",
+      ),
+    ).resolves.toMatchObject({
+      managed: expect.arrayContaining([
+        expect.objectContaining({
+          key: "release_notifications_discord_webhook",
+          value: "",
+          configured: true,
+          sensitive: true,
+        }),
+      ]),
+    });
+    await expect(
+      api.previewReleaseNotifications({ line_numbers: [2] }, "csrf"),
+    ).resolves.toMatchObject({
+      destination: {
+        type: "discord",
+        configured: true,
+        source: "WebUI settings",
+      },
+    });
+    await expect(
+      api.updateManagedSettings(
+        { release_notifications_discord_webhook: "" },
+        "csrf",
+      ),
+    ).resolves.toMatchObject({
+      managed: expect.arrayContaining([
+        expect.objectContaining({
+          key: "release_notifications_discord_webhook",
+          configured: false,
+          sensitive: true,
+        }),
+      ]),
+    });
+    await expect(
+      api.previewReleaseNotifications({ line_numbers: [2] }, "csrf"),
+    ).resolves.toMatchObject({
+      destination: {
+        type: "discord",
+        configured: false,
+        source: "",
+      },
+    });
+    await expect(
+      api.updateManagedSettings(
+        {
+          release_notifications_discord_webhook:
+            "https://discord.com/api/not-webhooks/123/token-secret",
+        },
+        "csrf",
+      ),
+    ).rejects.toThrow(
+      "release_notifications_discord_webhook must be a Discord webhook URL",
+    );
+    await expect(
+      api.updateManagedSettings(
+        { release_notifications_verbosity: "full" },
+        "csrf",
+      ),
+    ).resolves.toMatchObject({
+      managed: expect.arrayContaining([
+        expect.objectContaining({
+          key: "release_notifications_verbosity",
+          value: "full",
+          source: "configured",
+        }),
+      ]),
+    });
     await expect(api.onboardingChecklist("csrf")).resolves.toMatchObject({
       visible: true,
       items: expect.arrayContaining([
@@ -387,6 +462,66 @@ describe("demo web API", () => {
       "media/radarr",
       "admin",
     ]);
+  });
+
+  it("labels fixture env release webhook as DISCORD_WEBHOOK", () => {
+    const webhook = generatedFixtures.settings.managed.find(
+      (entry) => entry.key === "release_notifications_discord_webhook",
+    );
+    const secret = generatedFixtures.settings.secrets.find(
+      (entry) => entry.name === "DISCORD_WEBHOOK",
+    );
+    if (!webhook || !secret) {
+      throw new Error("Expected release notification webhook fixture settings");
+    }
+    const originalWebhook = { ...webhook };
+    const originalSecret = { ...secret };
+    try {
+      Object.assign(webhook, { configured: true, source: "configured" });
+      Object.assign(secret, { configured: true });
+
+      expect(
+        new DemoApiState().releaseNotifications({ line_numbers: [2] }, false)
+          .destination,
+      ).toMatchObject({
+        configured: true,
+        source: "DISCORD_WEBHOOK",
+      });
+    } finally {
+      Object.assign(webhook, originalWebhook);
+      Object.assign(secret, originalSecret);
+    }
+  });
+
+  it("preserves fixture-configured release notification verbosity", () => {
+    const verbosity = generatedFixtures.settings.managed.find(
+      (entry) => entry.key === "release_notifications_verbosity",
+    );
+    if (!verbosity) {
+      throw new Error("Expected release notification verbosity fixture setting");
+    }
+    const original = { ...verbosity };
+    try {
+      Object.assign(verbosity, {
+        configured: true,
+        source: "configured",
+        value: "full",
+      });
+
+      expect(
+        new DemoApiState()
+          .settings()
+          .managed.find(
+            (entry) => entry.key === "release_notifications_verbosity",
+          ),
+      ).toMatchObject({
+        configured: true,
+        source: "configured",
+        value: "full",
+      });
+    } finally {
+      Object.assign(verbosity, original);
+    }
   });
 
   it("creates plans from the current fixture state", async () => {
@@ -1025,6 +1160,13 @@ describe("demo web API", () => {
   it("previews and sends static demo release notifications without mutating pending state", async () => {
     const api = createDemoWebApi();
     const selected = [2, 4, 6];
+    await api.updateManagedSettings(
+      {
+        release_notifications_discord_webhook:
+          "https://discord.com/api/webhooks/123/token-secret",
+      },
+      "csrf",
+    );
 
     const preview = await api.previewReleaseNotifications(
       { line_numbers: selected },
@@ -1044,7 +1186,7 @@ describe("demo web API", () => {
       destination: {
         type: "discord",
         configured: true,
-        source: "DISCORD_RELEASES_WEBHOOK",
+        source: "WebUI settings",
       },
     });
     expect(preview.items.map((item) => item.line_no)).toEqual(selected);

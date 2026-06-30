@@ -528,7 +528,7 @@ describe("settings mutation views", () => {
     expect(wrapper.text()).toContain("Preferences saved. Audit run #77.");
   });
 
-  it("saves the release-note notification preference from settings", async () => {
+  it("saves release-note notification settings from the notifications section", async () => {
     const { pinia, settings } = setupStores(true);
     settings.settings = settingsResponse({
       webui: settingsResponse().webui.map((entry) =>
@@ -560,6 +560,16 @@ describe("settings mutation views", () => {
             if (entry.key === "release_notifications_cooldown_seconds") {
               return { ...entry, value: "60", source: "configured" as const };
             }
+            if (entry.key === "release_notifications_discord_webhook") {
+              return {
+                ...entry,
+                configured: true,
+                source: "configured" as const,
+              };
+            }
+            if (entry.key === "release_notifications_verbosity") {
+              return { ...entry, value: "full", source: "configured" as const };
+            }
             return entry;
           }),
         }).managed,
@@ -569,14 +579,18 @@ describe("settings mutation views", () => {
     const wrapper = mountWithApp(SettingsView, { pinia });
     await flushPromises();
     await wrapper.find('input[role="switch"]').setValue(true);
-    emitSelectValue(wrapper, 1, "per_container");
-    emitSelectValue(wrapper, 2, "cooldown");
+    await wrapper
+      .find('input[aria-label="Discord webhook URL"]')
+      .setValue("https://discord.com/api/webhooks/123/token-secret");
+    emitSelectValue(wrapper, 3, "full");
+    emitSelectValue(wrapper, 4, "per_container");
+    emitSelectValue(wrapper, 5, "cooldown");
     await wrapper
       .find('input[aria-label="Release notification cooldown seconds"]')
-      .setValue("60");
+      .setValue("00060");
     const saveButton = wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Save preferences"));
+      .find((button) => button.text().includes("Save notifications"));
     await saveButton?.trigger("click");
     await flushPromises();
 
@@ -585,8 +599,53 @@ describe("settings mutation views", () => {
       release_notifications_mode: "per_container",
       release_notifications_resend_policy: "cooldown",
       release_notifications_cooldown_seconds: "60",
+      release_notifications_discord_webhook:
+        "https://discord.com/api/webhooks/123/token-secret",
+      release_notifications_verbosity: "full",
     });
-    expect(wrapper.text()).toContain("Preferences saved. Audit run #78.");
+    expect(wrapper.text()).toContain("Notification settings saved. Audit run #78.");
+  });
+
+  it("clears a configured Discord webhook from the notifications section", async () => {
+    const { pinia, settings } = setupStores(true);
+    settings.settings = settingsResponse({
+      webui: settingsResponse().webui.map((entry) =>
+        entry.name === "WUD_WEB_MUTATIONS_ENABLED"
+          ? { ...entry, value: "true", configured: true, source: "configured" as const }
+          : entry,
+      ),
+      managed: settingsResponse().managed.map((entry) =>
+        entry.key === "release_notifications_discord_webhook"
+          ? { ...entry, configured: true, source: "configured" as const }
+          : entry,
+      ),
+    });
+    settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    const updateManagedSettings = vi
+      .spyOn(settings, "updateManagedSettings")
+      .mockResolvedValue({
+        managed: settingsResponse().managed,
+        audit_run_id: 79,
+      });
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+    const clearButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Clear webhook"));
+    await clearButton?.trigger("click");
+    await flushPromises();
+    const saveButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Save notifications"));
+    await saveButton?.trigger("click");
+    await flushPromises();
+
+    expect(updateManagedSettings).toHaveBeenCalledWith({
+      release_notifications_discord_webhook: "",
+    });
+    expect(wrapper.text()).toContain("Notification settings saved. Audit run #79.");
   });
 
   it("validates release-note notification cooldown before saving", async () => {
@@ -603,7 +662,7 @@ describe("settings mutation views", () => {
       .setValue("0");
     const saveButton = wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Save preferences"));
+      .find((button) => button.text().includes("Save notifications"));
     await saveButton?.trigger("click");
     await flushPromises();
 
@@ -611,6 +670,34 @@ describe("settings mutation views", () => {
     expect(wrapper.text()).toContain(
       "Release notification cooldown must be a positive integer.",
     );
+  });
+
+  it("does not dirty release-note cooldown for equivalent normalized values", async () => {
+    const { pinia, settings } = setupStores(true);
+    settings.settings = settingsResponse({
+      webui: settingsResponse().webui.map((entry) =>
+        entry.name === "WUD_WEB_MUTATIONS_ENABLED"
+          ? { ...entry, value: "true", configured: true, source: "configured" as const }
+          : entry,
+      ),
+    });
+    settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    const updateManagedSettings = vi.spyOn(settings, "updateManagedSettings");
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+    await wrapper
+      .find('input[aria-label="Release notification cooldown seconds"]')
+      .setValue("086400");
+    const saveButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Save notifications"));
+
+    expect(saveButton?.attributes("disabled")).toBeDefined();
+    await saveButton?.trigger("click");
+    await flushPromises();
+    expect(updateManagedSettings).not.toHaveBeenCalled();
   });
 
   it("keeps release-note notification preferences read-only when env configured", async () => {
@@ -624,14 +711,23 @@ describe("settings mutation views", () => {
             "WUD_RELEASE_NOTIFICATIONS_RESEND_POLICY",
           release_notifications_cooldown_seconds:
             "WUD_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS",
+          release_notifications_discord_webhook: "DISCORD_WEBHOOK",
         };
         const envName = envNames[entry.key];
         return envName
           ? {
               ...entry,
               value: entry.key === "release_notes_enabled" ? "true" : entry.value,
+              configured:
+                entry.key === "release_notifications_discord_webhook"
+                  ? true
+                  : entry.configured,
               source: "configured" as const,
               editable: false,
+              sensitive:
+                entry.key === "release_notifications_discord_webhook"
+                  ? true
+                  : entry.sensitive,
               disabled_reason: `Set by ${envName}; remove it to manage this from the WebUI.`,
             }
           : entry;
@@ -648,6 +744,10 @@ describe("settings mutation views", () => {
     expect(wrapper.text()).toContain("WUD_RELEASE_NOTIFICATIONS_MODE");
     expect(wrapper.text()).toContain("WUD_RELEASE_NOTIFICATIONS_RESEND_POLICY");
     expect(wrapper.text()).toContain("WUD_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS");
+    expect(wrapper.text()).toContain("DISCORD_WEBHOOK");
+    expect(
+      wrapper.find('input[aria-label="Discord webhook URL"]').attributes("disabled"),
+    ).toBeDefined();
   });
 
   it("relaunches the onboarding checklist from settings", async () => {

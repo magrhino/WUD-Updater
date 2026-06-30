@@ -19,6 +19,7 @@ class ReleaseNotificationConfig:
     mode: str = "digest"
     resend_policy: str = "remote_change"
     cooldown_seconds: int = 86_400
+    verbosity: str = "summary"
 
 
 @dataclass(frozen=True)

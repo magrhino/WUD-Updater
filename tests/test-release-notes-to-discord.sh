@@ -158,10 +158,10 @@ FAKE_CURL
 
 run_notes(){
   local image="$1" current="$2" payload_file="$3"
-  local webhook="${DISCORD_RELEASES_WEBHOOK:-https://discord.test/webhook}"
+  local webhook="${DISCORD_WEBHOOK:-https://discord.test/webhook}"
 
   PATH="$TEST_TMP/bin:$PATH" \
-    DISCORD_RELEASES_WEBHOOK="$webhook" \
+    DISCORD_WEBHOOK="$webhook" \
     FAKE_WEBHOOK_PAYLOAD="$payload_file" \
     FAKE_CURL_ARGS_LOG="$TEST_TMP/curl.args" \
     FAKE_IMAGE_SOURCE="${FAKE_IMAGE_SOURCE:-}" \
@@ -505,7 +505,7 @@ test_missing_source_webhook_failure_is_nonzero_and_redacted(){
   local payload_file="$TEST_TMP/payload.json"
 
   if PATH="$TEST_TMP/bin:$PATH" \
-    DISCORD_RELEASES_WEBHOOK="https://discord.test/fail/secret-token" \
+    DISCORD_WEBHOOK="https://discord.test/fail/secret-token" \
     FAKE_WEBHOOK_PAYLOAD="$payload_file" \
     FAKE_CURL_ARGS_LOG="$TEST_TMP/curl.args" \
     FAKE_IMAGE_SOURCE="" \

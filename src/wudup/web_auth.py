@@ -65,8 +65,8 @@ SENSITIVE_ENV_KEYS = (
     "WUD_API_AUTH_BASIC_PASSWORD",
     "WUD_API_AUTH_BASIC_PASSWORD_FILE",
     "GITHUB_TOKEN",
-    "DISCORD_RELEASES_WEBHOOK",
     "DISCORD_WEBHOOK",
+    "DISCORD_RELEASES_WEBHOOK",
     "ADMIN_WEBHOOK",
 )
 SENSITIVE_FIELD_KEY_PARTS = frozenset(
@@ -350,21 +350,40 @@ def _sensitive_mapping_key(key: str) -> bool:
 
 
 def _sanitize_support_bundle_value(settings: WebSettings, value: Any) -> Any:
+    return _sanitize_support_bundle_value_with_secrets(settings, value, ())
+
+
+def _sanitize_support_bundle_value_with_secrets(
+    settings: WebSettings,
+    value: Any,
+    extra_secrets: Sequence[str],
+) -> Any:
     if isinstance(value, dict):
         return {
-            str(key): _sanitize_support_bundle_value(settings, item)
+            str(key): _sanitize_support_bundle_value_with_secrets(
+                settings,
+                item,
+                extra_secrets,
+            )
             for key, item in value.items()
         }
     if isinstance(value, list):
-        return [_sanitize_support_bundle_value(settings, item) for item in value]
+        return [
+            _sanitize_support_bundle_value_with_secrets(settings, item, extra_secrets)
+            for item in value
+        ]
     if isinstance(value, str):
-        return _sanitize_support_bundle_text(settings, value)
+        return _sanitize_support_bundle_text(settings, value, extra_secrets)
     return value
 
 
-def _sanitize_support_bundle_text(settings: WebSettings, value: str) -> str:
+def _sanitize_support_bundle_text(
+    settings: WebSettings,
+    value: str,
+    extra_secrets: Sequence[str] = (),
+) -> str:
     replacements = _support_bundle_path_replacements(settings)
-    redacted = _redact_sensitive_text(settings, value)
+    redacted = _redact_sensitive_text(settings, value, extra_secrets=extra_secrets)
     for source, target in replacements:
         redacted = redacted.replace(source, target)
     return _redact_unknown_absolute_paths(redacted)

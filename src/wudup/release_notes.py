@@ -67,6 +67,7 @@ class ReleaseNoteInfo:
     links: list[ReleaseNoteLink] = field(default_factory=list)
     refreshed_at: str = ""
     error: str = ""
+    body: str = ""
 
 
 @dataclass(frozen=True)
@@ -455,6 +456,7 @@ def _row_to_info(row: sqlite3.Row, *, line_no: int) -> ReleaseNoteInfo:
         ],
         refreshed_at=str(row["updated_at"]),
         error=str(row["error"]),
+        body=str(row["body"]),
     )
 
 
@@ -485,11 +487,12 @@ def _upsert_cache(
                 breaking_reasons_json,
                 links_json,
                 error,
+                body,
                 created_at,
                 updated_at,
                 metadata_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(cache_key) DO UPDATE SET
                 provider = excluded.provider,
                 image_repo = excluded.image_repo,
@@ -504,6 +507,7 @@ def _upsert_cache(
                 breaking_reasons_json = excluded.breaking_reasons_json,
                 links_json = excluded.links_json,
                 error = excluded.error,
+                body = excluded.body,
                 updated_at = excluded.updated_at,
                 metadata_json = excluded.metadata_json
             """,
@@ -522,6 +526,7 @@ def _upsert_cache(
                 reasons_json,
                 links_json,
                 info.error,
+                info.body,
                 timestamp,
                 timestamp,
                 metadata_json,
@@ -596,6 +601,7 @@ def _fetch_github_release_note(
             )
         ],
         refreshed_at=timestamp,
+        body=body,
     )
 
 
@@ -676,6 +682,7 @@ def _fetch_lsio_release_note(
         breaking_reasons=reasons,
         links=links,
         refreshed_at=timestamp,
+        body="\n\n".join(part for part in (body, lsio_body) if part),
     )
 
 

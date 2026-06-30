@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -15,9 +16,40 @@ from tests.web_test_helpers import (
     _client,
     _csrf_headers,
     _setup_admin,
+    _store_web_setting,
 )
 
-from tests.web_test_helpers import _store_web_setting
+
+def test_discord_webhook_policy_loader_falls_back_when_file_is_missing(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    monkeypatch.setattr(settings_module, "files", lambda _package: tmp_path)
+
+    with caplog.at_level(logging.WARNING, logger=settings_module.LOGGER.name):
+        hosts, path_prefix = settings_module._load_discord_webhook_policy()
+
+    assert hosts == frozenset(settings_module._DEFAULT_DISCORD_WEBHOOK_ALLOWED_HOSTS)
+    assert path_prefix == settings_module._DEFAULT_DISCORD_WEBHOOK_PATH_PREFIX
+    assert "using fallback Discord webhook policy" in caplog.text
+
+
+def test_discord_webhook_policy_loader_falls_back_when_file_is_malformed(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    monkeypatch.setattr(settings_module, "files", lambda _package: tmp_path)
+    (tmp_path / "discord_webhook_policy.json").write_text("{", encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING, logger=settings_module.LOGGER.name):
+        hosts, path_prefix = settings_module._load_discord_webhook_policy()
+
+    assert hosts == frozenset(settings_module._DEFAULT_DISCORD_WEBHOOK_ALLOWED_HOSTS)
+    assert path_prefix == settings_module._DEFAULT_DISCORD_WEBHOOK_PATH_PREFIX
+    assert "using fallback Discord webhook policy" in caplog.text
+
 
 def test_state_read_database_errors_are_sanitized(
     tmp_path: Path,
@@ -183,7 +215,6 @@ def test_settings_reports_effective_non_secret_configuration(
     assert secrets["WUD_API_AUTH_BASIC_PASSWORD_FILE"]["configured"] is False
     assert "WUD_API_HEADERS_FILE" not in secrets
     assert secrets["GITHUB_TOKEN"]["configured"] is True
-    assert secrets["DISCORD_RELEASES_WEBHOOK"]["configured"] is False
     assert secrets["DISCORD_WEBHOOK"]["configured"] is True
     assert secrets["ADMIN_WEBHOOK"]["configured"] is True
     assert managed["theme_preference"] == {
@@ -195,6 +226,8 @@ def test_settings_reports_effective_non_secret_configuration(
         "allowed_values": ["system", "light", "dark"],
         "restart_required": False,
         "disabled_reason": "",
+        "configured": False,
+        "sensitive": False,
     }
     assert managed["onboarding_checklist"] == {
         "key": "onboarding_checklist",
@@ -205,6 +238,8 @@ def test_settings_reports_effective_non_secret_configuration(
         "allowed_values": ["visible", "dismissed"],
         "restart_required": False,
         "disabled_reason": "",
+        "configured": False,
+        "sensitive": False,
     }
     assert managed["compose_ignore_paths"] == {
         "key": "compose_ignore_paths",
@@ -215,6 +250,8 @@ def test_settings_reports_effective_non_secret_configuration(
         "allowed_values": [],
         "restart_required": False,
         "disabled_reason": "",
+        "configured": False,
+        "sensitive": False,
     }
     assert managed["digest_pin_updates"] == {
         "key": "digest_pin_updates",
@@ -225,6 +262,8 @@ def test_settings_reports_effective_non_secret_configuration(
         "allowed_values": ["false", "true"],
         "restart_required": False,
         "disabled_reason": "",
+        "configured": False,
+        "sensitive": False,
     }
     assert managed["release_notes_enabled"] == {
         "key": "release_notes_enabled",
@@ -235,6 +274,35 @@ def test_settings_reports_effective_non_secret_configuration(
         "allowed_values": ["false", "true"],
         "restart_required": False,
         "disabled_reason": "",
+        "configured": False,
+        "sensitive": False,
+    }
+    assert managed["release_notifications_discord_webhook"] == {
+        "key": "release_notifications_discord_webhook",
+        "value": "",
+        "default_value": "",
+        "source": "configured",
+        "editable": False,
+        "allowed_values": [],
+        "restart_required": False,
+        "disabled_reason": (
+            "DISCORD_WEBHOOK is configured in the server environment. "
+            "Unset it to manage the Discord webhook in the WebUI."
+        ),
+        "configured": True,
+        "sensitive": True,
+    }
+    assert managed["release_notifications_verbosity"] == {
+        "key": "release_notifications_verbosity",
+        "value": "summary",
+        "default_value": "summary",
+        "source": "default",
+        "editable": True,
+        "allowed_values": ["summary", "full"],
+        "restart_required": False,
+        "disabled_reason": "",
+        "configured": False,
+        "sensitive": False,
     }
     for value in (*secret_values.values(), "wud-api-header-secret"):
         assert value not in serialized
@@ -356,6 +424,44 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
         json={"values": {"release_notifications_cooldown_seconds": "0"}},
         headers=headers,
     )
+    invalid_notification_webhook = client.post(
+        "/api/v1/settings/managed",
+        json={
+            "values": {
+                "release_notifications_discord_webhook": (
+                    "https://discord.com/api/not-webhooks/123/token-secret"
+                )
+            }
+        },
+        headers=headers,
+    )
+    partial_notification_webhook = client.post(
+        "/api/v1/settings/managed",
+        json={
+            "values": {
+                "release_notifications_discord_webhook": (
+                    "https://discord.com/api/webhooks/123"
+                )
+            }
+        },
+        headers=headers,
+    )
+    prefix_notification_webhook = client.post(
+        "/api/v1/settings/managed",
+        json={
+            "values": {
+                "release_notifications_discord_webhook": (
+                    "https://discord.com/api/webhooks/"
+                )
+            }
+        },
+        headers=headers,
+    )
+    invalid_notification_verbosity = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"release_notifications_verbosity": "verbose"}},
+        headers=headers,
+    )
     empty_payload = client.post(
         "/api/v1/settings/managed",
         json={"values": {}},
@@ -385,6 +491,22 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
     assert invalid_notification_cooldown.status_code == 422
     assert invalid_notification_cooldown.json()["detail"] == (
         "release_notifications_cooldown_seconds must be a positive integer"
+    )
+    assert invalid_notification_webhook.status_code == 422
+    assert invalid_notification_webhook.json()["detail"] == (
+        "release_notifications_discord_webhook must be a Discord webhook URL"
+    )
+    assert partial_notification_webhook.status_code == 422
+    assert partial_notification_webhook.json()["detail"] == (
+        "release_notifications_discord_webhook must be a Discord webhook URL"
+    )
+    assert prefix_notification_webhook.status_code == 422
+    assert prefix_notification_webhook.json()["detail"] == (
+        "release_notifications_discord_webhook must be a Discord webhook URL"
+    )
+    assert invalid_notification_verbosity.status_code == 422
+    assert invalid_notification_verbosity.json()["detail"] == (
+        "release_notifications_verbosity must be one of: summary, full"
     )
     assert empty_payload.status_code == 422
     assert empty_payload.json()["detail"] == "at least one managed setting is required"
@@ -572,6 +694,47 @@ def test_managed_release_notes_env_guard_disables_webui_edit(
     ]
 
 
+def test_managed_discord_webhook_env_guard_disables_webui_edit(
+    tmp_path: Path,
+) -> None:
+    webhook = "https://discord.com/api/webhooks/env/token-secret"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "DISCORD_WEBHOOK": webhook,
+        },
+    )
+    headers = _csrf_headers(client)
+
+    settings_response = client.get("/api/v1/settings")
+    managed = {entry["key"]: entry for entry in settings_response.json()["managed"]}
+    response = client.post(
+        "/api/v1/settings/managed",
+        json={
+            "values": {
+                "release_notifications_discord_webhook": (
+                    "https://discord.com/api/webhooks/db/token-secret"
+                )
+            }
+        },
+        headers=headers,
+    )
+    webhook_entry = managed["release_notifications_discord_webhook"]
+
+    assert webhook_entry["value"] == ""
+    assert webhook_entry["configured"] is True
+    assert webhook_entry["sensitive"] is True
+    assert webhook_entry["editable"] is False
+    assert "Unset it to manage the Discord webhook" in webhook_entry[
+        "disabled_reason"
+    ]
+    assert webhook not in settings_response.text
+    assert response.status_code == 422
+    assert response.json()["detail"] == webhook_entry["disabled_reason"]
+
+
 def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> None:
     client = _client(
         tmp_path,
@@ -581,6 +744,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         },
     )
     headers = _csrf_headers(client)
+    webhook = "https://discord.com/api/webhooks/123/token-secret"
 
     response = client.post(
         "/api/v1/settings/managed",
@@ -594,6 +758,8 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
                 "release_notifications_mode": "per_container",
                 "release_notifications_resend_policy": "cooldown",
                 "release_notifications_cooldown_seconds": "60",
+                "release_notifications_discord_webhook": webhook,
+                "release_notifications_verbosity": "full",
             }
         },
         headers=headers,
@@ -616,6 +782,12 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert managed["release_notifications_mode"]["value"] == "per_container"
     assert managed["release_notifications_resend_policy"]["value"] == "cooldown"
     assert managed["release_notifications_cooldown_seconds"]["value"] == "60"
+    assert managed["release_notifications_discord_webhook"]["value"] == ""
+    assert managed["release_notifications_discord_webhook"]["source"] == "configured"
+    assert managed["release_notifications_discord_webhook"]["configured"] is True
+    assert managed["release_notifications_discord_webhook"]["sensitive"] is True
+    assert managed["release_notifications_verbosity"]["value"] == "full"
+    assert webhook not in response.text
 
     db_path = tmp_path / "state" / "wud.sqlite"
     with open_db(db_path) as conn:
@@ -651,6 +823,20 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
             WHERE key = 'release_notifications.cooldown_seconds'
             """
         ).fetchone()
+        release_notifications_webhook = conn.execute(
+            """
+            SELECT value
+            FROM web_settings
+            WHERE key = 'release_notifications.discord_webhook'
+            """
+        ).fetchone()
+        release_notifications_verbosity = conn.execute(
+            """
+            SELECT value
+            FROM web_settings
+            WHERE key = 'release_notifications.verbosity'
+            """
+        ).fetchone()
         run = conn.execute(
             "SELECT * FROM update_runs WHERE id = ?",
             (body["audit_run_id"],),
@@ -670,6 +856,8 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert release_notifications_mode["value"] == "per_container"
     assert release_notifications_resend_policy["value"] == "cooldown"
     assert release_notifications_cooldown["value"] == "60"
+    assert release_notifications_webhook["value"] == webhook
+    assert release_notifications_verbosity["value"] == "full"
     assert run["mode"] == "web-settings"
     assert run_metadata["operation"] == "update_managed_settings"
     assert run_metadata["target"] == {
@@ -679,8 +867,10 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
             "onboarding_checklist",
             "release_notes_enabled",
             "release_notifications_cooldown_seconds",
+            "release_notifications_discord_webhook",
             "release_notifications_mode",
             "release_notifications_resend_policy",
+            "release_notifications_verbosity",
             "theme_preference",
         ]
     }
@@ -693,6 +883,8 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         "release_notifications_mode": "digest",
         "release_notifications_resend_policy": "remote_change",
         "release_notifications_cooldown_seconds": "86400",
+        "release_notifications_discord_webhook": "",
+        "release_notifications_verbosity": "summary",
     }
     assert event_metadata["after"] == {
         "theme_preference": "dark",
@@ -703,7 +895,11 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         "release_notifications_mode": "per_container",
         "release_notifications_resend_policy": "cooldown",
         "release_notifications_cooldown_seconds": "60",
+        "release_notifications_discord_webhook": "configured",
+        "release_notifications_verbosity": "full",
     }
+    assert webhook not in run["metadata_json"]
+    assert webhook not in event["metadata_json"]
 
     reset = client.post(
         "/api/v1/settings/managed",

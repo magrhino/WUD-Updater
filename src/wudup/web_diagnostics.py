@@ -17,7 +17,7 @@ from .db import DatabaseError
 from .plans import DryRunPlan
 from .web_auth import (
     _redact_sensitive_text,
-    _sanitize_support_bundle_value,
+    _sanitize_support_bundle_value_with_secrets,
     _settings,
 )
 from .web_database import (
@@ -103,8 +103,15 @@ def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundle
         discovery_warnings=discovery_warnings,
         log_tail=log_tail,
     )
+    extra_secrets = web_settings.release_notification_webhook_redaction_values(
+        settings,
+    )
     return DiagnosticsSupportBundleResponse.model_validate(
-        _sanitize_support_bundle_value(settings, bundle.model_dump(mode="json"))
+        _sanitize_support_bundle_value_with_secrets(
+            settings,
+            bundle.model_dump(mode="json"),
+            extra_secrets,
+        )
     )
 
 

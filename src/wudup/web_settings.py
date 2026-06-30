@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import sqlite3
+import urllib.parse
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import closing
 from dataclasses import replace
+from importlib.resources import files
 from pathlib import Path
 
 from fastapi import HTTPException, Request
@@ -61,6 +65,8 @@ from .web_static import (
     static_spa_available as _static_spa_available,
 )
 
+LOGGER = logging.getLogger(__name__)
+
 DEFAULT_WEB_HOST = "127.0.0.1"
 MANAGED_THEME_PREFERENCE_KEY = "theme_preference"
 MANAGED_THEME_PREFERENCE_DB_KEY = "ui.theme_preference"
@@ -86,16 +92,68 @@ MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_KEY = (
 MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY = (
     "release_notifications.cooldown_seconds"
 )
+MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_KEY = (
+    "release_notifications_discord_webhook"
+)
+MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_DB_KEY = (
+    "release_notifications.discord_webhook"
+)
+MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_KEY = "release_notifications_verbosity"
+MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_DB_KEY = "release_notifications.verbosity"
+DISCORD_WEBHOOK_ENV_NAMES = ("DISCORD_WEBHOOK",)
 THEME_PREFERENCE_VALUES = ("system", "light", "dark")
 ONBOARDING_CHECKLIST_VALUES = ("visible", "dismissed")
 DIGEST_PIN_UPDATES_VALUES = ("false", "true")
 RELEASE_NOTES_ENABLED_VALUES = ("false", "true")
 RELEASE_NOTIFICATIONS_MODE_VALUES = ("digest", "per_container")
 RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES = ("remote_change", "cooldown")
+RELEASE_NOTIFICATIONS_VERBOSITY_VALUES = ("summary", "full")
 DEFAULT_RELEASE_NOTES_ENABLED = False
 DEFAULT_RELEASE_NOTIFICATIONS_MODE = "digest"
 DEFAULT_RELEASE_NOTIFICATIONS_RESEND_POLICY = "remote_change"
 DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS = 86_400
+DEFAULT_RELEASE_NOTIFICATIONS_VERBOSITY = "summary"
+_DEFAULT_DISCORD_WEBHOOK_ALLOWED_HOSTS = (
+    "discord.com",
+    "discordapp.com",
+    "canary.discord.com",
+    "ptb.discord.com",
+)
+_DEFAULT_DISCORD_WEBHOOK_PATH_PREFIX = "/api/webhooks/"
+
+
+def _load_discord_webhook_policy() -> tuple[frozenset[str], str]:
+    try:
+        policy = json.loads(
+            files("wudup").joinpath("discord_webhook_policy.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        allowed_hosts = policy["allowed_hosts"]
+        path_prefix = policy["path_prefix"]
+        if (
+            not isinstance(allowed_hosts, list)
+            or not allowed_hosts
+            or not all(isinstance(host, str) and host.strip() for host in allowed_hosts)
+            or not isinstance(path_prefix, str)
+            or not path_prefix.startswith("/")
+        ):
+            raise ValueError("invalid Discord webhook policy shape")
+        return frozenset(host.strip().lower() for host in allowed_hosts), path_prefix
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        LOGGER.warning(
+            "using fallback Discord webhook policy; packaged policy load failed: %s",
+            type(exc).__name__,
+        )
+        return (
+            frozenset(_DEFAULT_DISCORD_WEBHOOK_ALLOWED_HOSTS),
+            _DEFAULT_DISCORD_WEBHOOK_PATH_PREFIX,
+        )
+
+
+DISCORD_WEBHOOK_ALLOWED_HOSTS, DISCORD_WEBHOOK_PATH_PREFIX = (
+    _load_discord_webhook_policy()
+)
 
 
 def api_settings(request: Request) -> SettingsResponse:
@@ -294,6 +352,60 @@ def effective_release_notification_config(
         ) from exc
 
 
+def effective_release_notification_webhook(settings: WebSettings) -> tuple[str, str]:
+    env_webhook = _discord_webhook_env(settings)
+    if env_webhook[0]:
+        return env_webhook
+    try:
+        with closing(_connect_readonly_db(settings)) as conn:
+            value = _web_setting_or_none(
+                conn,
+                MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_DB_KEY,
+            )
+    except ReadOnlyDatabaseMissing:
+        return "", ""
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read Discord webhook setting",
+                exc,
+            ),
+        ) from exc
+    if not value:
+        return "", ""
+    try:
+        return _validated_discord_webhook(value), "WebUI settings"
+    except ConfigError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                f"stored {MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_KEY} is invalid",
+                exc,
+            ),
+        ) from exc
+
+
+def release_notification_webhook_redaction_values(
+    settings: WebSettings,
+) -> tuple[str, ...]:
+    values = [_discord_webhook_env(settings)[0]]
+    try:
+        with closing(_connect_readonly_db(settings)) as conn:
+            values.append(
+                _web_setting_or_none(
+                    conn,
+                    MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_DB_KEY,
+                )
+                or ""
+            )
+    except (ReadOnlyDatabaseMissing, OSError, sqlite3.Error, DatabaseError):
+        pass
+    return tuple(value for value in values if value)
+
+
 def _effective_release_notes_enabled_state(settings: WebSettings) -> tuple[bool, bool]:
     if _release_notes_enabled_env_configured(settings):
         return bool(settings.release_notes_enabled_env), True
@@ -353,6 +465,25 @@ def _release_notes_enabled_disabled_reason(settings: WebSettings) -> str:
     )
 
 
+def _discord_webhook_env(settings: WebSettings) -> tuple[str, str]:
+    env = _settings_env(settings)
+    for name in DISCORD_WEBHOOK_ENV_NAMES:
+        value = env.get(name, "").strip()
+        if value:
+            return value, name
+    return "", ""
+
+
+def _discord_webhook_disabled_reason(settings: WebSettings) -> str:
+    _value, source = _discord_webhook_env(settings)
+    if not source:
+        return ""
+    return (
+        f"{source} is configured in the server environment. "
+        "Unset it to manage the Discord webhook in the WebUI."
+    )
+
+
 def _managed_settings_entries(settings: WebSettings) -> list[ManagedSettingEntry]:
     try:
         with closing(_connect_readonly_db(settings)) as conn:
@@ -406,7 +537,7 @@ def _managed_settings_db_values(conn: sqlite3.Connection) -> dict[str, str]:
         """
         SELECT key, value
         FROM web_settings
-        WHERE key IN (?, ?, ?, ?, ?, ?, ?, ?)
+        WHERE key IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             MANAGED_THEME_PREFERENCE_DB_KEY,
@@ -417,6 +548,8 @@ def _managed_settings_db_values(conn: sqlite3.Connection) -> dict[str, str]:
             MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY,
             MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_DB_KEY,
             MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY,
+            MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_DB_KEY,
+            MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_DB_KEY,
         ),
     ).fetchall()
     return {str(row["key"]): str(row["value"]) for row in rows}
@@ -475,6 +608,15 @@ def _managed_settings_entries_from_values(
     )
     release_notifications_cooldown_configured = (
         MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY in values
+    )
+    webhook_disabled_reason = _discord_webhook_disabled_reason(settings)
+    env_webhook, _env_webhook_source = _discord_webhook_env(settings)
+    stored_webhook = values.get(MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_DB_KEY, "")
+    webhook_configured = bool(env_webhook or stored_webhook)
+    if stored_webhook and not env_webhook:
+        _validated_discord_webhook(stored_webhook)
+    release_notifications_verbosity_configured = (
+        MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_DB_KEY in values
     )
     return [
         ManagedSettingEntry(
@@ -564,6 +706,31 @@ def _managed_settings_entries_from_values(
             allowed_values=[],
             restart_required=False,
         ),
+        ManagedSettingEntry(
+            key=MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_KEY,
+            value="",
+            default_value="",
+            source="configured" if webhook_configured else "default",
+            editable=not webhook_disabled_reason,
+            allowed_values=[],
+            restart_required=False,
+            disabled_reason=webhook_disabled_reason,
+            configured=webhook_configured,
+            sensitive=True,
+        ),
+        ManagedSettingEntry(
+            key=MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_KEY,
+            value=release_notification_config.verbosity,
+            default_value=DEFAULT_RELEASE_NOTIFICATIONS_VERBOSITY,
+            source=(
+                "configured"
+                if release_notifications_verbosity_configured
+                else "default"
+            ),
+            editable=True,
+            allowed_values=list(RELEASE_NOTIFICATIONS_VERBOSITY_VALUES),
+            restart_required=False,
+        ),
     ]
 
 
@@ -585,6 +752,9 @@ def _validated_managed_setting_updates(
         MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY: RELEASE_NOTIFICATIONS_MODE_VALUES,
         MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_KEY: (
             RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES
+        ),
+        MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_KEY: (
+            RELEASE_NOTIFICATIONS_VERBOSITY_VALUES
         ),
     }
     updates: dict[str, str] = {}
@@ -627,6 +797,16 @@ def _validated_managed_setting_updates(
                         DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS,
                     )
                 )
+            except ConfigError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            continue
+        if key == MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_KEY:
+            disabled_reason = _discord_webhook_disabled_reason(settings)
+            if disabled_reason:
+                raise HTTPException(status_code=422, detail=disabled_reason)
+            value = raw_value.strip()
+            try:
+                updates[key] = "" if not value else _validated_discord_webhook(value)
             except ConfigError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
             continue
@@ -683,12 +863,35 @@ def _apply_managed_setting_updates(
                 MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY,
                 value,
             )
+        elif key == MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_KEY:
+            if value:
+                _set_web_setting(
+                    conn,
+                    MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_DB_KEY,
+                    value,
+                )
+            else:
+                _delete_web_setting(
+                    conn,
+                    MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_DB_KEY,
+                )
+        elif key == MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_KEY:
+            _set_web_setting(
+                conn,
+                MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_DB_KEY,
+                value,
+            )
 
 
 def _managed_settings_audit_values(
     entries: Sequence[ManagedSettingEntry],
 ) -> dict[str, str]:
-    return {entry.key: entry.value for entry in entries}
+    return {
+        entry.key: (
+            "configured" if entry.sensitive and entry.configured else entry.value
+        )
+        for entry in entries
+    }
 
 
 def _release_notification_config_from_values(
@@ -715,10 +918,20 @@ def _release_notification_config_from_values(
         values.get(MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY, ""),
         DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS,
     )
+    verbosity = values.get(
+        MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_DB_KEY,
+        DEFAULT_RELEASE_NOTIFICATIONS_VERBOSITY,
+    )
+    if verbosity not in RELEASE_NOTIFICATIONS_VERBOSITY_VALUES:
+        options = ", ".join(RELEASE_NOTIFICATIONS_VERBOSITY_VALUES)
+        raise ConfigError(
+            f"{MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_KEY} must be one of: {options}"
+        )
     return ReleaseNotificationConfig(
         mode=mode,
         resend_policy=resend_policy,
         cooldown_seconds=cooldown_seconds,
+        verbosity=verbosity,
     )
 
 
@@ -733,6 +946,34 @@ def _parse_positive_int_setting(name: str, value: str, default: int) -> int:
     if parsed <= 0:
         raise ConfigError(f"{name} must be a positive integer")
     return parsed
+
+
+def _validated_discord_webhook(value: str) -> str:
+    candidate = value.strip()
+    parsed = urllib.parse.urlsplit(candidate)
+    host = (parsed.hostname or "").lower()
+    webhook_segments = (
+        parsed.path.removeprefix(DISCORD_WEBHOOK_PATH_PREFIX).split("/")
+        if parsed.path.startswith(DISCORD_WEBHOOK_PATH_PREFIX)
+        else []
+    )
+    try:
+        port = parsed.port
+    except ValueError:
+        port = -1
+    if (
+        parsed.scheme != "https"
+        or parsed.username
+        or parsed.password
+        or port not in (None, 443)
+        or host not in DISCORD_WEBHOOK_ALLOWED_HOSTS
+        or len(webhook_segments) != 2
+        or not all(webhook_segments)
+    ):
+        raise ConfigError(
+            f"{MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_KEY} must be a Discord webhook URL"
+        )
+    return candidate
 
 
 def _updater_settings_entries(settings: WebSettings) -> list[SettingsEntry]:

@@ -10,6 +10,7 @@ import SettingsActionsSection from "./settings/SettingsActionsSection.vue";
 import SettingsDiagnosticsSection from "./settings/SettingsDiagnosticsSection.vue";
 import SettingsDocsSection from "./settings/SettingsDocsSection.vue";
 import SettingsJumpNav from "./settings/SettingsJumpNav.vue";
+import SettingsNotificationsSection from "./settings/SettingsNotificationsSection.vue";
 import SettingsPreferencesSection from "./settings/SettingsPreferencesSection.vue";
 import SettingsRuntimeSections from "./settings/SettingsRuntimeSections.vue";
 import SettingsSafetyStrip from "./settings/SettingsSafetyStrip.vue";
@@ -72,6 +73,10 @@ async function refreshSettings(): Promise<void> {
           :compact="compactSettingsLayout"
         />
         <SettingsPreferencesSection
+          v-if="settingsData"
+          :compact="compactSettingsLayout"
+        />
+        <SettingsNotificationsSection
           v-if="settingsData"
           :compact="compactSettingsLayout"
         />

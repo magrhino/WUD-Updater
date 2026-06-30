@@ -9,7 +9,7 @@ from typing import Callable
 
 from .digest_provenance import DIGEST_PROVENANCE_SQL_COLUMNS
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 ColumnSchema = tuple[str, str, int, str | None, int]
 SchemaDefinition = dict[str, tuple[ColumnSchema, ...]]
@@ -21,6 +21,7 @@ SECURITY_SCAN_CACHE_FINDINGS_COLUMN: ColumnSchema = (
     "'[]'",
     0,
 )
+RELEASE_NOTE_BODY_COLUMN: ColumnSchema = ("body", "TEXT", 1, "''", 0)
 DIGEST_PROVENANCE_COLUMN_SCHEMA: tuple[ColumnSchema, ...] = tuple(
     (column, "TEXT", 1, "''", 0) for column in DIGEST_PROVENANCE_SQL_COLUMNS
 )
@@ -140,6 +141,7 @@ EXPECTED_SCHEMA: SchemaDefinition = {
         ("created_at", "TEXT", 1, None, 0),
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
+        RELEASE_NOTE_BODY_COLUMN,
     ),
     "release_notification_history": (
         ("notification_key", "TEXT", 0, None, 1),
@@ -227,9 +229,16 @@ WEB_SCHEMA_TABLES = frozenset(
     {"schema_migrations", "web_users", "web_sessions", "web_settings"}
 )
 
+EXPECTED_SCHEMA_V11: SchemaDefinition = dict(EXPECTED_SCHEMA)
+EXPECTED_SCHEMA_V11["release_note_cache"] = tuple(
+    column
+    for column in EXPECTED_SCHEMA["release_note_cache"]
+    if column[0] != RELEASE_NOTE_BODY_COLUMN[0]
+)
+
 EXPECTED_SCHEMA_V10: SchemaDefinition = {
     name: columns
-    for name, columns in EXPECTED_SCHEMA.items()
+    for name, columns in EXPECTED_SCHEMA_V11.items()
     if name != "release_notification_history"
 }
 
@@ -312,6 +321,7 @@ _EXPECTED_SCHEMAS_BY_VERSION: dict[int, SchemaDefinition] = {
     8: EXPECTED_SCHEMA_V8,
     9: EXPECTED_SCHEMA_V9,
     10: EXPECTED_SCHEMA_V10,
+    11: EXPECTED_SCHEMA_V11,
     SCHEMA_VERSION: EXPECTED_SCHEMA,
 }
 _SCHEMA_IDENTIFIERS = frozenset(EXPECTED_SCHEMA) | frozenset(
@@ -593,7 +603,8 @@ def init_schema(conn: sqlite3.Connection) -> None:
                 error TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                metadata_json TEXT NOT NULL DEFAULT '{}'
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                body TEXT NOT NULL DEFAULT ''
             );
             CREATE INDEX IF NOT EXISTS idx_release_note_cache_updated_at
                 ON release_note_cache (updated_at);
@@ -664,7 +675,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
         _validate_schema(conn)
         _backfill_schema_migrations(conn, SCHEMA_VERSION)
         conn.execute(  # nosemgrep: PRAGMA needs a literal internal version.
-            "PRAGMA user_version = 11"
+            "PRAGMA user_version = 12"
         )
 
 
@@ -796,6 +807,7 @@ MIGRATION_NAMES = {
     9: "add security scan cache",
     10: "add security scan findings",
     11: "add release notification history",
+    12: "add release note body cache",
 }
 
 
@@ -990,7 +1002,7 @@ def _migrate_v4_to_v5(conn: sqlite3.Connection) -> None:
         _validate_table_columns(
             conn,
             "release_note_cache",
-            EXPECTED_SCHEMA["release_note_cache"],
+            EXPECTED_SCHEMA_V11["release_note_cache"],
         )
     with conn:
         conn.executescript(
@@ -1189,6 +1201,23 @@ def _migrate_v10_to_v11(conn: sqlite3.Connection) -> None:
     _record_schema_migration(conn, 11)
 
 
+def _migrate_v11_to_v12(conn: sqlite3.Connection) -> None:
+    _validate_table_columns(
+        conn,
+        "release_note_cache",
+        EXPECTED_SCHEMA_V11["release_note_cache"],
+    )
+    with conn:
+        conn.execute(
+            """
+            ALTER TABLE release_note_cache
+                ADD COLUMN body TEXT NOT NULL DEFAULT ''
+            """
+        )
+        conn.execute("PRAGMA user_version = 12")
+    _record_schema_migration(conn, 12)
+
+
 _MIGRATIONS_BY_TARGET_VERSION: dict[int, Migration] = {
     2: _migrate_v1_to_v2,
     3: _migrate_v2_to_v3,
@@ -1200,4 +1229,5 @@ _MIGRATIONS_BY_TARGET_VERSION: dict[int, Migration] = {
     9: _migrate_v8_to_v9,
     10: _migrate_v9_to_v10,
     11: _migrate_v10_to_v11,
+    12: _migrate_v11_to_v12,
 }

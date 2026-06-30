@@ -1,24 +1,18 @@
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 
-import type { ManagedSettingEntry } from "../../api/client";
 import { useSettingsStore } from "../../stores/settings";
 import { focusOnboardingChecklist } from "./settingsDom";
 import {
   coreUpdateTourStatusLabel,
   coreUpdateTourStepLabel,
   DIGEST_PIN_UPDATES_LABELS,
+  managedSourceLabel,
   managedOptions,
   ONBOARDING_CHECKLIST_LABELS,
-  RELEASE_NOTIFICATION_MODE_LABELS,
-  RELEASE_NOTIFICATION_RESEND_POLICY_LABELS,
   THEME_PREFERENCE_LABELS,
 } from "./settingsDisplay";
 import { useSettingsSafety } from "./useSettingsSafety";
-
-function managedSourceLabel(entry: ManagedSettingEntry | undefined): string {
-  return entry?.source === "configured" ? "Configured" : "Default";
-}
 
 export function useManagedPreferences() {
   const settings = useSettingsStore();
@@ -39,31 +33,11 @@ export function useManagedPreferences() {
   const digestPinUpdatesEntry = computed(() =>
     managedEntries.value.find((entry) => entry.key === "digest_pin_updates"),
   );
-  const releaseNotesEnabledEntry = computed(() =>
-    managedEntries.value.find((entry) => entry.key === "release_notes_enabled"),
-  );
-  const releaseNotificationModeEntry = computed(() =>
-    managedEntries.value.find((entry) => entry.key === "release_notifications_mode"),
-  );
-  const releaseNotificationResendPolicyEntry = computed(() =>
-    managedEntries.value.find(
-      (entry) => entry.key === "release_notifications_resend_policy",
-    ),
-  );
-  const releaseNotificationCooldownEntry = computed(() =>
-    managedEntries.value.find(
-      (entry) => entry.key === "release_notifications_cooldown_seconds",
-    ),
-  );
 
   const themePreferenceValue = ref("system");
   const onboardingChecklistValue = ref("visible");
   const composeIgnorePathsValue = ref("");
   const digestPinUpdatesValue = ref("false");
-  const releaseNotesEnabledValue = ref(false);
-  const releaseNotificationModeValue = ref("digest");
-  const releaseNotificationResendPolicyValue = ref("remote_change");
-  const releaseNotificationCooldownValue = ref("86400");
   const preferencesMessage = ref("");
   const preferencesError = ref("");
 
@@ -76,18 +50,6 @@ export function useManagedPreferences() {
   const digestPinUpdatesEditable = computed(
     () => digestPinUpdatesEntry.value?.editable === true,
   );
-  const releaseNotesEnabledEditable = computed(
-    () => releaseNotesEnabledEntry.value?.editable === true,
-  );
-  const releaseNotificationModeEditable = computed(
-    () => releaseNotificationModeEntry.value?.editable === true,
-  );
-  const releaseNotificationResendPolicyEditable = computed(
-    () => releaseNotificationResendPolicyEntry.value?.editable === true,
-  );
-  const releaseNotificationCooldownEditable = computed(
-    () => releaseNotificationCooldownEntry.value?.editable === true,
-  );
   const preferencesDirty = computed(
     () =>
       themePreferenceValue.value !==
@@ -99,19 +61,7 @@ export function useManagedPreferences() {
           (composeIgnorePathsEntry.value?.value ?? "")) ||
       (digestPinUpdatesEditable.value &&
         digestPinUpdatesValue.value !==
-          (digestPinUpdatesEntry.value?.value ?? "false")) ||
-      (releaseNotesEnabledEditable.value &&
-        releaseNotesEnabledValue.value !==
-          (releaseNotesEnabledEntry.value?.value === "true")) ||
-      (releaseNotificationModeEditable.value &&
-        releaseNotificationModeValue.value !==
-          (releaseNotificationModeEntry.value?.value ?? "digest")) ||
-      (releaseNotificationResendPolicyEditable.value &&
-        releaseNotificationResendPolicyValue.value !==
-          (releaseNotificationResendPolicyEntry.value?.value ?? "remote_change")) ||
-      (releaseNotificationCooldownEditable.value &&
-        releaseNotificationCooldownValue.value !==
-          (releaseNotificationCooldownEntry.value?.value ?? "86400")),
+          (digestPinUpdatesEntry.value?.value ?? "false")),
   );
   const preferenceSaveDisabled = computed(
     () => preferenceControlsDisabled.value || !preferencesDirty.value,
@@ -124,18 +74,6 @@ export function useManagedPreferences() {
   );
   const digestPinUpdatesOptions = computed(() =>
     managedOptions(digestPinUpdatesEntry.value, DIGEST_PIN_UPDATES_LABELS),
-  );
-  const releaseNotificationModeOptions = computed(() =>
-    managedOptions(
-      releaseNotificationModeEntry.value,
-      RELEASE_NOTIFICATION_MODE_LABELS,
-    ),
-  );
-  const releaseNotificationResendPolicyOptions = computed(() =>
-    managedOptions(
-      releaseNotificationResendPolicyEntry.value,
-      RELEASE_NOTIFICATION_RESEND_POLICY_LABELS,
-    ),
   );
   const coreUpdateTourStatus = computed(() =>
     coreUpdateTourStatusLabel(settings.coreUpdateTour?.status),
@@ -150,13 +88,6 @@ export function useManagedPreferences() {
       onboardingChecklistEntry.value?.value ?? "visible";
     composeIgnorePathsValue.value = composeIgnorePathsEntry.value?.value ?? "";
     digestPinUpdatesValue.value = digestPinUpdatesEntry.value?.value ?? "false";
-    releaseNotesEnabledValue.value = releaseNotesEnabledEntry.value?.value === "true";
-    releaseNotificationModeValue.value =
-      releaseNotificationModeEntry.value?.value ?? "digest";
-    releaseNotificationResendPolicyValue.value =
-      releaseNotificationResendPolicyEntry.value?.value ?? "remote_change";
-    releaseNotificationCooldownValue.value =
-      releaseNotificationCooldownEntry.value?.value ?? "86400";
   }
 
   function resetPreferenceForm(): void {
@@ -194,42 +125,6 @@ export function useManagedPreferences() {
         (digestPinUpdatesEntry.value?.value ?? "false")
     ) {
       values.digest_pin_updates = digestPinUpdatesValue.value;
-    }
-    if (
-      releaseNotesEnabledEditable.value &&
-      releaseNotesEnabledValue.value !==
-        (releaseNotesEnabledEntry.value?.value === "true")
-    ) {
-      values.release_notes_enabled = releaseNotesEnabledValue.value ? "true" : "false";
-    }
-    if (
-      releaseNotificationModeEditable.value &&
-      releaseNotificationModeValue.value !==
-        (releaseNotificationModeEntry.value?.value ?? "digest")
-    ) {
-      values.release_notifications_mode = releaseNotificationModeValue.value;
-    }
-    if (
-      releaseNotificationResendPolicyEditable.value &&
-      releaseNotificationResendPolicyValue.value !==
-        (releaseNotificationResendPolicyEntry.value?.value ?? "remote_change")
-    ) {
-      values.release_notifications_resend_policy =
-        releaseNotificationResendPolicyValue.value;
-    }
-    if (
-      releaseNotificationCooldownEditable.value &&
-      releaseNotificationCooldownValue.value !==
-        (releaseNotificationCooldownEntry.value?.value ?? "86400")
-    ) {
-      const cooldownValue = releaseNotificationCooldownValue.value.trim();
-      const normalizedCooldown = cooldownValue.replace(/^0+/, "") || "0";
-      if (!/^\d+$/.test(cooldownValue) || normalizedCooldown === "0") {
-        preferencesError.value =
-          "Release notification cooldown must be a positive integer.";
-        return;
-      }
-      values.release_notifications_cooldown_seconds = normalizedCooldown;
     }
     if (!Object.keys(values).length) {
       return;
@@ -313,35 +208,21 @@ export function useManagedPreferences() {
     onboardingChecklistEntry,
     composeIgnorePathsEntry,
     digestPinUpdatesEntry,
-    releaseNotesEnabledEntry,
-    releaseNotificationModeEntry,
-    releaseNotificationResendPolicyEntry,
-    releaseNotificationCooldownEntry,
     themePreferenceValue,
     onboardingChecklistValue,
     composeIgnorePathsValue,
     digestPinUpdatesValue,
-    releaseNotesEnabledValue,
-    releaseNotificationModeValue,
-    releaseNotificationResendPolicyValue,
-    releaseNotificationCooldownValue,
     preferencesMessage,
     preferencesError,
     preferencesDisabledReason,
     preferenceControlsDisabled,
     composeIgnorePathsEditable,
     digestPinUpdatesEditable,
-    releaseNotesEnabledEditable,
-    releaseNotificationModeEditable,
-    releaseNotificationResendPolicyEditable,
-    releaseNotificationCooldownEditable,
     preferencesDirty,
     preferenceSaveDisabled,
     themePreferenceOptions,
     onboardingChecklistOptions,
     digestPinUpdatesOptions,
-    releaseNotificationModeOptions,
-    releaseNotificationResendPolicyOptions,
     coreUpdateTourStatus,
     coreUpdateTourStep,
     managedSourceLabel,

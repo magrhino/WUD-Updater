@@ -633,8 +633,7 @@ Release-note notification values:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DISCORD_RELEASES_WEBHOOK` | unset | Discord webhook for WebUI-sent release-note notifications and for the legacy `/wud/release-notes-to-discord.sh` helper. Prefer this name for new deployments. |
-| `DISCORD_WEBHOOK` | unset | Alternate webhook name accepted by the WebUI notification sender and shell helper. |
+| `DISCORD_WEBHOOK` | unset | Discord webhook for WebUI-sent release-note notifications and shell helpers. When set, it overrides and disables the WebUI-managed webhook field. |
 | `ADMIN_WEBHOOK` | selected release webhook | Optional webhook for missing LinuxServer.io upstream mapping alerts. |
 | `GITHUB_TOKEN` | unset | Optional GitHub API token for higher release-note lookup rate limits in WUD notifications and WebUI metadata refreshes. |
 | `MAX_COMMITS` | `3` | Maximum representative commits or pull requests included in Discord release embeds. |
@@ -649,18 +648,21 @@ WUD supplies callback fields such as `update_available`, `image_name`,
 are runtime inputs to the mounted scripts, not deployment settings you normally
 set yourself. `/wud/append-updates.sh` uses the image platform fields when WUD
 provides them to append `platform=<os>/<arch>[/variant]` metadata to pending
-candidate lines. Provide webhook and GitHub token values through the WUDup/WebUI
-runtime environment for WebUI-sent notifications, through the WUD container
-environment when using the legacy shell callback path, or through another
-host-local secret store. Do not put secrets in this repository or in SQLite.
+candidate lines. Provide GitHub token values through the WUDup/WebUI runtime
+environment, through the WUD container environment when using the legacy shell
+callback path, or through another host-local secret store. Discord release
+webhooks can also be saved from WebUI Settings; the browser only sees whether a
+stored webhook is configured, but the raw URL is still present in SQLite, so
+protect `WUD_DB_PATH` as a secret-bearing file.
 
 For the WebUI workflow, keep WUD's append-only callback or API pending source in
 place, enable release-note notifications from Settings or by setting
-`WUD_RELEASE_NOTES_ENABLED=true`, configure `DISCORD_RELEASES_WEBHOOK` in the
-WUDup runtime, and set `WUD_WEB_MUTATIONS_ENABLED=true` before sending from the
-browser. Then use **Preview release notes** from selected pending updates or
-from a successful apply job. The WebUI reads WUD trigger summaries through the
-WUD API when available, but it does not invoke WUD trigger POST endpoints.
+`WUD_RELEASE_NOTES_ENABLED=true`, configure a Discord webhook either in Settings
+or with `DISCORD_WEBHOOK` in the WUDup runtime, and set
+`WUD_WEB_MUTATIONS_ENABLED=true` before sending from the browser. Then use
+**Preview release notes** from selected pending updates or from a successful
+apply job. The WebUI reads WUD trigger summaries through the WUD API when
+available, but it does not invoke WUD trigger POST endpoints.
 
 Do not keep a legacy WUD shell release-note callback enabled unless you still
 want that separate path. Running both the shell helper and WebUI sender for the
@@ -675,9 +677,10 @@ The hardened compose example reduces direct socket exposure for WUD and the
 WebUI by putting the raw socket behind a sidecar proxy, but `POST=1` is still
 required for Docker Compose pull/recreate operations.
 
-Secrets such as Discord webhooks and GitHub tokens must come from environment
-variables or host-local secret stores. The scripts redact webhook values in
-logs where they print helper commands.
+Secrets such as GitHub tokens must come from environment variables or host-local
+secret stores. Discord webhooks are accepted from environment variables or the
+WebUI Settings page; script logs, Settings responses, audit records, support
+bundles, and send errors redact webhook values.
 
 The TrueNAS status helper does not use a TrueNAS API key. It relies on Docker
 access to start a short-lived container with the local middleware socket

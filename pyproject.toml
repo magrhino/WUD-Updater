@@ -50,4 +50,9 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-wudup = ["ascii-text-art.txt", "web_static/index.html", "web_static/assets/*"]
+wudup = [
+    "ascii-text-art.txt",
+    "discord_webhook_policy.json",
+    "web_static/index.html",
+    "web_static/assets/*",
+]

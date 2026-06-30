@@ -67,7 +67,11 @@ describe("settings display helpers", () => {
 
   it("keeps the settings nav grouped by workflow", () => {
     const expectedLinkIdsByGroup: Record<string, string[]> = {
-      operate: ["settings-actions", "settings-preferences"],
+      operate: [
+        "settings-actions",
+        "settings-preferences",
+        "settings-notifications",
+      ],
       configuration: [
         "settings-runtime",
         "settings-paths",

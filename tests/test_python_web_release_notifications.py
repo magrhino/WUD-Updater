@@ -14,6 +14,7 @@ from tests.web_test_helpers import (
     _client,
     _csrf_headers,
     _install_wud_api,
+    _store_web_setting,
     _wud_api_container,
 )
 
@@ -21,11 +22,11 @@ _RELEASE_NOTIFICATION_ENV = {
     "WUD_WEB_DEV_NO_AUTH": "true",
     "WUD_WEB_MUTATIONS_ENABLED": "true",
     "WUD_RELEASE_NOTES_ENABLED": "true",
-    "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
+    "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
 }
 
 
-def _fake_release_refresh(monkeypatch) -> None:
+def _fake_release_refresh(monkeypatch, *, body: str = "") -> None:
     def fake_refresh_release_notes(
         _conn,
         targets,
@@ -41,6 +42,7 @@ def _fake_release_refresh(monkeypatch) -> None:
                 upstream_repo="acme/app",
                 release_tag=target.desired_tag or "2.0.0",
                 title="v2.0.0",
+                body=body,
                 links=[
                     ReleaseNoteLinkData(
                         label="GitHub release",
@@ -275,7 +277,7 @@ def test_release_notification_preview_includes_wud_triggers(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
+            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
             "WUD_API_BASE_URL": "https://wud.release-notifications.test:3000",
         },
     )
@@ -296,7 +298,7 @@ def test_release_notification_preview_includes_wud_triggers(
     assert body["destination"] == {
         "type": "discord",
         "configured": True,
-        "source": "DISCORD_RELEASES_WEBHOOK",
+        "source": "DISCORD_WEBHOOK",
     }
     assert body["sendable_count"] == 1
     assert body["items"][0]["triggers"] == [
@@ -440,7 +442,7 @@ def test_release_notification_send_requires_mutations(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
+            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
         },
     )
     (tmp_path / "state" / "images.todo").write_text(
@@ -776,12 +778,81 @@ def test_release_notification_send_posts_discord_payload_and_audits(
     assert run["mode"] == "web-release-notifications"
     assert run_metadata["destination"] == {
         "type": "discord",
-        "source": "DISCORD_RELEASES_WEBHOOK",
+        "source": "DISCORD_WEBHOOK",
     }
     assert run_metadata["sent_count"] == 1
     assert event_metadata["items"][0]["line_no"] == 1
     serialized = json.dumps({"run": run_metadata, "event": event_metadata})
     assert "webhook-secret" not in serialized
+
+
+def test_release_notification_send_uses_persisted_discord_webhook(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _fake_release_refresh(monkeypatch)
+    posted = _capture_discord_posts(monkeypatch)
+    webhook = "https://discord.com/api/webhooks/123/webhook-secret"
+    _store_web_setting(
+        tmp_path,
+        "release_notifications.discord_webhook",
+        webhook,
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_RELEASE_NOTES_ENABLED": "true",
+        },
+    )
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
+
+    response = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "confirmation": "send-release-notes"},
+        headers=_csrf_headers(client),
+    )
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["destination"] == {
+        "type": "discord",
+        "configured": True,
+        "source": "WebUI settings",
+    }
+    assert posted[0][0] == webhook
+    assert "webhook-secret" not in response.text
+
+
+def test_release_notification_full_verbosity_includes_release_body(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    release_body = "Full release notes body from GitHub."
+    _fake_release_refresh(monkeypatch, body=release_body)
+    posted = _capture_discord_posts(monkeypatch)
+    client = _client(tmp_path, _RELEASE_NOTIFICATION_ENV)
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
+    headers = _csrf_headers(client)
+
+    summary = client.post(
+        "/api/v1/release-notifications/preview",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+    _store_web_setting(tmp_path, "release_notifications.verbosity", "full")
+    full = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "confirmation": "send-release-notes"},
+        headers=headers,
+    )
+
+    assert summary.status_code == 200
+    assert release_body not in summary.json()["items"][0]["description"]
+    assert full.status_code == 200
+    assert release_body in full.json()["items"][0]["description"]
+    assert release_body in posted[0][1]["embeds"][0]["description"]
 
 
 def test_release_notification_send_records_history_and_skips_duplicate_preview(
@@ -866,7 +937,7 @@ def test_release_notification_duplicate_key_survives_missing_wud_metadata(
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
             "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
+            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
             "WUD_API_BASE_URL": "https://wud.release-notifications.test:3000",
         },
     )

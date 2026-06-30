@@ -19,6 +19,7 @@ from .db import DatabaseError, init_db, open_db, utc_timestamp
 from .release_notes import refresh_release_notes
 from .web_auth import (
     _redact_sensitive_text,
+    _redact_unknown_absolute_paths,
     _request_actor_type,
     _safe_exception_detail,
     _settings,
@@ -41,6 +42,7 @@ from .web_models import (
 from .web_release_notes import release_note_source_resolver, release_notes_disabled_state
 from .web_settings import (
     effective_release_notification_config,
+    effective_release_notification_webhook,
     effective_release_notes_enabled,
 )
 from .wud_file import WudTarget, parse_wud_text
@@ -140,11 +142,7 @@ def api_send_release_notifications(
             sent_batch_count=sent_batch_count,
         )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
-        detail = _safe_exception_detail(
-            settings,
-            "could not send Discord release-note notifications",
-            exc,
-        )
+        detail = _safe_release_notification_exception_detail(settings, exc, webhook.value)
         if audit_run_id:
             sent_keys = {item.notification_key for item in sent_items}
             remaining_items = [
@@ -464,7 +462,13 @@ def _notification_items(
                     f"Line {target.target.line_no} WUD triggers unavailable: "
                     f"{trigger_warning}"
                 )
-        title, description = _notification_copy(settings, target, note, triggers)
+        title, description = _notification_copy(
+            settings,
+            target,
+            note,
+            triggers,
+            verbosity=config.verbosity,
+        )
         candidates.append(
             ReleaseNotificationItem(
                 line_no=target.target.line_no,
@@ -551,6 +555,8 @@ def _notification_copy(
     target: _NotificationTarget,
     note: ReleaseNoteInfo,
     triggers: Sequence[ReleaseNotificationTrigger],
+    *,
+    verbosity: str = "summary",
 ) -> tuple[str, str]:
     repo = note.upstream_repo or note.image_repo or target.target.repo
     tag = note.release_tag or target.target.desired_tag or target.target.tag_token
@@ -571,6 +577,9 @@ def _notification_copy(
     if triggers:
         label = ", ".join(_trigger_label(trigger) for trigger in triggers[:5])
         lines.append(f"WUD triggers: {label}")
+    body = str(getattr(note, "body", "") or "").strip()
+    if verbosity == "full" and body:
+        lines.extend(("", body))
     return title, "\n".join(lines)[:DISCORD_EMBED_DESCRIPTION_LIMIT]
 
 
@@ -669,12 +678,8 @@ class _WebhookConfig:
 
 
 def _discord_webhook(settings: WebSettings) -> _WebhookConfig:
-    env = settings.command_env or {}
-    for name in ("DISCORD_RELEASES_WEBHOOK", "DISCORD_WEBHOOK"):
-        value = env.get(name, "").strip()
-        if value:
-            return _WebhookConfig(value=value, source=name)
-    return _WebhookConfig(value="", source="")
+    value, source = effective_release_notification_webhook(settings)
+    return _WebhookConfig(value=value, source=source)
 
 
 def _release_notification_destination(
@@ -711,6 +716,16 @@ def _post_discord_payload(webhook_url: str, payload: Mapping[str, object]) -> No
                 response.headers,
                 None,
             )
+
+
+def _safe_release_notification_exception_detail(
+    settings: WebSettings,
+    exc: BaseException,
+    webhook_url: str,
+) -> str:
+    detail = _redact_sensitive_text(settings, str(exc), extra_secrets=(webhook_url,))
+    detail = _redact_unknown_absolute_paths(detail)
+    return f"could not send Discord release-note notifications: {detail}"
 
 
 def _insert_release_notification_audit_start(

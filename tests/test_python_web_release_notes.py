@@ -471,7 +471,7 @@ def test_release_note_error_metadata_redacts_configured_secrets(
         tmp_path,
         {
             "GITHUB_TOKEN": github_token,
-            "DISCORD_RELEASES_WEBHOOK": release_webhook,
+            "DISCORD_WEBHOOK": release_webhook,
             "ADMIN_WEBHOOK": admin_webhook,
             "WUD_WEB_MUTATIONS_ENABLED": "true",
         },

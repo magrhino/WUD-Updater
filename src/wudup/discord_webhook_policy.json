@@ -1,0 +1,9 @@
+{
+  "allowed_hosts": [
+    "discord.com",
+    "discordapp.com",
+    "canary.discord.com",
+    "ptb.discord.com"
+  ],
+  "path_prefix": "/api/webhooks/"
+}
