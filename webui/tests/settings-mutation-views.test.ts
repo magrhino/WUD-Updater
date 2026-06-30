@@ -648,6 +648,123 @@ describe("settings mutation views", () => {
     expect(wrapper.text()).toContain("Notification settings saved. Audit run #79.");
   });
 
+  it("sends a configured test webhook after confirmation", async () => {
+    const { pinia, settings } = setupStores(true);
+    settings.settings = settingsResponse({
+      webui: settingsResponse().webui.map((entry) =>
+        entry.name === "WUD_WEB_MUTATIONS_ENABLED"
+          ? { ...entry, value: "true", configured: true, source: "configured" as const }
+          : entry,
+      ),
+      managed: settingsResponse().managed.map((entry) =>
+        entry.key === "release_notifications_discord_webhook"
+          ? { ...entry, configured: true, source: "configured" as const }
+          : entry,
+      ),
+    });
+    settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    const testWebhook = vi
+      .spyOn(settings, "testReleaseNotificationWebhook")
+      .mockResolvedValue({
+        sent: true,
+        destination: {
+          type: "discord",
+          configured: true,
+          source: "WebUI settings",
+        },
+        audit_run_id: 80,
+      });
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+    const sendButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Send test"));
+    expect(sendButton?.attributes("disabled")).toBeUndefined();
+    await sendButton?.trigger("click");
+
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.text()).toContain("Send test webhook");
+    expect(testWebhook).not.toHaveBeenCalled();
+
+    const confirmButton = dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Send test"));
+    await confirmButton?.trigger("click");
+    await flushPromises();
+
+    expect(testWebhook).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain("Test webhook sent. Audit run #80.");
+  });
+
+  it("blocks test webhook while dirty, unconfigured, or read-only", async () => {
+    const { pinia, settings } = setupStores(true);
+    settings.settings = settingsResponse({
+      webui: settingsResponse().webui.map((entry) =>
+        entry.name === "WUD_WEB_MUTATIONS_ENABLED"
+          ? { ...entry, value: "true", configured: true, source: "configured" as const }
+          : entry,
+      ),
+      managed: settingsResponse().managed.map((entry) =>
+        entry.key === "release_notifications_discord_webhook"
+          ? { ...entry, configured: true, source: "configured" as const }
+          : entry,
+      ),
+    });
+    settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    const testWebhook = vi.spyOn(settings, "testReleaseNotificationWebhook");
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+
+    await wrapper
+      .find('input[aria-label="Discord webhook URL"]')
+      .setValue("https://discord.com/api/webhooks/123/new-token-secret");
+    const dirtyButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Send test"));
+    expect(dirtyButton?.attributes("disabled")).toBeDefined();
+    await dirtyButton?.trigger("click");
+    expect(testWebhook).not.toHaveBeenCalled();
+
+    const unconfigured = setupStores(true);
+    unconfigured.settings.settings = settingsResponse({
+      webui: settingsResponse().webui.map((entry) =>
+        entry.name === "WUD_WEB_MUTATIONS_ENABLED"
+          ? { ...entry, value: "true", configured: true, source: "configured" as const }
+          : entry,
+      ),
+    });
+    unconfigured.settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(unconfigured.settings, "loadSettings").mockResolvedValue();
+    const unconfiguredWrapper = mountWithApp(SettingsView, {
+      pinia: unconfigured.pinia,
+    });
+    await flushPromises();
+    const unconfiguredButton = unconfiguredWrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Send test"));
+    expect(unconfiguredButton?.attributes("disabled")).toBeDefined();
+
+    const readOnly = setupStores(false);
+    readOnly.settings.settings = settingsResponse({
+      managed: settingsResponse().managed.map((entry) =>
+        entry.key === "release_notifications_discord_webhook"
+          ? { ...entry, configured: true, source: "configured" as const }
+          : entry,
+      ),
+    });
+    readOnly.settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(readOnly.settings, "loadSettings").mockResolvedValue();
+    const readOnlyWrapper = mountWithApp(SettingsView, { pinia: readOnly.pinia });
+    await flushPromises();
+    const readOnlyButton = readOnlyWrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Send test"));
+    expect(readOnlyButton?.attributes("disabled")).toBeDefined();
+  });
+
   it("validates release-note notification cooldown before saving", async () => {
     const { pinia, settings } = setupStores(true);
     settings.settings = settingsResponse();

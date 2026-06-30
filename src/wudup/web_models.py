@@ -786,10 +786,20 @@ class ReleaseNotificationPreviewRequest(BaseModel):
 class ReleaseNotificationSendRequest(ReleaseNotificationPreviewRequest):
     confirmation: Literal["send-release-notes"]
 
+class ReleaseNotificationTestRequest(BaseModel):
+    confirmation: Literal["send-test-webhook"]
+
 class ReleaseNotificationDestination(BaseModel):
     type: Literal["discord"] = "discord"
     configured: bool = False
     source: str = ""
+
+class ReleaseNotificationTestResponse(BaseModel):
+    sent: bool = False
+    destination: ReleaseNotificationDestination = Field(
+        default_factory=ReleaseNotificationDestination
+    )
+    audit_run_id: int = 0
 
 class ReleaseNotificationTrigger(BaseModel):
     id: str = ""

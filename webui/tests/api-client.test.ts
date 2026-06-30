@@ -368,6 +368,7 @@ describe("webApi", () => {
     await webApi.refreshReleaseNotes("csrf-token");
     await webApi.previewReleaseNotifications({ line_numbers: [1] }, "csrf-token");
     await webApi.sendReleaseNotifications({ run_id: 7 }, "csrf-token");
+    await webApi.testReleaseNotificationWebhook("csrf-token");
     await webApi.refreshRetagGithubLatest("csrf-token");
     await webApi.startRetagPreview(
       [{ service_key: "media/app", choice: "switch-to-concrete" }],
@@ -547,6 +548,7 @@ describe("webApi", () => {
 
     await webApi.previewReleaseNotifications({ line_numbers: [1, 2] }, "csrf");
     await webApi.sendReleaseNotifications({ run_id: 9 }, "csrf");
+    await webApi.testReleaseNotificationWebhook("csrf");
 
     expect(fetchMock.mock.calls[0][0]).toBe(
       "/api/v1/release-notifications/preview",
@@ -566,6 +568,12 @@ describe("webApi", () => {
     expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual({
       run_id: 9,
       confirmation: "send-release-notes",
+    });
+    expect(fetchMock.mock.calls[2][0]).toBe(
+      "/api/v1/release-notifications/test",
+    );
+    expect(jsonRequestBody(fetchMock.mock.calls[2])).toEqual({
+      confirmation: "send-test-webhook",
     });
   });
 

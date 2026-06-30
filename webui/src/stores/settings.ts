@@ -9,6 +9,7 @@ import {
   type ManagedSettingsUpdateResponse,
   type OnboardingChecklistResponse,
   type OnboardingDismissResponse,
+  type ReleaseNotificationTestResponse,
   type ServicePolicyRecord,
   type ServicePolicyUpdateMode,
   type SettingsResponse,
@@ -87,6 +88,18 @@ export const useSettingsStore = defineStore("settings", () => {
       } catch {
         // The preference save succeeded; the checklist can refresh on the next view load.
       }
+    }
+    return response;
+  }
+
+  async function testReleaseNotificationWebhook(): Promise<ReleaseNotificationTestResponse> {
+    const auth = useAuthStore();
+    let response: ReleaseNotificationTestResponse | null = null;
+    await loadWithState(async () => {
+      response = await webApi.testReleaseNotificationWebhook(await auth.ensureCsrf());
+    });
+    if (response === null) {
+      throw new Error("Test webhook request did not return a response");
     }
     return response;
   }
@@ -354,6 +367,7 @@ export const useSettingsStore = defineStore("settings", () => {
     pendingSafetyCueError,
     loadSettings,
     updateManagedSettings,
+    testReleaseNotificationWebhook,
     loadOnboarding,
     dismissOnboarding,
     loadCoreUpdateTour,

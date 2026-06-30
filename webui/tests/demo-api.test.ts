@@ -141,6 +141,15 @@ describe("demo web API", () => {
         source: "WebUI settings",
       },
     });
+    await expect(api.testReleaseNotificationWebhook("csrf")).resolves.toEqual({
+      sent: true,
+      destination: {
+        type: "discord",
+        configured: true,
+        source: "WebUI settings",
+      },
+      audit_run_id: 9005,
+    });
     await expect(
       api.updateManagedSettings(
         { release_notifications_discord_webhook: "" },
@@ -164,6 +173,9 @@ describe("demo web API", () => {
         source: "",
       },
     });
+    await expect(api.testReleaseNotificationWebhook("csrf")).rejects.toThrow(
+      "Discord release-note webhook is not configured",
+    );
     await expect(
       api.updateManagedSettings(
         {

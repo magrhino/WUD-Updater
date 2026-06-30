@@ -22,7 +22,9 @@ import type {
   PendingRescanScope,
   PlanResponse,
   ReleaseNotificationSource,
+  ReleaseNotificationDestination,
   ReleaseNotificationResponse,
+  ReleaseNotificationTestResponse,
   ReleaseNotesResponse,
   RetagChoiceRequest,
   RetagPreviewJobResponse,
@@ -1026,15 +1028,7 @@ export class DemoApiState {
       enabled: true,
       mode: this.releaseNotificationMode,
       resend_policy: this.releaseNotificationResendPolicy,
-      destination: {
-        type: "discord",
-        configured: this.releaseNotificationDiscordWebhookConfigured,
-        source: this.releaseNotificationDiscordWebhookConfigured
-          ? this.releaseNotificationDiscordWebhookSetByWebUi
-            ? "WebUI settings"
-            : "DISCORD_WEBHOOK"
-          : "",
-      },
+      destination: this.releaseNotificationDestination(),
       source: releaseNotes.source,
       source_file: releaseNotes.source_file,
       count: items.length,
@@ -1050,6 +1044,30 @@ export class DemoApiState {
       sent,
       audit_run_id: sent ? 9004 : 0,
       error: "",
+    };
+  }
+
+  testReleaseNotificationWebhook(): ReleaseNotificationTestResponse {
+    const destination = this.releaseNotificationDestination();
+    if (!destination.configured) {
+      throw new Error("Discord release-note webhook is not configured");
+    }
+    return {
+      sent: true,
+      destination,
+      audit_run_id: 9005,
+    };
+  }
+
+  private releaseNotificationDestination(): ReleaseNotificationDestination {
+    return {
+      type: "discord",
+      configured: this.releaseNotificationDiscordWebhookConfigured,
+      source: this.releaseNotificationDiscordWebhookConfigured
+        ? this.releaseNotificationDiscordWebhookSetByWebUi
+          ? "WebUI settings"
+          : "DISCORD_WEBHOOK"
+        : "",
     };
   }
 

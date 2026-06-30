@@ -559,6 +559,12 @@ export interface ReleaseNotificationResponse {
   error: string;
 }
 
+export interface ReleaseNotificationTestResponse {
+  sent: boolean;
+  destination: ReleaseNotificationDestination;
+  audit_run_id: number;
+}
+
 // ---------------------------------------------------------------------------
 // Plans
 // ---------------------------------------------------------------------------

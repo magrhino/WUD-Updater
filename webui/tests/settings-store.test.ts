@@ -361,6 +361,43 @@ describe("settings store", () => {
     ).toBe("csrf-settings");
   });
 
+  it("passes csrf from auth store to test webhook requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        sent: true,
+        destination: {
+          type: "discord",
+          configured: true,
+          source: "WebUI settings",
+        },
+        audit_run_id: 45,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-test-webhook");
+    const settings = useSettingsStore();
+
+    const response = await settings.testReleaseNotificationWebhook();
+
+    expect(response.audit_run_id).toBe(45);
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/v1/release-notifications/test",
+    );
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe("POST");
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-test-webhook");
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      confirmation: "send-test-webhook",
+    });
+  });
+
   it("keeps managed settings saves successful when onboarding refresh fails", async () => {
     const updatedSettings = settingsResponse({
       managed: [

@@ -52,6 +52,7 @@ export function useManagedNotifications() {
   const releaseNotificationVerbosityValue = ref("summary");
   const notificationsMessage = ref("");
   const notificationsError = ref("");
+  const testWebhookDialogVisible = ref(false);
 
   const notificationControlsDisabled = computed(
     () => settings.loading || preferencesDisabledReason.value !== "",
@@ -108,6 +109,12 @@ export function useManagedNotifications() {
   const notificationSaveDisabled = computed(
     () => notificationControlsDisabled.value || !notificationsDirty.value,
   );
+  const testWebhookButtonDisabled = computed(
+    () =>
+      notificationControlsDisabled.value ||
+      notificationsDirty.value ||
+      !discordWebhookConfigured.value,
+  );
   const releaseNotificationModeOptions = computed(() =>
     managedOptions(
       releaseNotificationModeEntry.value,
@@ -155,6 +162,31 @@ export function useManagedNotifications() {
     discordWebhookClearRequested.value = true;
     notificationsMessage.value = "";
     notificationsError.value = "";
+  }
+
+  function openTestWebhookDialog(): void {
+    if (testWebhookButtonDisabled.value) {
+      return;
+    }
+    notificationsMessage.value = "";
+    notificationsError.value = "";
+    testWebhookDialogVisible.value = true;
+  }
+
+  async function sendTestWebhook(): Promise<void> {
+    if (testWebhookButtonDisabled.value) {
+      return;
+    }
+    notificationsMessage.value = "";
+    notificationsError.value = "";
+    try {
+      const response = await settings.testReleaseNotificationWebhook();
+      testWebhookDialogVisible.value = false;
+      notificationsMessage.value = `Test webhook sent. Audit run #${response.audit_run_id}.`;
+    } catch (error_) {
+      notificationsError.value =
+        error_ instanceof Error ? error_.message : "Test webhook could not be sent";
+    }
   }
 
   async function saveManagedNotifications(): Promise<void> {
@@ -258,6 +290,7 @@ export function useManagedNotifications() {
     releaseNotificationVerbosityValue,
     notificationsMessage,
     notificationsError,
+    testWebhookDialogVisible,
     preferencesDisabledReason,
     notificationControlsDisabled,
     releaseNotesEnabledEditable,
@@ -270,12 +303,15 @@ export function useManagedNotifications() {
     releaseNotificationVerbosityEditable,
     notificationsDirty,
     notificationSaveDisabled,
+    testWebhookButtonDisabled,
     releaseNotificationModeOptions,
     releaseNotificationResendPolicyOptions,
     releaseNotificationVerbosityOptions,
     managedSourceLabel,
     resetNotificationForm,
     clearDiscordWebhook,
+    openTestWebhookDialog,
+    sendTestWebhook,
     saveManagedNotifications,
   };
 }

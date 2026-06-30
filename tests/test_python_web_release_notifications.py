@@ -521,6 +521,189 @@ def test_release_notification_send_requires_webhook(
     assert response.json()["detail"] == "Discord release-note webhook is not configured"
 
 
+def test_release_notification_test_webhook_guards(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    posted = _capture_discord_posts(monkeypatch)
+    payload = {"confirmation": "send-test-webhook"}
+    unauthenticated = _client(
+        tmp_path,
+        {
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
+        },
+    )
+    read_only = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
+        },
+    )
+    mutating = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
+        },
+    )
+    no_webhook = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+
+    unauthenticated_response = unauthenticated.post(
+        "/api/v1/release-notifications/test",
+        json=payload,
+        headers=_csrf_headers(unauthenticated),
+    )
+    missing_csrf = mutating.post(
+        "/api/v1/release-notifications/test",
+        json=payload,
+    )
+    read_only_response = read_only.post(
+        "/api/v1/release-notifications/test",
+        json=payload,
+        headers=_csrf_headers(read_only),
+    )
+    no_webhook_response = no_webhook.post(
+        "/api/v1/release-notifications/test",
+        json=payload,
+        headers=_csrf_headers(no_webhook),
+    )
+    get_response = mutating.get("/api/v1/release-notifications/test")
+
+    assert unauthenticated_response.status_code == 403
+    assert unauthenticated_response.json()["detail"] == "setup required"
+    assert missing_csrf.status_code == 403
+    assert missing_csrf.json()["detail"] == "origin header is required"
+    assert read_only_response.status_code == 403
+    assert read_only_response.json()["detail"] == "mutations are disabled"
+    assert no_webhook_response.status_code == 422
+    assert (
+        no_webhook_response.json()["detail"]
+        == "Discord release-note webhook is not configured"
+    )
+    assert get_response.status_code == 405
+    assert posted == []
+
+
+def test_release_notification_test_webhook_posts_payload_and_audits(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    posted = _capture_discord_posts(monkeypatch)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
+        },
+    )
+
+    response = client.post(
+        "/api/v1/release-notifications/test",
+        json={"confirmation": "send-test-webhook"},
+        headers=_csrf_headers(client),
+    )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body == {
+        "sent": True,
+        "destination": {
+            "type": "discord",
+            "configured": True,
+            "source": "DISCORD_WEBHOOK",
+        },
+        "audit_run_id": body["audit_run_id"],
+    }
+    assert body["audit_run_id"]
+    assert len(posted) == 1
+    assert posted[0][0] == "https://discord.test/webhook-secret"
+    assert posted[0][1]["embeds"][0]["title"] == "WUDup test notification"
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        run = conn.execute(
+            "SELECT * FROM update_runs WHERE id = ?",
+            (body["audit_run_id"],),
+        ).fetchone()
+        event = conn.execute(
+            "SELECT * FROM update_events WHERE run_id = ?",
+            (body["audit_run_id"],),
+        ).fetchone()
+
+    run_metadata = json.loads(run["metadata_json"])
+    event_metadata = json.loads(event["metadata_json"])
+    assert run["mode"] == "web-release-notifications"
+    assert run["status"] == "success"
+    assert run_metadata["operation"] == "test_release_notification_webhook"
+    assert run_metadata["destination"] == {
+        "type": "discord",
+        "source": "DISCORD_WEBHOOK",
+    }
+    assert event["status"] == "success"
+    assert event_metadata["operation"] == "test_release_notification_webhook"
+    serialized = json.dumps({"run": run_metadata, "event": event_metadata})
+    assert "webhook-secret" not in serialized
+
+
+def test_release_notification_test_webhook_failure_is_sanitized_and_audited(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _capture_discord_posts(monkeypatch, fail_on=1)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
+        },
+    )
+
+    response = client.post(
+        "/api/v1/release-notifications/test",
+        json={"confirmation": "send-test-webhook"},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"].startswith("could not send Discord test webhook:")
+    assert "webhook-secret" not in response.text
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        run = conn.execute(
+            """
+            SELECT *
+            FROM update_runs
+            WHERE mode = 'web-release-notifications'
+            ORDER BY id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        event = conn.execute(
+            "SELECT * FROM update_events WHERE run_id = ?",
+            (run["id"],),
+        ).fetchone()
+
+    assert run["status"] == "failure"
+    assert event["status"] == "failure"
+    serialized = json.dumps(
+        {
+            "run": json.loads(run["metadata_json"]),
+            "event": json.loads(event["metadata_json"]),
+        }
+    )
+    assert "webhook-secret" not in serialized
+
+
 def test_release_notification_preview_rejects_duplicate_pending_lines(
     tmp_path: Path,
     monkeypatch,
