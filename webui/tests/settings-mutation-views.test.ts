@@ -683,7 +683,7 @@ describe("settings mutation views", () => {
             "WUD_RELEASE_NOTIFICATIONS_RESEND_POLICY",
           release_notifications_cooldown_seconds:
             "WUD_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS",
-          release_notifications_discord_webhook: "DISCORD_RELEASES_WEBHOOK",
+          release_notifications_discord_webhook: "DISCORD_WEBHOOK",
         };
         const envName = envNames[entry.key];
         return envName
@@ -716,7 +716,7 @@ describe("settings mutation views", () => {
     expect(wrapper.text()).toContain("WUD_RELEASE_NOTIFICATIONS_MODE");
     expect(wrapper.text()).toContain("WUD_RELEASE_NOTIFICATIONS_RESEND_POLICY");
     expect(wrapper.text()).toContain("WUD_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS");
-    expect(wrapper.text()).toContain("DISCORD_RELEASES_WEBHOOK");
+    expect(wrapper.text()).toContain("DISCORD_WEBHOOK");
     expect(
       wrapper.find('input[aria-label="Discord webhook URL"]').attributes("disabled"),
     ).toBeDefined();

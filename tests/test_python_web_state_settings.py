@@ -183,7 +183,6 @@ def test_settings_reports_effective_non_secret_configuration(
     assert secrets["WUD_API_AUTH_BASIC_PASSWORD_FILE"]["configured"] is False
     assert "WUD_API_HEADERS_FILE" not in secrets
     assert secrets["GITHUB_TOKEN"]["configured"] is True
-    assert secrets["DISCORD_RELEASES_WEBHOOK"]["configured"] is False
     assert secrets["DISCORD_WEBHOOK"]["configured"] is True
     assert secrets["ADMIN_WEBHOOK"]["configured"] is True
     assert managed["theme_preference"] == {
@@ -636,7 +635,7 @@ def test_managed_discord_webhook_env_guard_disables_webui_edit(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": webhook,
+            "DISCORD_WEBHOOK": webhook,
         },
     )
     headers = _csrf_headers(client)

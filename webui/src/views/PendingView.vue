@@ -299,7 +299,7 @@ const releaseNotificationSendDisabledMessage = computed(() => {
     return "Release-note notifications are disabled in Settings.";
   }
   if (!response.destination.configured) {
-    return "Configure a Discord webhook in Settings or set DISCORD_RELEASES_WEBHOOK in the WebUI runtime.";
+    return "Configure a Discord webhook in Settings or set DISCORD_WEBHOOK in the WebUI runtime.";
   }
   if (auth.session?.mutations_enabled === false) {
     return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to send notifications.";

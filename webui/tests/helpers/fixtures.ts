@@ -303,7 +303,7 @@ export function settingsResponse(
     secrets: [
       { name: "WUD_WEB_TOKEN", configured: false },
       { name: "GITHUB_TOKEN", configured: true },
-      { name: "DISCORD_RELEASES_WEBHOOK", configured: false },
+      { name: "DISCORD_WEBHOOK", configured: false },
     ],
     managed: [
       managedSettingEntry("theme_preference", "system", [
@@ -915,7 +915,7 @@ export function releaseNotificationResponse(
     destination: {
       type: "discord",
       configured: true,
-      source: "DISCORD_RELEASES_WEBHOOK",
+      source: "DISCORD_WEBHOOK",
     },
     source: pendingSourceInfo(),
     source_file: "/out/images.todo",

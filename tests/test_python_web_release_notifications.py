@@ -22,7 +22,7 @@ _RELEASE_NOTIFICATION_ENV = {
     "WUD_WEB_DEV_NO_AUTH": "true",
     "WUD_WEB_MUTATIONS_ENABLED": "true",
     "WUD_RELEASE_NOTES_ENABLED": "true",
-    "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
+    "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
 }
 
 
@@ -277,7 +277,7 @@ def test_release_notification_preview_includes_wud_triggers(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
+            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
             "WUD_API_BASE_URL": "https://wud.release-notifications.test:3000",
         },
     )
@@ -298,7 +298,7 @@ def test_release_notification_preview_includes_wud_triggers(
     assert body["destination"] == {
         "type": "discord",
         "configured": True,
-        "source": "DISCORD_RELEASES_WEBHOOK",
+        "source": "DISCORD_WEBHOOK",
     }
     assert body["sendable_count"] == 1
     assert body["items"][0]["triggers"] == [
@@ -442,7 +442,7 @@ def test_release_notification_send_requires_mutations(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
+            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
         },
     )
     (tmp_path / "state" / "images.todo").write_text(
@@ -778,7 +778,7 @@ def test_release_notification_send_posts_discord_payload_and_audits(
     assert run["mode"] == "web-release-notifications"
     assert run_metadata["destination"] == {
         "type": "discord",
-        "source": "DISCORD_RELEASES_WEBHOOK",
+        "source": "DISCORD_WEBHOOK",
     }
     assert run_metadata["sent_count"] == 1
     assert event_metadata["items"][0]["line_no"] == 1
@@ -937,7 +937,7 @@ def test_release_notification_duplicate_key_survives_missing_wud_metadata(
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
             "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
+            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
             "WUD_API_BASE_URL": "https://wud.release-notifications.test:3000",
         },
     )

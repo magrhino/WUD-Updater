@@ -633,8 +633,7 @@ Release-note notification values:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DISCORD_RELEASES_WEBHOOK` | unset | Discord webhook for WebUI-sent release-note notifications and for the legacy `/wud/release-notes-to-discord.sh` helper. Prefer this name for new deployments. When set, it overrides and disables the WebUI-managed webhook field. |
-| `DISCORD_WEBHOOK` | unset | Alternate webhook name accepted by the WebUI notification sender and shell helper. When set and `DISCORD_RELEASES_WEBHOOK` is unset, it overrides and disables the WebUI-managed webhook field. |
+| `DISCORD_WEBHOOK` | unset | Discord webhook for WebUI-sent release-note notifications and shell helpers. When set, it overrides and disables the WebUI-managed webhook field. |
 | `ADMIN_WEBHOOK` | selected release webhook | Optional webhook for missing LinuxServer.io upstream mapping alerts. |
 | `GITHUB_TOKEN` | unset | Optional GitHub API token for higher release-note lookup rate limits in WUD notifications and WebUI metadata refreshes. |
 | `MAX_COMMITS` | `3` | Maximum representative commits or pull requests included in Discord release embeds. |
@@ -659,7 +658,7 @@ protect `WUD_DB_PATH` as a secret-bearing file.
 For the WebUI workflow, keep WUD's append-only callback or API pending source in
 place, enable release-note notifications from Settings or by setting
 `WUD_RELEASE_NOTES_ENABLED=true`, configure a Discord webhook either in Settings
-or with `DISCORD_RELEASES_WEBHOOK` in the WUDup runtime, and set
+or with `DISCORD_WEBHOOK` in the WUDup runtime, and set
 `WUD_WEB_MUTATIONS_ENABLED=true` before sending from the browser. Then use
 **Preview release notes** from selected pending updates or from a successful
 apply job. The WebUI reads WUD trigger summaries through the WUD API when

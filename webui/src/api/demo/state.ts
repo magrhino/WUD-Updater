@@ -1021,7 +1021,7 @@ export class DemoApiState {
       destination: {
         type: "discord",
         configured: true,
-        source: "DISCORD_RELEASES_WEBHOOK",
+        source: "DISCORD_WEBHOOK",
       },
       source: releaseNotes.source,
       source_file: releaseNotes.source_file,

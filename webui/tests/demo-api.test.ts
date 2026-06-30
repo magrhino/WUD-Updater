@@ -1090,7 +1090,7 @@ describe("demo web API", () => {
       destination: {
         type: "discord",
         configured: true,
-        source: "DISCORD_RELEASES_WEBHOOK",
+        source: "DISCORD_WEBHOOK",
       },
     });
     expect(preview.items.map((item) => item.line_no)).toEqual(selected);

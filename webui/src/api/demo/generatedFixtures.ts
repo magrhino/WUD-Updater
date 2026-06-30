@@ -1081,11 +1081,13 @@ export const generatedFixtures = {
             "light",
             "dark"
           ],
+          "configured": false,
           "default_value": "system",
           "disabled_reason": "",
           "editable": true,
           "key": "theme_preference",
           "restart_required": false,
+          "sensitive": false,
           "source": "default",
           "value": "system"
         },
@@ -1094,21 +1096,25 @@ export const generatedFixtures = {
             "visible",
             "dismissed"
           ],
+          "configured": false,
           "default_value": "visible",
           "disabled_reason": "",
           "editable": true,
           "key": "onboarding_checklist",
           "restart_required": false,
+          "sensitive": false,
           "source": "default",
           "value": "visible"
         },
         {
           "allowed_values": [],
+          "configured": false,
           "default_value": "old",
           "disabled_reason": "",
           "editable": true,
           "key": "compose_ignore_paths",
           "restart_required": false,
+          "sensitive": false,
           "source": "default",
           "value": "old"
         },
@@ -1117,11 +1123,13 @@ export const generatedFixtures = {
             "false",
             "true"
           ],
+          "configured": false,
           "default_value": "false",
           "disabled_reason": "",
           "editable": true,
           "key": "digest_pin_updates",
           "restart_required": false,
+          "sensitive": false,
           "source": "default",
           "value": "false"
         },
@@ -1130,11 +1138,13 @@ export const generatedFixtures = {
             "false",
             "true"
           ],
+          "configured": false,
           "default_value": "false",
           "disabled_reason": "",
           "editable": true,
           "key": "release_notes_enabled",
           "restart_required": false,
+          "sensitive": false,
           "source": "configured",
           "value": "true"
         },
@@ -1143,11 +1153,13 @@ export const generatedFixtures = {
             "digest",
             "per_container"
           ],
+          "configured": false,
           "default_value": "digest",
           "disabled_reason": "",
           "editable": true,
           "key": "release_notifications_mode",
           "restart_required": false,
+          "sensitive": false,
           "source": "default",
           "value": "digest"
         },
@@ -1156,23 +1168,54 @@ export const generatedFixtures = {
             "remote_change",
             "cooldown"
           ],
+          "configured": false,
           "default_value": "remote_change",
           "disabled_reason": "",
           "editable": true,
           "key": "release_notifications_resend_policy",
           "restart_required": false,
+          "sensitive": false,
           "source": "default",
           "value": "remote_change"
         },
         {
           "allowed_values": [],
+          "configured": false,
           "default_value": "86400",
           "disabled_reason": "",
           "editable": true,
           "key": "release_notifications_cooldown_seconds",
           "restart_required": false,
+          "sensitive": false,
           "source": "default",
           "value": "86400"
+        },
+        {
+          "allowed_values": [],
+          "configured": false,
+          "default_value": "",
+          "disabled_reason": "",
+          "editable": true,
+          "key": "release_notifications_discord_webhook",
+          "restart_required": false,
+          "sensitive": true,
+          "source": "default",
+          "value": ""
+        },
+        {
+          "allowed_values": [
+            "summary",
+            "full"
+          ],
+          "configured": false,
+          "default_value": "summary",
+          "disabled_reason": "",
+          "editable": true,
+          "key": "release_notifications_verbosity",
+          "restart_required": false,
+          "sensitive": false,
+          "source": "default",
+          "value": "summary"
         }
       ],
       "secrets": [
@@ -1199,10 +1242,6 @@ export const generatedFixtures = {
         {
           "configured": false,
           "name": "GITHUB_TOKEN"
-        },
-        {
-          "configured": false,
-          "name": "DISCORD_RELEASES_WEBHOOK"
         },
         {
           "configured": false,
@@ -107070,6 +107109,7 @@ export const generatedFixtures = {
     "enabled": true,
     "items": [
       {
+        "body": "Patch release for the demo fixture.",
         "breaking": false,
         "breaking_reasons": [],
         "error": "",
@@ -107096,6 +107136,7 @@ export const generatedFixtures = {
         "upstream_repo": "home-assistant/core"
       },
       {
+        "body": "Demo upstream Radarr release notes.\n\nRemote changes:\n- Updating Radarr to v5.22.4",
         "breaking": false,
         "breaking_reasons": [],
         "error": "",
@@ -107127,6 +107168,7 @@ export const generatedFixtures = {
         "upstream_repo": "Radarr/Radarr"
       },
       {
+        "body": "",
         "breaking": false,
         "breaking_reasons": [],
         "error": "no supported GitHub release source found",
@@ -107147,6 +107189,7 @@ export const generatedFixtures = {
         "upstream_repo": ""
       },
       {
+        "body": "Demo WUDup release notes.",
         "breaking": false,
         "breaking_reasons": [],
         "error": "",
@@ -107173,6 +107216,7 @@ export const generatedFixtures = {
         "upstream_repo": "magrhino/wudup"
       },
       {
+        "body": "",
         "breaking": false,
         "breaking_reasons": [],
         "error": "",
@@ -107199,6 +107243,7 @@ export const generatedFixtures = {
         "upstream_repo": "gethomepage/homepage"
       },
       {
+        "body": "",
         "breaking": false,
         "breaking_reasons": [],
         "error": "no supported GitHub release source found",
@@ -107219,6 +107264,7 @@ export const generatedFixtures = {
         "upstream_repo": ""
       },
       {
+        "body": "",
         "breaking": false,
         "breaking_reasons": [],
         "error": "no supported GitHub release source found",
@@ -121985,11 +122031,13 @@ export const generatedFixtures = {
           "light",
           "dark"
         ],
+        "configured": false,
         "default_value": "system",
         "disabled_reason": "",
         "editable": true,
         "key": "theme_preference",
         "restart_required": false,
+        "sensitive": false,
         "source": "default",
         "value": "system"
       },
@@ -121998,21 +122046,25 @@ export const generatedFixtures = {
           "visible",
           "dismissed"
         ],
+        "configured": false,
         "default_value": "visible",
         "disabled_reason": "",
         "editable": true,
         "key": "onboarding_checklist",
         "restart_required": false,
+        "sensitive": false,
         "source": "default",
         "value": "visible"
       },
       {
         "allowed_values": [],
+        "configured": false,
         "default_value": "old",
         "disabled_reason": "",
         "editable": true,
         "key": "compose_ignore_paths",
         "restart_required": false,
+        "sensitive": false,
         "source": "default",
         "value": "old"
       },
@@ -122021,11 +122073,13 @@ export const generatedFixtures = {
           "false",
           "true"
         ],
+        "configured": false,
         "default_value": "false",
         "disabled_reason": "",
         "editable": true,
         "key": "digest_pin_updates",
         "restart_required": false,
+        "sensitive": false,
         "source": "default",
         "value": "false"
       },
@@ -122034,11 +122088,13 @@ export const generatedFixtures = {
           "false",
           "true"
         ],
+        "configured": false,
         "default_value": "false",
         "disabled_reason": "",
         "editable": true,
         "key": "release_notes_enabled",
         "restart_required": false,
+        "sensitive": false,
         "source": "configured",
         "value": "true"
       },
@@ -122047,11 +122103,13 @@ export const generatedFixtures = {
           "digest",
           "per_container"
         ],
+        "configured": false,
         "default_value": "digest",
         "disabled_reason": "",
         "editable": true,
         "key": "release_notifications_mode",
         "restart_required": false,
+        "sensitive": false,
         "source": "default",
         "value": "digest"
       },
@@ -122060,23 +122118,54 @@ export const generatedFixtures = {
           "remote_change",
           "cooldown"
         ],
+        "configured": false,
         "default_value": "remote_change",
         "disabled_reason": "",
         "editable": true,
         "key": "release_notifications_resend_policy",
         "restart_required": false,
+        "sensitive": false,
         "source": "default",
         "value": "remote_change"
       },
       {
         "allowed_values": [],
+        "configured": false,
         "default_value": "86400",
         "disabled_reason": "",
         "editable": true,
         "key": "release_notifications_cooldown_seconds",
         "restart_required": false,
+        "sensitive": false,
         "source": "default",
         "value": "86400"
+      },
+      {
+        "allowed_values": [],
+        "configured": false,
+        "default_value": "",
+        "disabled_reason": "",
+        "editable": true,
+        "key": "release_notifications_discord_webhook",
+        "restart_required": false,
+        "sensitive": true,
+        "source": "default",
+        "value": ""
+      },
+      {
+        "allowed_values": [
+          "summary",
+          "full"
+        ],
+        "configured": false,
+        "default_value": "summary",
+        "disabled_reason": "",
+        "editable": true,
+        "key": "release_notifications_verbosity",
+        "restart_required": false,
+        "sensitive": false,
+        "source": "default",
+        "value": "summary"
       }
     ],
     "secrets": [
@@ -122103,10 +122192,6 @@ export const generatedFixtures = {
       {
         "configured": false,
         "name": "GITHUB_TOKEN"
-      },
-      {
-        "configured": false,
-        "name": "DISCORD_RELEASES_WEBHOOK"
       },
       {
         "configured": false,

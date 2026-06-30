@@ -95,7 +95,7 @@ MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_DB_KEY = (
 )
 MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_KEY = "release_notifications_verbosity"
 MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_DB_KEY = "release_notifications.verbosity"
-DISCORD_WEBHOOK_ENV_NAMES = ("DISCORD_RELEASES_WEBHOOK", "DISCORD_WEBHOOK")
+DISCORD_WEBHOOK_ENV_NAMES = ("DISCORD_WEBHOOK",)
 THEME_PREFERENCE_VALUES = ("system", "light", "dark")
 ONBOARDING_CHECKLIST_VALUES = ("visible", "dismissed")
 DIGEST_PIN_UPDATES_VALUES = ("false", "true")
@@ -759,7 +759,10 @@ def _validated_managed_setting_updates(
             if disabled_reason:
                 raise HTTPException(status_code=422, detail=disabled_reason)
             value = raw_value.strip()
-            updates[key] = "" if not value else _validated_discord_webhook(value)
+            try:
+                updates[key] = "" if not value else _validated_discord_webhook(value)
+            except ConfigError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
             continue
         if key not in allowed_values:
             raise HTTPException(

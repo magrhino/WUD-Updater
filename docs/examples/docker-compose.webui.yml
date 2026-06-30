@@ -54,7 +54,6 @@ services:
       OUT_UID: "${OUT_UID:-1000}"
       OUT_GID: "${OUT_GID:-1000}"
       GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
-      DISCORD_RELEASES_WEBHOOK: "${DISCORD_RELEASES_WEBHOOK:-}"
       DISCORD_WEBHOOK: "${DISCORD_WEBHOOK:-}"
     networks:
       - wudup-app
