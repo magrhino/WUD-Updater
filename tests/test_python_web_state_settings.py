@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -15,9 +16,40 @@ from tests.web_test_helpers import (
     _client,
     _csrf_headers,
     _setup_admin,
+    _store_web_setting,
 )
 
-from tests.web_test_helpers import _store_web_setting
+
+def test_discord_webhook_policy_loader_falls_back_when_file_is_missing(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    monkeypatch.setattr(settings_module, "files", lambda _package: tmp_path)
+
+    with caplog.at_level(logging.WARNING, logger=settings_module.LOGGER.name):
+        hosts, path_prefix = settings_module._load_discord_webhook_policy()
+
+    assert hosts == frozenset(settings_module._DEFAULT_DISCORD_WEBHOOK_ALLOWED_HOSTS)
+    assert path_prefix == settings_module._DEFAULT_DISCORD_WEBHOOK_PATH_PREFIX
+    assert "using fallback Discord webhook policy" in caplog.text
+
+
+def test_discord_webhook_policy_loader_falls_back_when_file_is_malformed(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    monkeypatch.setattr(settings_module, "files", lambda _package: tmp_path)
+    (tmp_path / "discord_webhook_policy.json").write_text("{", encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING, logger=settings_module.LOGGER.name):
+        hosts, path_prefix = settings_module._load_discord_webhook_policy()
+
+    assert hosts == frozenset(settings_module._DEFAULT_DISCORD_WEBHOOK_ALLOWED_HOSTS)
+    assert path_prefix == settings_module._DEFAULT_DISCORD_WEBHOOK_PATH_PREFIX
+    assert "using fallback Discord webhook policy" in caplog.text
+
 
 def test_state_read_database_errors_are_sanitized(
     tmp_path: Path,

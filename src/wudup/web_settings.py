@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import urllib.parse
 from collections.abc import Iterator, Mapping, Sequence
@@ -64,6 +65,8 @@ from .web_static import (
     static_spa_available as _static_spa_available,
 )
 
+LOGGER = logging.getLogger(__name__)
+
 DEFAULT_WEB_HOST = "127.0.0.1"
 MANAGED_THEME_PREFERENCE_KEY = "theme_preference"
 MANAGED_THEME_PREFERENCE_DB_KEY = "ui.theme_preference"
@@ -110,13 +113,47 @@ DEFAULT_RELEASE_NOTIFICATIONS_MODE = "digest"
 DEFAULT_RELEASE_NOTIFICATIONS_RESEND_POLICY = "remote_change"
 DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS = 86_400
 DEFAULT_RELEASE_NOTIFICATIONS_VERBOSITY = "summary"
-_DISCORD_WEBHOOK_POLICY = json.loads(
-    files("wudup").joinpath("discord_webhook_policy.json").read_text(
-        encoding="utf-8"
-    )
+_DEFAULT_DISCORD_WEBHOOK_ALLOWED_HOSTS = (
+    "discord.com",
+    "discordapp.com",
+    "canary.discord.com",
+    "ptb.discord.com",
 )
-DISCORD_WEBHOOK_ALLOWED_HOSTS = frozenset(_DISCORD_WEBHOOK_POLICY["allowed_hosts"])
-DISCORD_WEBHOOK_PATH_PREFIX = str(_DISCORD_WEBHOOK_POLICY["path_prefix"])
+_DEFAULT_DISCORD_WEBHOOK_PATH_PREFIX = "/api/webhooks/"
+
+
+def _load_discord_webhook_policy() -> tuple[frozenset[str], str]:
+    try:
+        policy = json.loads(
+            files("wudup").joinpath("discord_webhook_policy.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        allowed_hosts = policy["allowed_hosts"]
+        path_prefix = policy["path_prefix"]
+        if (
+            not isinstance(allowed_hosts, list)
+            or not allowed_hosts
+            or not all(isinstance(host, str) and host.strip() for host in allowed_hosts)
+            or not isinstance(path_prefix, str)
+            or not path_prefix.startswith("/")
+        ):
+            raise ValueError("invalid Discord webhook policy shape")
+        return frozenset(host.strip().lower() for host in allowed_hosts), path_prefix
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        LOGGER.warning(
+            "using fallback Discord webhook policy; packaged policy load failed: %s",
+            type(exc).__name__,
+        )
+        return (
+            frozenset(_DEFAULT_DISCORD_WEBHOOK_ALLOWED_HOSTS),
+            _DEFAULT_DISCORD_WEBHOOK_PATH_PREFIX,
+        )
+
+
+DISCORD_WEBHOOK_ALLOWED_HOSTS, DISCORD_WEBHOOK_PATH_PREFIX = (
+    _load_discord_webhook_policy()
+)
 
 
 def api_settings(request: Request) -> SettingsResponse:
