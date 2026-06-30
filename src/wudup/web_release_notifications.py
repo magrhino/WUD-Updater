@@ -88,6 +88,16 @@ def api_send_release_notifications(
     request: Request,
 ) -> ReleaseNotificationResponse:
     settings = _settings(request)
+    return send_release_notifications(settings, payload, request=request)
+
+
+def send_release_notifications(
+    settings: WebSettings,
+    payload: ReleaseNotificationSendRequest,
+    *,
+    request: Request,
+    actor_type: str | None = None,
+) -> ReleaseNotificationResponse:
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
     if not effective_release_notes_enabled(settings):
@@ -119,6 +129,7 @@ def api_send_release_notifications(
             request,
             payload,
             response,
+            actor_type=actor_type,
         )
         for batch in _payload_batches(response.items, response.mode):
             _post_discord_payload(webhook.value, batch["payload"])
@@ -142,6 +153,7 @@ def api_send_release_notifications(
             status="success",
             sent_count=sent_count,
             sent_batch_count=sent_batch_count,
+            actor_type=actor_type,
         )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         detail = _safe_release_notification_exception_detail(settings, exc, webhook.value)
@@ -168,6 +180,7 @@ def api_send_release_notifications(
                 error=detail,
                 sent_count=sent_count,
                 sent_batch_count=sent_batch_count,
+                actor_type=actor_type,
             )
         raise HTTPException(
             status_code=500,
@@ -968,6 +981,8 @@ def _insert_release_notification_audit_start(
     request: Request,
     payload: ReleaseNotificationPreviewRequest,
     response: ReleaseNotificationResponse,
+    *,
+    actor_type: str | None = None,
 ) -> int:
     now = utc_timestamp()
     metadata = _release_notification_audit_metadata(
@@ -978,6 +993,7 @@ def _insert_release_notification_audit_start(
         status="running",
         sent_count=0,
         sent_batch_count=0,
+        actor_type=actor_type,
     )
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
@@ -1016,6 +1032,7 @@ def _finish_release_notification_audit(
     sent_count: int,
     sent_batch_count: int,
     error: str = "",
+    actor_type: str | None = None,
 ) -> None:
     now = utc_timestamp()
     metadata = _release_notification_audit_metadata(
@@ -1027,6 +1044,7 @@ def _finish_release_notification_audit(
         sent_count=sent_count,
         sent_batch_count=sent_batch_count,
         error=error,
+        actor_type=actor_type,
     )
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
@@ -1075,6 +1093,7 @@ def _safe_finish_release_notification_audit_failure(
     error: str,
     sent_count: int,
     sent_batch_count: int,
+    actor_type: str | None = None,
 ) -> None:
     try:
         _finish_release_notification_audit(
@@ -1087,6 +1106,7 @@ def _safe_finish_release_notification_audit_failure(
             sent_count=sent_count,
             sent_batch_count=sent_batch_count,
             error=error,
+            actor_type=actor_type,
         )
     except (OSError, sqlite3.Error, DatabaseError):
         LOGGER.exception("failed to finalize Discord release-note notification audit")
@@ -1160,6 +1180,7 @@ def _release_notification_audit_metadata(
     sent_count: int,
     sent_batch_count: int,
     error: str = "",
+    actor_type: str | None = None,
 ) -> dict[str, object]:
     target: dict[str, object] = {}
     if payload.run_id is not None:
@@ -1169,7 +1190,7 @@ def _release_notification_audit_metadata(
     metadata: dict[str, object] = {
         "source": "webui",
         "operation": "send_release_notifications",
-        "actor_type": _request_actor_type(settings, request),
+        "actor_type": actor_type or _request_actor_type(settings, request),
         "resource_type": "release_notifications",
         "resource_id": "discord",
         "status": status,

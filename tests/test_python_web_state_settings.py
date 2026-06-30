@@ -103,6 +103,7 @@ def test_settings_reports_effective_non_secret_configuration(
     secret_values = {
         "WUD_WEB_TOKEN": "web-token-secret",
         "WUD_API_AUTH_BEARER_TOKEN": "wud-api-token-secret",
+        "WUDUP_TRIGGER_TOKEN": "trigger-token-secret",
         "GITHUB_TOKEN": "github-token-secret",
         "DISCORD_WEBHOOK": "discord-webhook-secret",
         "ADMIN_WEBHOOK": "admin-webhook-secret",
@@ -203,6 +204,13 @@ def test_settings_reports_effective_non_secret_configuration(
         "configured": True,
         "source": "configured",
     }
+    assert webui["WUDUP_LEGACY_SCRIPTS"] == {
+        "name": "WUDUP_LEGACY_SCRIPTS",
+        "value": "true",
+        "default_value": "true",
+        "configured": False,
+        "source": "default",
+    }
     assert webui["WUD_WEB_SECURE_COOKIES"]["value"] == "false"
     assert webui["WUD_WEB_SECURE_COOKIES_EFFECTIVE"]["value"] == "false"
     assert webui["WUD_WEB_SECURE_COOKIES_EFFECTIVE"]["source"] == "request"
@@ -210,6 +218,8 @@ def test_settings_reports_effective_non_secret_configuration(
     assert secrets["WUD_WEB_TOKEN"]["configured"] is True
     assert secrets["WUD_API_AUTH_BEARER_TOKEN"]["configured"] is True
     assert secrets["WUD_API_AUTH_BEARER_TOKEN_FILE"]["configured"] is False
+    assert secrets["WUDUP_TRIGGER_TOKEN"]["configured"] is True
+    assert secrets["WUDUP_TRIGGER_TOKEN_FILE"]["configured"] is False
     assert "WUD_API_AUTH_BASIC_USER" not in secrets
     assert secrets["WUD_API_AUTH_BASIC_PASSWORD"]["configured"] is False
     assert secrets["WUD_API_AUTH_BASIC_PASSWORD_FILE"]["configured"] is False

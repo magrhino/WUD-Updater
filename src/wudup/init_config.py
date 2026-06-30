@@ -314,6 +314,9 @@ def _container_env_values(answers: InitAnswers) -> list[tuple[str, str]]:
         values.append(("WUD_API_BASE_URL", "http://wud:3000"))
         values.append(("WUD_API_STARTUP_WAIT_SECONDS", "5"))
         values.append(("WUD_PENDING_SOURCE", "file"))
+        values.append(("WUDUP_LEGACY_SCRIPTS", "true"))
+        values.append(("WUDUP_TRIGGER_TOKEN", ""))
+        values.append(("WUDUP_TRIGGER_TOKEN_FILE", ""))
     if answers.profile == "webui":
         values.extend(
             (
@@ -410,6 +413,9 @@ def _compose_environment(answers: InitAnswers) -> dict[str, str]:
             "${WUD_API_STARTUP_WAIT_SECONDS:-5}"
         )
         environment["WUD_PENDING_SOURCE"] = "${WUD_PENDING_SOURCE:-file}"
+        environment["WUDUP_LEGACY_SCRIPTS"] = "${WUDUP_LEGACY_SCRIPTS:-true}"
+        environment["WUDUP_TRIGGER_TOKEN"] = "${WUDUP_TRIGGER_TOKEN:-}"
+        environment["WUDUP_TRIGGER_TOKEN_FILE"] = "${WUDUP_TRIGGER_TOKEN_FILE:-}"
     return environment
 
 

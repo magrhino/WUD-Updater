@@ -97,6 +97,9 @@ run_entrypoint(){
   if [[ -n "${WUD_SYNC_SCRIPTS+x}" ]]; then
     env_args+=("WUD_SYNC_SCRIPTS=$WUD_SYNC_SCRIPTS")
   fi
+  if [[ -n "${WUDUP_LEGACY_SCRIPTS+x}" ]]; then
+    env_args+=("WUDUP_LEGACY_SCRIPTS=$WUDUP_LEGACY_SCRIPTS")
+  fi
 
   LAST_STATUS=0
   env "${env_args[@]}" "$SCRIPT" "$@" > "$TEST_TMP/output.log" 2>&1 ||
@@ -271,6 +274,16 @@ test_web_exports_disabled_script_sync_status(){
   teardown_case
 }
 
+test_web_exports_legacy_disabled_script_sync_status(){
+  setup_case
+  mkdir -p "$TEST_TMP/managed-wud"
+  WUDUP_LEGACY_SCRIPTS=FALSE PYTHON_BIN="$TEST_TMP/python" FAKE_PYTHON_PRINT_SCRIPT_SYNC_STATUS=1 run_entrypoint web
+  assert_status 0
+  assert_output "python [-m] [wudup.cli] [web] [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--log-dir] [/logs] WUD_SCRIPT_SYNC_STATUS=[legacy-disabled]"
+  [[ ! -e "$TEST_TMP/managed-wud/.wudup-managed" ]] || fail "legacy-disabled sync created marker"
+  teardown_case
+}
+
 test_doctor_exports_skipped_script_sync_status(){
   setup_case
   WUD_SYNC_SCRIPTS=true PYTHON_BIN="$TEST_TMP/python" FAKE_PYTHON_PRINT_SCRIPT_SYNC_STATUS=1 run_entrypoint doctor --no-color
@@ -294,6 +307,15 @@ test_sync_command_copies_scripts_and_exits(){
   assert_status 0
   assert_output "Synced WUD scripts to $TEST_TMP/managed-wud"
   assert_synced_scripts
+  teardown_case
+}
+
+test_sync_command_fails_when_legacy_scripts_disabled(){
+  setup_case
+  WUDUP_LEGACY_SCRIPTS=false run_entrypoint sync-wud-scripts
+  assert_status 1
+  grep -q 'Legacy WUD scripts are disabled by WUDUP_LEGACY_SCRIPTS=false' "$TEST_TMP/output.log" || fail "missing legacy disabled message"
+  [[ ! -e "$TEST_TMP/managed-wud/.wudup-managed" ]] || fail "legacy-disabled sync created marker"
   teardown_case
 }
 
@@ -454,9 +476,11 @@ main(){
   run_test test_web_exports_explicit_auto_script_sync_status
   run_test test_web_exports_forced_script_sync_status
   run_test test_web_exports_disabled_script_sync_status
+  run_test test_web_exports_legacy_disabled_script_sync_status
   run_test test_doctor_exports_skipped_script_sync_status
   run_test test_debug_command_executes_directly
   run_test test_sync_command_copies_scripts_and_exits
+  run_test test_sync_command_fails_when_legacy_scripts_disabled
   run_test test_startup_auto_sync_runs_for_existing_destination
   run_test test_startup_auto_sync_skips_missing_destination
   run_test test_startup_explicit_auto_sync_runs_for_existing_destination

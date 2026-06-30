@@ -134,6 +134,12 @@ def test_script_sync_summary_treats_explicit_auto_as_auto(
     assert summary.startswith(f"auto fallback sees writable {scripts_dir}")
 
 
+def test_script_sync_summary_reports_legacy_disabled() -> None:
+    summary = web_startup._script_sync_summary({"WUDUP_LEGACY_SCRIPTS": "FALSE"})
+
+    assert summary == "disabled by WUDUP_LEGACY_SCRIPTS"
+
+
 def test_static_spa_mount_serves_index_when_configured(tmp_path: Path) -> None:
     static_dir = tmp_path / "static"
     static_dir.mkdir()

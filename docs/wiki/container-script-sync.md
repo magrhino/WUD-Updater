@@ -26,7 +26,9 @@ services:
 
 Set `WUD_SYNC_SCRIPTS=false` to opt out of startup sync. Set
 `WUD_SYNC_SCRIPTS=true` to force sync, including when using a custom
-`WUD_SCRIPTS_DIR`.
+`WUD_SCRIPTS_DIR`. Set `WUDUP_LEGACY_SCRIPTS=false` for API-first WebUI
+deployments; that disables startup sync and makes `sync-wud-scripts` fail
+clearly instead of refreshing legacy WUD callbacks.
 
 After the first sync, configure WUD to call:
 

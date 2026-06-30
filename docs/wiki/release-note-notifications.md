@@ -117,6 +117,13 @@ New WebUI-focused configurations should not use these shell notification
 wrappers. Keep them only for existing WUD callback setups that intentionally
 send release notes outside the WebUI.
 
+For API-first per-update release notes, configure WUD's HTTP trigger to `POST`
+to WUDup at `/api/v1/wud/triggers/update` with bearer auth matching
+`WUDUP_TRIGGER_TOKEN` or `WUDUP_TRIGGER_TOKEN_FILE`. Once WUD API metadata is
+healthy, set `WUDUP_LEGACY_SCRIPTS=false` and `WUD_PENDING_SOURCE=api`, then
+remove WUD command triggers that call `/wud/append-updates.sh`,
+`/wud/on-update.sh`, or `/wud/tag-manager.sh` before recreating WUD.
+
 ## LinuxServer.io Mapping
 
 For default WUD callbacks, LinuxServer.io images keep the legacy behavior:

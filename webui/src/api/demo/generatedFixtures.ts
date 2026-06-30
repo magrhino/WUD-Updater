@@ -1241,6 +1241,14 @@ export const generatedFixtures = {
         },
         {
           "configured": false,
+          "name": "WUDUP_TRIGGER_TOKEN"
+        },
+        {
+          "configured": false,
+          "name": "WUDUP_TRIGGER_TOKEN_FILE"
+        },
+        {
+          "configured": false,
           "name": "GITHUB_TOKEN"
         },
         {
@@ -1440,6 +1448,13 @@ export const generatedFixtures = {
           "name": "WUD_PENDING_SOURCE",
           "source": "default",
           "value": "file"
+        },
+        {
+          "configured": false,
+          "default_value": "true",
+          "name": "WUDUP_LEGACY_SCRIPTS",
+          "source": "default",
+          "value": "true"
         },
         {
           "configured": true,
@@ -122195,6 +122210,14 @@ export const generatedFixtures = {
       },
       {
         "configured": false,
+        "name": "WUDUP_TRIGGER_TOKEN"
+      },
+      {
+        "configured": false,
+        "name": "WUDUP_TRIGGER_TOKEN_FILE"
+      },
+      {
+        "configured": false,
         "name": "GITHUB_TOKEN"
       },
       {
@@ -122394,6 +122417,13 @@ export const generatedFixtures = {
         "name": "WUD_PENDING_SOURCE",
         "source": "default",
         "value": "file"
+      },
+      {
+        "configured": false,
+        "default_value": "true",
+        "name": "WUDUP_LEGACY_SCRIPTS",
+        "source": "default",
+        "value": "true"
       },
       {
         "configured": true,

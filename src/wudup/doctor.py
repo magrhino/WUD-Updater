@@ -61,6 +61,7 @@ class DoctorOptions:
     host_docker_base: Path | None = None
     docker_host: str = ""
     sync_scripts: str = "auto"
+    legacy_scripts_enabled: bool = True
     updater_use_sudo: bool = False
     updater_use_sudo_source: str = ""
     updater_use_sudo_value: str = ""
@@ -529,6 +530,13 @@ class Doctor:
             self._record("PASS", "packaged WUD scripts", str(scripts))
 
     def _check_script_sync(self) -> None:
+        if not self.options.legacy_scripts_enabled:
+            self._record(
+                "WARN",
+                "WUD script sync",
+                "WUDUP_LEGACY_SCRIPTS is disabled",
+            )
+            return
         if self.options.sync_scripts == "disabled":
             self._record("WARN", "WUD script sync", "WUD_SYNC_SCRIPTS is disabled")
             return
@@ -961,6 +969,11 @@ def options_from_namespace(
         docker_host=environ.get("DOCKER_HOST") or "",
         sync_scripts=_resolve_script_sync_mode(
             environ.get("WUD_SYNC_SCRIPTS"),
+        ),
+        legacy_scripts_enabled=_resolve_bool_env(
+            environ.get("WUDUP_LEGACY_SCRIPTS"),
+            "WUDUP_LEGACY_SCRIPTS",
+            default=True,
         ),
         updater_use_sudo=_resolve_bool_env(
             updater_sudo_value,

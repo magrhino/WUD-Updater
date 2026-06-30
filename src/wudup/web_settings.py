@@ -68,6 +68,7 @@ from .web_static import (
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_WEB_HOST = "127.0.0.1"
+LEGACY_SCRIPTS_ENV = "WUDUP_LEGACY_SCRIPTS"
 MANAGED_THEME_PREFERENCE_KEY = "theme_preference"
 MANAGED_THEME_PREFERENCE_DB_KEY = "ui.theme_preference"
 MANAGED_ONBOARDING_CHECKLIST_KEY = "onboarding_checklist"
@@ -1123,6 +1124,13 @@ def _webui_settings_entries(
             settings.pending_source,
             web_pending_sources.DEFAULT_PENDING_SOURCE,
             _env_configured(settings, web_pending_sources.PENDING_SOURCE_ENV),
+            source="derived" if not settings.legacy_scripts_enabled else None,
+        ),
+        _settings_entry(
+            LEGACY_SCRIPTS_ENV,
+            _format_bool(settings.legacy_scripts_enabled),
+            "true",
+            _env_configured(settings, LEGACY_SCRIPTS_ENV),
         ),
         _settings_entry(
             "WUD_WEB_MUTATIONS_ENABLED",

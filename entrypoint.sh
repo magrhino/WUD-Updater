@@ -23,6 +23,23 @@ env_bool_enabled(){
   esac
 }
 
+env_bool_disabled(){
+  local value="${1:-}"
+
+  case "$value" in
+    0|[Ff][Aa][Ll][Ss][Ee]|[Nn][Oo]|[Oo][Ff][Ff]|[Dd][Ii][Ss][Aa][Bb][Ll][Ee][Dd])
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+legacy_wud_scripts_disabled(){
+  [[ -n "${WUDUP_LEGACY_SCRIPTS+x}" ]] && env_bool_disabled "$WUDUP_LEGACY_SCRIPTS"
+}
+
 env_auto_enabled(){
   case "${1:-}" in
     [Aa][Uu][Tt][Oo])
@@ -36,6 +53,11 @@ env_auto_enabled(){
 
 startup_sync_status(){
   local command="${1:-}"
+
+  if legacy_wud_scripts_disabled; then
+    printf 'legacy-disabled\n'
+    return
+  fi
 
   case "$command" in
     sync-wud-scripts)
@@ -178,6 +200,11 @@ sync_wud_scripts(){
   local src="$app_dir/wud"
   local dst="$wud_scripts_dir"
   local dst_canon app_canon docker_base_canon out_dir_canon out_dir marker legacy_marker
+
+  if legacy_wud_scripts_disabled; then
+    printf 'Legacy WUD scripts are disabled by WUDUP_LEGACY_SCRIPTS=false\n' >&2
+    return 1
+  fi
 
   if [[ -z "$dst" ]]; then
     refuse_unsafe_wud_scripts_dir

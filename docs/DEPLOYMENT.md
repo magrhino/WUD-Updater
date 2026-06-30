@@ -261,6 +261,12 @@ reads WebUI pending entries from WUD's `/api/containers` metadata, and
 `WUD_OUT_FILE`. Keep the default `file` mode until WUD API access is healthy;
 the host `updates` CLI and `docker-update-from-wud` remain legacy file-mode
 helpers and will not grow API mode.
+Set `WUDUP_LEGACY_SCRIPTS=false` only after WUD API access is healthy and after
+removing WUD command triggers that call `/wud/append-updates.sh`,
+`/wud/on-update.sh`, or `/wud/tag-manager.sh`; recreate WUD so stale trigger
+environment is gone. In that mode the WebUI forces API pending source behavior,
+skips managed WUD script sync, and the API-first WUD HTTP trigger can wake
+release-note notifications without touching `images.todo`.
 For LAN or reverse-proxy exposure, set `WUD_WEB_PUBLIC_ORIGIN`; use
 `WUD_WEB_ALLOWED_HOSTS` only for extra host aliases, and review
 `WUD_WEB_TRUSTED_PROXIES` plus `WUD_WEB_SECURE_COOKIES` for reverse proxies.
@@ -595,6 +601,8 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_API_AUTH_BASIC_USER` + `WUD_API_AUTH_BASIC_PASSWORD_FILE` / `WUD_API_AUTH_BASIC_PASSWORD` | unset | Optional basic auth credentials for WUDup's outbound WUD API calls. The user and one password source must be set together. Prefer the `_FILE` password form in containers. |
 | `WUD_API_HEADERS_FILE` | unset | Optional UTF-8 JSON object of static WUD API request headers, such as `{"X-Api-Key":"example"}`. Header names and values are validated, values are redacted, and an `Authorization` header cannot be combined with bearer or basic auth. |
 | `WUD_PENDING_SOURCE` | `file` | WebUI pending-update source: `file` reads `WUD_OUT_FILE`, `api` derives pending lines from WUD `/api/containers`, and `auto` uses API metadata when usable before falling back to `WUD_OUT_FILE`. Host CLI update commands remain legacy file-mode only. |
+| `WUDUP_LEGACY_SCRIPTS` | `true` | Set `false` to disable WebUI `images.todo` fallback and managed WUD script sync. This forces API pending source behavior for the WebUI and the WUD trigger endpoint; host CLI update commands remain legacy file-mode only. |
+| `WUDUP_TRIGGER_TOKEN_FILE` / `WUDUP_TRIGGER_TOKEN` | unset | Shared bearer token accepted by `POST /api/v1/wud/triggers/update`. Prefer the `_FILE` form in containers. Configure the WUD HTTP trigger to send the same token. |
 | `WUD_RELEASE_NOTES_ENABLED` | unset | Optional env override for WebUI Discord release-note notifications. Leave unset to manage the setting from Settings; set `true` or `false` only when the deployment should force the value and make the Settings toggle read-only. |
 | `WUD_WEB_HOST` | Host/direct app: `127.0.0.1`; container image: `0.0.0.0` | Host passed to Uvicorn when running `wudup web`. The image default makes published Docker ports reachable; Compose still controls host-side exposure with `WEBUI_HTTP_BIND`. |
 | `WUD_WEB_PORT` | `7417` | Port passed to Uvicorn when running `wudup web`. |
@@ -674,6 +682,14 @@ or with `DISCORD_WEBHOOK` in the WUDup runtime, and set
 **Preview release notes** from selected pending updates or from a successful
 apply job. The WebUI reads WUD trigger summaries through the WUD API when
 available, but it does not invoke WUD trigger POST endpoints.
+
+For API-first per-update release notes, configure WUD's HTTP trigger to `POST`
+to `http://wudup:7417/api/v1/wud/triggers/update` with bearer auth matching
+`WUDUP_TRIGGER_TOKEN` or `WUDUP_TRIGGER_TOKEN_FILE`. Set
+`WUDUP_LEGACY_SCRIPTS=false` and `WUD_PENDING_SOURCE=api` once WUD API metadata
+is healthy. Remove legacy WUD command triggers for `/wud/append-updates.sh`,
+`/wud/on-update.sh`, and `/wud/tag-manager.sh`; otherwise old WUD containers can
+keep sending file-mode or shell release-note notifications until recreated.
 
 Do not keep a legacy WUD shell release-note callback enabled unless you still
 want that separate path. Running both the shell helper and WebUI sender for the
