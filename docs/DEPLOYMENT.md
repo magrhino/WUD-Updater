@@ -691,8 +691,8 @@ available, but it does not invoke WUD trigger POST endpoints.
 For API-first per-update release notes, configure WUD's HTTP trigger to `POST`
 to `http://wudup:7417/api/v1/wud/triggers/update` with bearer auth matching
 `WUDUP_TRIGGER_TOKEN` or `WUDUP_TRIGGER_TOKEN_FILE`. Set
-`WUDUP_LEGACY_SCRIPTS=false` and `WUD_PENDING_SOURCE=api` once WUD API metadata
-is healthy. Remove legacy WUD command triggers for `/wud/append-updates.sh`,
+`WUDUP_LEGACY_SCRIPTS=false` once WUD API metadata is healthy. Remove legacy
+WUD command triggers for `/wud/append-updates.sh`,
 `/wud/on-update.sh`, and `/wud/tag-manager.sh`, then recreate the stack;
 otherwise old WUD containers can keep sending file-mode or shell release-note
 notifications until recreated.

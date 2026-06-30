@@ -97,8 +97,6 @@ def _script_sync_status_message(status: str, scripts_dir: Path) -> str:
         return "forced by WUD_SYNC_SCRIPTS and synced packaged scripts"
     if status == "disabled":
         return "disabled by WUD_SYNC_SCRIPTS"
-    if status == "legacy-disabled":
-        return "disabled by WUDUP_LEGACY_SCRIPTS"
     if status == "skipped-doctor":
         return "not run for doctor command"
     if status == "manual-command":

@@ -57,7 +57,6 @@ from .config import (
 )
 
 DEFAULT_WEB_PORT = 7417
-LEGACY_SCRIPTS_ENV = "WUDUP_LEGACY_SCRIPTS"
 
 
 def __getattr__(name: str) -> Any:
@@ -554,8 +553,8 @@ def load_web_settings(
     )
     host_docker_base = _parse_host_docker_base(env, config)
     legacy_scripts_enabled = parse_bool_env(
-        LEGACY_SCRIPTS_ENV,
-        env.get(LEGACY_SCRIPTS_ENV),
+        web_settings.LEGACY_SCRIPTS_ENV,
+        env.get(web_settings.LEGACY_SCRIPTS_ENV),
         default=True,
     )
     return web_models.WebSettings(

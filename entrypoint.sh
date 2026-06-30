@@ -23,10 +23,9 @@ env_bool_enabled(){
   esac
 }
 
-env_bool_disabled(){
-  local value="${1:-}"
-
-  case "$value" in
+legacy_wud_scripts_disabled(){
+  [[ -n "${WUDUP_LEGACY_SCRIPTS+x}" ]] || return 1
+  case "$WUDUP_LEGACY_SCRIPTS" in
     0|[Ff][Aa][Ll][Ss][Ee]|[Nn][Oo]|[Oo][Ff][Ff]|[Dd][Ii][Ss][Aa][Bb][Ll][Ee][Dd])
       return 0
       ;;
@@ -34,10 +33,6 @@ env_bool_disabled(){
       return 1
       ;;
   esac
-}
-
-legacy_wud_scripts_disabled(){
-  [[ -n "${WUDUP_LEGACY_SCRIPTS+x}" ]] && env_bool_disabled "$WUDUP_LEGACY_SCRIPTS"
 }
 
 env_auto_enabled(){

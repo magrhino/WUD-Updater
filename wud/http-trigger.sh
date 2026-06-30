@@ -13,10 +13,6 @@ if [ -z "$TOKEN" ]; then
   exit 1
 fi
 
-json_string() {
-  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
-
 case "${update_available:-}" in
   false|0|no|off)
     UPDATE_AVAILABLE=false
@@ -26,15 +22,14 @@ case "${update_available:-}" in
     ;;
 esac
 
-PAYLOAD=$(printf \
-  '{"updateAvailable":%s,"id":"%s","container_id":"%s","name":"%s","image_name":"%s","image":{"name":"%s","tag":"%s"}}' \
-  "$UPDATE_AVAILABLE" \
-  "$(json_string "${id:-}")" \
-  "$(json_string "${container_id:-}")" \
-  "$(json_string "${name:-}")" \
-  "$(json_string "${image_name:-}")" \
-  "$(json_string "${image_name:-}")" \
-  "$(json_string "${image_tag_value:-}")")
+PAYLOAD=$(jq -nc \
+  --argjson updateAvailable "$UPDATE_AVAILABLE" \
+  --arg id "${id:-}" \
+  --arg container_id "${container_id:-}" \
+  --arg name "${name:-}" \
+  --arg image_name "${image_name:-}" \
+  --arg image_tag "${image_tag_value:-}" \
+  '{updateAvailable:$updateAvailable,id:$id,container_id:$container_id,name:$name,image_name:$image_name,image:{name:$image_name,tag:$image_tag}}')
 
 curl --fail --silent --show-error \
   -H "Authorization: Bearer $TOKEN" \

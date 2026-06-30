@@ -192,7 +192,10 @@ def _matching_line_numbers(
         ):
             matched.append(line_no)
             continue
-        if image_ref and _image_matches(container.image, image_ref):
+        if image_ref and (
+            container.image == image_ref
+            or image_matches_resolved_target(container.image, image_ref, True)
+        ):
             matched.append(line_no)
     return tuple(sorted(set(matched)))
 
@@ -238,12 +241,6 @@ def _payload_image_ref(payload: Mapping[str, object]) -> str:
     if name and tag and not image_has_tag(name):
         return f"{name}:{tag}"
     return name
-
-
-def _image_matches(container_image: str, payload_image: str) -> bool:
-    if container_image == payload_image:
-        return True
-    return image_matches_resolved_target(container_image, payload_image, True)
 
 
 def _object(value: object) -> Mapping[str, object]:
