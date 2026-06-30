@@ -252,12 +252,19 @@ def _annotate_notification_state(
     config = effective_release_notification_config(settings)
     try:
         with closing(_connect_readonly_db(settings)) as conn:
-            histories = web_release_notification_state.notification_history_by_key(
+            annotations = web_release_notification_state.notification_annotations(
                 conn,
-                {identity.notification_key for identity in identities.values()},
+                config,
+                identities,
+                resend=False,
             )
     except ReadOnlyDatabaseMissing:
-        histories = {}
+        annotations = web_release_notification_state.notification_annotations_from_history(
+            config,
+            identities,
+            {},
+            resend=False,
+        )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
@@ -274,23 +281,15 @@ def _annotate_notification_state(
         if identity is None:
             annotated.append(item)
             continue
-        history = histories.get(identity.notification_key)
-        status, skipped_reason = web_release_notification_state.notification_decision(
-            config,
-            identity,
-            history,
-            resend=False,
-        )
+        annotation = annotations[item.line_no]
         annotated.append(
             item.model_copy(
                 update={
-                    "notification_key": identity.notification_key,
-                    "notification_status": status,
-                    "notification_last_sent_at": ""
-                    if history is None
-                    else history.last_sent_at,
-                    "notification_send_count": 0 if history is None else history.send_count,
-                    "notification_skipped_reason": skipped_reason,
+                    "notification_key": annotation.notification_key,
+                    "notification_status": annotation.status,
+                    "notification_last_sent_at": annotation.last_sent_at,
+                    "notification_send_count": annotation.send_count,
+                    "notification_skipped_reason": annotation.skipped_reason,
                 }
             )
         )

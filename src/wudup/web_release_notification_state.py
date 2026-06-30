@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -38,28 +39,43 @@ class NotificationHistory:
     metadata: dict[str, object]
 
 
+@dataclass(frozen=True)
+class NotificationAnnotation:
+    notification_key: str
+    status: str
+    last_sent_at: str
+    send_count: int
+    skipped_reason: str
+
+
 def notification_identity(
     target: Any,
     note: Any,
     metadata: Any | None = None,
 ) -> NotificationIdentity:
-    payload = {
+    metadata_payload = _metadata_payload(metadata)
+    remote_value = (
+        _value(note, "release_tag")
+        or _value(target, "desired_tag")
+        or _value(target, "digest")
+        or _metadata_remote_value(metadata_payload)
+    )
+    payload: dict[str, object] = {
         "service_key": _value(target, "key"),
         "image": _value(target, "first"),
         "image_repo": _value(note, "image_repo") or _value(target, "repo"),
         "local_value": _value(target, "tag_token"),
-        "remote_value": (
-            _value(note, "release_tag")
-            or _value(target, "desired_tag")
-            or _value(target, "digest")
-        ),
+        "remote_value": remote_value,
         "digest": _value(target, "digest"),
         "release_link": _first_link_url(note),
     }
+    stored_payload = dict(payload)
+    if metadata_payload:
+        stored_payload["metadata"] = metadata_payload
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return NotificationIdentity(
         notification_key=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
-        metadata=payload,
+        metadata=stored_payload,
     )
 
 
@@ -69,14 +85,14 @@ def notification_history_by_key(
 ) -> dict[str, NotificationHistory]:
     if not keys:
         return {}
-    placeholders = ", ".join("?" for _ in keys)
     rows = conn.execute(
-        f"""
-        SELECT *
+        """
+        SELECT release_notification_history.*
         FROM release_notification_history
-        WHERE notification_key IN ({placeholders})
+        JOIN json_each(?) AS wanted
+            ON release_notification_history.notification_key = wanted.value
         """,
-        tuple(keys),
+        (json.dumps(sorted(keys)),),
     ).fetchall()
     return {
         str(row["notification_key"]): NotificationHistory(
@@ -91,6 +107,51 @@ def notification_history_by_key(
         )
         for row in rows
     }
+
+
+def notification_annotations(
+    conn: sqlite3.Connection,
+    config: ReleaseNotificationConfig,
+    identities: Mapping[int, NotificationIdentity],
+    *,
+    resend: bool,
+) -> dict[int, NotificationAnnotation]:
+    histories = notification_history_by_key(
+        conn,
+        {identity.notification_key for identity in identities.values()},
+    )
+    return notification_annotations_from_history(
+        config,
+        identities,
+        histories,
+        resend=resend,
+    )
+
+
+def notification_annotations_from_history(
+    config: ReleaseNotificationConfig,
+    identities: Mapping[int, NotificationIdentity],
+    histories: Mapping[str, NotificationHistory],
+    *,
+    resend: bool,
+) -> dict[int, NotificationAnnotation]:
+    annotations: dict[int, NotificationAnnotation] = {}
+    for line_no, identity in identities.items():
+        history = histories.get(identity.notification_key)
+        status, skipped_reason = notification_decision(
+            config,
+            identity,
+            history,
+            resend=resend,
+        )
+        annotations[line_no] = NotificationAnnotation(
+            notification_key=identity.notification_key,
+            status=status,
+            last_sent_at="" if history is None else history.last_sent_at,
+            send_count=0 if history is None else history.send_count,
+            skipped_reason=skipped_reason,
+        )
+    return annotations
 
 
 def notification_decision(
@@ -184,6 +245,49 @@ def _first_link_url(note: Any) -> str:
         if value:
             return value
     return ""
+
+
+def _metadata_payload(metadata: Any | None) -> dict[str, object]:
+    if metadata is None:
+        return {}
+    if isinstance(metadata, Mapping):
+        return _json_mapping(metadata)
+
+    payload: dict[str, object] = {}
+    for name in ("local_digest", "remote_tag", "remote_digest", "link"):
+        value = _value(metadata, name)
+        if value:
+            payload[name] = value
+    labels = getattr(metadata, "labels", None)
+    if isinstance(labels, Mapping):
+        source_label = labels.get("org.opencontainers.image.source")
+        if isinstance(source_label, str) and source_label:
+            payload["source_label"] = source_label
+    return payload
+
+
+def _json_mapping(metadata: Mapping[Any, Any]) -> dict[str, object]:
+    value = json.loads(
+        json.dumps(
+            {str(key): item for key, item in metadata.items()},
+            sort_keys=True,
+            default=str,
+        )
+    )
+    return value if isinstance(value, dict) else {}
+
+
+def _metadata_value(metadata: Mapping[str, object], name: str) -> str:
+    value = metadata.get(name, "")
+    return value if isinstance(value, str) else ""
+
+
+def _metadata_remote_value(metadata: Mapping[str, object]) -> str:
+    remote_tag = _metadata_value(metadata, "remote_tag")
+    remote_digest = _metadata_value(metadata, "remote_digest")
+    if remote_tag and remote_digest:
+        return f"{remote_tag}@{remote_digest}"
+    return remote_tag or remote_digest
 
 
 def _value(source: Any, name: str) -> str:

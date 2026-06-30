@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import urllib.error
 from pathlib import Path
+from types import SimpleNamespace
 
 from wudup import web_release_notifications as notifications_module
 from wudup.db import init_db, insert_pending_update, insert_update_run, open_db
@@ -95,6 +96,107 @@ def _write_pending_lines(tmp_path: Path, lines: list[str]) -> None:
         "\n".join(lines) + "\n",
         encoding="utf-8",
     )
+
+
+def test_notification_identity_includes_wud_metadata() -> None:
+    target = notifications_module.WudTarget(
+        line_no=1,
+        raw="ghcr.io/acme/app:1.0.0 tag=2.0.0",
+        first="ghcr.io/acme/app:1.0.0",
+        key="app",
+        repo="ghcr.io/acme/app",
+        has_tag=True,
+        allow_repo=True,
+        digest="",
+        desired_tag="2.0.0",
+        tag_token="1.0.0",
+    )
+    note = notifications_module.ReleaseNoteInfo(
+        line_no=1,
+        status="ready",
+        provider="github",
+        image_repo="ghcr.io/acme/app",
+        upstream_repo="acme/app",
+        release_tag="2.0.0",
+        title="v2.0.0",
+    )
+    metadata = SimpleNamespace(
+        local_digest="sha256:local",
+        remote_tag="2.0.0",
+        remote_digest="sha256:remote-a",
+        link="https://github.com/acme/app",
+        labels={
+            "org.opencontainers.image.source": "https://github.com/acme/app",
+            "ignored": "not persisted",
+        },
+    )
+
+    first = notifications_module.web_release_notification_state.notification_identity(
+        target,
+        note,
+        metadata,
+    )
+
+    assert first.metadata["metadata"] == {
+        "local_digest": "sha256:local",
+        "remote_tag": "2.0.0",
+        "remote_digest": "sha256:remote-a",
+        "link": "https://github.com/acme/app",
+        "source_label": "https://github.com/acme/app",
+    }
+
+    unresolved_target = notifications_module.WudTarget(
+        line_no=1,
+        raw="ghcr.io/acme/app:1.0.0",
+        first="ghcr.io/acme/app:1.0.0",
+        key="app",
+        repo="ghcr.io/acme/app",
+        has_tag=True,
+        allow_repo=True,
+        digest="",
+        desired_tag="",
+        tag_token="1.0.0",
+    )
+    unresolved_note = note.model_copy(update={"release_tag": ""})
+    first_fallback = notifications_module.web_release_notification_state.notification_identity(
+        unresolved_target,
+        unresolved_note,
+        metadata,
+    )
+    changed_fallback = notifications_module.web_release_notification_state.notification_identity(
+        unresolved_target,
+        unresolved_note,
+        SimpleNamespace(**{**metadata.__dict__, "remote_digest": "sha256:remote-b"}),
+    )
+
+    assert first_fallback.notification_key != changed_fallback.notification_key
+
+
+def test_notification_history_by_key_binds_keys(tmp_path: Path) -> None:
+    db_path = tmp_path / "state" / "wud.sqlite"
+    hostile_key = "abc') OR 1=1 --"
+    with open_db(db_path) as conn:
+        init_db(conn)
+        with conn:
+            for key in (hostile_key, "other-key"):
+                notifications_module.web_release_notification_state.upsert_notification_history(
+                    conn,
+                    identity=notifications_module.web_release_notification_state.NotificationIdentity(
+                        notification_key=key,
+                        metadata={},
+                    ),
+                    config=notifications_module.web_release_notification_state.ReleaseNotificationConfig(),
+                    status="sent",
+                    audit_run_id=1,
+                    now="2026-06-01T00:00:00+00:00",
+                )
+
+        histories = notifications_module.web_release_notification_state.notification_history_by_key(
+            conn,
+            {hostile_key},
+        )
+
+    assert set(histories) == {hostile_key}
 
 
 def test_release_notification_preview_includes_wud_triggers(

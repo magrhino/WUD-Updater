@@ -435,9 +435,8 @@ def _notification_items(
     config: web_release_notification_state.ReleaseNotificationConfig,
     resend: bool,
 ) -> tuple[list[ReleaseNotificationItem], list[str]]:
-    candidates: list[
-        tuple[ReleaseNotificationItem, web_release_notification_state.NotificationIdentity]
-    ] = []
+    candidates: list[ReleaseNotificationItem] = []
+    identities: dict[int, web_release_notification_state.NotificationIdentity] = {}
     warnings: list[str] = []
     trigger_cache: dict[str, tuple[list[ReleaseNotificationTrigger], str]] = {}
     for target in source.targets:
@@ -451,6 +450,7 @@ def _notification_items(
             note,
             metadata,
         )
+        identities[target.target.line_no] = identity
         triggers: list[ReleaseNotificationTrigger] = []
         if target.wud_container_id:
             if target.wud_container_id not in trigger_cache:
@@ -465,7 +465,7 @@ def _notification_items(
                     f"{trigger_warning}"
                 )
         title, description = _notification_copy(settings, target, note, triggers)
-        candidates.append((
+        candidates.append(
             ReleaseNotificationItem(
                 line_no=target.target.line_no,
                 image=target.target.first,
@@ -478,48 +478,52 @@ def _notification_items(
                 links=_release_note_links(note),
                 triggers=triggers,
                 notification_key=identity.notification_key,
-            ),
-            identity,
-        ))
-    histories = _notification_histories(
-        settings,
-        {identity.notification_key for _item, identity in candidates},
-    )
-    items: list[ReleaseNotificationItem] = []
-    for item, identity in candidates:
-        history = histories.get(identity.notification_key)
-        notification_status, skipped_reason = (
-            web_release_notification_state.notification_decision(
-                config,
-                identity,
-                history,
-                resend=resend,
             )
         )
+    annotations = _notification_annotations(
+        settings,
+        config,
+        identities,
+        resend=resend,
+    )
+    items: list[ReleaseNotificationItem] = []
+    for item in candidates:
+        annotation = annotations[item.line_no]
         items.append(
             item.model_copy(
                 update={
-                    "notification_status": notification_status,
-                    "notification_last_sent_at": ""
-                    if history is None
-                    else history.last_sent_at,
-                    "notification_send_count": 0 if history is None else history.send_count,
-                    "skipped_reason": skipped_reason,
+                    "notification_status": annotation.status,
+                    "notification_last_sent_at": annotation.last_sent_at,
+                    "notification_send_count": annotation.send_count,
+                    "skipped_reason": annotation.skipped_reason,
                 }
             )
         )
     return items, warnings
 
 
-def _notification_histories(
+def _notification_annotations(
     settings: WebSettings,
-    keys: set[str],
-) -> dict[str, web_release_notification_state.NotificationHistory]:
+    config: web_release_notification_state.ReleaseNotificationConfig,
+    identities: Mapping[int, web_release_notification_state.NotificationIdentity],
+    *,
+    resend: bool,
+) -> dict[int, web_release_notification_state.NotificationAnnotation]:
     try:
         with closing(connect_readonly_db(settings)) as conn:
-            return web_release_notification_state.notification_history_by_key(conn, keys)
+            return web_release_notification_state.notification_annotations(
+                conn,
+                config,
+                identities,
+                resend=resend,
+            )
     except (AttributeError, ReadOnlyDatabaseMissing):
-        return {}
+        return web_release_notification_state.notification_annotations_from_history(
+            config,
+            identities,
+            {},
+            resend=resend,
+        )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
