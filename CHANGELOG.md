@@ -4,6 +4,19 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.50.0](https://github.com/magrhino/wudup/compare/v0.49.1...v0.50.0) (2026-06-30)
+
+
+### Features
+
+* **notifications:** add webhook test action ([b84b84e](https://github.com/magrhino/wudup/commit/b84b84e57fb3820db44314b5df66906e70a9c5a2))
+
+
+### Bug Fixes
+
+* **release:** keep release pr current ([b092464](https://github.com/magrhino/wudup/commit/b0924641eb37ced17b69119dc8551454516b7f7b))
+* **ui:** filter and paginate security scan findings ([#450](https://github.com/magrhino/wudup/issues/450)) ([76383cf](https://github.com/magrhino/wudup/commit/76383cff152676aafb770de4d31c67d3bbff7e2f))
+
 ## [0.49.1](https://github.com/magrhino/wudup/compare/v0.49.0...v0.49.1) (2026-06-30)
 
 
