@@ -9,6 +9,7 @@
       "initial-version": "1.0.0",
       "draft": true,
       "force-tag-creation": true,
+      "always-update": true,
       "pull-request-title-pattern": "chore: release ${version}",
       "pull-request-footer": "@coderabbitai ignore"
     }
