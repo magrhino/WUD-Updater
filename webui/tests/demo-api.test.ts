@@ -464,6 +464,66 @@ describe("demo web API", () => {
     ]);
   });
 
+  it("labels fixture env release webhook as DISCORD_WEBHOOK", () => {
+    const webhook = generatedFixtures.settings.managed.find(
+      (entry) => entry.key === "release_notifications_discord_webhook",
+    );
+    const secret = generatedFixtures.settings.secrets.find(
+      (entry) => entry.name === "DISCORD_WEBHOOK",
+    );
+    if (!webhook || !secret) {
+      throw new Error("Expected release notification webhook fixture settings");
+    }
+    const originalWebhook = { ...webhook };
+    const originalSecret = { ...secret };
+    try {
+      Object.assign(webhook, { configured: true, source: "configured" });
+      Object.assign(secret, { configured: true });
+
+      expect(
+        new DemoApiState().releaseNotifications({ line_numbers: [2] }, false)
+          .destination,
+      ).toMatchObject({
+        configured: true,
+        source: "DISCORD_WEBHOOK",
+      });
+    } finally {
+      Object.assign(webhook, originalWebhook);
+      Object.assign(secret, originalSecret);
+    }
+  });
+
+  it("preserves fixture-configured release notification verbosity", () => {
+    const verbosity = generatedFixtures.settings.managed.find(
+      (entry) => entry.key === "release_notifications_verbosity",
+    );
+    if (!verbosity) {
+      throw new Error("Expected release notification verbosity fixture setting");
+    }
+    const original = { ...verbosity };
+    try {
+      Object.assign(verbosity, {
+        configured: true,
+        source: "configured",
+        value: "full",
+      });
+
+      expect(
+        new DemoApiState()
+          .settings()
+          .managed.find(
+            (entry) => entry.key === "release_notifications_verbosity",
+          ),
+      ).toMatchObject({
+        configured: true,
+        source: "configured",
+        value: "full",
+      });
+    } finally {
+      Object.assign(verbosity, original);
+    }
+  });
+
   it("creates plans from the current fixture state", async () => {
     const api = createDemoWebApi();
 

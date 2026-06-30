@@ -189,11 +189,13 @@ def test_safe_exception_detail_redacts_secrets_and_absolute_paths(
     tmp_path: Path,
 ) -> None:
     secret = "secret-token-value"
+    discord_webhook = "discord-webhook-secret"
     legacy_webhook = "legacy-webhook-secret"
     client = _client(
         tmp_path,
         {
             "WUD_WEB_TOKEN": secret,
+            "DISCORD_WEBHOOK": discord_webhook,
             "DISCORD_RELEASES_WEBHOOK": legacy_webhook,
         },
     )
@@ -203,13 +205,14 @@ def test_safe_exception_detail_redacts_secrets_and_absolute_paths(
         f"{tmp_path / 'state' / 'wud.sqlite'}, "
         r"C:\Users\admin\wud.sqlite, "
         r"\\server\share\wud.sqlite "
-        f"with token {secret} and webhook {legacy_webhook}"
+        f"with token {secret} and webhooks {discord_webhook} {legacy_webhook}"
     )
 
     detail = web_auth_module._safe_exception_detail(settings, "could not read", exc)
 
     assert detail.startswith("could not read: open failed for ")
     assert secret not in detail
+    assert discord_webhook not in detail
     assert legacy_webhook not in detail
     assert "<redacted>" in detail
     assert str(tmp_path) not in detail

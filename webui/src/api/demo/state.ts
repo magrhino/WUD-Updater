@@ -539,14 +539,17 @@ export class DemoApiState {
       (entry) => entry.key === "release_notifications_discord_webhook",
     )?.configured === true;
   releaseNotificationDiscordWebhookSetByWebUi =
-    fixtures.settings.managed.find(
-      (entry) => entry.key === "release_notifications_discord_webhook",
-    )?.source === "configured";
+    this.releaseNotificationDiscordWebhookConfigured &&
+    fixtures.settings.secrets.find((entry) => entry.name === "DISCORD_WEBHOOK")
+      ?.configured !== true;
   releaseNotificationVerbosity =
     fixtures.settings.managed.find(
       (entry) => entry.key === "release_notifications_verbosity",
     )?.value === "full" ? "full" : "summary";
-  releaseNotificationVerbosityConfigured = false;
+  releaseNotificationVerbosityConfigured =
+    fixtures.settings.managed.find(
+      (entry) => entry.key === "release_notifications_verbosity",
+    )?.configured === true;
   coreUpdateTour: CoreUpdateTourResponse = {
     status: "not_started",
     step: "dashboard",
