@@ -16,6 +16,13 @@ from tests.web_test_helpers import (
     _wud_api_container,
 )
 
+_RELEASE_NOTIFICATION_ENV = {
+    "WUD_WEB_DEV_NO_AUTH": "true",
+    "WUD_WEB_MUTATIONS_ENABLED": "true",
+    "WUD_RELEASE_NOTES_ENABLED": "true",
+    "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
+}
+
 
 def _fake_release_refresh(monkeypatch) -> None:
     def fake_refresh_release_notes(
@@ -48,6 +55,45 @@ def _fake_release_refresh(monkeypatch) -> None:
         notifications_module,
         "refresh_release_notes",
         fake_refresh_release_notes,
+    )
+
+
+def _capture_discord_posts(
+    monkeypatch,
+    *,
+    fail_on: int | None = None,
+) -> list[tuple[str, object]]:
+    posted: list[tuple[str, object]] = []
+
+    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
+        posted.append((webhook_url, payload))
+        if fail_on is not None and len(posted) == fail_on:
+            raise urllib.error.HTTPError(
+                webhook_url,
+                500,
+                "Discord webhook request failed webhook-secret",
+                {},
+                None,
+            )
+
+    monkeypatch.setattr(
+        notifications_module,
+        "_post_discord_payload",
+        fake_post_discord_payload,
+    )
+    return posted
+
+
+def _release_notification_client(tmp_path: Path, monkeypatch):
+    _fake_release_refresh(monkeypatch)
+    posted = _capture_discord_posts(monkeypatch)
+    return _client(tmp_path, _RELEASE_NOTIFICATION_ENV), posted
+
+
+def _write_pending_lines(tmp_path: Path, lines: list[str]) -> None:
+    (tmp_path / "state" / "images.todo").write_text(
+        "\n".join(lines) + "\n",
+        encoding="utf-8",
     )
 
 
@@ -522,34 +568,14 @@ def test_release_notification_preview_and_send_redact_cached_errors(
             for target in targets
         ]
 
-    posted: list[tuple[str, object]] = []
-
-    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
-        posted.append((webhook_url, payload))
-
     monkeypatch.setattr(
         notifications_module,
         "refresh_release_notes",
         fake_refresh_release_notes,
     )
-    monkeypatch.setattr(
-        notifications_module,
-        "_post_discord_payload",
-        fake_post_discord_payload,
-    )
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
-        },
-    )
-    (tmp_path / "state" / "images.todo").write_text(
-        "ghcr.io/acme/app:1.0.0 tag=2.0.0\n",
-        encoding="utf-8",
-    )
+    posted = _capture_discord_posts(monkeypatch)
+    client = _client(tmp_path, _RELEASE_NOTIFICATION_ENV)
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
 
     preview = client.post(
         "/api/v1/release-notifications/preview",
@@ -573,30 +599,8 @@ def test_release_notification_send_posts_discord_payload_and_audits(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _fake_release_refresh(monkeypatch)
-    posted: list[tuple[str, object]] = []
-
-    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
-        posted.append((webhook_url, payload))
-
-    monkeypatch.setattr(
-        notifications_module,
-        "_post_discord_payload",
-        fake_post_discord_payload,
-    )
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
-        },
-    )
-    (tmp_path / "state" / "images.todo").write_text(
-        "ghcr.io/acme/app:1.0.0 tag=2.0.0\n",
-        encoding="utf-8",
-    )
+    client, posted = _release_notification_client(tmp_path, monkeypatch)
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
 
     response = client.post(
         "/api/v1/release-notifications/send",
@@ -639,30 +643,8 @@ def test_release_notification_send_records_history_and_skips_duplicate_preview(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _fake_release_refresh(monkeypatch)
-    posted: list[tuple[str, object]] = []
-
-    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
-        posted.append((webhook_url, payload))
-
-    monkeypatch.setattr(
-        notifications_module,
-        "_post_discord_payload",
-        fake_post_discord_payload,
-    )
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
-        },
-    )
-    (tmp_path / "state" / "images.todo").write_text(
-        "ghcr.io/acme/app:1.0.0 tag=2.0.0\n",
-        encoding="utf-8",
-    )
+    client, posted = _release_notification_client(tmp_path, monkeypatch)
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
     headers = _csrf_headers(client)
 
     sent = client.post(
@@ -793,23 +775,8 @@ def test_release_notification_remote_change_gets_new_key(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _fake_release_refresh(monkeypatch)
-    monkeypatch.setattr(
-        notifications_module,
-        "_post_discord_payload",
-        lambda _url, _payload: None,
-    )
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
-        },
-    )
-    pending_file = tmp_path / "state" / "images.todo"
-    pending_file.write_text("ghcr.io/acme/app:1.0.0 tag=2.0.0\n", encoding="utf-8")
+    client, _ = _release_notification_client(tmp_path, monkeypatch)
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
     headers = _csrf_headers(client)
 
     sent = client.post(
@@ -817,7 +784,7 @@ def test_release_notification_remote_change_gets_new_key(
         json={"line_numbers": [1], "confirmation": "send-release-notes"},
         headers=headers,
     )
-    pending_file.write_text("ghcr.io/acme/app:1.0.0 tag=2.1.0\n", encoding="utf-8")
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.1.0"])
     preview = client.post(
         "/api/v1/release-notifications/preview",
         json={"line_numbers": [1]},
@@ -837,21 +804,7 @@ def test_release_notification_cooldown_policy_allows_after_cooldown(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _fake_release_refresh(monkeypatch)
-    monkeypatch.setattr(
-        notifications_module,
-        "_post_discord_payload",
-        lambda _url, _payload: None,
-    )
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
-        },
-    )
+    client, _ = _release_notification_client(tmp_path, monkeypatch)
     db_path = tmp_path / "state" / "wud.sqlite"
     with open_db(db_path) as conn:
         init_db(conn)
@@ -872,10 +825,7 @@ def test_release_notification_cooldown_policy_allows_after_cooldown(
                     )
                 """
             )
-    (tmp_path / "state" / "images.todo").write_text(
-        "ghcr.io/acme/app:1.0.0 tag=2.0.0\n",
-        encoding="utf-8",
-    )
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
     headers = _csrf_headers(client)
     sent = client.post(
         "/api/v1/release-notifications/send",
@@ -926,25 +876,8 @@ def test_release_notification_manual_resend_increments_history(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _fake_release_refresh(monkeypatch)
-    monkeypatch.setattr(
-        notifications_module,
-        "_post_discord_payload",
-        lambda _url, _payload: None,
-    )
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
-        },
-    )
-    (tmp_path / "state" / "images.todo").write_text(
-        "ghcr.io/acme/app:1.0.0 tag=2.0.0\n",
-        encoding="utf-8",
-    )
+    client, _ = _release_notification_client(tmp_path, monkeypatch)
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
     headers = _csrf_headers(client)
     first = client.post(
         "/api/v1/release-notifications/send",
@@ -984,34 +917,12 @@ def test_release_notification_send_batches_discord_embeds(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _fake_release_refresh(monkeypatch)
-    posted: list[tuple[str, object]] = []
-
-    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
-        posted.append((webhook_url, payload))
-
-    monkeypatch.setattr(
-        notifications_module,
-        "_post_discord_payload",
-        fake_post_discord_payload,
-    )
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
-        },
-    )
+    client, posted = _release_notification_client(tmp_path, monkeypatch)
     lines = [
         f"ghcr.io/acme/app{i}:1.0.0 tag=2.0.0"
         for i in range(1, 12)
     ]
-    (tmp_path / "state" / "images.todo").write_text(
-        "\n".join(lines) + "\n",
-        encoding="utf-8",
-    )
+    _write_pending_lines(tmp_path, lines)
 
     response = client.post(
         "/api/v1/release-notifications/send",
@@ -1034,41 +945,13 @@ def test_release_notification_send_audits_partial_discord_failure(
     monkeypatch,
 ) -> None:
     _fake_release_refresh(monkeypatch)
-    posted: list[tuple[str, object]] = []
-
-    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
-        posted.append((webhook_url, payload))
-        if len(posted) == 2:
-            raise urllib.error.HTTPError(
-                webhook_url,
-                500,
-                "Discord webhook request failed webhook-secret",
-                {},
-                None,
-            )
-
-    monkeypatch.setattr(
-        notifications_module,
-        "_post_discord_payload",
-        fake_post_discord_payload,
-    )
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_RELEASES_WEBHOOK": "https://discord.test/webhook-secret",
-        },
-    )
+    posted = _capture_discord_posts(monkeypatch, fail_on=2)
+    client = _client(tmp_path, _RELEASE_NOTIFICATION_ENV)
     lines = [
         f"ghcr.io/acme/app{i}:1.0.0 tag=2.0.0"
         for i in range(1, 12)
     ]
-    (tmp_path / "state" / "images.todo").write_text(
-        "\n".join(lines) + "\n",
-        encoding="utf-8",
-    )
+    _write_pending_lines(tmp_path, lines)
 
     response = client.post(
         "/api/v1/release-notifications/send",

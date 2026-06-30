@@ -21,6 +21,9 @@ SECURITY_SCAN_CACHE_FINDINGS_COLUMN: ColumnSchema = (
     "'[]'",
     0,
 )
+DIGEST_PROVENANCE_COLUMN_SCHEMA: tuple[ColumnSchema, ...] = tuple(
+    (column, "TEXT", 1, "''", 0) for column in DIGEST_PROVENANCE_SQL_COLUMNS
+)
 
 EXPECTED_SCHEMA: SchemaDefinition = {
     "schema_migrations": (
@@ -53,13 +56,7 @@ EXPECTED_SCHEMA: SchemaDefinition = {
         ("new_digest", "TEXT", 1, "''", 0),
         ("status", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
-        ("digest_source_image", "TEXT", 1, "''", 0),
-        ("digest_resolved_tag", "TEXT", 1, "''", 0),
-        ("digest_watch_tag", "TEXT", 1, "''", 0),
-        ("digest_target_digest", "TEXT", 1, "''", 0),
-        ("digest_final_image", "TEXT", 1, "''", 0),
-        ("digest_provenance_source", "TEXT", 1, "''", 0),
-        ("digest_provenance_confidence", "TEXT", 1, "''", 0),
+        *DIGEST_PROVENANCE_COLUMN_SCHEMA,
     ),
     "snoozes": (
         ("id", "INTEGER", 0, None, 1),
@@ -105,13 +102,7 @@ EXPECTED_SCHEMA: SchemaDefinition = {
         ("digest", "TEXT", 1, "''", 0),
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
-        ("digest_source_image", "TEXT", 1, "''", 0),
-        ("digest_resolved_tag", "TEXT", 1, "''", 0),
-        ("digest_watch_tag", "TEXT", 1, "''", 0),
-        ("digest_target_digest", "TEXT", 1, "''", 0),
-        ("digest_final_image", "TEXT", 1, "''", 0),
-        ("digest_provenance_source", "TEXT", 1, "''", 0),
-        ("digest_provenance_confidence", "TEXT", 1, "''", 0),
+        *DIGEST_PROVENANCE_COLUMN_SCHEMA,
     ),
     "pending_updates": (
         ("id", "INTEGER", 0, None, 1),
@@ -129,13 +120,7 @@ EXPECTED_SCHEMA: SchemaDefinition = {
         ("created_at", "TEXT", 1, None, 0),
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
-        ("digest_source_image", "TEXT", 1, "''", 0),
-        ("digest_resolved_tag", "TEXT", 1, "''", 0),
-        ("digest_watch_tag", "TEXT", 1, "''", 0),
-        ("digest_target_digest", "TEXT", 1, "''", 0),
-        ("digest_final_image", "TEXT", 1, "''", 0),
-        ("digest_provenance_source", "TEXT", 1, "''", 0),
-        ("digest_provenance_confidence", "TEXT", 1, "''", 0),
+        *DIGEST_PROVENANCE_COLUMN_SCHEMA,
     ),
     "release_note_cache": (
         ("cache_key", "TEXT", 0, None, 1),
