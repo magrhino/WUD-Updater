@@ -80,7 +80,7 @@ def api_preview_release_notifications(
     request: Request,
 ) -> ReleaseNotificationResponse:
     settings = _settings(request)
-    return _notification_response(settings, payload, sent=False)
+    return preview_release_notifications(settings, payload)
 
 
 def api_send_release_notifications(
@@ -89,6 +89,15 @@ def api_send_release_notifications(
 ) -> ReleaseNotificationResponse:
     settings = _settings(request)
     return send_release_notifications(settings, payload, request=request)
+
+
+def preview_release_notifications(
+    settings: WebSettings,
+    payload: ReleaseNotificationPreviewRequest,
+    *,
+    sent: bool = False,
+) -> ReleaseNotificationResponse:
+    return _notification_response(settings, payload, sent=sent)
 
 
 def send_release_notifications(

@@ -93,6 +93,60 @@ def test_wud_update_trigger_requires_configured_token(tmp_path: Path) -> None:
     assert response.json()["detail"] == "WUD trigger token is not configured"
 
 
+def test_wud_update_trigger_rejects_token_env_and_file(
+    tmp_path: Path,
+) -> None:
+    token_file = tmp_path / "trigger-token"
+    token_file.write_text("file-secret", encoding="utf-8")
+    client = _client(
+        tmp_path,
+        {
+            "WUDUP_TRIGGER_TOKEN": _TOKEN,
+            "WUDUP_TRIGGER_TOKEN_FILE": str(token_file),
+        },
+    )
+
+    response = client.post(
+        _TRIGGER_PATH,
+        json={"updateAvailable": True},
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "WUD trigger token is misconfigured"
+
+
+def test_wud_update_trigger_rejects_missing_token_file(tmp_path: Path) -> None:
+    client = _client(
+        tmp_path,
+        {"WUDUP_TRIGGER_TOKEN_FILE": str(tmp_path / "missing-trigger-token")},
+    )
+
+    response = client.post(
+        _TRIGGER_PATH,
+        json={"updateAvailable": True},
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "WUD trigger token file could not be read"
+
+
+def test_wud_update_trigger_rejects_empty_token_file(tmp_path: Path) -> None:
+    token_file = tmp_path / "trigger-token"
+    token_file.write_text("", encoding="utf-8")
+    client = _client(tmp_path, {"WUDUP_TRIGGER_TOKEN_FILE": str(token_file)})
+
+    response = client.post(
+        _TRIGGER_PATH,
+        json={"updateAvailable": True},
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "WUD trigger token file is empty"
+
+
 def test_wud_update_trigger_rejects_wrong_token(tmp_path: Path) -> None:
     client = _client(tmp_path, {"WUDUP_TRIGGER_TOKEN": _TOKEN})
 
@@ -104,6 +158,71 @@ def test_wud_update_trigger_rejects_wrong_token(tmp_path: Path) -> None:
 
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_wud_update_trigger_requires_mutations_enabled(tmp_path: Path) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUDUP_TRIGGER_TOKEN": _TOKEN,
+            "WUD_RELEASE_NOTES_ENABLED": "true",
+            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
+        },
+    )
+
+    response = client.post(
+        _TRIGGER_PATH,
+        json={"updateAvailable": True},
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "mutations are disabled"
+
+
+def test_wud_update_trigger_requires_release_notes_enabled(tmp_path: Path) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUDUP_TRIGGER_TOKEN": _TOKEN,
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
+        },
+    )
+
+    response = client.post(
+        _TRIGGER_PATH,
+        json={"updateAvailable": True},
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "release-note notifications are disabled"
+
+
+def test_wud_update_trigger_requires_release_notification_webhook(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUDUP_TRIGGER_TOKEN": _TOKEN,
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_RELEASE_NOTES_ENABLED": "true",
+        },
+    )
+
+    response = client.post(
+        _TRIGGER_PATH,
+        json={"updateAvailable": True},
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 422
+    assert (
+        response.json()["detail"]
+        == "Discord release-note webhook is not configured"
+    )
 
 
 def test_wud_update_trigger_accepts_token_file_noop(tmp_path: Path) -> None:

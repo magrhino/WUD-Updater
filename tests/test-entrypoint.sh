@@ -338,7 +338,7 @@ test_sync_command_rejects_invalid_legacy_scripts_bool(){
   setup_case
   WUDUP_LEGACY_SCRIPTS=disabled run_entrypoint sync-wud-scripts
   assert_status 1
-  grep -q 'WUDUP_LEGACY_SCRIPTS must be true or false' "$TEST_TMP/output.log" || fail "missing invalid bool message"
+  grep -q 'WUDUP_LEGACY_SCRIPTS must be one of true, false, 1, 0, yes, no, on, or off' "$TEST_TMP/output.log" || fail "missing invalid bool message"
   [[ ! -e "$TEST_TMP/managed-wud/.wudup-managed" ]] || fail "invalid config synced scripts"
   teardown_case
 }

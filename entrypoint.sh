@@ -42,7 +42,7 @@ validate_legacy_wud_scripts(){
       return 0
       ;;
     *)
-      printf 'WUDUP_LEGACY_SCRIPTS must be true or false\n' >&2
+      printf 'WUDUP_LEGACY_SCRIPTS must be one of true, false, 1, 0, yes, no, on, or off\n' >&2
       return 1
       ;;
   esac

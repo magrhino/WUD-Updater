@@ -41,7 +41,15 @@ def api_wud_update_trigger(
             status="skipped",
             reason="updateAvailable is not true",
         )
+    return send_wud_update_release_notifications(settings, payload, request=request)
 
+
+def send_wud_update_release_notifications(
+    settings: WebSettings,
+    payload: Mapping[str, object],
+    *,
+    request: Request,
+) -> WudTriggerUpdateResponse:
     api_settings = replace(settings, pending_source="api")
     _require_release_notification_sendable(api_settings)
     source = web_pending_sources.resolve_pending_source(
@@ -65,7 +73,7 @@ def api_wud_update_trigger(
         )
 
     preview_payload = ReleaseNotificationPreviewRequest(line_numbers=list(line_numbers))
-    preview = web_release_notifications._notification_response(
+    preview = web_release_notifications.preview_release_notifications(
         api_settings,
         preview_payload,
         sent=False,
