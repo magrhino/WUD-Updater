@@ -80,6 +80,10 @@ export function useManagedNotifications() {
   const discordWebhookStatus = computed(() =>
     discordWebhookConfigured.value ? "Configured" : "Not configured",
   );
+  const normalizedReleaseNotificationCooldown = computed(() => {
+    const cooldownValue = releaseNotificationCooldownValue.value.trim();
+    return cooldownValue.replace(/^0+/, "") || "0";
+  });
   const notificationsDirty = computed(
     () =>
       (releaseNotesEnabledEditable.value &&
@@ -92,7 +96,7 @@ export function useManagedNotifications() {
         releaseNotificationResendPolicyValue.value !==
           (releaseNotificationResendPolicyEntry.value?.value ?? "remote_change")) ||
       (releaseNotificationCooldownEditable.value &&
-        releaseNotificationCooldownValue.value !==
+        normalizedReleaseNotificationCooldown.value !==
           (releaseNotificationCooldownEntry.value?.value ?? "86400")) ||
       (discordWebhookEditable.value &&
         (discordWebhookValue.value.trim() !== "" ||
@@ -184,17 +188,20 @@ export function useManagedNotifications() {
     }
     if (
       releaseNotificationCooldownEditable.value &&
-      releaseNotificationCooldownValue.value !==
+      normalizedReleaseNotificationCooldown.value !==
         (releaseNotificationCooldownEntry.value?.value ?? "86400")
     ) {
       const cooldownValue = releaseNotificationCooldownValue.value.trim();
-      const normalizedCooldown = cooldownValue.replace(/^0+/, "") || "0";
-      if (!/^\d+$/.test(cooldownValue) || normalizedCooldown === "0") {
+      if (
+        !/^\d+$/.test(cooldownValue) ||
+        normalizedReleaseNotificationCooldown.value === "0"
+      ) {
         notificationsError.value =
           "Release notification cooldown must be a positive integer.";
         return;
       }
-      values.release_notifications_cooldown_seconds = normalizedCooldown;
+      values.release_notifications_cooldown_seconds =
+        normalizedReleaseNotificationCooldown.value;
     }
     if (discordWebhookEditable.value) {
       const webhook = discordWebhookValue.value.trim();

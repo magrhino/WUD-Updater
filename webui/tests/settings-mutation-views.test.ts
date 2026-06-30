@@ -587,7 +587,7 @@ describe("settings mutation views", () => {
     emitSelectValue(wrapper, 5, "cooldown");
     await wrapper
       .find('input[aria-label="Release notification cooldown seconds"]')
-      .setValue("60");
+      .setValue("00060");
     const saveButton = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Save notifications"));
@@ -670,6 +670,34 @@ describe("settings mutation views", () => {
     expect(wrapper.text()).toContain(
       "Release notification cooldown must be a positive integer.",
     );
+  });
+
+  it("does not dirty release-note cooldown for equivalent normalized values", async () => {
+    const { pinia, settings } = setupStores(true);
+    settings.settings = settingsResponse({
+      webui: settingsResponse().webui.map((entry) =>
+        entry.name === "WUD_WEB_MUTATIONS_ENABLED"
+          ? { ...entry, value: "true", configured: true, source: "configured" as const }
+          : entry,
+      ),
+    });
+    settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    const updateManagedSettings = vi.spyOn(settings, "updateManagedSettings");
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+    await wrapper
+      .find('input[aria-label="Release notification cooldown seconds"]')
+      .setValue("086400");
+    const saveButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Save notifications"));
+
+    expect(saveButton?.attributes("disabled")).toBeDefined();
+    await saveButton?.trigger("click");
+    await flushPromises();
+    expect(updateManagedSettings).not.toHaveBeenCalled();
   });
 
   it("keeps release-note notification preferences read-only when env configured", async () => {

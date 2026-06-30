@@ -1249,6 +1249,10 @@ export const generatedFixtures = {
         },
         {
           "configured": false,
+          "name": "DISCORD_RELEASES_WEBHOOK"
+        },
+        {
+          "configured": false,
           "name": "ADMIN_WEBHOOK"
         }
       ],
@@ -122196,6 +122200,10 @@ export const generatedFixtures = {
       {
         "configured": false,
         "name": "DISCORD_WEBHOOK"
+      },
+      {
+        "configured": false,
+        "name": "DISCORD_RELEASES_WEBHOOK"
       },
       {
         "configured": false,

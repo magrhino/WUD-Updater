@@ -538,6 +538,10 @@ export class DemoApiState {
     fixtures.settings.managed.find(
       (entry) => entry.key === "release_notifications_discord_webhook",
     )?.configured === true;
+  releaseNotificationDiscordWebhookSetByWebUi =
+    fixtures.settings.managed.find(
+      (entry) => entry.key === "release_notifications_discord_webhook",
+    )?.source === "configured";
   releaseNotificationVerbosity =
     fixtures.settings.managed.find(
       (entry) => entry.key === "release_notifications_verbosity",
@@ -849,6 +853,7 @@ export class DemoApiState {
           }
         }
         this.releaseNotificationDiscordWebhookConfigured = Boolean(value);
+        this.releaseNotificationDiscordWebhookSetByWebUi = Boolean(value);
         return;
       case "release_notifications_verbosity":
         if (!["summary", "full"].includes(value)) {
@@ -1020,8 +1025,12 @@ export class DemoApiState {
       resend_policy: this.releaseNotificationResendPolicy,
       destination: {
         type: "discord",
-        configured: true,
-        source: "DISCORD_WEBHOOK",
+        configured: this.releaseNotificationDiscordWebhookConfigured,
+        source: this.releaseNotificationDiscordWebhookConfigured
+          ? this.releaseNotificationDiscordWebhookSetByWebUi
+            ? "WebUI settings"
+            : "DISCORD_WEBHOOK"
+          : "",
       },
       source: releaseNotes.source,
       source_file: releaseNotes.source_file,

@@ -403,6 +403,28 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
         },
         headers=headers,
     )
+    partial_notification_webhook = client.post(
+        "/api/v1/settings/managed",
+        json={
+            "values": {
+                "release_notifications_discord_webhook": (
+                    "https://discord.com/api/webhooks/123"
+                )
+            }
+        },
+        headers=headers,
+    )
+    prefix_notification_webhook = client.post(
+        "/api/v1/settings/managed",
+        json={
+            "values": {
+                "release_notifications_discord_webhook": (
+                    "https://discord.com/api/webhooks/"
+                )
+            }
+        },
+        headers=headers,
+    )
     invalid_notification_verbosity = client.post(
         "/api/v1/settings/managed",
         json={"values": {"release_notifications_verbosity": "verbose"}},
@@ -440,6 +462,14 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
     )
     assert invalid_notification_webhook.status_code == 422
     assert invalid_notification_webhook.json()["detail"] == (
+        "release_notifications_discord_webhook must be a Discord webhook URL"
+    )
+    assert partial_notification_webhook.status_code == 422
+    assert partial_notification_webhook.json()["detail"] == (
+        "release_notifications_discord_webhook must be a Discord webhook URL"
+    )
+    assert prefix_notification_webhook.status_code == 422
+    assert prefix_notification_webhook.json()["detail"] == (
         "release_notifications_discord_webhook must be a Discord webhook URL"
     )
     assert invalid_notification_verbosity.status_code == 422

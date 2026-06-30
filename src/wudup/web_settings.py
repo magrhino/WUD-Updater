@@ -915,6 +915,11 @@ def _validated_discord_webhook(value: str) -> str:
     candidate = value.strip()
     parsed = urllib.parse.urlsplit(candidate)
     host = (parsed.hostname or "").lower()
+    webhook_segments = (
+        parsed.path.removeprefix(DISCORD_WEBHOOK_PATH_PREFIX).split("/")
+        if parsed.path.startswith(DISCORD_WEBHOOK_PATH_PREFIX)
+        else []
+    )
     try:
         port = parsed.port
     except ValueError:
@@ -925,7 +930,8 @@ def _validated_discord_webhook(value: str) -> str:
         or parsed.password
         or port not in (None, 443)
         or host not in DISCORD_WEBHOOK_ALLOWED_HOSTS
-        or not parsed.path.startswith(DISCORD_WEBHOOK_PATH_PREFIX)
+        or len(webhook_segments) != 2
+        or not all(webhook_segments)
     ):
         raise ConfigError(
             f"{MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_KEY} must be a Discord webhook URL"
