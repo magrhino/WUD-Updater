@@ -35,11 +35,11 @@ def api_wud_update_trigger(
 ) -> WudTriggerUpdateResponse:
     settings = _settings(request)
     _require_trigger_token(settings, authorization)
-    if _update_available_false(payload):
+    if not _update_available_true(payload):
         return WudTriggerUpdateResponse(
             ok=True,
             status="skipped",
-            reason="updateAvailable is false",
+            reason="updateAvailable is not true",
         )
 
     api_settings = replace(settings, pending_source="api")
@@ -158,15 +158,18 @@ def _configured_trigger_token(settings: WebSettings) -> str:
     return token
 
 
-def _update_available_false(payload: Mapping[str, object]) -> bool:
+def _update_available_true(payload: Mapping[str, object]) -> bool:
     for key in ("updateAvailable", "update_available"):
         if key not in payload:
             continue
         value = payload[key]
-        if value is False:
+        if value is True:
             return True
-        if isinstance(value, str) and value.strip().lower() in {"0", "false", "no", "off"}:
+        if value == 1:
             return True
+        if isinstance(value, str) and value.strip().lower() in {"1", "true", "yes", "on"}:
+            return True
+        return False
     return False
 
 

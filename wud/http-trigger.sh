@@ -14,11 +14,11 @@ if [ -z "$TOKEN" ]; then
 fi
 
 case "${update_available:-}" in
-  false|0|no|off)
-    UPDATE_AVAILABLE=false
+  true|TRUE|True|1|yes|YES|Yes|on|ON|On)
+    UPDATE_AVAILABLE=true
     ;;
   *)
-    UPDATE_AVAILABLE=true
+    UPDATE_AVAILABLE=false
     ;;
 esac
 
@@ -32,6 +32,11 @@ PAYLOAD=$(jq -nc \
   '{updateAvailable:$updateAvailable,id:$id,container_id:$container_id,name:$name,image_name:$image_name,image:{name:$image_name,tag:$image_tag}}')
 
 curl --fail --silent --show-error \
+  --location \
+  --retry 3 \
+  --retry-delay 1 \
+  --connect-timeout 5 \
+  --max-time 20 \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" \

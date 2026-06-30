@@ -13,6 +13,8 @@ from typing import Any
 from .db import utc_timestamp
 from .web_metadata import json_object, json_object_or_empty
 
+SENDING_RESERVATION_TTL_SECONDS = 600
+
 
 @dataclass(frozen=True)
 class ReleaseNotificationConfig:
@@ -169,6 +171,14 @@ def notification_decision(
 ) -> tuple[str, str]:
     if history is None:
         return "new", ""
+    if history.status == "sending":
+        if _sending_reservation_stale(history.last_attempted_at, now):
+            if resend:
+                return "manual_resend", ""
+            if history.send_count > 0:
+                return "skipped_duplicate", "Already sent for this update."
+            return "new", ""
+        return "sending", "Notification is already being sent."
     if history.status != "sent":
         if resend:
             return "manual_resend", ""
@@ -233,6 +243,80 @@ def upsert_notification_history(
             send_count_increment,
         ),
     )
+
+
+def reserve_notification_history(
+    conn: sqlite3.Connection,
+    *,
+    identity: NotificationIdentity,
+    config: ReleaseNotificationConfig,
+    audit_run_id: int,
+    allow_existing: bool = False,
+    now: str | None = None,
+) -> bool:
+    timestamp = now or utc_timestamp()
+    stale_before = _timestamp_before(timestamp, SENDING_RESERVATION_TTL_SECONDS)
+    metadata_json = json_object(identity.metadata)
+    cursor = conn.execute(
+        """
+        INSERT OR IGNORE INTO release_notification_history (
+            notification_key,
+            mode,
+            status,
+            last_attempted_at,
+            last_sent_at,
+            send_count,
+            last_audit_run_id,
+            metadata_json
+        )
+        VALUES (?, ?, 'sending', ?, '', 0, ?, ?)
+        """,
+        (
+            identity.notification_key,
+            config.mode,
+            timestamp,
+            audit_run_id,
+            metadata_json,
+        ),
+    )
+    if cursor.rowcount:
+        return True
+    cursor = conn.execute(
+        """
+        UPDATE release_notification_history
+        SET mode = ?,
+            status = 'sending',
+            last_attempted_at = ?,
+            last_audit_run_id = ?,
+            metadata_json = ?
+        WHERE notification_key = ?
+          AND (status != 'sending' OR last_attempted_at <= ?)
+          AND (send_count = 0 OR ?)
+        """,
+        (
+            config.mode,
+            timestamp,
+            audit_run_id,
+            metadata_json,
+            identity.notification_key,
+            stale_before,
+            int(allow_existing),
+        ),
+    )
+    return bool(cursor.rowcount)
+
+
+def _sending_reservation_stale(last_attempted_at: str, now: str | None) -> bool:
+    try:
+        attempted_at = datetime.fromisoformat(last_attempted_at)
+        current = datetime.fromisoformat(now or utc_timestamp())
+    except ValueError:
+        return True
+    return current >= attempted_at + timedelta(seconds=SENDING_RESERVATION_TTL_SECONDS)
+
+
+def _timestamp_before(timestamp: str, seconds: int) -> str:
+    return (datetime.fromisoformat(timestamp) - timedelta(seconds=seconds)).isoformat()
 
 
 def _cooldown_elapsed(

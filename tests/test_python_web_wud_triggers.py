@@ -121,10 +121,24 @@ def test_wud_update_trigger_accepts_token_file_noop(tmp_path: Path) -> None:
     assert response.json() == {
         "ok": True,
         "status": "skipped",
-        "reason": "updateAvailable is false",
+        "reason": "updateAvailable is not true",
         "line_numbers": [],
         "release_notifications": None,
     }
+
+
+def test_wud_update_trigger_requires_true_update_available(tmp_path: Path) -> None:
+    client = _client(tmp_path, _TRIGGER_ENV)
+
+    response = client.post(
+        _TRIGGER_PATH,
+        json={"id": "docker.local.app"},
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "skipped"
+    assert response.json()["reason"] == "updateAvailable is not true"
 
 
 def test_wud_update_trigger_sends_release_notification_without_wud_file(

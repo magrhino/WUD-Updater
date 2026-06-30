@@ -27,7 +27,7 @@ teardown_case(){
 
 assert_arg(){
   local expected="$1"
-  grep -Fx "$expected" "$TEST_TMP/curl.args" >/dev/null || fail "missing curl arg: $expected"
+  grep -Fx -- "$expected" "$TEST_TMP/curl.args" >/dev/null || fail "missing curl arg: $expected"
 }
 
 test_posts_wud_payload(){
@@ -43,6 +43,10 @@ test_posts_wud_payload(){
     "$SCRIPT"
 
   assert_arg "Authorization: Bearer secret"
+  assert_arg "--connect-timeout"
+  assert_arg "5"
+  assert_arg "--max-time"
+  assert_arg "20"
   assert_arg '{"updateAvailable":true,"id":"docker.local.app","container_id":"","name":"app","image_name":"repo/app","image":{"name":"repo/app","tag":"1.0"}}'
   assert_arg "http://wudup:7417/api/v1/wud/triggers/update"
   teardown_case
@@ -58,6 +62,17 @@ test_token_file_and_false_update(){
     "$SCRIPT"
 
   assert_arg "Authorization: Bearer file-secret"
+  assert_arg '{"updateAvailable":false,"id":"","container_id":"","name":"","image_name":"","image":{"name":"","tag":""}}'
+  teardown_case
+}
+
+test_missing_update_available_fails_closed(){
+  setup_case
+  PATH="$TEST_TMP/bin:$PATH" \
+    CURL_ARGS_FILE="$TEST_TMP/curl.args" \
+    WUDUP_TRIGGER_TOKEN=secret \
+    "$SCRIPT"
+
   assert_arg '{"updateAvailable":false,"id":"","container_id":"","name":"","image_name":"","image":{"name":"","tag":""}}'
   teardown_case
 }
@@ -82,4 +97,5 @@ run_test(){
 trap teardown_case EXIT
 run_test test_posts_wud_payload
 run_test test_token_file_and_false_update
+run_test test_missing_update_available_fails_closed
 run_test test_missing_token_fails_before_curl

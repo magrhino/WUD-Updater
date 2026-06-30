@@ -131,6 +131,28 @@ def send_release_notifications(
             response,
             actor_type=actor_type,
         )
+        response = _reserve_release_notification_history(
+            settings,
+            response,
+            audit_run_id,
+        )
+        if response.sendable_count <= 0:
+            _finish_release_notification_audit(
+                settings,
+                audit_run_id,
+                response,
+                request=request,
+                payload=payload,
+                status="failure",
+                sent_count=0,
+                sent_batch_count=0,
+                error="no release-note notifications are available to send",
+                actor_type=actor_type,
+            )
+            raise HTTPException(
+                status_code=422,
+                detail="no release-note notifications are available to send",
+            )
         for batch in _payload_batches(response.items, response.mode):
             _post_discord_payload(webhook.value, batch["payload"])
             sent_batch_count += 1
@@ -1120,30 +1142,16 @@ def _record_release_notification_history(
     *,
     status: str,
 ) -> None:
-    config = web_release_notification_state.ReleaseNotificationConfig(
-        mode=response.mode,
-        resend_policy=response.resend_policy,
-    )
+    config = _release_notification_config(response)
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
         with conn:
             for item in items:
                 if not item.notification_key:
                     continue
-                identity = web_release_notification_state.NotificationIdentity(
-                    notification_key=item.notification_key,
-                    metadata={
-                        "line_no": item.line_no,
-                        "image": item.image,
-                        "service_key": item.service_key,
-                        "status": item.status,
-                        "release_tag": item.release_tag,
-                        "upstream_repo": item.upstream_repo,
-                    },
-                )
                 web_release_notification_state.upsert_notification_history(
                     conn,
-                    identity=identity,
+                    identity=_release_notification_identity(item),
                     config=config,
                     status=status,
                     audit_run_id=audit_run_id,
@@ -1168,6 +1176,87 @@ def _safe_record_release_notification_history(
         )
     except (OSError, sqlite3.Error, DatabaseError):
         LOGGER.exception("failed to record Discord release-note notification history")
+
+
+def _reserve_release_notification_history(
+    settings: WebSettings,
+    response: ReleaseNotificationResponse,
+    audit_run_id: int,
+) -> ReleaseNotificationResponse:
+    config = _release_notification_config(response)
+    items: list[ReleaseNotificationItem] = []
+    with open_db(settings.config.db_path) as conn:
+        init_db(conn)
+        with conn:
+            for item in response.items:
+                if item.skipped_reason or not item.notification_key:
+                    items.append(item)
+                    continue
+                allow_existing = item.notification_status in {
+                    "manual_resend",
+                    "cooldown_ready",
+                }
+                reserved = web_release_notification_state.reserve_notification_history(
+                    conn,
+                    identity=_release_notification_identity(item),
+                    config=config,
+                    audit_run_id=audit_run_id,
+                    allow_existing=allow_existing,
+                )
+                items.append(item if reserved else _release_notification_reserved_item(item))
+    return _release_notification_response_with_items(response, items)
+
+
+def _release_notification_config(
+    response: ReleaseNotificationResponse,
+) -> web_release_notification_state.ReleaseNotificationConfig:
+    return web_release_notification_state.ReleaseNotificationConfig(
+        mode=response.mode,
+        resend_policy=response.resend_policy,
+    )
+
+
+def _release_notification_identity(
+    item: ReleaseNotificationItem,
+) -> web_release_notification_state.NotificationIdentity:
+    return web_release_notification_state.NotificationIdentity(
+        notification_key=item.notification_key,
+        metadata={
+            "line_no": item.line_no,
+            "image": item.image,
+            "service_key": item.service_key,
+            "status": item.status,
+            "release_tag": item.release_tag,
+            "upstream_repo": item.upstream_repo,
+        },
+    )
+
+
+def _release_notification_reserved_item(
+    item: ReleaseNotificationItem,
+) -> ReleaseNotificationItem:
+    return item.model_copy(
+        update={
+            "notification_status": "sending",
+            "skipped_reason": "Notification is already being sent.",
+        }
+    )
+
+
+def _release_notification_response_with_items(
+    response: ReleaseNotificationResponse,
+    items: Sequence[ReleaseNotificationItem],
+) -> ReleaseNotificationResponse:
+    sendable_count = sum(1 for item in items if not item.skipped_reason)
+    return response.model_copy(
+        update={
+            "count": len(items),
+            "sendable_count": sendable_count,
+            "skipped_count": len(items) - sendable_count,
+            "batch_count": _payload_batch_count(sendable_count, response.mode),
+            "items": list(items),
+        }
+    )
 
 
 def _release_notification_audit_metadata(

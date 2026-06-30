@@ -218,6 +218,72 @@ def test_failed_notification_history_with_prior_send_is_skipped() -> None:
     ) == ("manual_resend", "")
 
 
+def test_sending_notification_history_skips_until_stale() -> None:
+    state = notifications_module.web_release_notification_state
+    identity = state.NotificationIdentity(
+        notification_key="notification-a",
+        metadata={},
+    )
+    history = state.NotificationHistory(
+        notification_key=identity.notification_key,
+        mode="digest",
+        status="sending",
+        last_attempted_at="2026-01-01T00:00:00+00:00",
+        last_sent_at="",
+        send_count=0,
+        last_audit_run_id=1,
+        metadata={},
+    )
+
+    assert state.notification_decision(
+        state.ReleaseNotificationConfig(),
+        identity,
+        history,
+        resend=False,
+        now="2026-01-01T00:09:59+00:00",
+    ) == ("sending", "Notification is already being sent.")
+    assert state.notification_decision(
+        state.ReleaseNotificationConfig(),
+        identity,
+        history,
+        resend=False,
+        now="2026-01-01T00:10:00+00:00",
+    ) == ("new", "")
+
+
+def test_reserve_notification_history_reclaims_stale_sending_row(tmp_path: Path) -> None:
+    state = notifications_module.web_release_notification_state
+    identity = state.NotificationIdentity(
+        notification_key="notification-a",
+        metadata={"image": "ghcr.io/acme/app:1.0.0"},
+    )
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        init_db(conn)
+        with conn:
+            assert state.reserve_notification_history(
+                conn,
+                identity=identity,
+                config=state.ReleaseNotificationConfig(),
+                audit_run_id=1,
+                now="2026-01-01T00:00:00+00:00",
+            )
+            assert not state.reserve_notification_history(
+                conn,
+                identity=identity,
+                config=state.ReleaseNotificationConfig(),
+                audit_run_id=2,
+                now="2026-01-01T00:09:59+00:00",
+            )
+            assert state.reserve_notification_history(
+                conn,
+                identity=identity,
+                config=state.ReleaseNotificationConfig(),
+                audit_run_id=3,
+                now="2026-01-01T00:10:00+00:00",
+            )
+
+
 def test_notification_history_by_key_binds_keys(tmp_path: Path) -> None:
     db_path = tmp_path / "state" / "wud.sqlite"
     hostile_key = "abc') OR 1=1 --"
@@ -1147,6 +1213,45 @@ def test_release_notification_send_records_history_and_skips_duplicate_preview(
     assert history["send_count"] == 1
     assert history["last_audit_run_id"] == sent_body["audit_run_id"]
     assert "webhook-secret" not in history["metadata_json"]
+
+
+def test_release_notification_send_reserves_history_before_posting(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _fake_release_refresh(monkeypatch)
+    client = _client(tmp_path, _RELEASE_NOTIFICATION_ENV)
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
+    headers = _csrf_headers(client)
+    posted: list[tuple[str, object]] = []
+    duplicate_responses = []
+
+    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
+        if not posted:
+            duplicate_responses.append(
+                client.post(
+                    "/api/v1/release-notifications/send",
+                    json={"line_numbers": [1], "confirmation": "send-release-notes"},
+                    headers=headers,
+                )
+            )
+        posted.append((webhook_url, payload))
+
+    monkeypatch.setattr(
+        notifications_module,
+        "_post_discord_payload",
+        fake_post_discord_payload,
+    )
+
+    response = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "confirmation": "send-release-notes"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert duplicate_responses[0].status_code == 422
+    assert len(posted) == 1
 
 
 def test_release_notification_duplicate_key_survives_missing_wud_metadata(
