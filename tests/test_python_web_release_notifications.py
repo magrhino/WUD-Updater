@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import urllib.error
 from pathlib import Path
 from types import SimpleNamespace
@@ -652,6 +653,61 @@ def test_release_notification_test_webhook_posts_payload_and_audits(
     assert event_metadata["operation"] == "test_release_notification_webhook"
     serialized = json.dumps({"run": run_metadata, "event": event_metadata})
     assert "webhook-secret" not in serialized
+
+
+def test_release_notification_test_webhook_audit_finish_failure_preserves_send(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    posted = _capture_discord_posts(monkeypatch)
+    original_finish = notifications_module._finish_release_notification_test_audit
+
+    def fake_finish_test_audit(*args, **kwargs):
+        if kwargs["status"] == "success":
+            raise sqlite3.OperationalError("audit finish failed")
+        return original_finish(*args, **kwargs)
+
+    monkeypatch.setattr(
+        notifications_module,
+        "_finish_release_notification_test_audit",
+        fake_finish_test_audit,
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
+        },
+    )
+
+    response = client.post(
+        "/api/v1/release-notifications/test",
+        json={"confirmation": "send-test-webhook"},
+        headers=_csrf_headers(client),
+    )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["sent"] is True
+    assert body["audit_run_id"]
+    assert len(posted) == 1
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        run = conn.execute(
+            "SELECT * FROM update_runs WHERE id = ?",
+            (body["audit_run_id"],),
+        ).fetchone()
+        event = conn.execute(
+            "SELECT * FROM update_events WHERE run_id = ?",
+            (body["audit_run_id"],),
+        ).fetchone()
+
+    assert run["status"] == "failure"
+    assert event["status"] == "failure"
+    error = json.loads(run["metadata_json"])["error"]
+    assert error.startswith("could not finalize Discord test webhook audit:")
+    assert "could not send Discord test webhook" not in error
 
 
 def test_release_notification_test_webhook_failure_is_sanitized_and_audited(

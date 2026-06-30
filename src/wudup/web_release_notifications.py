@@ -202,13 +202,6 @@ def api_test_release_notification_webhook(
             destination,
         )
         _post_discord_payload(webhook.value, _test_discord_payload())
-        _finish_release_notification_test_audit(
-            settings,
-            audit_run_id,
-            request=request,
-            destination=destination,
-            status="success",
-        )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         detail = _safe_release_notification_test_exception_detail(
             settings,
@@ -224,6 +217,27 @@ def api_test_release_notification_webhook(
                 error=detail,
             )
         raise HTTPException(status_code=500, detail=detail) from exc
+    try:
+        _finish_release_notification_test_audit(
+            settings,
+            audit_run_id,
+            request=request,
+            destination=destination,
+            status="success",
+        )
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        detail = _safe_exception_detail(
+            settings,
+            "could not finalize Discord test webhook audit",
+            exc,
+        )
+        _safe_finish_release_notification_test_audit_failure(
+            settings,
+            audit_run_id,
+            request=request,
+            destination=destination,
+            error=detail,
+        )
     return ReleaseNotificationTestResponse(
         sent=True,
         destination=destination,
