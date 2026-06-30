@@ -4,6 +4,18 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.49.0](https://github.com/magrhino/wudup/compare/v0.48.1...v0.49.0) (2026-06-30)
+
+
+### Features
+
+* **release-notes:** add stateful notification dedupe ([#445](https://github.com/magrhino/wudup/issues/445)) ([3074cea](https://github.com/magrhino/wudup/commit/3074cea9250a544cc4cf3f2db125a388c3e4b1fc))
+
+
+### Bug Fixes
+
+* **ui:** Refine the Settings page layout and navigation map ([#442](https://github.com/magrhino/wudup/issues/442)) ([bc3a7b1](https://github.com/magrhino/wudup/commit/bc3a7b1d8782fbbabbf4ac9f31d091c7467047c8))
+
 ## [0.48.1](https://github.com/magrhino/wudup/compare/v0.48.0...v0.48.1) (2026-06-28)
 
 
