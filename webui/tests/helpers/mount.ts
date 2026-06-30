@@ -312,6 +312,32 @@ export const naiveStubs: Record<string, Component> = {
       };
     },
   },
+  NPagination: {
+    props: {
+      page: Number,
+      pageCount: Number,
+    },
+    emits: ["update:page"],
+    setup(props, { emit }) {
+      return () =>
+        h(
+          "nav",
+          { "aria-label": "Pagination" },
+          Array.from({ length: props.pageCount ?? 0 }, (_, index) => {
+            const page = index + 1;
+            return h(
+              "button",
+              {
+                disabled: page === props.page,
+                type: "button",
+                onClick: () => emit("update:page", page),
+              },
+              String(page),
+            );
+          }),
+        );
+    },
+  },
   NRadioButton: {
     props: {
       disabled: Boolean,
@@ -376,11 +402,12 @@ export const naiveStubs: Record<string, Component> = {
       value: [String, Number, Array],
     },
     emits: ["update:value"],
-    setup(props, { emit }) {
+    setup(props, { attrs, emit }) {
       return () =>
         h(
           "select",
           {
+            ...attrs,
             disabled: props.disabled,
             multiple: props.multiple,
             value: props.value ?? (props.multiple ? [] : ""),
@@ -504,6 +531,7 @@ Object.assign(naiveStubs, {
   MessageProvider: naiveStubs.NMessageProvider,
   Modal: naiveStubs.NModal,
   NGridItem: naiveStubs.NGi,
+  Pagination: naiveStubs.NPagination,
   RadioButton: naiveStubs.NRadioButton,
   RadioGroup: naiveStubs.NRadioGroup,
   Select: naiveStubs.NSelect,
