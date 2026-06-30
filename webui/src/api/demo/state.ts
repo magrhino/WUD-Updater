@@ -529,6 +529,15 @@ export class DemoApiState {
       (entry) => entry.key === "release_notifications_cooldown_seconds",
     )?.value ?? "86400";
   releaseNotificationCooldownSecondsConfigured = false;
+  releaseNotificationDiscordWebhookConfigured =
+    fixtures.settings.managed.find(
+      (entry) => entry.key === "release_notifications_discord_webhook",
+    )?.configured === true;
+  releaseNotificationVerbosity =
+    fixtures.settings.managed.find(
+      (entry) => entry.key === "release_notifications_verbosity",
+    )?.value === "full" ? "full" : "summary";
+  releaseNotificationVerbosityConfigured = false;
   coreUpdateTour: CoreUpdateTourResponse = {
     status: "not_started",
     step: "dashboard",
@@ -583,6 +592,19 @@ export class DemoApiState {
       "86400",
       [],
     );
+    this.ensureManagedEntry(
+      settings,
+      "release_notifications_discord_webhook",
+      "",
+      [],
+      { sensitive: true },
+    );
+    this.ensureManagedEntry(
+      settings,
+      "release_notifications_verbosity",
+      "summary",
+      ["summary", "full"],
+    );
     this.updateManagedEntry(settings, "theme_preference", this.themePreference, this.themePreferenceConfigured);
     this.updateManagedEntry(
       settings,
@@ -626,6 +648,18 @@ export class DemoApiState {
       this.releaseNotificationCooldownSeconds,
       this.releaseNotificationCooldownSecondsConfigured,
     );
+    this.updateManagedEntry(
+      settings,
+      "release_notifications_discord_webhook",
+      "",
+      this.releaseNotificationDiscordWebhookConfigured,
+    );
+    this.updateManagedEntry(
+      settings,
+      "release_notifications_verbosity",
+      this.releaseNotificationVerbosity,
+      this.releaseNotificationVerbosityConfigured,
+    );
     return settings;
   }
 
@@ -634,6 +668,7 @@ export class DemoApiState {
     key: string,
     defaultValue: string,
     allowedValues: string[],
+    overrides: Partial<SettingsResponse["managed"][number]> = {},
   ): void {
     if (settings.managed.some((item) => item.key === key)) {
       return;
@@ -647,6 +682,9 @@ export class DemoApiState {
       allowed_values: allowedValues,
       restart_required: false,
       disabled_reason: "",
+      configured: false,
+      sensitive: false,
+      ...overrides,
     });
   }
 
@@ -662,6 +700,7 @@ export class DemoApiState {
     }
     entry.value = value;
     entry.source = configured ? "configured" : "default";
+    entry.configured = configured;
   }
 
   doctor(): DoctorResponse {
@@ -784,6 +823,40 @@ export class DemoApiState {
         this.releaseNotificationCooldownSeconds = value;
         this.releaseNotificationCooldownSecondsConfigured = true;
         return;
+      case "release_notifications_discord_webhook":
+        if (value) {
+          try {
+            const parsed = new URL(value);
+            const allowedHosts = new Set([
+              "discord.com",
+              "discordapp.com",
+              "canary.discord.com",
+              "ptb.discord.com",
+            ]);
+            if (
+              parsed.protocol !== "https:" ||
+              parsed.username ||
+              parsed.password ||
+              !allowedHosts.has(parsed.hostname.toLowerCase()) ||
+              !parsed.pathname.startsWith("/api/webhooks/")
+            ) {
+              throw new Error();
+            }
+          } catch {
+            throw new Error(
+              "release_notifications_discord_webhook must be a Discord webhook URL",
+            );
+          }
+        }
+        this.releaseNotificationDiscordWebhookConfigured = Boolean(value);
+        return;
+      case "release_notifications_verbosity":
+        if (!["summary", "full"].includes(value)) {
+          throw new Error("release_notifications_verbosity must be summary or full");
+        }
+        this.releaseNotificationVerbosity = value === "full" ? "full" : "summary";
+        this.releaseNotificationVerbosityConfigured = true;
+        return;
       default:
         throw new Error(`managed setting is not editable: ${key}`);
     }
@@ -896,12 +969,16 @@ export class DemoApiState {
         const serviceKey = pending?.key ?? "";
         const skippedReason =
           source.resend === true ? "" : item.notification_skipped_reason || "";
+        const description =
+          this.releaseNotificationVerbosity === "full" && item.body
+            ? `${item.upstream_repo || item.image_repo}\n\n${item.body}`.slice(0, 4096)
+            : item.upstream_repo || item.image_repo;
         return {
           line_no: item.line_no,
           image: pending?.image || item.image_repo,
           service_key: serviceKey,
           title: item.title || item.release_tag || item.image_repo,
-          description: item.upstream_repo || item.image_repo,
+          description,
           status: item.status,
           release_tag: item.release_tag,
           upstream_repo: item.upstream_repo,

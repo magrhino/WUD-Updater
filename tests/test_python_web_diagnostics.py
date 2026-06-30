@@ -16,6 +16,7 @@ from tests.web_test_helpers import (
     _doctor_client,
     _install_wud_api,
     _insert_run,
+    _store_web_setting,
 )
 
 
@@ -89,6 +90,38 @@ def test_diagnostics_support_bundle_returns_semantically_redacted_payload(
     assert "wud_api_diagnostics" in body
     assert body["pending_summary"]["source_file"] == "<WUD_OUT_FILE>"
     assert body["log_tail"]["exists"] is True
+
+
+def test_diagnostics_support_bundle_redacts_stored_discord_webhook(
+    tmp_path: Path,
+) -> None:
+    webhook = "https://discord.com/api/webhooks/123/token-secret"
+    (tmp_path / "state").mkdir()
+    _store_web_setting(
+        tmp_path,
+        "release_notifications.discord_webhook",
+        webhook,
+    )
+    run_id = _insert_run(tmp_path)
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        with conn:
+            conn.execute(
+                """
+                UPDATE update_runs
+                SET metadata_json = ?
+                WHERE id = ?
+                """,
+                (json.dumps({"webhook": webhook}), run_id),
+            )
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+
+    response = client.get("/api/v1/diagnostics/support-bundle")
+    serialized = json.dumps(response.json())
+
+    assert response.status_code == 200
+    assert webhook not in serialized
+    assert "token-secret" not in serialized
+    assert "<redacted>" in serialized
 
 
 def test_diagnostics_support_bundle_includes_sanitized_wud_api_diagnostics(

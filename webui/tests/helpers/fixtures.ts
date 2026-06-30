@@ -86,6 +86,8 @@ function managedSettingEntry(
     allowed_values: allowedValues,
     restart_required: false,
     disabled_reason: "",
+    configured: false,
+    sensitive: false,
     ...overrides,
   };
 }
@@ -324,6 +326,14 @@ export function settingsResponse(
         ["remote_change", "cooldown"],
       ),
       managedSettingEntry("release_notifications_cooldown_seconds", "86400"),
+      managedSettingEntry("release_notifications_discord_webhook", "", [], {
+        configured: false,
+        sensitive: true,
+      }),
+      managedSettingEntry("release_notifications_verbosity", "summary", [
+        "summary",
+        "full",
+      ]),
     ],
     ...overrides,
   };
@@ -868,6 +878,7 @@ export function releaseNoteInfo(
     ],
     refreshed_at: "2026-01-02T00:00:00Z",
     error: "",
+    body: "Full release notes body.",
     notification_key: "notification-key-1",
     notification_status: "new",
     notification_last_sent_at: "",

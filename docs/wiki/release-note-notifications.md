@@ -2,9 +2,10 @@
 
 WUDup can post release information to Discord from the WebUI after you preview
 selected pending updates or a successful apply run. Legacy WUD shell helpers
-remain available for existing callback setups. Webhook and token values must
-come from the WUDup/WebUI runtime environment, the WUD container environment
-for shell callbacks, or another host-local secret store.
+remain available for existing callback setups. GitHub token values must come
+from the WUDup/WebUI runtime environment, the WUD container environment for
+shell callbacks, or another host-local secret store. Discord webhooks can come
+from those same places or from the WebUI-managed webhook field.
 
 ## WebUI Workflow
 
@@ -13,9 +14,9 @@ Release-note notifications default disabled. Enable them from Settings, or set
 value and make the Settings toggle read-only. Sending notifications is a WebUI
 mutation, so the server must also run with `WUD_WEB_MUTATIONS_ENABLED=true`.
 
-Configure `DISCORD_RELEASES_WEBHOOK` in the WUDup runtime environment, with
-`DISCORD_WEBHOOK` accepted as a fallback. Webhook URLs and GitHub tokens are not
-editable in the WebUI and are never stored in SQLite.
+Configure a Discord webhook from Settings, or set `DISCORD_RELEASES_WEBHOOK` in
+the WUDup runtime environment with `DISCORD_WEBHOOK` accepted as a fallback.
+Environment webhooks override and disable the WebUI-managed webhook field.
 
 Use WUD's append-only callback (`/wud/on-update.sh`) or the WUD API pending
 source to populate pending updates, then choose **Preview release notes** from
@@ -114,13 +115,20 @@ upstream release or project link.
 The WebUI uses a separate Python service for structured release-note metadata.
 It does not call the shell helper or parse Discord embeds. The WebUI cache uses
 the same `GITHUB_TOKEN` for rate limits and can use `WUD_WEB_UPSTREAM_MAP` to
-point at a custom LinuxServer.io upstream map.
+point at a custom LinuxServer.io upstream map. WebUI-sent Discord notifications
+use `DISCORD_RELEASES_WEBHOOK` or `DISCORD_WEBHOOK` first. When neither
+environment value is set, the Settings page can save a Discord webhook URL in
+SQLite. Settings responses only report whether that stored webhook is
+configured; the raw URL is not returned to the browser.
 
 ## Secrets And Logs
 
 Do not commit webhook URLs, GitHub tokens, or private service URLs. Use
-environment variables supplied by WUD, Compose secrets, or host-local config.
+environment variables supplied by WUD, Compose secrets, host-local config, or
+the WebUI-managed webhook field. Treat the WebUI SQLite database as
+secret-bearing if you store a webhook there.
 
 The legacy tag manager redacts webhook values when logging helper commands, and
-shared HTTP errors do not print webhook URLs. Avoid copying raw environment
-dumps into issues or pull requests.
+shared HTTP errors do not print webhook URLs. WebUI Settings responses, audit
+records, support bundles, and send errors also redact webhook values. Avoid
+copying raw environment dumps or SQLite rows into issues or pull requests.

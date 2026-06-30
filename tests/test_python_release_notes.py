@@ -163,10 +163,15 @@ class ReleaseNotesTests(unittest.TestCase):
         with open_db(":memory:") as conn:
             init_db(conn)
             items = refresh_release_notes(conn, parsed.targets, {}, client=client)
+            cached_body = conn.execute(
+                "SELECT body FROM release_note_cache LIMIT 1"
+            ).fetchone()[0]
 
         self.assertEqual(items[0].status, "ready")
         self.assertEqual(items[0].provider, "github")
         self.assertEqual(items[0].release_tag, "v2.0.0")
+        self.assertEqual(items[0].body, "Routine update")
+        self.assertEqual(cached_body, "Routine update")
         self.assertTrue(items[0].breaking)
         self.assertEqual(items[0].links[0].label, "GitHub release")
 

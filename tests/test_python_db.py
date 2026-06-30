@@ -48,6 +48,11 @@ class FakeConnection:
         self.statements.append(statement)
 
 
+def _drop_release_note_cache_body(conn: sqlite3.Connection) -> None:
+    conn.execute("ALTER TABLE release_note_cache DROP COLUMN body")
+    conn.execute("DELETE FROM schema_migrations WHERE version = 12")
+
+
 class DatabaseTests(unittest.TestCase):
     def test_connect_db_sets_driver_timeout_and_connection_pragmas(self) -> None:
         conn = FakeConnection()
@@ -383,6 +388,7 @@ class DatabaseTests(unittest.TestCase):
     def test_init_db_migrates_v8_schema_and_adds_security_scan_cache(self) -> None:
         with sqlite3.connect(":memory:") as conn:
             init_db(conn)
+            _drop_release_note_cache_body(conn)
             conn.execute("DROP TABLE security_scan_cache")
             conn.execute("DELETE FROM schema_migrations WHERE version = 9")
             conn.execute("PRAGMA user_version = 8")
@@ -425,6 +431,7 @@ class DatabaseTests(unittest.TestCase):
             sqlite3.connect(Path(tmpdir) / "wudup.sqlite") as conn,
         ):
             init_db(conn)
+            _drop_release_note_cache_body(conn)
             conn.execute(
                 "ALTER TABLE security_scan_cache RENAME TO old_security_scan_cache"
             )
@@ -450,6 +457,7 @@ class DatabaseTests(unittest.TestCase):
             sqlite3.connect(Path(tmpdir) / "wudup.sqlite") as conn,
         ):
             init_db(conn)
+            _drop_release_note_cache_body(conn)
             conn.execute(
                 "ALTER TABLE security_scan_cache RENAME TO old_security_scan_cache"
             )
@@ -493,6 +501,7 @@ class DatabaseTests(unittest.TestCase):
         with sqlite3.connect(":memory:") as conn:
             init_db(conn)
             conn.execute("DROP TABLE release_notification_history")
+            _drop_release_note_cache_body(conn)
             conn.execute("DELETE FROM schema_migrations WHERE version = 11")
             conn.execute("PRAGMA user_version = 10")
 
@@ -526,9 +535,27 @@ class DatabaseTests(unittest.TestCase):
             ],
         )
 
+    def test_init_db_migrates_v11_and_adds_release_note_body(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            init_db(conn)
+            _drop_release_note_cache_body(conn)
+            conn.execute("PRAGMA user_version = 11")
+
+            init_db(conn)
+
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            columns = [
+                column[1]
+                for column in conn.execute("PRAGMA table_info(release_note_cache)")
+            ]
+
+        self.assertEqual(version, SCHEMA_VERSION)
+        self.assertIn("body", columns)
+
     def test_init_db_rejects_v8_schema_with_conflicting_security_cache(self) -> None:
         with sqlite3.connect(":memory:") as conn:
             init_db(conn)
+            _drop_release_note_cache_body(conn)
             conn.execute("DROP TABLE security_scan_cache")
             conn.execute("CREATE VIEW security_scan_cache AS SELECT 1 AS dummy_column")
             conn.execute("DELETE FROM schema_migrations WHERE version = 9")

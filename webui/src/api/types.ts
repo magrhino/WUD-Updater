@@ -485,6 +485,7 @@ export interface ReleaseNoteInfo {
   links: ReleaseNoteLink[];
   refreshed_at: string;
   error: string;
+  body?: string;
   notification_key: string;
   notification_status: string;
   notification_last_sent_at: string;
@@ -845,6 +846,8 @@ export interface ManagedSettingEntry {
   allowed_values: string[];
   restart_required: boolean;
   disabled_reason: string;
+  configured?: boolean;
+  sensitive?: boolean;
 }
 
 export interface SettingsResponse {

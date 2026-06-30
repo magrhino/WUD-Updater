@@ -49,6 +49,7 @@ export const SETTINGS_NAV_GROUPS: readonly SettingsNavGroup[] = [
   navGroup("operate", "Operate", [
     navLink("settings-actions", "Actions"),
     navLink("settings-preferences", "Preferences"),
+    navLink("settings-notifications", "Notifications"),
   ]),
   navGroup("configuration", "Configuration", [
     navLink("settings-runtime", "Overview"),
@@ -87,6 +88,11 @@ export const RELEASE_NOTIFICATION_MODE_LABELS: Record<string, string> = {
 export const RELEASE_NOTIFICATION_RESEND_POLICY_LABELS: Record<string, string> = {
   remote_change: "Remote changes",
   cooldown: "Cooldown",
+};
+
+export const RELEASE_NOTIFICATION_VERBOSITY_LABELS: Record<string, string> = {
+  summary: "Summary",
+  full: "Full release notes",
 };
 
 const CORE_UPDATE_TOUR_STATUS_LABELS: Record<CoreUpdateTourStatus, string> = {
@@ -136,6 +142,10 @@ export function sourceTagType(
 
 export function secretLabel(secret: SecretSettingStatus): string {
   return secret.configured ? "Configured" : "Not configured";
+}
+
+export function managedSourceLabel(entry: ManagedSettingEntry | undefined): string {
+  return entry?.source === "configured" ? "Configured" : "Default";
 }
 
 export function settingRows(entries: SettingsEntry[]): SettingsDisclosureRow[] {

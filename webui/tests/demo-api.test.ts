@@ -114,6 +114,52 @@ describe("demo web API", () => {
         }),
       ]),
     });
+    await expect(
+      api.updateManagedSettings(
+        {
+          release_notifications_discord_webhook:
+            "https://discord.com/api/webhooks/123/token-secret",
+        },
+        "csrf",
+      ),
+    ).resolves.toMatchObject({
+      managed: expect.arrayContaining([
+        expect.objectContaining({
+          key: "release_notifications_discord_webhook",
+          value: "",
+          configured: true,
+          sensitive: true,
+        }),
+      ]),
+    });
+    await expect(
+      api.updateManagedSettings(
+        { release_notifications_discord_webhook: "" },
+        "csrf",
+      ),
+    ).resolves.toMatchObject({
+      managed: expect.arrayContaining([
+        expect.objectContaining({
+          key: "release_notifications_discord_webhook",
+          configured: false,
+          sensitive: true,
+        }),
+      ]),
+    });
+    await expect(
+      api.updateManagedSettings(
+        { release_notifications_verbosity: "full" },
+        "csrf",
+      ),
+    ).resolves.toMatchObject({
+      managed: expect.arrayContaining([
+        expect.objectContaining({
+          key: "release_notifications_verbosity",
+          value: "full",
+          source: "configured",
+        }),
+      ]),
+    });
     await expect(api.onboardingChecklist("csrf")).resolves.toMatchObject({
       visible: true,
       items: expect.arrayContaining([

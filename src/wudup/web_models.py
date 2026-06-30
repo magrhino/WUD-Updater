@@ -746,6 +746,7 @@ class ReleaseNoteInfo(BaseModel):
     links: list[ReleaseNoteLink] = Field(default_factory=list)
     refreshed_at: str = ""
     error: str = ""
+    body: str = ""
     notification_key: str = ""
     notification_status: str = "new"
     notification_last_sent_at: str = ""
@@ -889,6 +890,8 @@ class ManagedSettingEntry(BaseModel):
     allowed_values: list[str] = Field(default_factory=list)
     restart_required: bool
     disabled_reason: str = ""
+    configured: bool = False
+    sensitive: bool = False
 
 class ManagedSettingsUpdateRequest(BaseModel):
     values: dict[str, str] = Field(default_factory=dict)
