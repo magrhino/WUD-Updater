@@ -112,6 +112,8 @@ __all__ = (
     "ReleaseNotificationPreviewRequest",
     "ReleaseNotificationResponse",
     "ReleaseNotificationSendRequest",
+    "ReleaseNotificationTestRequest",
+    "ReleaseNotificationTestResponse",
     "ReleaseNotificationTrigger",
     "ReleaseNotesResponse",
     "ResetAdminClaimRequest",
