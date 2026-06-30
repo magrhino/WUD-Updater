@@ -47,20 +47,15 @@ const findingCount = computed(
     props.scan.findings.length ||
     severityItems.value.reduce((total, item) => total + item.count, 0),
 );
-const severityFilterItems = computed(() =>
-  severityOrder
-    .map((severity) => ({
-      count: props.scan.findings.filter((finding) => finding.severity === severity).length,
-      severity,
-    }))
-    .filter((item) => item.count > 0),
+const severityFilterTotal = computed(() =>
+  severityItems.value.reduce((total, item) => total + item.count, 0),
 );
 const severityFilterOptions = computed(() => [
   {
-    label: `All categories (${props.scan.findings.length})`,
+    label: `All categories (${severityFilterTotal.value})`,
     value: "all",
   },
-  ...severityFilterItems.value.map((item) => ({
+  ...severityItems.value.map((item) => ({
     label: `${titleCase(item.severity)} (${item.count})`,
     value: item.severity,
   })),
@@ -85,16 +80,16 @@ const findingPageEnd = computed(() =>
 );
 const showFindingControls = computed(
   () =>
-    severityFilterItems.value.length > 1 ||
+    severityItems.value.length > 1 ||
     filteredFindings.value.length > findingPageSize,
 );
 
 watch(
-  [selectedSeverity, () => props.scan.findings],
+  [selectedSeverity, () => props.scan],
   () => {
     if (
       selectedSeverity.value !== "all" &&
-      !props.scan.findings.some((finding) => finding.severity === selectedSeverity.value)
+      !severityItems.value.some((item) => item.severity === selectedSeverity.value)
     ) {
       selectedSeverity.value = "all";
     }
@@ -183,7 +178,7 @@ function findingTitle(finding: SecurityScanFinding): string {
 
     <div v-if="scan.findings.length && showFindingControls" class="security-finding-controls">
       <n-select
-        v-if="severityFilterItems.length > 1"
+        v-if="severityItems.length > 1"
         v-model:value="selectedSeverity"
         class="security-finding-filter"
         size="small"

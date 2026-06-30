@@ -620,6 +620,20 @@ describe("pending helper modules", () => {
     expect(wrapper.text()).not.toContain("CVE-2026-0001");
     expect(wrapper.text()).toContain("CVE-2026-0011");
     expect(wrapper.text()).toContain("CVE-2026-0012");
+
+    await wrapper.setProps({
+      scan: securityScanWithFindings(
+        Array.from({ length: 11 }, (_, index) => securityFinding(index + 101)),
+      ),
+    });
+
+    expect(wrapper.text()).toContain("Showing 1-10 of 11 findings");
+    expect(wrapper.text()).toContain("CVE-2026-0101");
+    expect(wrapper.text()).toContain("CVE-2026-0110");
+    expect(wrapper.text()).not.toContain("CVE-2026-0111");
+
+    const pageOne = wrapper.findAll("button").find((button) => button.text() === "1");
+    expect(pageOne?.attributes("disabled")).toBeDefined();
   });
 
   it("summarizes candidate security scans with shared severity semantics", () => {
