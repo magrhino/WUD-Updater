@@ -35,6 +35,8 @@ from .web_models import (
     ReleaseNotificationPreviewRequest,
     ReleaseNotificationResponse,
     ReleaseNotificationSendRequest,
+    ReleaseNotificationTestRequest,
+    ReleaseNotificationTestResponse,
     ReleaseNotificationTrigger,
     WebSettings,
     WudApiStatus,
@@ -172,6 +174,75 @@ def api_send_release_notifications(
             detail=detail,
         ) from exc
     return response.model_copy(update={"sent": True, "audit_run_id": audit_run_id})
+
+
+def api_test_release_notification_webhook(
+    _payload: ReleaseNotificationTestRequest,
+    request: Request,
+) -> ReleaseNotificationTestResponse:
+    settings = _settings(request)
+    if not settings.mutations_enabled:
+        raise HTTPException(status_code=403, detail="mutations are disabled")
+    webhook = _discord_webhook(settings)
+    if not webhook.value:
+        raise HTTPException(
+            status_code=422,
+            detail="Discord release-note webhook is not configured",
+        )
+
+    destination = ReleaseNotificationDestination(
+        configured=True,
+        source=webhook.source,
+    )
+    audit_run_id = 0
+    try:
+        audit_run_id = _insert_release_notification_test_audit_start(
+            settings,
+            request,
+            destination,
+        )
+        _post_discord_payload(webhook.value, _test_discord_payload())
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        detail = _safe_release_notification_test_exception_detail(
+            settings,
+            exc,
+            webhook.value,
+        )
+        if audit_run_id:
+            _safe_finish_release_notification_test_audit_failure(
+                settings,
+                audit_run_id,
+                request=request,
+                destination=destination,
+                error=detail,
+            )
+        raise HTTPException(status_code=500, detail=detail) from exc
+    try:
+        _finish_release_notification_test_audit(
+            settings,
+            audit_run_id,
+            request=request,
+            destination=destination,
+            status="success",
+        )
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        detail = _safe_exception_detail(
+            settings,
+            "could not finalize Discord test webhook audit",
+            exc,
+        )
+        _safe_finish_release_notification_test_audit_failure(
+            settings,
+            audit_run_id,
+            request=request,
+            destination=destination,
+            error=detail,
+        )
+    return ReleaseNotificationTestResponse(
+        sent=True,
+        destination=destination,
+        audit_run_id=audit_run_id,
+    )
 
 
 def _notification_response(
@@ -718,6 +789,22 @@ def _post_discord_payload(webhook_url: str, payload: Mapping[str, object]) -> No
             )
 
 
+def _test_discord_payload() -> dict[str, object]:
+    return {
+        "username": "WUDup Release Notes",
+        "allowed_mentions": {"parse": []},
+        "embeds": [
+            {
+                "title": "WUDup test notification",
+                "description": (
+                    "Discord webhook delivery is configured correctly for WUDup."
+                ),
+                "color": DISCORD_COLOR,
+            }
+        ],
+    }
+
+
 def _safe_release_notification_exception_detail(
     settings: WebSettings,
     exc: BaseException,
@@ -726,6 +813,154 @@ def _safe_release_notification_exception_detail(
     detail = _redact_sensitive_text(settings, str(exc), extra_secrets=(webhook_url,))
     detail = _redact_unknown_absolute_paths(detail)
     return f"could not send Discord release-note notifications: {detail}"
+
+
+def _safe_release_notification_test_exception_detail(
+    settings: WebSettings,
+    exc: BaseException,
+    webhook_url: str,
+) -> str:
+    detail = _redact_sensitive_text(settings, str(exc), extra_secrets=(webhook_url,))
+    detail = _redact_unknown_absolute_paths(detail)
+    return f"could not send Discord test webhook: {detail}"
+
+
+def _insert_release_notification_test_audit_start(
+    settings: WebSettings,
+    request: Request,
+    destination: ReleaseNotificationDestination,
+) -> int:
+    now = utc_timestamp()
+    metadata = _release_notification_test_audit_metadata(
+        settings,
+        request,
+        destination,
+        status="running",
+    )
+    with open_db(settings.config.db_path) as conn:
+        init_db(conn)
+        with conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO update_runs (
+                    started_at,
+                    finished_at,
+                    status,
+                    dry_run,
+                    mode,
+                    wud_file,
+                    log_file,
+                    metadata_json
+                )
+                VALUES (?, NULL, 'running', 0, 'web-release-notifications', ?, '', ?)
+                """,
+                (
+                    now,
+                    str(settings.config.wud_out_file),
+                    json_object(metadata),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+
+def _finish_release_notification_test_audit(
+    settings: WebSettings,
+    run_id: int,
+    *,
+    request: Request,
+    destination: ReleaseNotificationDestination,
+    status: str,
+    error: str = "",
+) -> None:
+    now = utc_timestamp()
+    metadata = _release_notification_test_audit_metadata(
+        settings,
+        request,
+        destination,
+        status=status,
+        error=error,
+    )
+    with open_db(settings.config.db_path) as conn:
+        init_db(conn)
+        with conn:
+            conn.execute(
+                """
+                UPDATE update_runs
+                SET finished_at = ?,
+                    status = ?,
+                    metadata_json = ?
+                WHERE id = ?
+                  AND mode = 'web-release-notifications'
+                """,
+                (now, status, json_object(metadata), run_id),
+            )
+            conn.execute(
+                """
+                INSERT INTO update_events (
+                    run_id,
+                    created_at,
+                    service_name,
+                    stack_name,
+                    image,
+                    target_image,
+                    status,
+                    metadata_json
+                )
+                VALUES (?, ?, 'release-notes', 'webui', 'discord', 'discord-test', ?, ?)
+                """,
+                (
+                    run_id,
+                    now,
+                    status,
+                    json_object(metadata),
+                ),
+            )
+
+
+def _safe_finish_release_notification_test_audit_failure(
+    settings: WebSettings,
+    run_id: int,
+    *,
+    request: Request,
+    destination: ReleaseNotificationDestination,
+    error: str,
+) -> None:
+    try:
+        _finish_release_notification_test_audit(
+            settings,
+            run_id,
+            request=request,
+            destination=destination,
+            status="failure",
+            error=error,
+        )
+    except (OSError, sqlite3.Error, DatabaseError):
+        LOGGER.exception("failed to finalize Discord test webhook audit")
+
+
+def _release_notification_test_audit_metadata(
+    settings: WebSettings,
+    request: Request,
+    destination: ReleaseNotificationDestination,
+    *,
+    status: str,
+    error: str = "",
+) -> dict[str, object]:
+    metadata: dict[str, object] = {
+        "source": "webui",
+        "operation": "test_release_notification_webhook",
+        "actor_type": _request_actor_type(settings, request),
+        "resource_type": "release_notifications",
+        "resource_id": "discord",
+        "status": status,
+        "destination": {
+            "type": destination.type,
+            "source": destination.source,
+        },
+    }
+    if error:
+        metadata["error"] = error
+    return metadata
 
 
 def _insert_release_notification_audit_start(

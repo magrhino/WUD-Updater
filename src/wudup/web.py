@@ -392,6 +392,17 @@ def create_app(
         api_post_only_method_not_allowed,
         methods=["GET"],
     )
+    router.add_api_route(
+        "/release-notifications/test",
+        web_release_notifications.api_test_release_notification_webhook,
+        methods=["POST"],
+        response_model=web_models.ReleaseNotificationTestResponse,
+    )
+    router.add_api_route(
+        "/release-notifications/test",
+        api_post_only_method_not_allowed,
+        methods=["GET"],
+    )
     web_security.register_security_scan_routes(router, api_post_only_method_not_allowed)
     router.add_api_route(
         "/service-policies",

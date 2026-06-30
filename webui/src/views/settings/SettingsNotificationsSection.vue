@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Bell, RotateCcw, Save, Trash2 } from "@lucide/vue";
-import { NAlert, NButton, NFlex, NInput, NSelect, NSwitch } from "naive-ui";
+import { Bell, RotateCcw, Save, Send, Trash2 } from "@lucide/vue";
+import { NAlert, NButton, NFlex, NInput, NModal, NSelect, NSwitch } from "naive-ui";
 
 import { useManagedNotifications } from "./useManagedNotifications";
 
@@ -25,6 +25,7 @@ const {
   releaseNotificationVerbosityValue,
   notificationsMessage,
   notificationsError,
+  testWebhookDialogVisible,
   notificationControlsDisabled,
   releaseNotesEnabledEditable,
   releaseNotificationModeEditable,
@@ -36,12 +37,15 @@ const {
   releaseNotificationVerbosityEditable,
   notificationsDirty,
   notificationSaveDisabled,
+  testWebhookButtonDisabled,
   releaseNotificationModeOptions,
   releaseNotificationResendPolicyOptions,
   releaseNotificationVerbosityOptions,
   managedSourceLabel,
   resetNotificationForm,
   clearDiscordWebhook,
+  openTestWebhookDialog,
+  sendTestWebhook,
   saveManagedNotifications,
 } = useManagedNotifications();
 </script>
@@ -134,6 +138,17 @@ const {
                   :justify="compact ? 'flex-start' : 'flex-end'"
                   :size="8"
                 >
+                  <n-button
+                    size="small"
+                    :disabled="testWebhookButtonDisabled"
+                    :loading="settings.loading"
+                    @click="openTestWebhookDialog"
+                  >
+                    <template #icon>
+                      <Send :size="16" />
+                    </template>
+                    Send test
+                  </n-button>
                   <n-button
                     size="small"
                     :disabled="
@@ -318,6 +333,27 @@ const {
         </n-flex>
       </div>
     </section>
+    <n-modal
+      v-model:show="testWebhookDialogVisible"
+      preset="dialog"
+      title="Send test webhook"
+      positive-text="Send test"
+      negative-text="Cancel"
+      :positive-button-props="{
+        type: 'primary',
+        loading: settings.loading,
+        disabled: testWebhookButtonDisabled,
+      }"
+      @positive-click="sendTestWebhook"
+    >
+      <n-alert type="warning" :show-icon="false" class="block-alert">
+        This sends one Discord test message to the saved webhook destination.
+      </n-alert>
+      <p class="settings-dialog-copy">
+        Destination source:
+        <strong>{{ managedSourceLabel(discordWebhookEntry) }}</strong>
+      </p>
+    </n-modal>
   </div>
 </template>
 

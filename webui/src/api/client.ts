@@ -67,6 +67,7 @@ export type {
   ReleaseNotificationItem,
   ReleaseNotificationSource,
   ReleaseNotificationResponse,
+  ReleaseNotificationTestResponse,
   // Plans
   PlanStatus,
   PlanSummary,
@@ -195,6 +196,7 @@ import type {
   ReleaseNotesResponse,
   ReleaseNotificationSource,
   ReleaseNotificationResponse,
+  ReleaseNotificationTestResponse,
   ServicePolicyRecord,
   SnoozeState,
   SnoozeRecord,
@@ -571,6 +573,12 @@ const updatesApi = {
         ...source,
         confirmation: "send-release-notes",
       }),
+    }),
+  testReleaseNotificationWebhook: (csrfToken: string) =>
+    apiRequest<ReleaseNotificationTestResponse>("/release-notifications/test", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({ confirmation: "send-test-webhook" }),
     }),
   securityScans: () => apiRequest<SecurityScansResponse>("/security-scans"),
   refreshSecurityScans: (csrfToken: string) =>
