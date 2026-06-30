@@ -148,6 +148,17 @@ describe("demo web API", () => {
     });
     await expect(
       api.updateManagedSettings(
+        {
+          release_notifications_discord_webhook:
+            "https://discord.com/api/not-webhooks/123/token-secret",
+        },
+        "csrf",
+      ),
+    ).rejects.toThrow(
+      "release_notifications_discord_webhook must be a Discord webhook URL",
+    );
+    await expect(
+      api.updateManagedSettings(
         { release_notifications_verbosity: "full" },
         "csrf",
       ),

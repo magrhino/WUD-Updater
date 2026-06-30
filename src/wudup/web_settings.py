@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import urllib.parse
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import closing
 from dataclasses import replace
+from importlib.resources import files
 from pathlib import Path
 
 from fastapi import HTTPException, Request
@@ -108,6 +110,13 @@ DEFAULT_RELEASE_NOTIFICATIONS_MODE = "digest"
 DEFAULT_RELEASE_NOTIFICATIONS_RESEND_POLICY = "remote_change"
 DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS = 86_400
 DEFAULT_RELEASE_NOTIFICATIONS_VERBOSITY = "summary"
+_DISCORD_WEBHOOK_POLICY = json.loads(
+    files("wudup").joinpath("discord_webhook_policy.json").read_text(
+        encoding="utf-8"
+    )
+)
+DISCORD_WEBHOOK_ALLOWED_HOSTS = frozenset(_DISCORD_WEBHOOK_POLICY["allowed_hosts"])
+DISCORD_WEBHOOK_PATH_PREFIX = str(_DISCORD_WEBHOOK_POLICY["path_prefix"])
 
 
 def api_settings(request: Request) -> SettingsResponse:
@@ -915,14 +924,8 @@ def _validated_discord_webhook(value: str) -> str:
         or parsed.username
         or parsed.password
         or port not in (None, 443)
-        or host
-        not in {
-            "discord.com",
-            "discordapp.com",
-            "canary.discord.com",
-            "ptb.discord.com",
-        }
-        or not parsed.path.startswith("/api/webhooks/")
+        or host not in DISCORD_WEBHOOK_ALLOWED_HOSTS
+        or not parsed.path.startswith(DISCORD_WEBHOOK_PATH_PREFIX)
     ):
         raise ConfigError(
             f"{MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_KEY} must be a Discord webhook URL"

@@ -51,6 +51,7 @@ import type {
   TagOverrideRequest,
   UpdateTargetsResponse,
 } from "../types";
+import discordWebhookPolicy from "../../../../src/wudup/discord_webhook_policy.json";
 import { DEMO_VERSION } from "./constants";
 import { generatedFixtures } from "./generatedFixtures";
 import {
@@ -88,6 +89,10 @@ const EMPTY_SECURITY_COUNTS: SecurityScanSeverityCounts = {
   low: 0,
   unknown: 0,
 };
+const DISCORD_WEBHOOK_ALLOWED_HOSTS = new Set(
+  discordWebhookPolicy.allowed_hosts,
+);
+const DISCORD_WEBHOOK_PATH_PREFIX = discordWebhookPolicy.path_prefix;
 
 type DemoSecurityScanDecision = {
   hasFindings: boolean;
@@ -827,18 +832,13 @@ export class DemoApiState {
         if (value) {
           try {
             const parsed = new URL(value);
-            const allowedHosts = new Set([
-              "discord.com",
-              "discordapp.com",
-              "canary.discord.com",
-              "ptb.discord.com",
-            ]);
             if (
               parsed.protocol !== "https:" ||
               parsed.username ||
               parsed.password ||
-              !allowedHosts.has(parsed.hostname.toLowerCase()) ||
-              !parsed.pathname.startsWith("/api/webhooks/")
+              (parsed.port && parsed.port !== "443") ||
+              !DISCORD_WEBHOOK_ALLOWED_HOSTS.has(parsed.hostname.toLowerCase()) ||
+              !parsed.pathname.startsWith(DISCORD_WEBHOOK_PATH_PREFIX)
             ) {
               throw new Error();
             }

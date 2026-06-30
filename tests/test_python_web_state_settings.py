@@ -394,7 +394,13 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
     )
     invalid_notification_webhook = client.post(
         "/api/v1/settings/managed",
-        json={"values": {"release_notifications_discord_webhook": "http://example.test/hook"}},
+        json={
+            "values": {
+                "release_notifications_discord_webhook": (
+                    "https://discord.com/api/not-webhooks/123/token-secret"
+                )
+            }
+        },
         headers=headers,
     )
     invalid_notification_verbosity = client.post(
