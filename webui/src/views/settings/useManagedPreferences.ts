@@ -222,8 +222,14 @@ export function useManagedPreferences() {
       releaseNotificationCooldownValue.value !==
         (releaseNotificationCooldownEntry.value?.value ?? "86400")
     ) {
-      values.release_notifications_cooldown_seconds =
-        releaseNotificationCooldownValue.value;
+      const cooldownValue = releaseNotificationCooldownValue.value.trim();
+      const normalizedCooldown = cooldownValue.replace(/^0+/, "") || "0";
+      if (!/^\d+$/.test(cooldownValue) || normalizedCooldown === "0") {
+        preferencesError.value =
+          "Release notification cooldown must be a positive integer.";
+        return;
+      }
+      values.release_notifications_cooldown_seconds = normalizedCooldown;
     }
     if (!Object.keys(values).length) {
       return;

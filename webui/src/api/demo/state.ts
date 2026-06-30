@@ -514,15 +514,15 @@ export class DemoApiState {
       (entry) => entry.key === "release_notes_enabled",
     )?.value ?? "false";
   releaseNotesEnabledConfigured = false;
-  releaseNotificationMode =
+  releaseNotificationMode: ReleaseNotificationResponse["mode"] =
     fixtures.settings.managed.find(
       (entry) => entry.key === "release_notifications_mode",
-    )?.value ?? "digest";
+    )?.value === "per_container" ? "per_container" : "digest";
   releaseNotificationModeConfigured = false;
-  releaseNotificationResendPolicy =
+  releaseNotificationResendPolicy: ReleaseNotificationResponse["resend_policy"] =
     fixtures.settings.managed.find(
       (entry) => entry.key === "release_notifications_resend_policy",
-    )?.value ?? "remote_change";
+    )?.value === "cooldown" ? "cooldown" : "remote_change";
   releaseNotificationResendPolicyConfigured = false;
   releaseNotificationCooldownSeconds =
     fixtures.settings.managed.find(
@@ -544,6 +544,10 @@ export class DemoApiState {
   private nextTagExclusion =
     Math.max(0, ...fixtures.tagExclusions.all.map((rule) => rule.id)) +
     1;
+  private releaseNotificationHistory = new Map<
+    string,
+    { lastSentAt: string; sendCount: number }
+  >();
 
   session(): AuthSessionResponse {
     return clone(fixtures.auth.session);
@@ -757,7 +761,8 @@ export class DemoApiState {
         if (!["digest", "per_container"].includes(value)) {
           throw new Error("release_notifications_mode must be digest or per_container");
         }
-        this.releaseNotificationMode = value;
+        this.releaseNotificationMode =
+          value === "per_container" ? "per_container" : "digest";
         this.releaseNotificationModeConfigured = true;
         return;
       case "release_notifications_resend_policy":
@@ -766,7 +771,8 @@ export class DemoApiState {
             "release_notifications_resend_policy must be remote_change or cooldown",
           );
         }
-        this.releaseNotificationResendPolicy = value;
+        this.releaseNotificationResendPolicy =
+          value === "cooldown" ? "cooldown" : "remote_change";
         this.releaseNotificationResendPolicyConfigured = true;
         return;
       case "release_notifications_cooldown_seconds":
@@ -839,14 +845,34 @@ export class DemoApiState {
     };
     response.items = fixture.items
       .filter((item) => activeLines.has(item.line_no))
-      .map((item) => ({
-        ...item,
-        notification_key: item.notification_key || demoNotificationKey(item.line_no),
-        notification_status: item.notification_status || "new",
-        notification_last_sent_at: item.notification_last_sent_at || "",
-        notification_send_count: item.notification_send_count || 0,
-        notification_skipped_reason: item.notification_skipped_reason || "",
-      }));
+      .map((item) => {
+        const notificationKey =
+          item.notification_key || demoNotificationKey(item.line_no);
+        const history = this.releaseNotificationHistory.get(notificationKey);
+        const skipped =
+          history && this.releaseNotificationResendPolicy === "cooldown"
+            ? {
+                status: "skipped_cooldown",
+                reason: "Notification cooldown has not elapsed.",
+              }
+            : history
+              ? {
+                  status: "skipped_duplicate",
+                  reason: "Already sent for this update.",
+                }
+              : { status: item.notification_status || "new", reason: "" };
+        return {
+          ...item,
+          notification_key: notificationKey,
+          notification_status: skipped.status,
+          notification_last_sent_at:
+            history?.lastSentAt || item.notification_last_sent_at || "",
+          notification_send_count:
+            history?.sendCount || item.notification_send_count || 0,
+          notification_skipped_reason:
+            skipped.reason || item.notification_skipped_reason || "",
+        };
+      });
     response.count = response.items.length;
     return response;
   }
@@ -868,7 +894,8 @@ export class DemoApiState {
       .map((item) => {
         const pending = pendingByLine.get(item.line_no);
         const serviceKey = pending?.key ?? "";
-        const skippedReason = item.status === "ready" ? "" : item.error || item.status;
+        const skippedReason =
+          source.resend === true ? "" : item.notification_skipped_reason || "";
         return {
           line_no: item.line_no,
           image: pending?.image || item.image_repo,
@@ -900,6 +927,16 @@ export class DemoApiState {
         };
       });
     const sendableCount = items.filter((item) => !item.skipped_reason).length;
+    if (sent) {
+      for (const item of items) {
+        if (!item.skipped_reason) {
+          this.releaseNotificationHistory.set(item.notification_key, {
+            lastSentAt: DEMO_NOW,
+            sendCount: Math.max(item.notification_send_count, 1),
+          });
+        }
+      }
+    }
     return {
       enabled: true,
       mode: this.releaseNotificationMode,

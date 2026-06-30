@@ -306,7 +306,13 @@ const releaseNotificationSendDisabledMessage = computed(() => {
   }
   if (!response.sendable_count) {
     if (response.skipped_count) {
-      return "Duplicate notifications are skipped. Preview resend to send them again.";
+      const skippedItems = response.items.filter((item) => item.skipped_reason);
+      const duplicatesOnly = skippedItems.every(
+        (item) => item.notification_status === "skipped_duplicate",
+      );
+      return duplicatesOnly
+        ? "Duplicate notifications are skipped. Preview resend to send them again."
+        : "Release-note notifications are skipped by the resend policy. Preview resend to review them.";
     }
     return "No release-note notifications are available to send.";
   }

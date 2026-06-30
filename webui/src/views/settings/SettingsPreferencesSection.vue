@@ -144,12 +144,22 @@ const {
                   {{ managedSourceLabel(releaseNotificationModeEntry) }}
                 </span>
               </div>
-              <n-select
-                v-model:value="releaseNotificationModeValue"
-                :options="releaseNotificationModeOptions"
-                :disabled="preferenceControlsDisabled || !releaseNotificationModeEditable"
-                aria-label="Release notification mode"
-              />
+              <div class="settings-preference-controls">
+                <n-select
+                  v-model:value="releaseNotificationModeValue"
+                  :options="releaseNotificationModeOptions"
+                  :disabled="preferenceControlsDisabled || !releaseNotificationModeEditable"
+                  aria-label="Release notification mode"
+                />
+                <n-alert
+                  v-if="releaseNotificationModeEntry?.disabled_reason"
+                  type="info"
+                  :show-icon="false"
+                  class="settings-action-alert"
+                >
+                  {{ releaseNotificationModeEntry.disabled_reason }}
+                </n-alert>
+              </div>
             </div>
             <div class="settings-preference-row">
               <div>
@@ -159,15 +169,25 @@ const {
                   {{ managedSourceLabel(releaseNotificationResendPolicyEntry) }}
                 </span>
               </div>
-              <n-select
-                v-model:value="releaseNotificationResendPolicyValue"
-                :options="releaseNotificationResendPolicyOptions"
-                :disabled="
-                  preferenceControlsDisabled ||
-                  !releaseNotificationResendPolicyEditable
-                "
-                aria-label="Release notification resend policy"
-              />
+              <div class="settings-preference-controls">
+                <n-select
+                  v-model:value="releaseNotificationResendPolicyValue"
+                  :options="releaseNotificationResendPolicyOptions"
+                  :disabled="
+                    preferenceControlsDisabled ||
+                    !releaseNotificationResendPolicyEditable
+                  "
+                  aria-label="Release notification resend policy"
+                />
+                <n-alert
+                  v-if="releaseNotificationResendPolicyEntry?.disabled_reason"
+                  type="info"
+                  :show-icon="false"
+                  class="settings-action-alert"
+                >
+                  {{ releaseNotificationResendPolicyEntry.disabled_reason }}
+                </n-alert>
+              </div>
             </div>
             <div class="settings-preference-row">
               <div>
@@ -177,15 +197,25 @@ const {
                   {{ managedSourceLabel(releaseNotificationCooldownEntry) }}
                 </span>
               </div>
-              <n-input
-                v-model:value="releaseNotificationCooldownValue"
-                :disabled="
-                  preferenceControlsDisabled ||
-                  !releaseNotificationCooldownEditable
-                "
-                inputmode="numeric"
-                aria-label="Release notification cooldown seconds"
-              />
+              <div class="settings-preference-controls">
+                <n-input
+                  v-model:value="releaseNotificationCooldownValue"
+                  :disabled="
+                    preferenceControlsDisabled ||
+                    !releaseNotificationCooldownEditable
+                  "
+                  inputmode="numeric"
+                  aria-label="Release notification cooldown seconds"
+                />
+                <n-alert
+                  v-if="releaseNotificationCooldownEntry?.disabled_reason"
+                  type="info"
+                  :show-icon="false"
+                  class="settings-action-alert"
+                >
+                  {{ releaseNotificationCooldownEntry.disabled_reason }}
+                </n-alert>
+              </div>
             </div>
           </div>
         </section>

@@ -497,6 +497,46 @@ describe("pending view selection actions", () => {
     expect(wrapper.find("dialog").text()).toContain("Manual resend");
   });
 
+  it("uses generic resend copy for cooldown-skipped release notifications", async () => {
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = pendingResponse();
+    updates.releaseNotes = releaseNotesResponse();
+    mockPendingLifecycle(settings, updates);
+    vi.spyOn(updates, "previewReleaseNotifications").mockImplementation(async () => {
+      const response = releaseNotificationResponse({
+        sendable_count: 0,
+        skipped_count: 1,
+        items: [
+          {
+            ...releaseNotificationResponse().items[0],
+            notification_status: "skipped_cooldown",
+            skipped_reason: "Notification cooldown has not elapsed.",
+          },
+        ],
+      });
+      updates.releaseNotification = response;
+      return response;
+    });
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview release notes"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.find("dialog").text()).toContain(
+      "Release-note notifications are skipped by the resend policy.",
+    );
+    expect(wrapper.find("dialog").text()).not.toContain(
+      "Duplicate notifications are skipped.",
+    );
+  });
+
   it("keeps Discord release-note send disabled when preview fails", async () => {
     const { pinia, settings, updates } = setupStores(true);
     updates.pending = pendingResponse();

@@ -541,8 +541,8 @@ export type ReleaseNotificationSource =
 
 export interface ReleaseNotificationResponse {
   enabled: boolean;
-  mode: string;
-  resend_policy: string;
+  mode: "digest" | "per_container";
+  resend_policy: "remote_change" | "cooldown";
   destination: ReleaseNotificationDestination;
   source: PendingSourceInfo;
   source_file: string;

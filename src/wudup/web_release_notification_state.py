@@ -72,7 +72,11 @@ def notification_identity(
     stored_payload = dict(payload)
     if metadata_payload:
         stored_payload["metadata"] = metadata_payload
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    hash_payload = dict(payload)
+    metadata_hash_payload = _metadata_hash_payload(metadata)
+    if metadata_hash_payload:
+        hash_payload["metadata"] = metadata_hash_payload
+    canonical = json.dumps(hash_payload, sort_keys=True, separators=(",", ":"))
     return NotificationIdentity(
         notification_key=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
         metadata=stored_payload,
@@ -165,6 +169,10 @@ def notification_decision(
     if history is None:
         return "new", ""
     if history.status != "sent":
+        if resend:
+            return "manual_resend", ""
+        if history.send_count > 0:
+            return "skipped_duplicate", "Already sent for this update."
         return history.status or "new", ""
     if resend:
         return "manual_resend", ""
@@ -264,6 +272,14 @@ def _metadata_payload(metadata: Any | None) -> dict[str, object]:
         if isinstance(source_label, str) and source_label:
             payload["source_label"] = source_label
     return payload
+
+
+def _metadata_hash_payload(metadata: Any | None) -> dict[str, object]:
+    # Keep WUD enrichment optional: line previews and run previews must de-dupe
+    # even when WUD metadata is unavailable in one path.
+    if isinstance(metadata, Mapping):
+        return _json_mapping(metadata)
+    return {}
 
 
 def _json_mapping(metadata: Mapping[Any, Any]) -> dict[str, object]:

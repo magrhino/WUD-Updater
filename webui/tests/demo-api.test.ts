@@ -1039,8 +1039,8 @@ describe("demo web API", () => {
       audit_run_id: 0,
       source_file: "demo/out/images.todo",
       count: 3,
-      sendable_count: 1,
-      skipped_count: 2,
+      sendable_count: 3,
+      skipped_count: 0,
       destination: {
         type: "discord",
         configured: true,
@@ -1067,12 +1067,12 @@ describe("demo web API", () => {
     expect(preview.items[1]).toMatchObject({
       line_no: 4,
       status: "unsupported",
-      skipped_reason: "no supported GitHub release source found",
+      skipped_reason: "",
     });
     expect(preview.items[2]).toMatchObject({
       line_no: 6,
       status: "not_found",
-      skipped_reason: "not_found",
+      skipped_reason: "",
     });
     expect(preview.batch_count).toBe(1);
 
@@ -1097,6 +1097,32 @@ describe("demo web API", () => {
       count: preview.count,
       sendable_count: preview.sendable_count,
       skipped_count: preview.skipped_count,
+    });
+    expect(sent.items[0]).toMatchObject({
+      line_no: 2,
+      notification_status: "sent",
+      notification_send_count: 1,
+    });
+    await expect(
+      api.previewReleaseNotifications({ line_numbers: [2] }, "csrf"),
+    ).resolves.toMatchObject({
+      sendable_count: 0,
+      skipped_count: 1,
+      items: [
+        expect.objectContaining({
+          line_no: 2,
+          notification_status: "skipped_duplicate",
+          notification_send_count: 1,
+          skipped_reason: "Already sent for this update.",
+        }),
+      ],
+    });
+    expect(
+      (await api.releaseNotes()).items.find((item) => item.line_no === 2),
+    ).toMatchObject({
+      notification_status: "skipped_duplicate",
+      notification_send_count: 1,
+      notification_skipped_reason: "Already sent for this update.",
     });
     expect((await api.pending()).items.map((item) => item.line_no)).toEqual([
       2,

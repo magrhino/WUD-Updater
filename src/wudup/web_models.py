@@ -814,8 +814,8 @@ class ReleaseNotificationItem(BaseModel):
 
 class ReleaseNotificationResponse(BaseModel):
     enabled: bool
-    mode: str = "digest"
-    resend_policy: str = "remote_change"
+    mode: Literal["digest", "per_container"] = "digest"
+    resend_policy: Literal["remote_change", "cooldown"] = "remote_change"
     destination: ReleaseNotificationDestination = Field(
         default_factory=ReleaseNotificationDestination
     )

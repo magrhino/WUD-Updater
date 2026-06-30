@@ -144,6 +144,18 @@ def test_notification_identity_includes_wud_metadata() -> None:
         "link": "https://github.com/acme/app",
         "source_label": "https://github.com/acme/app",
     }
+    mapped_metadata = notifications_module.web_release_notification_state.notification_identity(
+        target,
+        note,
+        {"watcher": "docker.local", "container": "app-a", "update_kind": "tag"},
+    )
+    changed_mapped_metadata = notifications_module.web_release_notification_state.notification_identity(
+        target,
+        note,
+        {"watcher": "docker.local", "container": "app-b", "update_kind": "tag"},
+    )
+
+    assert mapped_metadata.notification_key != changed_mapped_metadata.notification_key
 
     unresolved_target = notifications_module.WudTarget(
         line_no=1,
@@ -170,6 +182,37 @@ def test_notification_identity_includes_wud_metadata() -> None:
     )
 
     assert first_fallback.notification_key != changed_fallback.notification_key
+
+
+def test_failed_notification_history_with_prior_send_is_skipped() -> None:
+    state = notifications_module.web_release_notification_state
+    identity = state.NotificationIdentity(
+        notification_key="notification-a",
+        metadata={},
+    )
+    history = state.NotificationHistory(
+        notification_key=identity.notification_key,
+        mode="digest",
+        status="failure",
+        last_attempted_at="2026-01-02T00:00:00+00:00",
+        last_sent_at="2026-01-01T00:00:00+00:00",
+        send_count=1,
+        last_audit_run_id=1,
+        metadata={},
+    )
+
+    assert state.notification_decision(
+        state.ReleaseNotificationConfig(),
+        identity,
+        history,
+        resend=False,
+    ) == ("skipped_duplicate", "Already sent for this update.")
+    assert state.notification_decision(
+        state.ReleaseNotificationConfig(),
+        identity,
+        history,
+        resend=True,
+    ) == ("manual_resend", "")
 
 
 def test_notification_history_by_key_binds_keys(tmp_path: Path) -> None:

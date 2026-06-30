@@ -35,12 +35,18 @@ const resendPreviewAvailable = computed(
     (props.response?.skipped_count ?? 0) > 0,
 );
 const notificationModeLabel = computed(() => {
+  if (!props.response) {
+    return "";
+  }
   if (props.response?.mode === "per_container") {
     return "Per container";
   }
   return "Digest";
 });
 const resendPolicyLabel = computed(() => {
+  if (!props.response) {
+    return "";
+  }
   if (props.response?.resend_policy === "cooldown") {
     return "Cooldown";
   }
@@ -171,7 +177,7 @@ function notificationDetail(item: ReleaseNotificationItem): string {
           <div class="list-row">
             <span>Mode</span>
             <strong>{{ notificationModeLabel }}</strong>
-            <em>{{ resendPolicyLabel }} resend policy</em>
+            <em>{{ resendPolicyLabel ? `${resendPolicyLabel} resend policy` : "" }}</em>
           </div>
         </div>
       </section>
