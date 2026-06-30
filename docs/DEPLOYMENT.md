@@ -90,6 +90,11 @@ docker run --rm \
 
 ### Docker Script Runner
 
+The script-runner commands are legacy file-mode helpers. They read
+`WUD_OUT_FILE`/`images.todo` only; WUD API pending sources are a WebUI path.
+Keep using them for existing host or helper-container workflows, but do not
+expect CLI/WebUI feature parity.
+
 The repository example is at
 [`docs/examples/docker-compose.example.yml`](examples/docker-compose.example.yml).
 It uses the published GHCR image by default. Run it from the repository root:
@@ -249,11 +254,13 @@ authentication layer, configure WUDup's outbound WUD API client with bearer,
 basic, or JSON header-file credentials. Prefer the `_FILE` variables for
 container deployments so secrets stay out of Compose YAML, logs, and support
 bundles.
-By default, pending updates still come from the WUD callback todo file. The
-experimental `WUD_PENDING_SOURCE=api` mode reads WebUI pending entries from
-WUD's `/api/containers` metadata, and `WUD_PENDING_SOURCE=auto` uses that API
-when usable before falling back to `WUD_OUT_FILE`. The host `updates` CLI and
-`docker-update-from-wud` remain file-based.
+The WebUI turns both `WUD_OUT_FILE` and WUD API metadata into the same
+pending-line format before planning or applying updates. `WUD_PENDING_SOURCE=api`
+reads WebUI pending entries from WUD's `/api/containers` metadata, and
+`WUD_PENDING_SOURCE=auto` uses that API when usable before falling back to
+`WUD_OUT_FILE`. Keep the default `file` mode until WUD API access is healthy;
+the host `updates` CLI and `docker-update-from-wud` remain legacy file-mode
+helpers and will not grow API mode.
 For LAN or reverse-proxy exposure, set `WUD_WEB_PUBLIC_ORIGIN`; use
 `WUD_WEB_ALLOWED_HOSTS` only for extra host aliases, and review
 `WUD_WEB_TRUSTED_PROXIES` plus `WUD_WEB_SECURE_COOKIES` for reverse proxies.
@@ -314,8 +321,9 @@ services:
     volumes:
       - wud-scripts:/wud:ro
       - wud-out:/out
-    # Configure your WUD trigger to call:
-    #   /wud/on-update.sh
+    # File-mode fallback: configure your WUD trigger to call:
+    #   /wud/append-updates.sh
+    # Use /wud/on-update.sh only for legacy shell release-note notifications.
 
   wudup:
     image: ghcr.io/magrhino/wudup:latest
@@ -354,8 +362,10 @@ Managed directories are marked with `.wudup-managed`. Sync removes the
 previous managed contents, copies the packaged scripts, marks `*.sh` executable,
 and writes the marker again.
 
-Start or recreate `wudup` once before relying on `/wud/on-update.sh` in a
-fresh empty script volume. You can also run the sync directly:
+Start or recreate `wudup` once before relying on `/wud/append-updates.sh` in a
+fresh empty script volume. Use `/wud/on-update.sh` only when you intentionally
+keep legacy shell release-note notifications. You can also run the sync
+directly:
 
 ```bash
 docker compose -f docs/examples/docker-compose.example.yml run --rm wudup sync-wud-scripts
@@ -427,7 +437,7 @@ volumes:
 Configure WUD to call:
 
 ```text
-/wud/on-update.sh
+/wud/append-updates.sh
 ```
 
 Then run:
@@ -584,7 +594,7 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_API_AUTH_BEARER_TOKEN_FILE` / `WUD_API_AUTH_BEARER_TOKEN` | unset | Optional bearer token for WUDup's outbound WUD API calls. Prefer the `_FILE` form in containers; direct values are intended for local development. Do not combine bearer and basic auth. |
 | `WUD_API_AUTH_BASIC_USER` + `WUD_API_AUTH_BASIC_PASSWORD_FILE` / `WUD_API_AUTH_BASIC_PASSWORD` | unset | Optional basic auth credentials for WUDup's outbound WUD API calls. The user and one password source must be set together. Prefer the `_FILE` password form in containers. |
 | `WUD_API_HEADERS_FILE` | unset | Optional UTF-8 JSON object of static WUD API request headers, such as `{"X-Api-Key":"example"}`. Header names and values are validated, values are redacted, and an `Authorization` header cannot be combined with bearer or basic auth. |
-| `WUD_PENDING_SOURCE` | `file` | Experimental WebUI/API pending-update source: `file` keeps the callback todo file as the source of truth, `api` derives pending entries from WUD `/api/containers`, and `auto` uses API metadata when usable before falling back to `WUD_OUT_FILE`. Host CLI update commands remain file-based. |
+| `WUD_PENDING_SOURCE` | `file` | WebUI pending-update source: `file` reads `WUD_OUT_FILE`, `api` derives pending lines from WUD `/api/containers`, and `auto` uses API metadata when usable before falling back to `WUD_OUT_FILE`. Host CLI update commands remain legacy file-mode only. |
 | `WUD_RELEASE_NOTES_ENABLED` | unset | Optional env override for WebUI Discord release-note notifications. Leave unset to manage the setting from Settings; set `true` or `false` only when the deployment should force the value and make the Settings toggle read-only. |
 | `WUD_WEB_HOST` | Host/direct app: `127.0.0.1`; container image: `0.0.0.0` | Host passed to Uvicorn when running `wudup web`. The image default makes published Docker ports reachable; Compose still controls host-side exposure with `WEBUI_HTTP_BIND`. |
 | `WUD_WEB_PORT` | `7417` | Port passed to Uvicorn when running `wudup web`. |
@@ -655,8 +665,9 @@ webhooks can also be saved from WebUI Settings; the browser only sees whether a
 stored webhook is configured, but the raw URL is still present in SQLite, so
 protect `WUD_DB_PATH` as a secret-bearing file.
 
-For the WebUI workflow, keep WUD's append-only callback or API pending source in
-place, enable release-note notifications from Settings or by setting
+For the WebUI workflow, prefer the WUD API pending source when available and
+keep WUD's append-only callback as fallback/import compatibility. Enable
+release-note notifications from Settings or by setting
 `WUD_RELEASE_NOTES_ENABLED=true`, configure a Discord webhook either in Settings
 or with `DISCORD_WEBHOOK` in the WUDup runtime, and set
 `WUD_WEB_MUTATIONS_ENABLED=true` before sending from the browser. Then use
