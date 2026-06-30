@@ -334,6 +334,15 @@ test_sync_command_copies_http_trigger_when_legacy_scripts_disabled(){
   teardown_case
 }
 
+test_sync_command_rejects_invalid_legacy_scripts_bool(){
+  setup_case
+  WUDUP_LEGACY_SCRIPTS=disabled run_entrypoint sync-wud-scripts
+  assert_status 1
+  grep -q 'WUDUP_LEGACY_SCRIPTS must be true or false' "$TEST_TMP/output.log" || fail "missing invalid bool message"
+  [[ ! -e "$TEST_TMP/managed-wud/.wudup-managed" ]] || fail "invalid config synced scripts"
+  teardown_case
+}
+
 test_startup_auto_sync_runs_for_existing_destination(){
   setup_case
   mkdir -p "$TEST_TMP/managed-wud"
@@ -496,6 +505,7 @@ main(){
   run_test test_debug_command_executes_directly
   run_test test_sync_command_copies_scripts_and_exits
   run_test test_sync_command_copies_http_trigger_when_legacy_scripts_disabled
+  run_test test_sync_command_rejects_invalid_legacy_scripts_bool
   run_test test_startup_auto_sync_runs_for_existing_destination
   run_test test_startup_auto_sync_skips_missing_destination
   run_test test_startup_explicit_auto_sync_runs_for_existing_destination

@@ -32,7 +32,6 @@ PAYLOAD=$(jq -nc \
   '{updateAvailable:$updateAvailable,id:$id,container_id:$container_id,name:$name,image_name:$image_name,image:{name:$image_name,tag:$image_tag}}')
 
 curl --fail --silent --show-error \
-  --location \
   --retry 3 \
   --retry-delay 1 \
   --connect-timeout 5 \

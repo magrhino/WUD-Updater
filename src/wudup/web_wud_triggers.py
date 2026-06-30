@@ -183,8 +183,7 @@ def _matching_line_numbers(
         for line_no, container_ids in (source.container_ids_by_line or {}).items():
             if any(container_id in payload_ids for container_id in container_ids):
                 matched.append(line_no)
-        if matched:
-            return tuple(sorted(set(matched)))
+        return tuple(sorted(set(matched)))
 
     names = _payload_names(payload)
     image_ref = _payload_image_ref(payload)

@@ -26,10 +26,23 @@ env_bool_enabled(){
 legacy_wud_scripts_disabled(){
   [[ -n "${WUDUP_LEGACY_SCRIPTS+x}" ]] || return 1
   case "$WUDUP_LEGACY_SCRIPTS" in
-    0|[Ff][Aa][Ll][Ss][Ee]|[Nn][Oo]|[Oo][Ff][Ff]|[Dd][Ii][Ss][Aa][Bb][Ll][Ee][Dd])
+    0|[Ff][Aa][Ll][Ss][Ee]|[Nn][Oo]|[Oo][Ff][Ff])
       return 0
       ;;
     *)
+      return 1
+      ;;
+  esac
+}
+
+validate_legacy_wud_scripts(){
+  [[ -n "${WUDUP_LEGACY_SCRIPTS+x}" ]] || return 0
+  case "$WUDUP_LEGACY_SCRIPTS" in
+    ""|0|1|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee]|[Yy][Ee][Ss]|[Nn][Oo]|[Oo][Nn]|[Oo][Ff][Ff])
+      return 0
+      ;;
+    *)
+      printf 'WUDUP_LEGACY_SCRIPTS must be true or false\n' >&2
       return 1
       ;;
   esac
@@ -199,6 +212,7 @@ sync_wud_scripts(){
     printf 'Packaged WUD scripts directory not found: %s\n' "$src" >&2
     return 1
   fi
+  validate_legacy_wud_scripts || return 1
 
   dst_canon="$(canonicalize_dir_target "$dst")" || {
     printf 'Unable to resolve WUD_SCRIPTS_DIR: %s\n' "$dst" >&2

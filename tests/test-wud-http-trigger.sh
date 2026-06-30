@@ -30,6 +30,11 @@ assert_arg(){
   grep -Fx -- "$expected" "$TEST_TMP/curl.args" >/dev/null || fail "missing curl arg: $expected"
 }
 
+assert_no_arg(){
+  local unexpected="$1"
+  ! grep -Fx -- "$unexpected" "$TEST_TMP/curl.args" >/dev/null || fail "unexpected curl arg: $unexpected"
+}
+
 test_posts_wud_payload(){
   setup_case
   PATH="$TEST_TMP/bin:$PATH" \
@@ -47,6 +52,7 @@ test_posts_wud_payload(){
   assert_arg "5"
   assert_arg "--max-time"
   assert_arg "20"
+  assert_no_arg "--location"
   assert_arg '{"updateAvailable":true,"id":"docker.local.app","container_id":"","name":"app","image_name":"repo/app","image":{"name":"repo/app","tag":"1.0"}}'
   assert_arg "http://wudup:7417/api/v1/wud/triggers/update"
   teardown_case

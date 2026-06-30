@@ -212,6 +212,39 @@ def test_wud_update_trigger_skips_duplicate_release_notification(
     assert len(posted) == 1
 
 
+def test_wud_update_trigger_does_not_fallback_when_id_misses(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(
+        monkeypatch,
+        containers=[_wud_api_container(name="app")],
+        triggers={"docker.local.app": (200, [])},
+    )
+    _fake_release_refresh(monkeypatch)
+    posted = _capture_discord_posts(monkeypatch)
+    client = _client(tmp_path, _TRIGGER_ENV)
+
+    response = client.post(
+        _TRIGGER_PATH,
+        json={
+            "id": "docker.local.other",
+            "image_name": "repo/app",
+            "image": {"name": "repo/app", "tag": "1.0"},
+            "updateAvailable": True,
+        },
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "skipped"
+    assert (
+        response.json()["reason"]
+        == "triggered container is not in current WUD API pending updates"
+    )
+    assert len(posted) == 0
+
+
 def test_legacy_disabled_forces_api_pending_source_without_wud_file(
     tmp_path: Path,
     monkeypatch,
