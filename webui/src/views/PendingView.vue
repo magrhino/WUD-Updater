@@ -120,7 +120,7 @@ const securityScanRefreshMutationMessage =
   "security scans.";
 const PENDING_METADATA_REFRESH_INTERVAL_MS = 30_000;
 let pendingMetadataRefreshInterval:
-  | ReturnType<typeof window.setInterval>
+  | ReturnType<typeof globalThis.setInterval>
   | null = null;
 let pendingMetadataRefreshInFlight = false;
 
@@ -632,14 +632,14 @@ onMounted(() => {
   runInBackground(retryPendingLoad());
   runInBackground(settings.loadPendingSafetyCues());
   runInBackground(reconnectObservedApplyJob());
-  pendingMetadataRefreshInterval = window.setInterval(() => {
+  pendingMetadataRefreshInterval = globalThis.setInterval(() => {
     runInBackground(refreshPendingMetadataFromStatus());
   }, PENDING_METADATA_REFRESH_INTERVAL_MS);
 });
 
 onBeforeUnmount(() => {
   if (pendingMetadataRefreshInterval !== null) {
-    window.clearInterval(pendingMetadataRefreshInterval);
+    globalThis.clearInterval(pendingMetadataRefreshInterval);
     pendingMetadataRefreshInterval = null;
   }
 });

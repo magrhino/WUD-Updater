@@ -69,6 +69,18 @@ const TERMINAL_APPLY_JOB_STATUSES = new Set<ApplyJobResponse["status"]>([
   "failure",
 ]);
 
+function pendingMetadataChanged(
+  item: PendingItem,
+  metadata: PendingMetadataRefreshItem,
+): boolean {
+  return (
+    item.raw !== metadata.raw ||
+    item.source_id !== metadata.source_id ||
+    JSON.stringify(item.wud_metadata ?? null) !==
+      JSON.stringify(metadata.wud_metadata ?? null)
+  );
+}
+
 const TERMINAL_RETAG_PREVIEW_STATUSES = new Set<RetagPreviewJobResponse["status"]>([
   "success",
   "failure",
@@ -898,18 +910,6 @@ export const useUpdatesStore = defineStore("updates", () => {
       },
     };
     return changed;
-  }
-
-  function pendingMetadataChanged(
-    item: PendingItem,
-    metadata: PendingMetadataRefreshItem,
-  ): boolean {
-    return (
-      item.raw !== metadata.raw ||
-      item.source_id !== metadata.source_id ||
-      JSON.stringify(item.wud_metadata ?? null) !==
-        JSON.stringify(metadata.wud_metadata ?? null)
-    );
   }
 
   function clearReleaseNoteDisplay(): void {

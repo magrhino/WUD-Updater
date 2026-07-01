@@ -889,11 +889,7 @@ export class DemoApiState {
     const items: PendingMetadataRefreshResponse["items"] = [];
     for (const line of request.lines) {
       const item = byLine.get(line.line_no);
-      if (
-        !item ||
-        item.raw !== line.raw ||
-        item.source_id !== line.source_id
-      ) {
+      if (item?.raw !== line.raw || item?.source_id !== line.source_id) {
         return this.stalePendingMetadata(pending);
       }
       items.push({
