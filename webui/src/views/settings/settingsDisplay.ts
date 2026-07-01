@@ -6,6 +6,11 @@ import type {
   SettingsEntry,
 } from "../../api/client";
 import type { SettingsDisclosureRow } from "../../components/SettingsDisclosureSection.types";
+import {
+  RELEASE_NOTIFICATION_DELIVERY_MODE_ON_DEMAND,
+  RELEASE_NOTIFICATION_DELIVERY_MODE_ON_DETECTION,
+  type ReleaseNotificationDeliveryMode,
+} from "../../releaseNotifications";
 
 export const PATH_ENTRY_NAMES = new Set([
   "DOCKER_BASE",
@@ -80,9 +85,12 @@ export const DIGEST_PIN_UPDATES_LABELS: Record<string, string> = {
   true: "Enabled",
 };
 
-export const RELEASE_NOTIFICATION_DELIVERY_MODE_LABELS: Record<string, string> = {
-  on_demand: "On demand",
-  on_detection: "On detection",
+export const RELEASE_NOTIFICATION_DELIVERY_MODE_LABELS: Record<
+  ReleaseNotificationDeliveryMode,
+  string
+> = {
+  [RELEASE_NOTIFICATION_DELIVERY_MODE_ON_DEMAND]: "On demand",
+  [RELEASE_NOTIFICATION_DELIVERY_MODE_ON_DETECTION]: "On detection",
 };
 
 export const RELEASE_NOTIFICATION_MODE_LABELS: Record<string, string> = {

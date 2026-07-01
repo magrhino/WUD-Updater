@@ -15,6 +15,15 @@ from .web_metadata import json_object, json_object_or_empty
 
 SENDING_RESERVATION_TTL_SECONDS = 600
 ALREADY_SENT_FOR_UPDATE_REASON = "Already sent for this update."
+RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DEMAND = "on_demand"
+RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DETECTION = "on_detection"
+RELEASE_NOTIFICATIONS_DELIVERY_MODE_VALUES = (
+    RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DEMAND,
+    RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DETECTION,
+)
+DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE = (
+    RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DETECTION
+)
 
 
 @dataclass(frozen=True)
@@ -23,7 +32,7 @@ class ReleaseNotificationConfig:
     resend_policy: str = "remote_change"
     cooldown_seconds: int = 86_400
     verbosity: str = "summary"
-    delivery_mode: str = "on_detection"
+    delivery_mode: str = DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE
 
 
 @dataclass(frozen=True)

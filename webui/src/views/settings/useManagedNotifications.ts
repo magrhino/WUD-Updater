@@ -1,5 +1,8 @@
 import { computed, ref, watch } from "vue";
 
+import {
+  DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE,
+} from "../../releaseNotifications";
 import { useSettingsStore } from "../../stores/settings";
 import {
   managedOptions,
@@ -50,7 +53,9 @@ export function useManagedNotifications() {
   );
 
   const releaseNotesEnabledValue = ref(false);
-  const releaseNotificationDeliveryModeValue = ref("on_detection");
+  const releaseNotificationDeliveryModeValue = ref<string>(
+    DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE,
+  );
   const releaseNotificationModeValue = ref("digest");
   const releaseNotificationResendPolicyValue = ref("remote_change");
   const releaseNotificationCooldownValue = ref("86400");
@@ -102,7 +107,8 @@ export function useManagedNotifications() {
           (releaseNotesEnabledEntry.value?.value === "true")) ||
       (releaseNotificationDeliveryModeEditable.value &&
         releaseNotificationDeliveryModeValue.value !==
-          (releaseNotificationDeliveryModeEntry.value?.value ?? "on_detection")) ||
+          (releaseNotificationDeliveryModeEntry.value?.value ??
+            DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE)) ||
       (releaseNotificationModeEditable.value &&
         releaseNotificationModeValue.value !==
           (releaseNotificationModeEntry.value?.value ?? "digest")) ||
@@ -156,7 +162,8 @@ export function useManagedNotifications() {
   function hydrateNotificationForm(): void {
     releaseNotesEnabledValue.value = releaseNotesEnabledEntry.value?.value === "true";
     releaseNotificationDeliveryModeValue.value =
-      releaseNotificationDeliveryModeEntry.value?.value ?? "on_detection";
+      releaseNotificationDeliveryModeEntry.value?.value ??
+      DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE;
     releaseNotificationModeValue.value =
       releaseNotificationModeEntry.value?.value ?? "digest";
     releaseNotificationResendPolicyValue.value =
@@ -227,7 +234,8 @@ export function useManagedNotifications() {
     if (
       releaseNotificationDeliveryModeEditable.value &&
       releaseNotificationDeliveryModeValue.value !==
-        (releaseNotificationDeliveryModeEntry.value?.value ?? "on_detection")
+        (releaseNotificationDeliveryModeEntry.value?.value ??
+          DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE)
     ) {
       values.release_notifications_delivery_mode =
         releaseNotificationDeliveryModeValue.value;

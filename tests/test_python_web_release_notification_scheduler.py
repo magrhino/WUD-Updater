@@ -11,6 +11,9 @@ from wudup import (
     web_scheduler,
 )
 from wudup.db import open_db
+from wudup.web_release_notification_state import (
+    RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DEMAND,
+)
 
 from tests.web_test_helpers import (
     _capture_discord_posts,
@@ -38,7 +41,11 @@ def test_poll_skips_when_delivery_mode_on_demand(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _store_web_setting(tmp_path, "release_notifications.delivery_mode", "on_demand")
+    _store_web_setting(
+        tmp_path,
+        "release_notifications.delivery_mode",
+        RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DEMAND,
+    )
     _install_wud_api(
         monkeypatch,
         containers=[_wud_api_container(name="app")],

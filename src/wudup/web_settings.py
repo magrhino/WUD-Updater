@@ -58,7 +58,11 @@ from .web_models import (
     WebSettings,
 )
 from .web_onboarding import ONBOARDING_DISMISSED_AT_KEY
-from .web_release_notification_state import ReleaseNotificationConfig
+from .web_release_notification_state import (
+    DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE,
+    RELEASE_NOTIFICATIONS_DELIVERY_MODE_VALUES,
+    ReleaseNotificationConfig,
+)
 from .web_state import _insert_managed_settings_audit
 from .web_static import (
     resolve_static_dir as _resolve_static_dir,
@@ -112,12 +116,10 @@ THEME_PREFERENCE_VALUES = ("system", "light", "dark")
 ONBOARDING_CHECKLIST_VALUES = ("visible", "dismissed")
 DIGEST_PIN_UPDATES_VALUES = ("false", "true")
 RELEASE_NOTES_ENABLED_VALUES = ("false", "true")
-RELEASE_NOTIFICATIONS_DELIVERY_MODE_VALUES = ("on_demand", "on_detection")
 RELEASE_NOTIFICATIONS_MODE_VALUES = ("digest", "per_container")
 RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES = ("remote_change", "cooldown")
 RELEASE_NOTIFICATIONS_VERBOSITY_VALUES = ("summary", "full")
 DEFAULT_RELEASE_NOTES_ENABLED = False
-DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE = "on_detection"
 DEFAULT_RELEASE_NOTIFICATIONS_MODE = "digest"
 DEFAULT_RELEASE_NOTIFICATIONS_RESEND_POLICY = "remote_change"
 DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS = 86_400
@@ -1209,7 +1211,6 @@ def _secret_settings(settings: WebSettings) -> list[SecretSettingStatus]:
             else bool(env.get(name, "").strip()),
         )
         for name in SENSITIVE_ENV_KEYS
-        if name not in {"WUDUP_TRIGGER_TOKEN", "WUDUP_TRIGGER_TOKEN_FILE"}
     ]
 
 
