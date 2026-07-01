@@ -819,13 +819,13 @@ def test_pending_source_rejects_invalid_values(tmp_path: Path) -> None:
 
 
 def test_legacy_scripts_rejects_invalid_bool(tmp_path: Path) -> None:
+    environ = _web_env(
+        tmp_path,
+        {"WUDUP_LEGACY_SCRIPTS": "treu"},
+    )
+
     with pytest.raises(ConfigError, match="WUDUP_LEGACY_SCRIPTS"):
-        load_web_settings(
-            environ=_web_env(
-                tmp_path,
-                {"WUDUP_LEGACY_SCRIPTS": "treu"},
-            ),
-        )
+        load_web_settings(environ=environ)
 
 
 def test_wud_api_snapshot_reports_auth_required_metadata(

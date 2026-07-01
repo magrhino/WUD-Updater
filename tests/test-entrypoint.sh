@@ -135,6 +135,9 @@ assert_synced_marker_only(){
   [[ -f "$dst/.wudup-managed" ]] || fail "expected synced marker file"
   [[ ! -e "$dst/append-updates.sh" ]] || fail "legacy append-updates.sh was synced"
   [[ ! -e "$dst/on-update.sh" ]] || fail "legacy on-update.sh was synced"
+  [[ ! -e "$dst/release-parser.sh" ]] || fail "legacy release-parser.sh was synced"
+  [[ ! -e "$dst/release-notes-to-discord.sh" ]] || fail "legacy release-notes-to-discord.sh was synced"
+  [[ ! -e "$dst/github-release-embed.sh" ]] || fail "legacy github-release-embed.sh was synced"
   [[ ! -e "$dst/tag-manager.sh" ]] || fail "legacy tag-manager.sh was synced"
 }
 

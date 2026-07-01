@@ -81,6 +81,8 @@ class InitConfigTests(unittest.TestCase):
         self.assertIn("WUD_API_STARTUP_WAIT_SECONDS=5", content)
         self.assertIn("WUD_PENDING_SOURCE=file", content)
         self.assertIn("WUDUP_LEGACY_SCRIPTS=true", content)
+        self.assertNotIn("WUDUP_TRIGGER_TOKEN=", content)
+        self.assertNotIn("WUDUP_TRIGGER_TOKEN_FILE=", content)
 
     def test_webui_lan_requires_public_origin_in_non_interactive_mode(self) -> None:
         with self.assertRaisesRegex(InitConfigError, "--public-origin"):
