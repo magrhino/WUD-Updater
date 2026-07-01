@@ -17,7 +17,7 @@ before applying updates.
 | Hardened WebUI container | You want the WebUI behind a Docker socket proxy instead of mounting the raw socket into WUDup. | [WebUI Container](wiki/webui-container.md) and [`docker-compose.hardened.yml`](examples/docker-compose.hardened.yml) |
 | Docker script runner | You want short-lived `docker compose run` commands for `doctor`, dry runs, and applies without a persistent WebUI. | [Command Runner And Host Install](COMMAND_RUNNER.md) |
 | Host install | You want `updates` and `docker-update-from-wud` on the host `PATH` with host-managed WUD script mounts. | [Command Runner And Host Install](COMMAND_RUNNER.md) |
-| Configuration reference | You need environment variables, WUD API auth, scan settings, trigger tokens, or legacy aliases. | [Configuration](CONFIGURATION.md) |
+| Configuration reference | You need environment variables, WUD API auth, scan settings, notification settings, or legacy aliases. | [Configuration](CONFIGURATION.md) |
 
 The WebUI/API is the primary supported workflow. The `updates` and
 `docker-update-from-wud` CLI paths remain supported legacy file-mode
@@ -138,8 +138,8 @@ and mutation-gate checks.
   the host Docker daemon. Use trusted images and keep mounts scoped.
 - Prefer the hardened Compose example when you want WUDup to access Docker
   through a socket proxy sidecar.
-- Secrets such as GitHub tokens, Discord webhooks, WUD API credentials, and
-  trigger tokens should come from environment variables, `_FILE` variables, or
+- Secrets such as GitHub tokens, Discord webhooks, and WUD API credentials should
+  come from environment variables, `_FILE` variables, WebUI-managed settings, or
   host-local secret stores.
 
 ## Maintenance
