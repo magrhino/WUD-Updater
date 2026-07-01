@@ -472,7 +472,7 @@ const {
   subscribeApplyJob,
 } = usePendingApplyJob({
   applyJobPanelRef,
-  loadPendingAndReleaseNotes: () => loadPendingAndReleaseNotesHandler(),
+  refreshAfterTerminalJob: () => refreshAfterTerminalApplyJob(),
 });
 const mutationInProgress = computed(
   () => updates.loading || applyJobActive.value,
@@ -533,6 +533,19 @@ const {
 clearPreflightHandler = clearPreflight;
 loadPendingAndReleaseNotesHandler = () => loadPendingAndReleaseNotes();
 useRouteRefresh(() => updates.loadPending());
+
+async function refreshAfterTerminalApplyJob(): Promise<void> {
+  const job = updates.applyJob;
+  if (job?.status !== "success" || updates.pending?.source.active !== "api") {
+    await loadPendingAndReleaseNotesHandler();
+    return;
+  }
+  try {
+    await updates.rescanPending("selected", job.selected_line_numbers);
+  } catch {
+    await loadPendingAndReleaseNotesHandler();
+  }
+}
 
 function releaseNoteStatus(note: ReleaseNoteInfo | null): string {
   return pendingReleaseNoteStatus(note, updates.releaseNotesLoading);

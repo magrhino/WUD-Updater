@@ -30,6 +30,8 @@ import {
   pendingGrouping,
   pendingItem,
   pendingResponse,
+  pendingRescanResponse,
+  pendingSourceInfo,
   planResponse,
   releaseNoteInfo,
   releaseNotificationResponse,
@@ -250,6 +252,122 @@ describe("pending view apply jobs", () => {
     );
     expect(showOutputButton.attributes("aria-expanded")).toBe("true");
     expect(wrapper.find(".batch-action-bar").exists()).toBe(false);
+  });
+
+  it("rescans api-backed pending updates after successful apply", async () => {
+    const { pinia, settings, updates, runs } = setupStores(true);
+    updates.pending = {
+      ...pendingResponse([
+        pendingItem({ source: "api", source_id: "docker.local.app" }),
+      ]),
+      source_file: "WUD API",
+      source: pendingSourceInfo({
+        configured: "api",
+        active: "api",
+        label: "WUD API",
+      }),
+    };
+    const loadPending = vi.spyOn(updates, "loadPending").mockResolvedValue();
+    vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "loadSecurityScans").mockResolvedValue();
+    vi.spyOn(settings, "loadPendingSafetyCues").mockResolvedValue();
+    vi.spyOn(runs, "loadRuns").mockResolvedValue();
+    vi.spyOn(runs, "loadRunDetail").mockResolvedValue();
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse();
+    });
+    vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
+      const job = applyJobResponse();
+      updates.setApplyJob(job);
+      return job;
+    });
+    const rescanPending = vi.spyOn(updates, "rescanPending").mockResolvedValue(
+      pendingRescanResponse({
+        scope: "selected",
+        requested_count: 1,
+        watched_count: 1,
+      }),
+    );
+    const jobStream = mockApplyJobStream();
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview media plan"))
+      ?.trigger("click");
+    await flushPromises();
+    await wrapper
+      .find('[role="dialog"]')
+      .findAll("button")
+      .find((button) => button.text().includes("Apply 1 update"))
+      ?.trigger("click");
+    await flushPromises();
+
+    loadPending.mockClear();
+    jobStream.emitJob(applyJobResponse({ status: "success", run_id: 10 }));
+    await flushPromises();
+
+    expect(rescanPending).toHaveBeenCalledWith("selected", [1]);
+    expect(loadPending).not.toHaveBeenCalled();
+  });
+
+  it("falls back to normal pending refresh when api rescan fails", async () => {
+    const { pinia, settings, updates, runs } = setupStores(true);
+    updates.pending = {
+      ...pendingResponse([
+        pendingItem({ source: "api", source_id: "docker.local.app" }),
+      ]),
+      source_file: "WUD API",
+      source: pendingSourceInfo({
+        configured: "api",
+        active: "api",
+        label: "WUD API",
+      }),
+    };
+    const loadPending = vi.spyOn(updates, "loadPending").mockResolvedValue();
+    const loadReleaseNotes = vi
+      .spyOn(updates, "loadReleaseNotes")
+      .mockResolvedValue();
+    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "loadSecurityScans").mockResolvedValue();
+    vi.spyOn(settings, "loadPendingSafetyCues").mockResolvedValue();
+    vi.spyOn(runs, "loadRuns").mockResolvedValue();
+    vi.spyOn(runs, "loadRunDetail").mockResolvedValue();
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse();
+    });
+    vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
+      const job = applyJobResponse();
+      updates.setApplyJob(job);
+      return job;
+    });
+    const rescanPending = vi
+      .spyOn(updates, "rescanPending")
+      .mockRejectedValue(new Error("selected rescan is stale"));
+    const jobStream = mockApplyJobStream();
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview media plan"))
+      ?.trigger("click");
+    await flushPromises();
+    await wrapper
+      .find('[role="dialog"]')
+      .findAll("button")
+      .find((button) => button.text().includes("Apply 1 update"))
+      ?.trigger("click");
+    await flushPromises();
+
+    loadPending.mockClear();
+    loadReleaseNotes.mockClear();
+    jobStream.emitJob(applyJobResponse({ status: "success", run_id: 10 }));
+    await flushPromises();
+
+    expect(rescanPending).toHaveBeenCalledWith("selected", [1]);
+    expect(loadPending).toHaveBeenCalled();
+    expect(loadReleaseNotes).toHaveBeenCalled();
   });
 
   it("keeps an earlier phase failure visible after a later same-phase success", async () => {
