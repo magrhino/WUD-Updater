@@ -55,6 +55,9 @@ DISCORD_WEBHOOK_TIMEOUT_SECONDS = 10.0
 DISCORD_WEBHOOK_USER_AGENT = "wudup-webui-release-notifications/1.0"
 DISCORD_COLOR = 0x57F287
 RUN_NOTIFICATION_STATUS_REASON = "updated"
+NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL = (
+    "no release-note notifications are available to send"
+)
 LOGGER = logging.getLogger(__name__)
 
 
@@ -130,7 +133,7 @@ def send_release_notifications(
     if response.sendable_count <= 0:
         raise HTTPException(
             status_code=422,
-            detail="no release-note notifications are available to send",
+            detail=NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL,
         )
 
     audit_run_id = 0
@@ -160,12 +163,12 @@ def send_release_notifications(
                 status="failure",
                 sent_count=0,
                 sent_batch_count=0,
-                error="no release-note notifications are available to send",
+                error=NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL,
                 actor_type=actor_type,
             )
             raise HTTPException(
                 status_code=422,
-                detail="no release-note notifications are available to send",
+                detail=NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL,
             )
         for batch in _payload_batches(response.items, response.mode):
             _post_discord_payload(webhook, batch["payload"])

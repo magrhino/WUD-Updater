@@ -174,18 +174,20 @@ def notification_decision(
         return "new", ""
     if history.status == "sending":
         if _sending_reservation_stale(history.last_attempted_at, now):
-            if resend:
-                return "manual_resend", ""
-            if history.send_count > 0:
-                return "skipped_duplicate", ALREADY_SENT_FOR_UPDATE_REASON
-            return "new", ""
+            return _retryable_notification_decision(
+                history,
+                resend=resend,
+                fresh_status="new",
+            )
         return "sending", "Notification is already being sent."
     if history.status != "sent":
         if resend:
             return "manual_resend", ""
-        if history.send_count > 0:
-            return "skipped_duplicate", ALREADY_SENT_FOR_UPDATE_REASON
-        return history.status or "new", ""
+        return _retryable_notification_decision(
+            history,
+            resend=False,
+            fresh_status=history.status or "new",
+        )
     if resend:
         return "manual_resend", ""
     if config.resend_policy == "cooldown":
@@ -193,6 +195,19 @@ def notification_decision(
             return "cooldown_ready", ""
         return "skipped_cooldown", "Notification cooldown has not elapsed."
     return "skipped_duplicate", ALREADY_SENT_FOR_UPDATE_REASON
+
+
+def _retryable_notification_decision(
+    history: NotificationHistory,
+    *,
+    resend: bool,
+    fresh_status: str,
+) -> tuple[str, str]:
+    if resend:
+        return "manual_resend", ""
+    if history.send_count > 0:
+        return "skipped_duplicate", ALREADY_SENT_FOR_UPDATE_REASON
+    return fresh_status, ""
 
 
 def upsert_notification_history(

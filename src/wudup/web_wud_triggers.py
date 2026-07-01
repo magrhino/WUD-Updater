@@ -57,8 +57,8 @@ def send_wud_update_release_notifications(
     *,
     request: Request,
 ) -> WudTriggerUpdateResponse:
-    api_settings = replace(settings, pending_source="api")
-    _require_release_notification_sendable(api_settings)
+    api_settings: WebSettings = replace(settings, pending_source="api")
+    web_release_notifications.require_release_notification_sendable(api_settings)
     source = web_pending_sources.resolve_pending_source(
         api_settings,
         include_wud_metadata=True,
@@ -88,7 +88,9 @@ def send_wud_update_release_notifications(
         return WudTriggerUpdateResponse(
             ok=True,
             status="skipped",
-            reason="no release-note notifications are available to send",
+            reason=(
+                web_release_notifications.NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL
+            ),
             line_numbers=list(line_numbers),
             release_notifications=preview,
         )
@@ -108,10 +110,6 @@ def send_wud_update_release_notifications(
         line_numbers=list(line_numbers),
         release_notifications=sent,
     )
-
-
-def _require_release_notification_sendable(settings: WebSettings) -> None:
-    web_release_notifications.require_release_notification_sendable(settings)
 
 
 def _require_trigger_token(settings: WebSettings, authorization: str | None) -> None:
