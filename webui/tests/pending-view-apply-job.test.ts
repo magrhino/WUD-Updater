@@ -312,6 +312,66 @@ describe("pending view apply jobs", () => {
     expect(loadPending).not.toHaveBeenCalled();
   });
 
+  it("loads pending before api rescan for terminal remembered apply jobs", async () => {
+    window.sessionStorage.setItem("applyJobId", "job-terminal");
+    const { pinia, settings, updates, runs } = setupStores(true);
+    const apiPending = {
+      ...pendingResponse([
+        pendingItem({ source: "api", source_id: "docker.local.app" }),
+      ]),
+      source_file: "WUD API",
+      source: pendingSourceInfo({
+        configured: "api",
+        active: "api",
+        label: "WUD API",
+      }),
+    };
+    let loadPendingCalls = 0;
+    let finishInitialPendingLoad: () => void = () => undefined;
+    const loadPending = vi.spyOn(updates, "loadPending").mockImplementation(async () => {
+      loadPendingCalls += 1;
+      if (loadPendingCalls === 1) {
+        await new Promise<void>((resolve) => {
+          finishInitialPendingLoad = resolve;
+        });
+        return;
+      }
+      updates.pending = apiPending;
+    });
+    vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "loadSecurityScans").mockResolvedValue();
+    vi.spyOn(updates, "loadApplyJobLogFromRun").mockResolvedValue(
+      applyJobLogResponse({ job_id: "job-terminal" }),
+    );
+    vi.spyOn(settings, "loadPendingSafetyCues").mockResolvedValue();
+    vi.spyOn(runs, "loadRuns").mockResolvedValue();
+    vi.spyOn(runs, "loadRunDetail").mockResolvedValue();
+    vi.spyOn(webApi, "job").mockResolvedValue(
+      applyJobResponse({
+        job_id: "job-terminal",
+        status: "success",
+        run_id: 10,
+      }),
+    );
+    const rescanPending = vi.spyOn(updates, "rescanPending").mockResolvedValue(
+      pendingRescanResponse({
+        scope: "selected",
+        requested_count: 1,
+        watched_count: 1,
+      }),
+    );
+
+    mountPendingView(pinia);
+    await flushPromises();
+
+    expect(loadPending).toHaveBeenCalledTimes(2);
+    expect(rescanPending).toHaveBeenCalledWith("selected", [1]);
+
+    finishInitialPendingLoad();
+    await flushPromises();
+  });
+
   it("falls back to normal pending refresh when api rescan fails", async () => {
     const { pinia, settings, updates, runs } = setupStores(true);
     updates.pending = {
