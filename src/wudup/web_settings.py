@@ -33,7 +33,7 @@ from .config import (
 )
 from .db import DatabaseError, init_db, open_db, utc_timestamp
 from .web_auth import (
-    SECRET_SETTING_ENV_KEYS,
+    SENSITIVE_ENV_KEYS,
     _delete_web_setting,
     _parse_allowed_hosts,
     _safe_exception_detail,
@@ -1208,7 +1208,8 @@ def _secret_settings(settings: WebSettings) -> list[SecretSettingStatus]:
             if name == "WUD_WEB_TOKEN"
             else bool(env.get(name, "").strip()),
         )
-        for name in SECRET_SETTING_ENV_KEYS
+        for name in SENSITIVE_ENV_KEYS
+        if name not in {"WUDUP_TRIGGER_TOKEN", "WUDUP_TRIGGER_TOKEN_FILE"}
     ]
 
 
