@@ -5,14 +5,13 @@ from pathlib import Path
 import pytest
 
 from wudup import web_pending_sources
-from wudup import web_release_notifications as notifications_module
 from wudup.config import ConfigError
-from wudup.release_notes import ReleaseNoteInfo as ReleaseNoteData
-from wudup.release_notes import ReleaseNoteLink as ReleaseNoteLinkData
 from wudup.web import load_web_settings
 
 from tests.web_test_helpers import (
+    _capture_discord_posts,
     _client,
+    _fake_release_refresh,
     _install_wud_api,
     _web_env,
     _wud_api_container,
@@ -30,54 +29,6 @@ _TRIGGER_ENV = {
 
 def _auth_headers(token: str = _TOKEN) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
-
-
-def _fake_release_refresh(monkeypatch) -> None:
-    def fake_refresh_release_notes(
-        _conn,
-        targets,
-        _environ,
-        **_kwargs,
-    ):
-        return [
-            ReleaseNoteData(
-                line_no=target.line_no,
-                status="ready",
-                provider="github",
-                image_repo="acme/app",
-                upstream_repo="acme/app",
-                release_tag=target.desired_tag or "2.0.0",
-                title="v2.0.0",
-                links=[
-                    ReleaseNoteLinkData(
-                        label="GitHub release",
-                        url="https://github.com/acme/app/releases/tag/v2.0.0",
-                        kind="github_release",
-                    )
-                ],
-            )
-            for target in targets
-        ]
-
-    monkeypatch.setattr(
-        notifications_module,
-        "refresh_release_notes",
-        fake_refresh_release_notes,
-    )
-
-
-def _capture_discord_posts(monkeypatch) -> list[tuple[str, object]]:
-    posted: list[tuple[str, object]] = []
-
-    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
-        posted.append((webhook_url, payload))
-
-    monkeypatch.setattr(
-        notifications_module,
-        "_post_discord_payload",
-        fake_post_discord_payload,
-    )
-    return posted
 
 
 def test_wud_update_trigger_requires_configured_token(tmp_path: Path) -> None:

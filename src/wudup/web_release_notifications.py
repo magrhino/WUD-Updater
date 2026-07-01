@@ -60,6 +60,11 @@ RUN_NOTIFICATION_STATUS_REASON = "updated"
 NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL = (
     "no release-note notifications are available to send"
 )
+MUTATIONS_DISABLED_DETAIL = "mutations are disabled"
+RELEASE_NOTIFICATIONS_DISABLED_DETAIL = "release-note notifications are disabled"
+DISCORD_WEBHOOK_NOT_CONFIGURED_DETAIL = (
+    "Discord release-note webhook is not configured"
+)
 RELEASE_NOTIFICATION_POLL_SECONDS = 60.0
 SCHEDULER_ACTOR_TYPE = "release-notification-scheduler"
 LOGGER = logging.getLogger(__name__)
@@ -149,7 +154,7 @@ def _release_notification_scheduler_loop(
 def poll_wud_api_release_notifications(
     settings: WebSettings,
 ) -> ReleaseNotificationResponse | None:
-    api_settings = replace(settings, pending_source="api")
+    api_settings: WebSettings = replace(settings, pending_source="api")
     try:
         require_release_notification_sendable(api_settings)
     except HTTPException as exc:
@@ -157,9 +162,9 @@ def poll_wud_api_release_notifications(
             exc.status_code in {403, 422}
             and exc.detail
             in {
-                "mutations are disabled",
-                "release-note notifications are disabled",
-                "Discord release-note webhook is not configured",
+                MUTATIONS_DISABLED_DETAIL,
+                RELEASE_NOTIFICATIONS_DISABLED_DETAIL,
+                DISCORD_WEBHOOK_NOT_CONFIGURED_DETAIL,
             }
         ):
             return None
@@ -209,17 +214,17 @@ def preview_release_notifications(
 
 def require_release_notification_sendable(settings: WebSettings) -> str:
     if not settings.mutations_enabled:
-        raise HTTPException(status_code=403, detail="mutations are disabled")
+        raise HTTPException(status_code=403, detail=MUTATIONS_DISABLED_DETAIL)
     if not effective_release_notes_enabled(settings):
         raise HTTPException(
             status_code=403,
-            detail="release-note notifications are disabled",
+            detail=RELEASE_NOTIFICATIONS_DISABLED_DETAIL,
         )
     webhook = _discord_webhook(settings)
     if not webhook.value:
         raise HTTPException(
             status_code=422,
-            detail="Discord release-note webhook is not configured",
+            detail=DISCORD_WEBHOOK_NOT_CONFIGURED_DETAIL,
         )
     return webhook.value
 
@@ -338,12 +343,12 @@ def api_test_release_notification_webhook(
 ) -> ReleaseNotificationTestResponse:
     settings = _settings(request)
     if not settings.mutations_enabled:
-        raise HTTPException(status_code=403, detail="mutations are disabled")
+        raise HTTPException(status_code=403, detail=MUTATIONS_DISABLED_DETAIL)
     webhook = _discord_webhook(settings)
     if not webhook.value:
         raise HTTPException(
             status_code=422,
-            detail="Discord release-note webhook is not configured",
+            detail=DISCORD_WEBHOOK_NOT_CONFIGURED_DETAIL,
         )
 
     destination = ReleaseNotificationDestination(

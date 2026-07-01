@@ -11,10 +11,14 @@ from wudup import (
     web_scheduler,
 )
 from wudup.db import open_db
-from wudup.release_notes import ReleaseNoteInfo as ReleaseNoteData
-from wudup.release_notes import ReleaseNoteLink as ReleaseNoteLinkData
 
-from tests.web_test_helpers import _client, _install_wud_api, _wud_api_container
+from tests.web_test_helpers import (
+    _capture_discord_posts,
+    _client,
+    _fake_release_refresh,
+    _install_wud_api,
+    _wud_api_container,
+)
 
 _ENV = {
     "WUD_WEB_DEV_NO_AUTH": "true",
@@ -22,54 +26,6 @@ _ENV = {
     "WUD_RELEASE_NOTES_ENABLED": "true",
     "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
 }
-
-
-def _fake_release_refresh(monkeypatch) -> None:
-    def fake_refresh_release_notes(
-        _conn,
-        targets,
-        _environ,
-        **_kwargs,
-    ):
-        return [
-            ReleaseNoteData(
-                line_no=target.line_no,
-                status="ready",
-                provider="github",
-                image_repo="acme/app",
-                upstream_repo="acme/app",
-                release_tag=target.desired_tag or "2.0.0",
-                title="v2.0.0",
-                links=[
-                    ReleaseNoteLinkData(
-                        label="GitHub release",
-                        url="https://github.com/acme/app/releases/tag/v2.0.0",
-                        kind="github_release",
-                    )
-                ],
-            )
-            for target in targets
-        ]
-
-    monkeypatch.setattr(
-        notifications_module,
-        "refresh_release_notes",
-        fake_refresh_release_notes,
-    )
-
-
-def _capture_discord_posts(monkeypatch) -> list[tuple[str, object]]:
-    posted: list[tuple[str, object]] = []
-
-    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
-        posted.append((webhook_url, payload))
-
-    monkeypatch.setattr(
-        notifications_module,
-        "_post_discord_payload",
-        fake_post_discord_payload,
-    )
-    return posted
 
 
 def _shutdown(client) -> None:
