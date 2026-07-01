@@ -264,7 +264,7 @@ describe("updates store", () => {
     expect(updates.pendingCleanup).toBeNull();
   });
 
-  it("refreshes pending WUD metadata in place without clearing related state", async () => {
+  it("refreshes pending WUD metadata in place and clears release-note display", async () => {
     const oldMetadata = wudContainerMetadata({ remote_tag: "1.1" });
     const newMetadata = wudContainerMetadata({ remote_tag: "1.2" });
     const groupedItem = pendingItem({
@@ -340,6 +340,7 @@ describe("updates store", () => {
     };
     const rescan = pendingRescanResponse();
     const notes = releaseNotesResponse();
+    const notification = releaseNotificationResponse();
     const scans = securityScansResponse([securityScanInfo()]);
     const fetchMock = mockFetch({
       status: "ready",
@@ -372,6 +373,9 @@ describe("updates store", () => {
     updates.pendingRemovalPlan = removalPlan;
     updates.pendingRescan = rescan;
     updates.releaseNotes = notes;
+    updates.releaseNotesError = "stale notes";
+    updates.releaseNotification = notification;
+    updates.releaseNotificationError = "stale preview";
     updates.securityScans = scans;
 
     await updates.refreshPendingMetadata();
@@ -398,8 +402,75 @@ describe("updates store", () => {
     expect(updates.plan).toEqual(plan);
     expect(updates.pendingRemovalPlan).toEqual(removalPlan);
     expect(updates.pendingRescan).toEqual(rescan);
-    expect(updates.releaseNotes).toEqual(notes);
+    expect(updates.releaseNotes).toBeNull();
+    expect(updates.releaseNotesError).toBe("");
+    expect(updates.releaseNotification).toBeNull();
+    expect(updates.releaseNotificationError).toBe("");
     expect(updates.securityScans).toEqual(scans);
+  });
+
+  it("keeps release-note display when pending WUD metadata is unchanged", async () => {
+    const metadata = wudContainerMetadata({ remote_tag: "1.1" });
+    const item = pendingItem({ wud_metadata: metadata });
+    const pending = {
+      ...pendingResponse([item]),
+      wud_api: wudApiStatus({ last_checked_at: "old-check" }),
+    };
+    const notes = releaseNotesResponse();
+    const notification = releaseNotificationResponse();
+    const fetchMock = mockFetch({
+      status: "ready",
+      requires_pending_reload: false,
+      source_hash: pending.source_hash,
+      wud_api: wudApiStatus({ last_checked_at: "new-check" }),
+      items: [
+        {
+          line_no: item.line_no,
+          raw: item.raw,
+          source_id: item.source_id,
+          wud_metadata: metadata,
+        },
+      ],
+    });
+    useConnectionStore();
+    useSettingsStore();
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-metadata");
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pending = pending;
+    updates.releaseNotes = notes;
+    updates.releaseNotification = notification;
+
+    await updates.refreshPendingMetadata();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(updates.pendingWudMetadataCheckedAt).toBe("new-check");
+    expect(updates.releaseNotes).toEqual(notes);
+    expect(updates.releaseNotification).toEqual(notification);
+  });
+
+  it("rejects metadata refresh failures without changing main loading state", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ detail: "metadata failed" }, 503)),
+    );
+    useConnectionStore();
+    useSettingsStore();
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-metadata");
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pending = pendingResponse();
+    updates.error = "keep me";
+    updates.loading = false;
+
+    await expect(updates.refreshPendingMetadata()).rejects.toMatchObject({
+      message: "metadata failed",
+    });
+
+    expect(updates.loading).toBe(false);
+    expect(updates.error).toBe("keep me");
   });
 
   it("reloads pending while preserving cleanup when metadata refresh is stale", async () => {
@@ -444,6 +515,8 @@ describe("updates store", () => {
     updates.pending = pendingResponse();
     updates.plan = planResponse();
     updates.pendingRescan = pendingRescanResponse();
+    updates.releaseNotes = releaseNotesResponse();
+    updates.releaseNotification = releaseNotificationResponse();
     updates.pendingCleanup = {
       status: "success",
       audit_run_id: 12,
@@ -458,6 +531,8 @@ describe("updates store", () => {
     expect(updates.pendingCleanup?.audit_run_id).toBe(12);
     expect(updates.plan).toBeNull();
     expect(updates.pendingRescan).toBeNull();
+    expect(updates.releaseNotes).toBeNull();
+    expect(updates.releaseNotification).toBeNull();
   });
 
   it("matches security scans only for the current pending source and line", () => {

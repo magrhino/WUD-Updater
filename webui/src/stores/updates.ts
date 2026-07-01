@@ -154,15 +154,7 @@ export const useUpdatesStore = defineStore("updates", () => {
   async function loadPending(
     options: { preserveCleanup?: boolean } = {},
   ): Promise<void> {
-    await loadWithState(async () => {
-      plan.value = null;
-      pendingRemovalPlan.value = null;
-      pendingRescan.value = null;
-      if (!options.preserveCleanup) {
-        pendingCleanup.value = null;
-      }
-      setPending(await webApi.pending());
-    });
+    await loadWithState(() => reloadPending(options));
   }
 
   async function refreshPendingMetadata(): Promise<void> {
@@ -171,32 +163,37 @@ export const useUpdatesStore = defineStore("updates", () => {
       return;
     }
     const auth = useAuthStore();
-    await loadWithState(async () => {
-      const response = await webApi.pendingMetadata(
-        {
-          source_hash: current.source_hash ?? "",
-          lines: current.items.map((item) => ({
-            line_no: item.line_no,
-            raw: item.raw,
-            source_id: item.source_id,
-          })),
-        },
-        await auth.ensureCsrf(),
-      );
-      if (response.requires_pending_reload) {
-        await loadPending({ preserveCleanup: true });
-        return;
-      }
-      patchPendingMetadata(response.items);
-      if (pending.value) {
-        pending.value = {
-          ...pending.value,
-          source_hash: response.source_hash,
-          wud_api: response.wud_api,
-        };
-      }
-      pendingWudMetadataCheckedAt.value = response.wud_api.last_checked_at;
-    });
+    const response = await webApi.pendingMetadata(
+      {
+        source_hash: current.source_hash ?? "",
+        lines: current.items.map((item) => ({
+          line_no: item.line_no,
+          raw: item.raw,
+          source_id: item.source_id,
+        })),
+      },
+      await auth.ensureCsrf(),
+    );
+    if (response.requires_pending_reload) {
+      clearReleaseNoteDisplay();
+      await reloadPending({ preserveCleanup: true });
+      return;
+    }
+    if (pending.value !== current) {
+      return;
+    }
+    const metadataChanged = patchPendingMetadata(response.items);
+    if (pending.value) {
+      pending.value = {
+        ...pending.value,
+        source_hash: response.source_hash,
+        wud_api: response.wud_api,
+      };
+    }
+    pendingWudMetadataCheckedAt.value = response.wud_api.last_checked_at;
+    if (metadataChanged) {
+      clearReleaseNoteDisplay();
+    }
   }
 
   async function loadUpdateTargets(): Promise<void> {
@@ -849,21 +846,37 @@ export const useUpdatesStore = defineStore("updates", () => {
     pendingRemovalPlan.value = null;
   }
 
+  async function reloadPending(
+    options: { preserveCleanup?: boolean } = {},
+  ): Promise<void> {
+    plan.value = null;
+    pendingRemovalPlan.value = null;
+    pendingRescan.value = null;
+    if (!options.preserveCleanup) {
+      pendingCleanup.value = null;
+    }
+    setPending(await webApi.pending());
+  }
+
   function setPending(response: PendingResponse): void {
     pending.value = response;
     pendingWudMetadataCheckedAt.value = response.wud_api.last_checked_at;
   }
 
-  function patchPendingMetadata(items: PendingMetadataRefreshItem[]): void {
+  function patchPendingMetadata(items: PendingMetadataRefreshItem[]): boolean {
     const current = pending.value;
     if (current === null) {
-      return;
+      return false;
     }
     const byLine = new Map(items.map((item) => [item.line_no, item]));
+    let changed = false;
     const patchItem = <T extends PendingItem>(item: T): T => {
       const metadata = byLine.get(item.line_no);
       if (!metadata) {
         return item;
+      }
+      if (pendingMetadataChanged(item, metadata)) {
+        changed = true;
       }
       return {
         ...item,
@@ -884,6 +897,26 @@ export const useUpdatesStore = defineStore("updates", () => {
         unmatched: current.grouping.unmatched.map((item) => patchItem(item)),
       },
     };
+    return changed;
+  }
+
+  function pendingMetadataChanged(
+    item: PendingItem,
+    metadata: PendingMetadataRefreshItem,
+  ): boolean {
+    return (
+      item.raw !== metadata.raw ||
+      item.source_id !== metadata.source_id ||
+      JSON.stringify(item.wud_metadata ?? null) !==
+        JSON.stringify(metadata.wud_metadata ?? null)
+    );
+  }
+
+  function clearReleaseNoteDisplay(): void {
+    releaseNotes.value = null;
+    releaseNotesError.value = "";
+    releaseNotification.value = null;
+    releaseNotificationError.value = "";
   }
 
   async function createJob(
