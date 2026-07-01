@@ -9,9 +9,7 @@ from wudup.config import ConfigError
 from wudup.web import load_web_settings
 
 from tests.web_test_helpers import (
-    _capture_discord_posts,
     _client,
-    _fake_release_refresh,
     _install_wud_api,
     _web_env,
     _wud_api_container,
@@ -111,15 +109,8 @@ def test_wud_update_trigger_rejects_wrong_token(tmp_path: Path) -> None:
     assert response.headers["www-authenticate"] == "Bearer"
 
 
-def test_wud_update_trigger_requires_mutations_enabled(tmp_path: Path) -> None:
-    client = _client(
-        tmp_path,
-        {
-            "WUDUP_TRIGGER_TOKEN": _TOKEN,
-            "WUD_RELEASE_NOTES_ENABLED": "true",
-            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
-        },
-    )
+def test_wud_update_trigger_skips_release_notification_delivery(tmp_path: Path) -> None:
+    client = _client(tmp_path, {"WUDUP_TRIGGER_TOKEN": _TOKEN})
 
     response = client.post(
         _TRIGGER_PATH,
@@ -127,53 +118,14 @@ def test_wud_update_trigger_requires_mutations_enabled(tmp_path: Path) -> None:
         headers=_auth_headers(),
     )
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "mutations are disabled"
-
-
-def test_wud_update_trigger_requires_release_notes_enabled(tmp_path: Path) -> None:
-    client = _client(
-        tmp_path,
-        {
-            "WUDUP_TRIGGER_TOKEN": _TOKEN,
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
-        },
-    )
-
-    response = client.post(
-        _TRIGGER_PATH,
-        json={"updateAvailable": True},
-        headers=_auth_headers(),
-    )
-
-    assert response.status_code == 403
-    assert response.json()["detail"] == "release-note notifications are disabled"
-
-
-def test_wud_update_trigger_requires_release_notification_webhook(
-    tmp_path: Path,
-) -> None:
-    client = _client(
-        tmp_path,
-        {
-            "WUDUP_TRIGGER_TOKEN": _TOKEN,
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_RELEASE_NOTES_ENABLED": "true",
-        },
-    )
-
-    response = client.post(
-        _TRIGGER_PATH,
-        json={"updateAvailable": True},
-        headers=_auth_headers(),
-    )
-
-    assert response.status_code == 422
-    assert (
-        response.json()["detail"]
-        == "Discord release-note webhook is not configured"
-    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": True,
+        "status": "skipped",
+        "reason": "trigger-based release notifications are not enabled",
+        "line_numbers": [],
+        "release_notifications": None,
+    }
 
 
 def test_wud_update_trigger_accepts_token_file_noop(tmp_path: Path) -> None:
@@ -209,124 +161,6 @@ def test_wud_update_trigger_requires_true_update_available(tmp_path: Path) -> No
     assert response.status_code == 200
     assert response.json()["status"] == "skipped"
     assert response.json()["reason"] == "updateAvailable is not true"
-
-
-def test_wud_update_trigger_sends_release_notification_without_wud_file(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    _install_wud_api(
-        monkeypatch,
-        containers=[_wud_api_container(name="app")],
-        triggers={"docker.local.app": (200, [])},
-    )
-    _fake_release_refresh(monkeypatch)
-    posted = _capture_discord_posts(monkeypatch)
-
-    def fail_file_read(_path: Path):
-        raise AssertionError("trigger path should not read images.todo")
-
-    monkeypatch.setattr(web_pending_sources, "_read_pending_file", fail_file_read)
-    client = _client(
-        tmp_path,
-        {
-            **_TRIGGER_ENV,
-            "WUDUP_LEGACY_SCRIPTS": "FALSE",
-            "WUD_PENDING_SOURCE": "file",
-        },
-    )
-
-    response = client.post(
-        _TRIGGER_PATH,
-        json={"id": "docker.local.app", "updateAvailable": True},
-        headers=_auth_headers(),
-    )
-    body = response.json()
-
-    assert response.status_code == 200
-    assert body["status"] == "sent"
-    assert body["line_numbers"] == [1]
-    assert body["release_notifications"]["sent"] is True
-    assert len(posted) == 1
-
-
-def test_wud_update_trigger_reports_unavailable_wud_api(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    _install_wud_api(monkeypatch, containers=(500, {}))
-    client = _client(tmp_path, _TRIGGER_ENV)
-
-    response = client.post(
-        _TRIGGER_PATH,
-        json={"id": "docker.local.app", "updateAvailable": True},
-        headers=_auth_headers(),
-    )
-
-    assert response.status_code == 503
-    assert "WUD API" in response.json()["detail"]
-
-
-def test_wud_update_trigger_skips_duplicate_release_notification(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    _install_wud_api(
-        monkeypatch,
-        containers=[_wud_api_container(name="app")],
-        triggers={"docker.local.app": (200, [])},
-    )
-    _fake_release_refresh(monkeypatch)
-    posted = _capture_discord_posts(monkeypatch)
-    client = _client(tmp_path, _TRIGGER_ENV)
-
-    first = client.post(
-        _TRIGGER_PATH,
-        json={"id": "docker.local.app", "updateAvailable": True},
-        headers=_auth_headers(),
-    )
-    second = client.post(
-        _TRIGGER_PATH,
-        json={"id": "docker.local.app", "updateAvailable": True},
-        headers=_auth_headers(),
-    )
-
-    assert first.status_code == 200
-    assert first.json()["status"] == "sent"
-    assert second.status_code == 200
-    assert second.json()["status"] == "skipped"
-    assert second.json()["release_notifications"]["sendable_count"] == 0
-    assert len(posted) == 1
-
-
-def test_wud_update_trigger_falls_back_when_id_misses(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    _install_wud_api(
-        monkeypatch,
-        containers=[_wud_api_container(name="app")],
-        triggers={"docker.local.app": (200, [])},
-    )
-    _fake_release_refresh(monkeypatch)
-    posted = _capture_discord_posts(monkeypatch)
-    client = _client(tmp_path, _TRIGGER_ENV)
-
-    response = client.post(
-        _TRIGGER_PATH,
-        json={
-            "id": "docker.local.other",
-            "image_name": "repo/app",
-            "image": {"name": "repo/app", "tag": "1.0"},
-            "updateAvailable": True,
-        },
-        headers=_auth_headers(),
-    )
-
-    assert response.status_code == 200
-    assert response.json()["status"] == "sent"
-    assert response.json()["line_numbers"] == [1]
-    assert len(posted) == 1
 
 
 def test_legacy_disabled_forces_api_pending_source_without_wud_file(

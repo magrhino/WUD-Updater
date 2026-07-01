@@ -4,6 +4,7 @@ import { useSettingsStore } from "../../stores/settings";
 import {
   managedOptions,
   managedSourceLabel,
+  RELEASE_NOTIFICATION_DELIVERY_MODE_LABELS,
   RELEASE_NOTIFICATION_MODE_LABELS,
   RELEASE_NOTIFICATION_RESEND_POLICY_LABELS,
   RELEASE_NOTIFICATION_VERBOSITY_LABELS,
@@ -18,6 +19,11 @@ export function useManagedNotifications() {
   const managedEntries = computed(() => settingsData.value?.managed ?? []);
   const releaseNotesEnabledEntry = computed(() =>
     managedEntries.value.find((entry) => entry.key === "release_notes_enabled"),
+  );
+  const releaseNotificationDeliveryModeEntry = computed(() =>
+    managedEntries.value.find(
+      (entry) => entry.key === "release_notifications_delivery_mode",
+    ),
   );
   const releaseNotificationModeEntry = computed(() =>
     managedEntries.value.find((entry) => entry.key === "release_notifications_mode"),
@@ -44,6 +50,7 @@ export function useManagedNotifications() {
   );
 
   const releaseNotesEnabledValue = ref(false);
+  const releaseNotificationDeliveryModeValue = ref("on_demand");
   const releaseNotificationModeValue = ref("digest");
   const releaseNotificationResendPolicyValue = ref("remote_change");
   const releaseNotificationCooldownValue = ref("86400");
@@ -59,6 +66,9 @@ export function useManagedNotifications() {
   );
   const releaseNotesEnabledEditable = computed(
     () => releaseNotesEnabledEntry.value?.editable === true,
+  );
+  const releaseNotificationDeliveryModeEditable = computed(
+    () => releaseNotificationDeliveryModeEntry.value?.editable === true,
   );
   const releaseNotificationModeEditable = computed(
     () => releaseNotificationModeEntry.value?.editable === true,
@@ -90,6 +100,9 @@ export function useManagedNotifications() {
       (releaseNotesEnabledEditable.value &&
         releaseNotesEnabledValue.value !==
           (releaseNotesEnabledEntry.value?.value === "true")) ||
+      (releaseNotificationDeliveryModeEditable.value &&
+        releaseNotificationDeliveryModeValue.value !==
+          (releaseNotificationDeliveryModeEntry.value?.value ?? "on_demand")) ||
       (releaseNotificationModeEditable.value &&
         releaseNotificationModeValue.value !==
           (releaseNotificationModeEntry.value?.value ?? "digest")) ||
@@ -115,6 +128,12 @@ export function useManagedNotifications() {
       notificationsDirty.value ||
       !discordWebhookConfigured.value,
   );
+  const releaseNotificationDeliveryModeOptions = computed(() =>
+    managedOptions(
+      releaseNotificationDeliveryModeEntry.value,
+      RELEASE_NOTIFICATION_DELIVERY_MODE_LABELS,
+    ),
+  );
   const releaseNotificationModeOptions = computed(() =>
     managedOptions(
       releaseNotificationModeEntry.value,
@@ -136,6 +155,8 @@ export function useManagedNotifications() {
 
   function hydrateNotificationForm(): void {
     releaseNotesEnabledValue.value = releaseNotesEnabledEntry.value?.value === "true";
+    releaseNotificationDeliveryModeValue.value =
+      releaseNotificationDeliveryModeEntry.value?.value ?? "on_demand";
     releaseNotificationModeValue.value =
       releaseNotificationModeEntry.value?.value ?? "digest";
     releaseNotificationResendPolicyValue.value =
@@ -202,6 +223,14 @@ export function useManagedNotifications() {
         (releaseNotesEnabledEntry.value?.value === "true")
     ) {
       values.release_notes_enabled = releaseNotesEnabledValue.value ? "true" : "false";
+    }
+    if (
+      releaseNotificationDeliveryModeEditable.value &&
+      releaseNotificationDeliveryModeValue.value !==
+        (releaseNotificationDeliveryModeEntry.value?.value ?? "on_demand")
+    ) {
+      values.release_notifications_delivery_mode =
+        releaseNotificationDeliveryModeValue.value;
     }
     if (
       releaseNotificationModeEditable.value &&
@@ -276,12 +305,14 @@ export function useManagedNotifications() {
   return {
     settings,
     releaseNotesEnabledEntry,
+    releaseNotificationDeliveryModeEntry,
     releaseNotificationModeEntry,
     releaseNotificationResendPolicyEntry,
     releaseNotificationCooldownEntry,
     discordWebhookEntry,
     releaseNotificationVerbosityEntry,
     releaseNotesEnabledValue,
+    releaseNotificationDeliveryModeValue,
     releaseNotificationModeValue,
     releaseNotificationResendPolicyValue,
     releaseNotificationCooldownValue,
@@ -294,6 +325,7 @@ export function useManagedNotifications() {
     preferencesDisabledReason,
     notificationControlsDisabled,
     releaseNotesEnabledEditable,
+    releaseNotificationDeliveryModeEditable,
     releaseNotificationModeEditable,
     releaseNotificationResendPolicyEditable,
     releaseNotificationCooldownEditable,
@@ -304,6 +336,7 @@ export function useManagedNotifications() {
     notificationsDirty,
     notificationSaveDisabled,
     testWebhookButtonDisabled,
+    releaseNotificationDeliveryModeOptions,
     releaseNotificationModeOptions,
     releaseNotificationResendPolicyOptions,
     releaseNotificationVerbosityOptions,

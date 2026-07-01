@@ -23,6 +23,7 @@ class ReleaseNotificationConfig:
     resend_policy: str = "remote_change"
     cooldown_seconds: int = 86_400
     verbosity: str = "summary"
+    delivery_mode: str = "on_demand"
 
 
 @dataclass(frozen=True)

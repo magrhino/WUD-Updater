@@ -523,6 +523,11 @@ export class DemoApiState {
       (entry) => entry.key === "release_notes_enabled",
     )?.value ?? "false";
   releaseNotesEnabledConfigured = false;
+  releaseNotificationDeliveryMode =
+    fixtures.settings.managed.find(
+      (entry) => entry.key === "release_notifications_delivery_mode",
+    )?.value === "on_detection" ? "on_detection" : "on_demand";
+  releaseNotificationDeliveryModeConfigured = false;
   releaseNotificationMode: ReleaseNotificationResponse["mode"] =
     fixtures.settings.managed.find(
       (entry) => entry.key === "release_notifications_mode",
@@ -592,6 +597,12 @@ export class DemoApiState {
 
   settings(): SettingsResponse {
     const settings = clone(fixtures.settings);
+    this.ensureManagedEntry(
+      settings,
+      "release_notifications_delivery_mode",
+      "on_demand",
+      ["on_demand", "on_detection"],
+    );
     this.ensureManagedEntry(settings, "release_notifications_mode", "digest", [
       "digest",
       "per_container",
@@ -645,6 +656,12 @@ export class DemoApiState {
       "release_notes_enabled",
       this.releaseNotesEnabled,
       this.releaseNotesEnabledConfigured,
+    );
+    this.updateManagedEntry(
+      settings,
+      "release_notifications_delivery_mode",
+      this.releaseNotificationDeliveryMode,
+      this.releaseNotificationDeliveryModeConfigured,
     );
     this.updateManagedEntry(
       settings,
@@ -811,6 +828,16 @@ export class DemoApiState {
         }
         this.releaseNotesEnabled = value;
         this.releaseNotesEnabledConfigured = true;
+        return;
+      case "release_notifications_delivery_mode":
+        if (!["on_demand", "on_detection"].includes(value)) {
+          throw new Error(
+            "release_notifications_delivery_mode must be on_demand or on_detection",
+          );
+        }
+        this.releaseNotificationDeliveryMode =
+          value === "on_detection" ? "on_detection" : "on_demand";
+        this.releaseNotificationDeliveryModeConfigured = true;
         return;
       case "release_notifications_mode":
         if (!["digest", "per_container"].includes(value)) {

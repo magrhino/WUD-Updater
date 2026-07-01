@@ -155,6 +155,11 @@ def poll_wud_api_release_notifications(
     settings: WebSettings,
 ) -> ReleaseNotificationResponse | None:
     api_settings = cast(WebSettings, replace(settings, pending_source="api"))
+    if (
+        effective_release_notification_config(api_settings).delivery_mode
+        != "on_detection"
+    ):
+        return None
     try:
         require_release_notification_sendable(api_settings)
     except HTTPException as exc:

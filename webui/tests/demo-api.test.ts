@@ -116,6 +116,28 @@ describe("demo web API", () => {
     });
     await expect(
       api.updateManagedSettings(
+        { release_notifications_delivery_mode: "on_detection" },
+        "csrf",
+      ),
+    ).resolves.toMatchObject({
+      managed: expect.arrayContaining([
+        expect.objectContaining({
+          key: "release_notifications_delivery_mode",
+          value: "on_detection",
+          source: "configured",
+        }),
+      ]),
+    });
+    await expect(
+      api.updateManagedSettings(
+        { release_notifications_delivery_mode: "trigger" },
+        "csrf",
+      ),
+    ).rejects.toThrow(
+      "release_notifications_delivery_mode must be on_demand or on_detection",
+    );
+    await expect(
+      api.updateManagedSettings(
         {
           release_notifications_discord_webhook:
             "https://discord.com/api/webhooks/123/token-secret",

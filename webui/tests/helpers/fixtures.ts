@@ -316,6 +316,10 @@ export function settingsResponse(
         "dismissed",
       ]),
       managedSettingEntry("release_notes_enabled", "false", ["false", "true"]),
+      managedSettingEntry("release_notifications_delivery_mode", "on_demand", [
+        "on_demand",
+        "on_detection",
+      ]),
       managedSettingEntry("release_notifications_mode", "digest", [
         "digest",
         "per_container",

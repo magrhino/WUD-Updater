@@ -11,12 +11,14 @@ defineProps<{
 const {
   settings,
   releaseNotesEnabledEntry,
+  releaseNotificationDeliveryModeEntry,
   releaseNotificationModeEntry,
   releaseNotificationResendPolicyEntry,
   releaseNotificationCooldownEntry,
   discordWebhookEntry,
   releaseNotificationVerbosityEntry,
   releaseNotesEnabledValue,
+  releaseNotificationDeliveryModeValue,
   releaseNotificationModeValue,
   releaseNotificationResendPolicyValue,
   releaseNotificationCooldownValue,
@@ -28,6 +30,7 @@ const {
   testWebhookDialogVisible,
   notificationControlsDisabled,
   releaseNotesEnabledEditable,
+  releaseNotificationDeliveryModeEditable,
   releaseNotificationModeEditable,
   releaseNotificationResendPolicyEditable,
   releaseNotificationCooldownEditable,
@@ -38,6 +41,7 @@ const {
   notificationsDirty,
   notificationSaveDisabled,
   testWebhookButtonDisabled,
+  releaseNotificationDeliveryModeOptions,
   releaseNotificationModeOptions,
   releaseNotificationResendPolicyOptions,
   releaseNotificationVerbosityOptions,
@@ -64,7 +68,7 @@ const {
           <p class="eyebrow">Managed notifications</p>
           <h2>Release-note notifications</h2>
           <p class="section-copy">
-            WUD API polling sends Discord updates through WUDup history and resend policy.
+            Send Discord updates on demand, or let WUD API polling send them on detection.
           </p>
         </div>
         <Bell :size="20" class="section-heading-icon" />
@@ -113,6 +117,34 @@ const {
                   class="settings-action-alert"
                 >
                   {{ releaseNotesEnabledEntry.disabled_reason }}
+                </n-alert>
+              </div>
+            </div>
+            <div class="settings-preference-row">
+              <div>
+                <strong class="wrap-anywhere">Delivery mode</strong>
+                <span class="wrap-anywhere">
+                  Source:
+                  {{ managedSourceLabel(releaseNotificationDeliveryModeEntry) }}
+                </span>
+              </div>
+              <div class="settings-preference-controls">
+                <n-select
+                  v-model:value="releaseNotificationDeliveryModeValue"
+                  :options="releaseNotificationDeliveryModeOptions"
+                  :disabled="
+                    notificationControlsDisabled ||
+                    !releaseNotificationDeliveryModeEditable
+                  "
+                  aria-label="Release notification delivery mode"
+                />
+                <n-alert
+                  v-if="releaseNotificationDeliveryModeEntry?.disabled_reason"
+                  type="info"
+                  :show-icon="false"
+                  class="settings-action-alert"
+                >
+                  {{ releaseNotificationDeliveryModeEntry.disabled_reason }}
                 </n-alert>
               </div>
             </div>
@@ -221,7 +253,7 @@ const {
             </div>
             <div class="settings-preference-row">
               <div>
-                <strong class="wrap-anywhere">Notification mode</strong>
+                <strong class="wrap-anywhere">Message grouping</strong>
                 <span class="wrap-anywhere">
                   Source:
                   {{ managedSourceLabel(releaseNotificationModeEntry) }}
@@ -232,7 +264,7 @@ const {
                   v-model:value="releaseNotificationModeValue"
                   :options="releaseNotificationModeOptions"
                   :disabled="notificationControlsDisabled || !releaseNotificationModeEditable"
-                  aria-label="Release notification mode"
+                  aria-label="Release notification message grouping"
                 />
                 <n-alert
                   v-if="releaseNotificationModeEntry?.disabled_reason"

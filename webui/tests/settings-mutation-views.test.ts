@@ -547,6 +547,13 @@ describe("settings mutation views", () => {
             if (entry.key === "release_notes_enabled") {
               return { ...entry, value: "true", source: "configured" as const };
             }
+            if (entry.key === "release_notifications_delivery_mode") {
+              return {
+                ...entry,
+                value: "on_detection",
+                source: "configured" as const,
+              };
+            }
             if (entry.key === "release_notifications_mode") {
               return {
                 ...entry,
@@ -582,9 +589,10 @@ describe("settings mutation views", () => {
     await wrapper
       .find('input[aria-label="Discord webhook URL"]')
       .setValue("https://discord.com/api/webhooks/123/token-secret");
-    emitSelectValue(wrapper, 3, "full");
-    emitSelectValue(wrapper, 4, "per_container");
-    emitSelectValue(wrapper, 5, "cooldown");
+    emitSelectValue(wrapper, 3, "on_detection");
+    emitSelectValue(wrapper, 4, "full");
+    emitSelectValue(wrapper, 5, "per_container");
+    emitSelectValue(wrapper, 6, "cooldown");
     await wrapper
       .find('input[aria-label="Release notification cooldown seconds"]')
       .setValue("00060");
@@ -596,6 +604,7 @@ describe("settings mutation views", () => {
 
     expect(updateManagedSettings).toHaveBeenCalledWith({
       release_notes_enabled: "true",
+      release_notifications_delivery_mode: "on_detection",
       release_notifications_mode: "per_container",
       release_notifications_resend_policy: "cooldown",
       release_notifications_cooldown_seconds: "60",

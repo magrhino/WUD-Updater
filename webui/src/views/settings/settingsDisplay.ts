@@ -80,6 +80,11 @@ export const DIGEST_PIN_UPDATES_LABELS: Record<string, string> = {
   true: "Enabled",
 };
 
+export const RELEASE_NOTIFICATION_DELIVERY_MODE_LABELS: Record<string, string> = {
+  on_demand: "On demand",
+  on_detection: "On detection",
+};
+
 export const RELEASE_NOTIFICATION_MODE_LABELS: Record<string, string> = {
   digest: "Digest",
   per_container: "Per container",

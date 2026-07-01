@@ -17,6 +17,7 @@ from tests.web_test_helpers import (
     _client,
     _fake_release_refresh,
     _install_wud_api,
+    _store_web_setting,
     _wud_api_container,
 )
 
@@ -33,10 +34,34 @@ def _shutdown(client) -> None:
     web_scheduler.shutdown_auto_update_scheduler_state(client.app.state)
 
 
+def test_poll_skips_when_delivery_mode_on_demand(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(
+        monkeypatch,
+        containers=[_wud_api_container(name="app")],
+        triggers={"docker.local.app": (200, [])},
+    )
+    _fake_release_refresh(monkeypatch)
+    posted = _capture_discord_posts(monkeypatch)
+    client = _client(tmp_path, _ENV)
+    try:
+        response = notifications_module.poll_wud_api_release_notifications(
+            client.app.state.web_settings,
+        )
+    finally:
+        _shutdown(client)
+
+    assert response is None
+    assert posted == []
+
+
 def test_poll_sends_wud_api_notifications_without_trigger_token(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    _store_web_setting(tmp_path, "release_notifications.delivery_mode", "on_detection")
     _install_wud_api(
         monkeypatch,
         containers=[_wud_api_container(name="app")],
@@ -81,6 +106,7 @@ def test_poll_skips_duplicate_notifications(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    _store_web_setting(tmp_path, "release_notifications.delivery_mode", "on_detection")
     _install_wud_api(
         monkeypatch,
         containers=[_wud_api_container(name="app")],
@@ -109,6 +135,7 @@ def test_poll_skips_degraded_wud_api_quietly(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    _store_web_setting(tmp_path, "release_notifications.delivery_mode", "on_detection")
     _install_wud_api(monkeypatch, containers=(500, {}))
     posted = _capture_discord_posts(monkeypatch)
 

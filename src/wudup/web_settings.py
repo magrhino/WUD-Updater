@@ -79,6 +79,12 @@ MANAGED_DIGEST_PIN_UPDATES_DB_KEY = "compose.digest_pin_updates"
 RELEASE_NOTES_ENABLED_ENV = "WUD_RELEASE_NOTES_ENABLED"
 MANAGED_RELEASE_NOTES_ENABLED_KEY = "release_notes_enabled"
 MANAGED_RELEASE_NOTES_ENABLED_DB_KEY = "release_notes.enabled"
+MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_KEY = (
+    "release_notifications_delivery_mode"
+)
+MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_DB_KEY = (
+    "release_notifications.delivery_mode"
+)
 MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY = "release_notifications_mode"
 MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY = "release_notifications.mode"
 MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_KEY = (
@@ -106,10 +112,12 @@ THEME_PREFERENCE_VALUES = ("system", "light", "dark")
 ONBOARDING_CHECKLIST_VALUES = ("visible", "dismissed")
 DIGEST_PIN_UPDATES_VALUES = ("false", "true")
 RELEASE_NOTES_ENABLED_VALUES = ("false", "true")
+RELEASE_NOTIFICATIONS_DELIVERY_MODE_VALUES = ("on_demand", "on_detection")
 RELEASE_NOTIFICATIONS_MODE_VALUES = ("digest", "per_container")
 RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES = ("remote_change", "cooldown")
 RELEASE_NOTIFICATIONS_VERBOSITY_VALUES = ("summary", "full")
 DEFAULT_RELEASE_NOTES_ENABLED = False
+DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE = "on_demand"
 DEFAULT_RELEASE_NOTIFICATIONS_MODE = "digest"
 DEFAULT_RELEASE_NOTIFICATIONS_RESEND_POLICY = "remote_change"
 DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS = 86_400
@@ -538,7 +546,7 @@ def _managed_settings_db_values(conn: sqlite3.Connection) -> dict[str, str]:
         """
         SELECT key, value
         FROM web_settings
-        WHERE key IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        WHERE key IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             MANAGED_THEME_PREFERENCE_DB_KEY,
@@ -546,6 +554,7 @@ def _managed_settings_db_values(conn: sqlite3.Connection) -> dict[str, str]:
             MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY,
             MANAGED_DIGEST_PIN_UPDATES_DB_KEY,
             MANAGED_RELEASE_NOTES_ENABLED_DB_KEY,
+            MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_DB_KEY,
             MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY,
             MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_DB_KEY,
             MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY,
@@ -601,6 +610,9 @@ def _managed_settings_entries_from_values(
             default=DEFAULT_RELEASE_NOTES_ENABLED,
         )
     release_notification_config = _release_notification_config_from_values(values)
+    release_notifications_delivery_mode_configured = (
+        MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_DB_KEY in values
+    )
     release_notifications_mode_configured = (
         MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY in values
     )
@@ -667,6 +679,19 @@ def _managed_settings_entries_from_values(
             allowed_values=list(RELEASE_NOTES_ENABLED_VALUES),
             restart_required=False,
             disabled_reason=release_notes_disabled_reason,
+        ),
+        ManagedSettingEntry(
+            key=MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_KEY,
+            value=release_notification_config.delivery_mode,
+            default_value=DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE,
+            source=(
+                "configured"
+                if release_notifications_delivery_mode_configured
+                else "default"
+            ),
+            editable=True,
+            allowed_values=list(RELEASE_NOTIFICATIONS_DELIVERY_MODE_VALUES),
+            restart_required=False,
         ),
         ManagedSettingEntry(
             key=MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY,
@@ -750,6 +775,9 @@ def _validated_managed_setting_updates(
         MANAGED_ONBOARDING_CHECKLIST_KEY: ONBOARDING_CHECKLIST_VALUES,
         MANAGED_DIGEST_PIN_UPDATES_KEY: DIGEST_PIN_UPDATES_VALUES,
         MANAGED_RELEASE_NOTES_ENABLED_KEY: RELEASE_NOTES_ENABLED_VALUES,
+        MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_KEY: (
+            RELEASE_NOTIFICATIONS_DELIVERY_MODE_VALUES
+        ),
         MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY: RELEASE_NOTIFICATIONS_MODE_VALUES,
         MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_KEY: (
             RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES
@@ -850,6 +878,12 @@ def _apply_managed_setting_updates(
             _set_web_setting(conn, MANAGED_DIGEST_PIN_UPDATES_DB_KEY, value)
         elif key == MANAGED_RELEASE_NOTES_ENABLED_KEY:
             _set_web_setting(conn, MANAGED_RELEASE_NOTES_ENABLED_DB_KEY, value)
+        elif key == MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_KEY:
+            _set_web_setting(
+                conn,
+                MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_DB_KEY,
+                value,
+            )
         elif key == MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY:
             _set_web_setting(conn, MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY, value)
         elif key == MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_KEY:
@@ -898,6 +932,15 @@ def _managed_settings_audit_values(
 def _release_notification_config_from_values(
     values: Mapping[str, str],
 ) -> ReleaseNotificationConfig:
+    delivery_mode = values.get(
+        MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_DB_KEY,
+        DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE,
+    )
+    if delivery_mode not in RELEASE_NOTIFICATIONS_DELIVERY_MODE_VALUES:
+        options = ", ".join(RELEASE_NOTIFICATIONS_DELIVERY_MODE_VALUES)
+        raise ConfigError(
+            f"{MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_KEY} must be one of: {options}"
+        )
     mode = values.get(
         MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY,
         DEFAULT_RELEASE_NOTIFICATIONS_MODE,
@@ -929,6 +972,7 @@ def _release_notification_config_from_values(
             f"{MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_KEY} must be one of: {options}"
         )
     return ReleaseNotificationConfig(
+        delivery_mode=delivery_mode,
         mode=mode,
         resend_policy=resend_policy,
         cooldown_seconds=cooldown_seconds,
