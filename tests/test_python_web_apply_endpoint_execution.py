@@ -487,6 +487,67 @@ def test_apply_endpoint_wraps_api_pending_source_oserror_without_mutation(
     assert _fake_docker_calls(fake_root) == calls_before
 
 
+def test_apply_endpoint_wraps_plan_revalidation_oserror_without_mutation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    redaction_value = "api-revalidation-redaction-value"
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_TOKEN": redaction_value,
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    calls_before = _fake_docker_calls(fake_root)
+
+    def fail_build_web_plan(*_args, **_kwargs):
+        raise OSError(
+            f"could not read {tmp_path / 'state' / 'plan-redaction-path'} "
+            f"with {redaction_value}"
+        )
+
+    monkeypatch.setattr(web_plans, "build_web_plan", fail_build_web_plan)
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert apply_response.status_code == 500
+    detail = apply_response.json()["detail"]
+    assert detail.startswith("could not revalidate plan: ")
+    assert redaction_value not in detail
+    assert str(tmp_path) not in detail
+    assert "<redacted>" in detail
+    assert "[REDACTED_PATH]" in detail
+    assert wud_file.read_text(encoding="utf-8") == "repo/app:latest\n"
+    assert _fake_docker_calls(fake_root) == calls_before
+    assert not lock_dir_for(wud_file).exists()
+
+
 def test_apply_endpoint_passes_tag_overrides_to_updater(tmp_path: Path) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
     client = _client(

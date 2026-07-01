@@ -60,7 +60,7 @@ def api_create_plan(payload: PlanRequest, request: Request) -> PlanResponse:
     except OSError as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not create plan: {exc}",
+            detail=_safe_exception_detail(settings, "could not create plan", exc),
         ) from exc
     return plan_response(plan, settings, request)
 
@@ -108,7 +108,11 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
         except OSError as exc:
             raise HTTPException(
                 status_code=500,
-                detail=f"could not revalidate plan: {exc}",
+                detail=_safe_exception_detail(
+                    settings,
+                    "could not revalidate plan",
+                    exc,
+                ),
             ) from exc
 
         if not secrets.compare_digest(plan.plan_id, payload.plan_id):

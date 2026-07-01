@@ -72,6 +72,45 @@ def test_plan_endpoint_wraps_config_error(
     assert "[REDACTED_PATH]" in detail
 
 
+def test_plan_endpoint_wraps_source_oserror(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret = "plan-oserror-secret"
+
+    def fail_pending_source(*_args, **_kwargs):
+        raise OSError(
+            f"open failed for {tmp_path / 'state' / 'images.todo'} with {secret}"
+        )
+
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_TOKEN": secret,
+        },
+    )
+    monkeypatch.setattr(
+        plans_module.web_pending_sources,
+        "resolve_pending_source",
+        fail_pending_source,
+    )
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    )
+    detail = response.json()["detail"]
+
+    assert response.status_code == 500
+    assert detail.startswith("could not create plan: ")
+    assert secret not in detail
+    assert str(tmp_path) not in detail
+    assert "<redacted>" in detail
+    assert "[REDACTED_PATH]" in detail
+
+
 def test_plan_endpoint_returns_selected_dry_run_without_mutation(
     tmp_path: Path,
 ) -> None:
