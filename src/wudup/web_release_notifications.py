@@ -153,7 +153,15 @@ def poll_wud_api_release_notifications(
     try:
         require_release_notification_sendable(api_settings)
     except HTTPException as exc:
-        if _expected_poll_skip(exc):
+        if (
+            exc.status_code in {403, 422}
+            and exc.detail
+            in {
+                "mutations are disabled",
+                "release-note notifications are disabled",
+                "Discord release-note webhook is not configured",
+            }
+        ):
             return None
         raise
 
@@ -177,9 +185,6 @@ def poll_wud_api_release_notifications(
         line_numbers=line_numbers,
         confirmation="send-release-notes",
     )
-    preview = preview_release_notifications(api_settings, payload, sent=False)
-    if preview.sendable_count <= 0:
-        return preview
     try:
         return send_release_notifications(
             api_settings,
@@ -189,20 +194,8 @@ def poll_wud_api_release_notifications(
         )
     except HTTPException as exc:
         if exc.status_code == 422 and exc.detail == NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL:
-            return preview
+            return None
         raise
-
-
-def _expected_poll_skip(exc: HTTPException) -> bool:
-    return (
-        exc.status_code in {403, 422}
-        and exc.detail
-        in {
-            "mutations are disabled",
-            "release-note notifications are disabled",
-            "Discord release-note webhook is not configured",
-        }
-    )
 
 
 def preview_release_notifications(
@@ -1407,11 +1400,8 @@ def _release_notification_audit_metadata(
     metadata: dict[str, object] = {
         "source": "webui",
         "operation": "send_release_notifications",
-        "actor_type": _release_notification_actor_type(
-            settings,
-            request,
-            actor_type,
-        ),
+        "actor_type": actor_type
+        or ("system" if request is None else _request_actor_type(settings, request)),
         "resource_type": "release_notifications",
         "resource_id": "discord",
         "status": status,
@@ -1431,18 +1421,6 @@ def _release_notification_audit_metadata(
     if error:
         metadata["error"] = error
     return metadata
-
-
-def _release_notification_actor_type(
-    settings: WebSettings,
-    request: Request | None,
-    actor_type: str | None,
-) -> str:
-    if actor_type:
-        return actor_type
-    if request is None:
-        return "system"
-    return _request_actor_type(settings, request)
 
 
 def _audit_items(items: Sequence[ReleaseNotificationItem]) -> list[dict[str, object]]:

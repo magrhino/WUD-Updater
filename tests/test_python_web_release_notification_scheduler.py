@@ -145,9 +145,7 @@ def test_poll_skips_duplicate_notifications(
 
     assert first is not None
     assert first.sent is True
-    assert second is not None
-    assert second.sendable_count == 0
-    assert second.items[0].notification_status == "skipped_duplicate"
+    assert second is None
     assert len(posted) == 1
 
 
