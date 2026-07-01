@@ -1,7 +1,7 @@
 # Development
 
 This page covers local development, CI behavior, and release automation. Runtime
-deployment details live in [DEPLOYMENT.md](DEPLOYMENT.md).
+deployment docs start in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Local Setup
 
