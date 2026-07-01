@@ -348,7 +348,7 @@ def test_wud_update_trigger_skips_duplicate_release_notification(
     assert len(posted) == 1
 
 
-def test_wud_update_trigger_does_not_fallback_when_id_misses(
+def test_wud_update_trigger_falls_back_when_id_misses(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -373,12 +373,9 @@ def test_wud_update_trigger_does_not_fallback_when_id_misses(
     )
 
     assert response.status_code == 200
-    assert response.json()["status"] == "skipped"
-    assert (
-        response.json()["reason"]
-        == "triggered container is not in current WUD API pending updates"
-    )
-    assert len(posted) == 0
+    assert response.json()["status"] == "sent"
+    assert response.json()["line_numbers"] == [1]
+    assert len(posted) == 1
 
 
 def test_legacy_disabled_forces_api_pending_source_without_wud_file(

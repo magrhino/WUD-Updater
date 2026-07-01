@@ -179,7 +179,7 @@ def _matching_line_numbers(
 ) -> tuple[int, ...]:
     payload_ids = _payload_ids(payload)
     matched = _matching_line_numbers_by_id(payload_ids, source)
-    if payload_ids:
+    if matched:
         return _line_number_tuple(matched)
     return _line_number_tuple(_matching_line_numbers_by_name_or_image(payload, source))
 
