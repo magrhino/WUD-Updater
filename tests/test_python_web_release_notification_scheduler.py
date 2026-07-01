@@ -38,6 +38,7 @@ def test_poll_skips_when_delivery_mode_on_demand(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    _store_web_setting(tmp_path, "release_notifications.delivery_mode", "on_demand")
     _install_wud_api(
         monkeypatch,
         containers=[_wud_api_container(name="app")],
@@ -61,7 +62,6 @@ def test_poll_sends_wud_api_notifications_without_trigger_token(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _store_web_setting(tmp_path, "release_notifications.delivery_mode", "on_detection")
     _install_wud_api(
         monkeypatch,
         containers=[_wud_api_container(name="app")],
@@ -106,7 +106,6 @@ def test_poll_skips_duplicate_notifications(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _store_web_setting(tmp_path, "release_notifications.delivery_mode", "on_detection")
     _install_wud_api(
         monkeypatch,
         containers=[_wud_api_container(name="app")],
@@ -135,7 +134,6 @@ def test_poll_skips_degraded_wud_api_quietly(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _store_web_setting(tmp_path, "release_notifications.delivery_mode", "on_detection")
     _install_wud_api(monkeypatch, containers=(500, {}))
     posted = _capture_discord_posts(monkeypatch)
 

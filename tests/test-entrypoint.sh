@@ -77,10 +77,6 @@ FAKE_WUD_SCRIPT
 #!/usr/bin/env bash
 echo tag-manager
 FAKE_WUD_SCRIPT
-  cat > "$APP_DIR/wud/http-trigger.sh" <<'FAKE_WUD_SCRIPT'
-#!/bin/sh
-echo http-trigger
-FAKE_WUD_SCRIPT
   printf 'linuxserver/example|example/example\n' > "$APP_DIR/wud/upstreams.txt"
   printf 'nested file\n' > "$APP_DIR/wud/nested/example.txt"
 }
@@ -130,15 +126,13 @@ assert_synced_scripts(){
   [[ -x "$dst/release-notes-to-discord.sh" ]] || fail "expected executable synced release-notes-to-discord.sh"
   [[ -x "$dst/github-release-embed.sh" ]] || fail "expected executable synced github-release-embed.sh"
   [[ -x "$dst/tag-manager.sh" ]] || fail "expected executable synced tag-manager.sh"
-  [[ ! -e "$dst/http-trigger.sh" ]] || fail "http-trigger.sh was synced with legacy scripts"
   [[ -f "$dst/upstreams.txt" ]] || fail "expected synced upstreams.txt"
   [[ -f "$dst/nested/example.txt" ]] || fail "expected synced nested file"
 }
 
-assert_synced_http_trigger_only(){
+assert_synced_marker_only(){
   local dst="${WUD_SCRIPTS_DIR:-$TEST_TMP/managed-wud}"
   [[ -f "$dst/.wudup-managed" ]] || fail "expected synced marker file"
-  [[ -x "$dst/http-trigger.sh" ]] || fail "expected executable synced http-trigger.sh"
   [[ ! -e "$dst/append-updates.sh" ]] || fail "legacy append-updates.sh was synced"
   [[ ! -e "$dst/on-update.sh" ]] || fail "legacy on-update.sh was synced"
   [[ ! -e "$dst/tag-manager.sh" ]] || fail "legacy tag-manager.sh was synced"
@@ -295,7 +289,7 @@ test_web_exports_legacy_disabled_script_sync_status(){
   assert_status 0
   assert_output "Synced WUD scripts to $TEST_TMP/managed-wud
 python [-m] [wudup.cli] [web] [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--log-dir] [/logs] WUD_SCRIPT_SYNC_STATUS=[auto-detected]"
-  assert_synced_http_trigger_only
+  assert_synced_marker_only
   teardown_case
 }
 
@@ -325,12 +319,12 @@ test_sync_command_copies_scripts_and_exits(){
   teardown_case
 }
 
-test_sync_command_copies_http_trigger_when_legacy_scripts_disabled(){
+test_sync_command_copies_no_scripts_when_legacy_scripts_disabled(){
   setup_case
   WUDUP_LEGACY_SCRIPTS=false run_entrypoint sync-wud-scripts
   assert_status 0
   assert_output "Synced WUD scripts to $TEST_TMP/managed-wud"
-  assert_synced_http_trigger_only
+  assert_synced_marker_only
   teardown_case
 }
 
@@ -504,7 +498,7 @@ main(){
   run_test test_doctor_exports_skipped_script_sync_status
   run_test test_debug_command_executes_directly
   run_test test_sync_command_copies_scripts_and_exits
-  run_test test_sync_command_copies_http_trigger_when_legacy_scripts_disabled
+  run_test test_sync_command_copies_no_scripts_when_legacy_scripts_disabled
   run_test test_sync_command_rejects_invalid_legacy_scripts_bool
   run_test test_startup_auto_sync_runs_for_existing_destination
   run_test test_startup_auto_sync_skips_missing_destination

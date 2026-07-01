@@ -218,8 +218,8 @@ def test_settings_reports_effective_non_secret_configuration(
     assert secrets["WUD_WEB_TOKEN"]["configured"] is True
     assert secrets["WUD_API_AUTH_BEARER_TOKEN"]["configured"] is True
     assert secrets["WUD_API_AUTH_BEARER_TOKEN_FILE"]["configured"] is False
-    assert secrets["WUDUP_TRIGGER_TOKEN"]["configured"] is True
-    assert secrets["WUDUP_TRIGGER_TOKEN_FILE"]["configured"] is False
+    assert "WUDUP_TRIGGER_TOKEN" not in secrets
+    assert "WUDUP_TRIGGER_TOKEN_FILE" not in secrets
     assert "WUD_API_AUTH_BASIC_USER" not in secrets
     assert secrets["WUD_API_AUTH_BASIC_PASSWORD"]["configured"] is False
     assert secrets["WUD_API_AUTH_BASIC_PASSWORD_FILE"]["configured"] is False
@@ -910,7 +910,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         "compose_ignore_paths": "old",
         "digest_pin_updates": "false",
         "release_notes_enabled": "false",
-        "release_notifications_delivery_mode": "on_demand",
+        "release_notifications_delivery_mode": "on_detection",
         "release_notifications_mode": "digest",
         "release_notifications_resend_policy": "remote_change",
         "release_notifications_cooldown_seconds": "86400",

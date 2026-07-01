@@ -33,7 +33,7 @@ from .config import (
 )
 from .db import DatabaseError, init_db, open_db, utc_timestamp
 from .web_auth import (
-    SENSITIVE_ENV_KEYS,
+    SECRET_SETTING_ENV_KEYS,
     _delete_web_setting,
     _parse_allowed_hosts,
     _safe_exception_detail,
@@ -117,7 +117,7 @@ RELEASE_NOTIFICATIONS_MODE_VALUES = ("digest", "per_container")
 RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES = ("remote_change", "cooldown")
 RELEASE_NOTIFICATIONS_VERBOSITY_VALUES = ("summary", "full")
 DEFAULT_RELEASE_NOTES_ENABLED = False
-DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE = "on_demand"
+DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE = "on_detection"
 DEFAULT_RELEASE_NOTIFICATIONS_MODE = "digest"
 DEFAULT_RELEASE_NOTIFICATIONS_RESEND_POLICY = "remote_change"
 DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS = 86_400
@@ -1208,7 +1208,7 @@ def _secret_settings(settings: WebSettings) -> list[SecretSettingStatus]:
             if name == "WUD_WEB_TOKEN"
             else bool(env.get(name, "").strip()),
         )
-        for name in SENSITIVE_ENV_KEYS
+        for name in SECRET_SETTING_ENV_KEYS
     ]
 
 

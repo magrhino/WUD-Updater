@@ -117,9 +117,7 @@ New WebUI-focused configurations should not use these shell notification
 wrappers. Keep them only for existing WUD callback setups that intentionally
 send release notes outside the WebUI.
 
-For optional instant wake-ups, WUD can `POST` to WUDup at
-`/api/v1/wud/triggers/update` with bearer auth matching `WUDUP_TRIGGER_TOKEN` or
-`WUDUP_TRIGGER_TOKEN_FILE`. This is not required for the default polling path.
+WUDup polls WUD's API directly for WebUI release-note notifications.
 Once WUD API metadata is healthy, set `WUDUP_LEGACY_SCRIPTS=false`, then remove
 WUD command triggers that call `/wud/append-updates.sh`, `/wud/on-update.sh`, or
 `/wud/tag-manager.sh` before recreating the stack.

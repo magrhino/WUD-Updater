@@ -526,7 +526,7 @@ export class DemoApiState {
   releaseNotificationDeliveryMode =
     fixtures.settings.managed.find(
       (entry) => entry.key === "release_notifications_delivery_mode",
-    )?.value === "on_detection" ? "on_detection" : "on_demand";
+    )?.value === "on_demand" ? "on_demand" : "on_detection";
   releaseNotificationDeliveryModeConfigured = false;
   releaseNotificationMode: ReleaseNotificationResponse["mode"] =
     fixtures.settings.managed.find(
@@ -600,7 +600,7 @@ export class DemoApiState {
     this.ensureManagedEntry(
       settings,
       "release_notifications_delivery_mode",
-      "on_demand",
+      "on_detection",
       ["on_demand", "on_detection"],
     );
     this.ensureManagedEntry(settings, "release_notifications_mode", "digest", [

@@ -51,7 +51,7 @@ FALSE_VALUES = frozenset({"", "0", "false", "no", "off"})
 SECURE_COOKIE_MODES = frozenset({"auto", "true", "false"})
 CSRF_HEADER = "x-wud-csrf-token"
 CSRF_COOKIE = "wud_csrf_token"
-CSRF_EXEMPT_PATHS = frozenset({"/api/v1/wud/triggers/update"})
+CSRF_EXEMPT_PATHS = frozenset()
 SESSION_COOKIE = "wud_session"
 SETUP_CLAIM_HASH_KEY = "setup_claim_hash"
 SETUP_CLAIM_EXPIRES_KEY = "setup_claim_expires_at"
@@ -71,6 +71,11 @@ SENSITIVE_ENV_KEYS = (
     "DISCORD_WEBHOOK",
     "DISCORD_RELEASES_WEBHOOK",
     "ADMIN_WEBHOOK",
+)
+SECRET_SETTING_ENV_KEYS = tuple(
+    key
+    for key in SENSITIVE_ENV_KEYS
+    if key not in {"WUDUP_TRIGGER_TOKEN", "WUDUP_TRIGGER_TOKEN_FILE"}
 )
 SENSITIVE_FIELD_KEY_PARTS = frozenset(
     {

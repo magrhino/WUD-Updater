@@ -50,7 +50,7 @@ export function useManagedNotifications() {
   );
 
   const releaseNotesEnabledValue = ref(false);
-  const releaseNotificationDeliveryModeValue = ref("on_demand");
+  const releaseNotificationDeliveryModeValue = ref("on_detection");
   const releaseNotificationModeValue = ref("digest");
   const releaseNotificationResendPolicyValue = ref("remote_change");
   const releaseNotificationCooldownValue = ref("86400");
@@ -102,7 +102,7 @@ export function useManagedNotifications() {
           (releaseNotesEnabledEntry.value?.value === "true")) ||
       (releaseNotificationDeliveryModeEditable.value &&
         releaseNotificationDeliveryModeValue.value !==
-          (releaseNotificationDeliveryModeEntry.value?.value ?? "on_demand")) ||
+          (releaseNotificationDeliveryModeEntry.value?.value ?? "on_detection")) ||
       (releaseNotificationModeEditable.value &&
         releaseNotificationModeValue.value !==
           (releaseNotificationModeEntry.value?.value ?? "digest")) ||
@@ -156,7 +156,7 @@ export function useManagedNotifications() {
   function hydrateNotificationForm(): void {
     releaseNotesEnabledValue.value = releaseNotesEnabledEntry.value?.value === "true";
     releaseNotificationDeliveryModeValue.value =
-      releaseNotificationDeliveryModeEntry.value?.value ?? "on_demand";
+      releaseNotificationDeliveryModeEntry.value?.value ?? "on_detection";
     releaseNotificationModeValue.value =
       releaseNotificationModeEntry.value?.value ?? "digest";
     releaseNotificationResendPolicyValue.value =
@@ -227,7 +227,7 @@ export function useManagedNotifications() {
     if (
       releaseNotificationDeliveryModeEditable.value &&
       releaseNotificationDeliveryModeValue.value !==
-        (releaseNotificationDeliveryModeEntry.value?.value ?? "on_demand")
+        (releaseNotificationDeliveryModeEntry.value?.value ?? "on_detection")
     ) {
       values.release_notifications_delivery_mode =
         releaseNotificationDeliveryModeValue.value;

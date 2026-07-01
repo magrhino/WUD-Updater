@@ -46,7 +46,6 @@ from . import (
     web_startup,
     web_state,
     web_static,
-    web_wud_triggers,
     web_wud_api,
 )
 from .config import (
@@ -172,8 +171,6 @@ def create_app(
         response_model=web_models.AuthSessionResponse,
     )
     app.include_router(setup_router)
-
-    web_wud_triggers.configure(app)
 
     auth_router = APIRouter(prefix="/api/v1/auth")
     auth_router.add_api_route(

@@ -251,11 +251,8 @@ sync_wud_scripts(){
   fi
 
   find "$dst_canon" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-  if legacy_wud_scripts_disabled; then
-    cp "$src/http-trigger.sh" "$dst_canon"/
-  else
+  if ! legacy_wud_scripts_disabled; then
     cp -R "$src"/. "$dst_canon"/
-    rm -f "$dst_canon/http-trigger.sh"
   fi
   find "$dst_canon" -type f -name '*.sh' -exec chmod +x {} +
   : > "$marker"

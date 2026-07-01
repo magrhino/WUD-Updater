@@ -1150,6 +1150,21 @@ export const generatedFixtures = {
         },
         {
           "allowed_values": [
+            "on_demand",
+            "on_detection"
+          ],
+          "configured": false,
+          "default_value": "on_detection",
+          "disabled_reason": "",
+          "editable": true,
+          "key": "release_notifications_delivery_mode",
+          "restart_required": false,
+          "sensitive": false,
+          "source": "default",
+          "value": "on_detection"
+        },
+        {
+          "allowed_values": [
             "digest",
             "per_container"
           ],
@@ -1238,14 +1253,6 @@ export const generatedFixtures = {
         {
           "configured": false,
           "name": "WUD_API_AUTH_BASIC_PASSWORD_FILE"
-        },
-        {
-          "configured": false,
-          "name": "WUDUP_TRIGGER_TOKEN"
-        },
-        {
-          "configured": false,
-          "name": "WUDUP_TRIGGER_TOKEN_FILE"
         },
         {
           "configured": false,
@@ -122119,6 +122126,21 @@ export const generatedFixtures = {
       },
       {
         "allowed_values": [
+          "on_demand",
+          "on_detection"
+        ],
+        "configured": false,
+        "default_value": "on_detection",
+        "disabled_reason": "",
+        "editable": true,
+        "key": "release_notifications_delivery_mode",
+        "restart_required": false,
+        "sensitive": false,
+        "source": "default",
+        "value": "on_detection"
+      },
+      {
+        "allowed_values": [
           "digest",
           "per_container"
         ],
@@ -122207,14 +122229,6 @@ export const generatedFixtures = {
       {
         "configured": false,
         "name": "WUD_API_AUTH_BASIC_PASSWORD_FILE"
-      },
-      {
-        "configured": false,
-        "name": "WUDUP_TRIGGER_TOKEN"
-      },
-      {
-        "configured": false,
-        "name": "WUDUP_TRIGGER_TOKEN_FILE"
       },
       {
         "configured": false,

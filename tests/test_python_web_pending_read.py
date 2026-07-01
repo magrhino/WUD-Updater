@@ -112,6 +112,38 @@ def test_pending_endpoint_reads_wud_api_source_without_wud_file(
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
+def test_legacy_disabled_forces_api_pending_source_without_wud_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(monkeypatch, containers=[_wud_api_container(name="app")])
+
+    def fail_file_read(_path: Path):
+        raise AssertionError("legacy-disabled WebUI should not read images.todo")
+
+    monkeypatch.setattr(
+        pending_module.web_pending_sources,
+        "_read_pending_file",
+        fail_file_read,
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUDUP_LEGACY_SCRIPTS": "FALSE",
+            "WUD_PENDING_SOURCE": "file",
+        },
+    )
+
+    response = client.get("/api/v1/pending")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["source"]["configured"] == "api"
+    assert body["source"]["active"] == "api"
+    assert body["count"] == 1
+
+
 def test_pending_endpoint_preserves_tag_for_wud_api_digest_source(
     tmp_path: Path,
     monkeypatch,
