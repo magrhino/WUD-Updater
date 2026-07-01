@@ -1,6 +1,7 @@
 from __future__ import annotations
+import urllib.parse
 from pathlib import Path
-from wudup import web_jobs, web_plans
+from wudup import web_jobs, web_plans, web_wud_api
 from wudup.db import open_db
 from wudup.locks import DirectoryLock, WudLockError, lock_dir_for
 from tests.web_test_helpers import (
@@ -286,17 +287,28 @@ def test_apply_endpoint_uses_api_pending_source_without_editing_wud_file(
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:new",
+            update_kind="digest",
+        )
+    ]
     _install_wud_api(
         monkeypatch,
-        containers=[
-            _wud_api_container(
-                tag="latest",
-                remote_tag="",
-                remote_digest="sha256:new",
-                update_kind="digest",
-            )
-        ],
+        containers=containers,
     )
+    wud_api_posts: list[str] = []
+
+    def fake_post_json(url: str, _client_config=None, **_kwargs) -> object:
+        path = urllib.parse.urlsplit(url).path
+        wud_api_posts.append(path)
+        if path == "/api/containers/watch":
+            containers.clear()
+        return {"status": "ok"}
+
+    monkeypatch.setattr(web_wud_api, "_post_json", fake_post_json)
     client = _client(
         tmp_path,
         {
@@ -355,6 +367,10 @@ def test_apply_endpoint_uses_api_pending_source_without_editing_wud_file(
     assert detail["metadata"]["pending_source"] == "api"
     assert detail["metadata"]["pending_source_configured"] == "api"
     assert detail["metadata"]["pending_source_label"] == "WUD API"
+    assert "/api/containers/watch" in wud_api_posts
+    pending = client.get("/api/v1/pending").json()
+    assert pending["source"]["active"] == "api"
+    assert pending["count"] == 0
 
 
 def test_apply_endpoint_rejects_stale_api_pending_source_without_editing_file(

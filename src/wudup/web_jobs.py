@@ -17,6 +17,7 @@ from typing import Any, Protocol, cast
 from fastapi import HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 
+from . import web_wud_api
 from .command import CommandRunner
 from .config import UpdaterConfig
 from .db import utc_timestamp
@@ -469,6 +470,13 @@ def _run_apply_job(
         )
         status_code = runner.run()
         job_status: ApplyJobStatus = "success" if status_code == 0 else "failure"
+        if status_code == 0 and run_context.pending_source_text is not None:
+            _refresh_api_pending_source_after_apply(
+                settings,
+                jobs,
+                apply_condition,
+                job_id,
+            )
         auto_update_schedule_run_updater(
             settings,
             run_context.auto_update_schedule_keys,
@@ -528,6 +536,35 @@ def _run_apply_job(
         )
     if cleanup_error is not None:
         raise cleanup_error
+
+
+def _refresh_api_pending_source_after_apply(
+    settings: WebSettings,
+    jobs: dict[str, WebApplyJob],
+    apply_condition: Condition,
+    job_id: str,
+) -> None:
+    status: ApplyJobProgressStatus = "success"
+    message = "WUD API pending state refreshed."
+    try:
+        result = web_wud_api.watch_all(settings)
+    except Exception:
+        status = "skipped"
+        message = "WUD API pending refresh skipped."
+    else:
+        if result.snapshot.status.state != "ready" or not result.watched:
+            status = "skipped"
+            message = "WUD API pending refresh skipped."
+    _append_apply_job_progress(
+        jobs,
+        apply_condition,
+        job_id,
+        UpdaterProgressEvent(
+            phase="wud-api-refresh",
+            status=status,
+            message=message,
+        ),
+    )
 
 
 def _update_apply_job(
