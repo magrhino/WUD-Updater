@@ -79,12 +79,11 @@ by themselves:
 
 WUDup defaults to non-mutating operation where practical:
 
-- The container image runs `updates --dry-run` by default.
-- `--dry-run` must not pull images, recreate containers, remove WUD lines, or
-  otherwise mutate host state.
+- The container image starts the WebUI by default, with browser mutations
+  disabled unless `WUD_WEB_MUTATIONS_ENABLED=true` is set.
+- Explicit helper and updater `--dry-run` commands must not pull images,
+  recreate containers, remove WUD lines, or otherwise mutate host state.
 - Mutating Docker operations require interactive confirmation or `--yes`.
-- The WebUI starts read-only by default, with browser mutations disabled unless
-  `WUD_WEB_MUTATIONS_ENABLED=true` is set.
 - Browser sessions use HttpOnly cookies and CSRF protection. `WUD_WEB_TOKEN` is
   only an optional API bearer token; it is not accepted by the browser login form
   and does not bypass first-run setup.
@@ -104,8 +103,9 @@ where those commands are printed.
 
 The repository keeps security checks high-signal and cost-conscious:
 
-- Dependabot checks Python, npm, Docker, and GitHub Actions dependencies on a
-  weekly schedule.
+- Dependabot checks Python, npm, and GitHub Actions dependencies on a weekly
+  schedule.
+- Renovate checks Dockerfile image tags on a weekly schedule.
 - CodeQL scans Actions, Python, and WebUI JavaScript/TypeScript.
 - The security workflow runs workflow auditing with zizmor.
 - Dependency Review blocks public pull requests with high-severity dependency
