@@ -536,22 +536,20 @@ useRouteRefresh(() => updates.loadPending());
 
 async function refreshAfterTerminalApplyJob(): Promise<void> {
   const job = updates.applyJob;
-  if (job?.status !== "success") {
-    await loadPendingAndReleaseNotesHandler();
-    return;
+  if (job?.status === "success") {
+    if (!updates.pending) {
+      await updates.loadPending();
+    }
+    if (updates.pending?.source.active === "api") {
+      try {
+        await updates.rescanPending("selected", job.selected_line_numbers);
+        return;
+      } catch {
+        // Fall back to the standard refresh below.
+      }
+    }
   }
-  if (!updates.pending) {
-    await updates.loadPending();
-  }
-  if (updates.pending?.source.active !== "api") {
-    await loadPendingAndReleaseNotesHandler();
-    return;
-  }
-  try {
-    await updates.rescanPending("selected", job.selected_line_numbers);
-  } catch {
-    await loadPendingAndReleaseNotesHandler();
-  }
+  await loadPendingAndReleaseNotesHandler();
 }
 
 function releaseNoteStatus(note: ReleaseNoteInfo | null): string {

@@ -65,6 +65,47 @@ import {
   unmatchedPendingItem,
 } from "./helpers/viewSecurity";
 
+function apiBackedPendingResponse() {
+  return {
+    ...pendingResponse([
+      pendingItem({ source: "api", source_id: "docker.local.app" }),
+    ]),
+    source_file: "WUD API",
+    source: pendingSourceInfo({
+      configured: "api",
+      active: "api",
+      label: "WUD API",
+    }),
+  };
+}
+
+function mockApplyPlan(updates: ReturnType<typeof useUpdatesStore>): void {
+  vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+    updates.plan = planResponse();
+  });
+  vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
+    const job = applyJobResponse();
+    updates.setApplyJob(job);
+    return job;
+  });
+}
+
+async function previewAndApplyFirstUpdate(
+  wrapper: ReturnType<typeof mountPendingView>,
+): Promise<void> {
+  await wrapper
+    .findAll("button")
+    .find((button) => button.text().includes("Preview media plan"))
+    ?.trigger("click");
+  await flushPromises();
+  await wrapper
+    .find('[role="dialog"]')
+    .findAll("button")
+    .find((button) => button.text().includes("Apply 1 update"))
+    ?.trigger("click");
+  await flushPromises();
+}
+
 describe("pending view apply jobs", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -254,78 +295,48 @@ describe("pending view apply jobs", () => {
     expect(wrapper.find(".batch-action-bar").exists()).toBe(false);
   });
 
-  it("rescans api-backed pending updates after successful apply", async () => {
+  it.each([
+    ["rescans api-backed pending updates after successful apply", true],
+    ["falls back to normal pending refresh when api rescan fails", false],
+  ])("%s", async (_label, rescanSucceeds) => {
     const { pinia, settings, updates, runs } = setupStores(true);
-    updates.pending = {
-      ...pendingResponse([
-        pendingItem({ source: "api", source_id: "docker.local.app" }),
-      ]),
-      source_file: "WUD API",
-      source: pendingSourceInfo({
-        configured: "api",
-        active: "api",
-        label: "WUD API",
-      }),
-    };
-    const loadPending = vi.spyOn(updates, "loadPending").mockResolvedValue();
-    vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
-    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
-    vi.spyOn(updates, "loadSecurityScans").mockResolvedValue();
-    vi.spyOn(settings, "loadPendingSafetyCues").mockResolvedValue();
+    updates.pending = apiBackedPendingResponse();
+    const { loadPending, loadReleaseNotes } = mockPendingLifecycle(settings, updates);
     vi.spyOn(runs, "loadRuns").mockResolvedValue();
     vi.spyOn(runs, "loadRunDetail").mockResolvedValue();
-    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
-      updates.plan = planResponse();
-    });
-    vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
-      const job = applyJobResponse();
-      updates.setApplyJob(job);
-      return job;
-    });
-    const rescanPending = vi.spyOn(updates, "rescanPending").mockResolvedValue(
-      pendingRescanResponse({
-        scope: "selected",
-        requested_count: 1,
-        watched_count: 1,
-      }),
-    );
+    mockApplyPlan(updates);
+    const rescanPending = vi
+      .spyOn(updates, "rescanPending")
+      .mockImplementation(async () => {
+        if (!rescanSucceeds) {
+          throw new Error("selected rescan is stale");
+        }
+        return pendingRescanResponse();
+      });
     const jobStream = mockApplyJobStream();
     const wrapper = mountPendingView(pinia);
 
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Preview media plan"))
-      ?.trigger("click");
-    await flushPromises();
-    await wrapper
-      .find('[role="dialog"]')
-      .findAll("button")
-      .find((button) => button.text().includes("Apply 1 update"))
-      ?.trigger("click");
-    await flushPromises();
+    await previewAndApplyFirstUpdate(wrapper);
 
     loadPending.mockClear();
+    loadReleaseNotes.mockClear();
     jobStream.emitJob(applyJobResponse({ status: "success", run_id: 10 }));
     await flushPromises();
 
     expect(rescanPending).toHaveBeenCalledWith("selected", [1]);
-    expect(loadPending).not.toHaveBeenCalled();
+    if (rescanSucceeds) {
+      expect(loadPending).not.toHaveBeenCalled();
+      expect(loadReleaseNotes).not.toHaveBeenCalled();
+    } else {
+      expect(loadPending).toHaveBeenCalled();
+      expect(loadReleaseNotes).toHaveBeenCalled();
+    }
   });
 
   it("loads pending before api rescan for terminal remembered apply jobs", async () => {
     window.sessionStorage.setItem("applyJobId", "job-terminal");
     const { pinia, settings, updates, runs } = setupStores(true);
-    const apiPending = {
-      ...pendingResponse([
-        pendingItem({ source: "api", source_id: "docker.local.app" }),
-      ]),
-      source_file: "WUD API",
-      source: pendingSourceInfo({
-        configured: "api",
-        active: "api",
-        label: "WUD API",
-      }),
-    };
+    const apiPending = apiBackedPendingResponse();
     let loadPendingCalls = 0;
     let finishInitialPendingLoad: () => void = () => undefined;
     const loadPending = vi.spyOn(updates, "loadPending").mockImplementation(async () => {
@@ -354,13 +365,9 @@ describe("pending view apply jobs", () => {
         run_id: 10,
       }),
     );
-    const rescanPending = vi.spyOn(updates, "rescanPending").mockResolvedValue(
-      pendingRescanResponse({
-        scope: "selected",
-        requested_count: 1,
-        watched_count: 1,
-      }),
-    );
+    const rescanPending = vi
+      .spyOn(updates, "rescanPending")
+      .mockResolvedValue(pendingRescanResponse());
 
     mountPendingView(pinia);
     await flushPromises();
@@ -370,64 +377,6 @@ describe("pending view apply jobs", () => {
 
     finishInitialPendingLoad();
     await flushPromises();
-  });
-
-  it("falls back to normal pending refresh when api rescan fails", async () => {
-    const { pinia, settings, updates, runs } = setupStores(true);
-    updates.pending = {
-      ...pendingResponse([
-        pendingItem({ source: "api", source_id: "docker.local.app" }),
-      ]),
-      source_file: "WUD API",
-      source: pendingSourceInfo({
-        configured: "api",
-        active: "api",
-        label: "WUD API",
-      }),
-    };
-    const loadPending = vi.spyOn(updates, "loadPending").mockResolvedValue();
-    const loadReleaseNotes = vi
-      .spyOn(updates, "loadReleaseNotes")
-      .mockResolvedValue();
-    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
-    vi.spyOn(updates, "loadSecurityScans").mockResolvedValue();
-    vi.spyOn(settings, "loadPendingSafetyCues").mockResolvedValue();
-    vi.spyOn(runs, "loadRuns").mockResolvedValue();
-    vi.spyOn(runs, "loadRunDetail").mockResolvedValue();
-    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
-      updates.plan = planResponse();
-    });
-    vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
-      const job = applyJobResponse();
-      updates.setApplyJob(job);
-      return job;
-    });
-    const rescanPending = vi
-      .spyOn(updates, "rescanPending")
-      .mockRejectedValue(new Error("selected rescan is stale"));
-    const jobStream = mockApplyJobStream();
-    const wrapper = mountPendingView(pinia);
-
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Preview media plan"))
-      ?.trigger("click");
-    await flushPromises();
-    await wrapper
-      .find('[role="dialog"]')
-      .findAll("button")
-      .find((button) => button.text().includes("Apply 1 update"))
-      ?.trigger("click");
-    await flushPromises();
-
-    loadPending.mockClear();
-    loadReleaseNotes.mockClear();
-    jobStream.emitJob(applyJobResponse({ status: "success", run_id: 10 }));
-    await flushPromises();
-
-    expect(rescanPending).toHaveBeenCalledWith("selected", [1]);
-    expect(loadPending).toHaveBeenCalled();
-    expect(loadReleaseNotes).toHaveBeenCalled();
   });
 
   it("keeps an earlier phase failure visible after a later same-phase success", async () => {
