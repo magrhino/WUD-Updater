@@ -1433,7 +1433,7 @@ class PendingMetadataRefreshRequest(BaseModel):
     lines: list[PendingMetadataRefreshLine] = Field(default_factory=list)
 
 class PendingMetadataRefreshItem(BaseModel):
-    line_no: int
+    line_no: LineNumber
     raw: str
     source_id: str = ""
     wud_metadata: WudContainerMetadata | None = None

@@ -192,13 +192,18 @@ describe("pending view selection actions", () => {
       .spyOn(updates, "refreshPendingMetadata")
       .mockResolvedValue();
     const wrapper = mountPendingView(pinia);
+    const selectedInput = () =>
+      wrapper.find<HTMLInputElement>('input[aria-label="Select update repo/app:1.0"]');
 
     try {
+      await selectedInput().setValue(true);
+
       await vi.advanceTimersByTimeAsync(30_000);
       await flushPromises();
 
       expect(loadStatus).toHaveBeenCalledTimes(1);
       expect(refreshPendingMetadata).toHaveBeenCalledTimes(1);
+      expect(selectedInput().element.checked).toBe(true);
 
       wrapper.unmount();
       await vi.advanceTimersByTimeAsync(30_000);

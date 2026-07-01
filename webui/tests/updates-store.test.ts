@@ -281,8 +281,17 @@ describe("updates store", () => {
       source_id: "file:2",
       wud_metadata: oldMetadata,
     });
+    const untrackedItem = pendingItem({
+      line_no: 3,
+      raw: "repo/untracked:1.0",
+      image: "repo/untracked:1.0",
+      key: "repo/untracked",
+      repo: "repo/untracked",
+      source_id: "file:3",
+      wud_metadata: null,
+    });
     const pending = {
-      ...pendingResponse([groupedItem, unmatchedItem]),
+      ...pendingResponse([groupedItem, unmatchedItem, untrackedItem]),
       wud_api: wudApiStatus({ last_checked_at: "old-check" }),
       grouping: {
         status: "ready" as const,
@@ -394,6 +403,7 @@ describe("updates store", () => {
     ).toBe("csrf-metadata");
     expect(updates.pending?.items[0].wud_metadata?.remote_tag).toBe("1.2");
     expect(updates.pending?.items[1].wud_metadata).toBeNull();
+    expect(updates.pending?.items[2].wud_metadata).toBeNull();
     expect(
       updates.pending?.grouping.groups[0].items[0].wud_metadata?.remote_tag,
     ).toBe("1.2");

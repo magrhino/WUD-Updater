@@ -119,10 +119,9 @@ const securityScanRefreshMutationMessage =
   "Wait for the active WebUI mutation to finish before refreshing candidate " +
   "security scans.";
 const PENDING_METADATA_REFRESH_INTERVAL_MS = 30_000;
-let pendingMetadataRefreshInterval:
-  | ReturnType<typeof globalThis.setInterval>
-  | null = null;
-let pendingMetadataRefreshInFlight = false;
+const pendingMetadataRefreshInterval =
+  ref<ReturnType<typeof globalThis.setInterval> | null>(null);
+const pendingMetadataRefreshInFlight = ref(false);
 
 const {
   clearSelection,
@@ -612,10 +611,10 @@ async function refreshSecurityScans(): Promise<void> {
 }
 
 async function refreshPendingMetadataFromStatus(): Promise<void> {
-  if (pendingMetadataRefreshInFlight) {
+  if (pendingMetadataRefreshInFlight.value) {
     return;
   }
-  pendingMetadataRefreshInFlight = true;
+  pendingMetadataRefreshInFlight.value = true;
   try {
     await connection.loadStatus();
     const checkedAt = connection.status?.wud_api.last_checked_at ?? "";
@@ -624,7 +623,7 @@ async function refreshPendingMetadataFromStatus(): Promise<void> {
     }
     await updates.refreshPendingMetadata();
   } finally {
-    pendingMetadataRefreshInFlight = false;
+    pendingMetadataRefreshInFlight.value = false;
   }
 }
 
@@ -632,15 +631,15 @@ onMounted(() => {
   runInBackground(retryPendingLoad());
   runInBackground(settings.loadPendingSafetyCues());
   runInBackground(reconnectObservedApplyJob());
-  pendingMetadataRefreshInterval = globalThis.setInterval(() => {
+  pendingMetadataRefreshInterval.value = globalThis.setInterval(() => {
     runInBackground(refreshPendingMetadataFromStatus());
   }, PENDING_METADATA_REFRESH_INTERVAL_MS);
 });
 
 onBeforeUnmount(() => {
-  if (pendingMetadataRefreshInterval !== null) {
-    globalThis.clearInterval(pendingMetadataRefreshInterval);
-    pendingMetadataRefreshInterval = null;
+  if (pendingMetadataRefreshInterval.value !== null) {
+    globalThis.clearInterval(pendingMetadataRefreshInterval.value);
+    pendingMetadataRefreshInterval.value = null;
   }
 });
 </script>

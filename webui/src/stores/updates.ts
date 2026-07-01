@@ -36,6 +36,7 @@ import {
   type SecurityScanJobResponse,
   type SecurityScansResponse,
   type TagOverrideRequest,
+  type WudContainerMetadata,
   type UpdateTargetsResponse,
   webApi,
 } from "../api/client";
@@ -68,6 +69,39 @@ const TERMINAL_APPLY_JOB_STATUSES = new Set<ApplyJobResponse["status"]>([
   "success",
   "failure",
 ]);
+const WUD_METADATA_FIELDS: readonly (keyof WudContainerMetadata)[] = [
+  "id",
+  "name",
+  "display_name",
+  "status",
+  "watcher",
+  "local_tag",
+  "local_digest",
+  "remote_tag",
+  "remote_digest",
+  "update_kind",
+  "semver_diff",
+  "link",
+  "error",
+  "platform",
+  "platform_os",
+  "platform_architecture",
+  "platform_variant",
+];
+
+function wudMetadataChanged(
+  current: WudContainerMetadata | null | undefined,
+  next: WudContainerMetadata | null | undefined,
+): boolean {
+  const currentMetadata = current ?? null;
+  const nextMetadata = next ?? null;
+  if (currentMetadata === null || nextMetadata === null) {
+    return currentMetadata !== nextMetadata;
+  }
+  return WUD_METADATA_FIELDS.some(
+    (field) => currentMetadata[field] !== nextMetadata[field],
+  );
+}
 
 function pendingMetadataChanged(
   item: PendingItem,
@@ -76,8 +110,7 @@ function pendingMetadataChanged(
   return (
     item.raw !== metadata.raw ||
     item.source_id !== metadata.source_id ||
-    JSON.stringify(item.wud_metadata ?? null) !==
-      JSON.stringify(metadata.wud_metadata ?? null)
+    wudMetadataChanged(item.wud_metadata, metadata.wud_metadata)
   );
 }
 
@@ -175,14 +208,17 @@ export const useUpdatesStore = defineStore("updates", () => {
       return;
     }
     const auth = useAuthStore();
+    const lines = current.items
+      .filter((item) => item.wud_metadata !== null && item.wud_metadata !== undefined)
+      .map((item) => ({
+        line_no: item.line_no,
+        raw: item.raw,
+        source_id: item.source_id,
+      }));
     const response = await webApi.pendingMetadata(
       {
         source_hash: current.source_hash ?? "",
-        lines: current.items.map((item) => ({
-          line_no: item.line_no,
-          raw: item.raw,
-          source_id: item.source_id,
-        })),
+        lines,
       },
       await auth.ensureCsrf(),
     );
