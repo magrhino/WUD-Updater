@@ -9,6 +9,8 @@ import {
   type DigestPinLabelRewriteApprovalRequest,
   type PendingCleanupLine,
   type PendingCleanupResponse,
+  type PendingGroupedItem,
+  type PendingMetadataRefreshItem,
   type PendingRemovalPlanResponse,
   type PendingRescanLine,
   type PendingRescanResponse,
@@ -81,6 +83,7 @@ const SECURITY_SCAN_POLL_ATTEMPTS_PER_CANDIDATE = 720;
 
 export const useUpdatesStore = defineStore("updates", () => {
   const pending = ref<PendingResponse | null>(null);
+  const pendingWudMetadataCheckedAt = ref("");
   const updateTargets = ref<UpdateTargetsResponse | null>(null);
   const retagTargets = ref<RetagTargetsResponse | null>(null);
   const retagChoices = ref<Record<string, RetagTargetChoice>>({});
@@ -158,7 +161,41 @@ export const useUpdatesStore = defineStore("updates", () => {
       if (!options.preserveCleanup) {
         pendingCleanup.value = null;
       }
-      pending.value = await webApi.pending();
+      setPending(await webApi.pending());
+    });
+  }
+
+  async function refreshPendingMetadata(): Promise<void> {
+    const current = pending.value;
+    if (current === null) {
+      return;
+    }
+    const auth = useAuthStore();
+    await loadWithState(async () => {
+      const response = await webApi.pendingMetadata(
+        {
+          source_hash: current.source_hash ?? "",
+          lines: current.items.map((item) => ({
+            line_no: item.line_no,
+            raw: item.raw,
+            source_id: item.source_id,
+          })),
+        },
+        await auth.ensureCsrf(),
+      );
+      if (response.requires_pending_reload) {
+        await loadPending({ preserveCleanup: true });
+        return;
+      }
+      patchPendingMetadata(response.items);
+      if (pending.value) {
+        pending.value = {
+          ...pending.value,
+          source_hash: response.source_hash,
+          wud_api: response.wud_api,
+        };
+      }
+      pendingWudMetadataCheckedAt.value = response.wud_api.last_checked_at;
     });
   }
 
@@ -795,7 +832,7 @@ export const useUpdatesStore = defineStore("updates", () => {
         await auth.ensureCsrf(),
       );
       pendingRescan.value = response;
-      pending.value = await webApi.pending();
+      setPending(await webApi.pending());
     });
     await loadReleaseNotes().catch(() => undefined);
     await loadSecurityScans().catch(() => undefined);
@@ -810,6 +847,43 @@ export const useUpdatesStore = defineStore("updates", () => {
   function clearPlan(): void {
     plan.value = null;
     pendingRemovalPlan.value = null;
+  }
+
+  function setPending(response: PendingResponse): void {
+    pending.value = response;
+    pendingWudMetadataCheckedAt.value = response.wud_api.last_checked_at;
+  }
+
+  function patchPendingMetadata(items: PendingMetadataRefreshItem[]): void {
+    const current = pending.value;
+    if (current === null) {
+      return;
+    }
+    const byLine = new Map(items.map((item) => [item.line_no, item]));
+    const patchItem = <T extends PendingItem>(item: T): T => {
+      const metadata = byLine.get(item.line_no);
+      if (!metadata) {
+        return item;
+      }
+      return {
+        ...item,
+        raw: metadata.raw,
+        source_id: metadata.source_id,
+        wud_metadata: metadata.wud_metadata,
+      };
+    };
+    pending.value = {
+      ...current,
+      items: current.items.map(patchItem),
+      grouping: {
+        ...current.grouping,
+        groups: current.grouping.groups.map((group) => ({
+          ...group,
+          items: group.items.map((item: PendingGroupedItem) => patchItem(item)),
+        })),
+        unmatched: current.grouping.unmatched.map((item) => patchItem(item)),
+      },
+    };
   }
 
   async function createJob(
@@ -971,6 +1045,7 @@ export const useUpdatesStore = defineStore("updates", () => {
 
   return {
     pending,
+    pendingWudMetadataCheckedAt,
     updateTargets,
     retagTargets,
     retagChoices,
@@ -1009,6 +1084,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     securityScansError,
     error,
     loadPending,
+    refreshPendingMetadata,
     loadUpdateTargets,
     loadRetagTargets,
     setRetagGithubLatestFallback,

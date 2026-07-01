@@ -15,6 +15,7 @@ import {
   releaseNotificationResponse,
   releaseNotesResponse,
   snooze,
+  statusResponse,
   wudApiStatus,
   wudContainerMetadata,
 } from "./helpers/fixtures";
@@ -172,6 +173,43 @@ describe("pending view selection actions", () => {
     await cleanupButton?.trigger("click");
 
     expect(cleanupPending).not.toHaveBeenCalled();
+  });
+
+  it("refreshes pending metadata from status timestamp changes while mounted", async () => {
+    vi.useFakeTimers();
+    const { pinia, connection, settings, updates } = setupStores(true);
+    updates.pending = pendingResponse();
+    updates.pendingWudMetadataCheckedAt = "2026-01-02T00:00:00+00:00";
+    mockPendingLifecycle(settings, updates);
+    const loadStatus = vi.spyOn(connection, "loadStatus").mockImplementation(async () => {
+      connection.status = statusResponse({
+        wud_api: wudApiStatus({
+          last_checked_at: "2026-01-02T00:00:30+00:00",
+        }),
+      });
+    });
+    const refreshPendingMetadata = vi
+      .spyOn(updates, "refreshPendingMetadata")
+      .mockResolvedValue();
+    const wrapper = mountPendingView(pinia);
+
+    try {
+      await vi.advanceTimersByTimeAsync(30_000);
+      await flushPromises();
+
+      expect(loadStatus).toHaveBeenCalledTimes(1);
+      expect(refreshPendingMetadata).toHaveBeenCalledTimes(1);
+
+      wrapper.unmount();
+      await vi.advanceTimersByTimeAsync(30_000);
+      await flushPromises();
+
+      expect(loadStatus).toHaveBeenCalledTimes(1);
+      expect(refreshPendingMetadata).toHaveBeenCalledTimes(1);
+    } finally {
+      wrapper.unmount();
+      vi.useRealTimers();
+    }
   });
 
   it("disables security scan refresh while an apply job is active", async () => {

@@ -15,6 +15,8 @@ import type {
   PendingCleanupResponse,
   PendingGroupedItem,
   PendingItem,
+  PendingMetadataRefreshRequest,
+  PendingMetadataRefreshResponse,
   PendingRescanLine,
   PendingRemovalPlanResponse,
   PendingResponse,
@@ -874,6 +876,52 @@ export class DemoApiState {
 
   pendingResponse(): PendingResponse {
     return filterPendingResponse(this.activePendingLineKeys);
+  }
+
+  pendingMetadata(
+    request: PendingMetadataRefreshRequest,
+  ): PendingMetadataRefreshResponse {
+    const pending = this.pendingResponse();
+    if ((pending.source_hash ?? "") !== request.source_hash) {
+      return this.stalePendingMetadata(pending);
+    }
+    const byLine = new Map(pending.items.map((item) => [item.line_no, item]));
+    const items: PendingMetadataRefreshResponse["items"] = [];
+    for (const line of request.lines) {
+      const item = byLine.get(line.line_no);
+      if (
+        !item ||
+        item.raw !== line.raw ||
+        item.source_id !== line.source_id
+      ) {
+        return this.stalePendingMetadata(pending);
+      }
+      items.push({
+        line_no: item.line_no,
+        raw: item.raw,
+        source_id: item.source_id,
+        wud_metadata: item.wud_metadata ?? null,
+      });
+    }
+    return {
+      status: "ready",
+      requires_pending_reload: false,
+      source_hash: pending.source_hash ?? "",
+      wud_api: pending.wud_api,
+      items,
+    };
+  }
+
+  private stalePendingMetadata(
+    pending: PendingResponse,
+  ): PendingMetadataRefreshResponse {
+    return {
+      status: "stale",
+      requires_pending_reload: true,
+      source_hash: pending.source_hash ?? "",
+      wud_api: pending.wud_api,
+      items: [],
+    };
   }
 
   updateTargets(): UpdateTargetsResponse {

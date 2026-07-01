@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 from wudup import web_pending as pending_module
+from wudup import web_wud_api
 from wudup.config import ConfigError
 from tests.web_test_helpers import (
     _client,
@@ -13,6 +14,7 @@ from tests.web_test_helpers import (
     _install_wud_api,
     _wud_api_container,
 )
+from tests.web_wud_rescan_helpers import install_recording_wud_api
 
 
 def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> None:
@@ -157,6 +159,222 @@ def test_pending_endpoint_preserves_tag_for_wud_api_digest_source(
     calls = _fake_docker_calls(fake_root)
     assert "worker" not in calls
     _assert_pending_grouping_did_not_mutate(calls)
+
+
+def test_pending_metadata_endpoint_refreshes_file_source_without_wud_watch(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = install_recording_wud_api(
+        monkeypatch,
+        [_wud_api_container(image="repo/app", tag="latest", remote_tag="2.0")],
+    )
+
+    def fail_watch_all(_settings):
+        raise AssertionError("watch_all called")
+
+    def fail_watch_containers(_settings, _ids):
+        raise AssertionError("watch_containers called")
+
+    monkeypatch.setattr(web_wud_api, "watch_all", fail_watch_all)
+    monkeypatch.setattr(web_wud_api, "watch_containers", fail_watch_containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_API_BASE_URL": "https://wud.metadata-file.test:3000",
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    pending_body = client.get("/api/v1/pending").json()
+    calls.clear()
+
+    response = client.post(
+        "/api/v1/pending/metadata",
+        json={
+            "source_hash": pending_body["source_hash"],
+            "lines": [
+                {
+                    "line_no": item["line_no"],
+                    "raw": item["raw"],
+                    "source_id": item["source_id"],
+                }
+                for item in pending_body["items"]
+            ],
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ready"
+    assert body["requires_pending_reload"] is False
+    assert body["source_hash"] == pending_body["source_hash"]
+    assert len(body["items"]) == 1
+    assert body["items"][0]["line_no"] == 1
+    assert body["items"][0]["raw"] == "repo/app:latest"
+    assert body["items"][0]["source_id"] == "file:1"
+    assert body["items"][0]["wud_metadata"]["remote_tag"] == "2.0"
+    assert [method for method, _path in calls if method == "POST"] == []
+
+
+def test_pending_metadata_endpoint_reports_changed_source_hash(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(monkeypatch, containers=[])
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_API_BASE_URL": "https://wud.metadata-stale.test:3000",
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    pending_body = client.get("/api/v1/pending").json()
+    wud_file.write_text("repo/other:latest\n", encoding="utf-8")
+
+    response = client.post(
+        "/api/v1/pending/metadata",
+        json={
+            "source_hash": pending_body["source_hash"],
+            "lines": [
+                {
+                    "line_no": 1,
+                    "raw": "repo/app:latest",
+                    "source_id": "file:1",
+                }
+            ],
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "stale"
+    assert body["requires_pending_reload"] is True
+    assert body["source_hash"] != pending_body["source_hash"]
+    assert body["items"] == []
+
+
+def test_pending_metadata_endpoint_reports_stale_line_identity(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(monkeypatch, containers=[])
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_API_BASE_URL": "https://wud.metadata-line-stale.test:3000",
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    pending_body = client.get("/api/v1/pending").json()
+
+    for stale_line in (
+        {"line_no": 2, "raw": "repo/app:latest", "source_id": "file:1"},
+        {"line_no": 1, "raw": "repo/changed:latest", "source_id": "file:1"},
+        {"line_no": 1, "raw": "repo/app:latest", "source_id": "file:2"},
+    ):
+        response = client.post(
+            "/api/v1/pending/metadata",
+            json={
+                "source_hash": pending_body["source_hash"],
+                "lines": [stale_line],
+            },
+            headers=_csrf_headers(client),
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "stale"
+        assert body["requires_pending_reload"] is True
+        assert body["items"] == []
+
+
+def test_pending_metadata_endpoint_clears_unavailable_wud_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(monkeypatch, containers=[], health_error=OSError("offline"))
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_API_BASE_URL": "https://wud.metadata-unavailable.test:3000",
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    pending_body = client.get("/api/v1/pending").json()
+
+    response = client.post(
+        "/api/v1/pending/metadata",
+        json={
+            "source_hash": pending_body["source_hash"],
+            "lines": [
+                {
+                    "line_no": 1,
+                    "raw": "repo/app:latest",
+                    "source_id": "file:1",
+                }
+            ],
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ready"
+    assert body["requires_pending_reload"] is False
+    assert body["wud_api"]["metadata_available"] is False
+    assert body["items"][0]["wud_metadata"] is None
+
+
+def test_pending_metadata_endpoint_refreshes_api_source(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(
+        monkeypatch,
+        containers=[_wud_api_container(image="repo/app", tag="1.0", remote_tag="2.0")],
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.metadata-api.test:3000",
+        },
+    )
+    pending_body = client.get("/api/v1/pending").json()
+
+    response = client.post(
+        "/api/v1/pending/metadata",
+        json={
+            "source_hash": pending_body["source_hash"],
+            "lines": [
+                {
+                    "line_no": item["line_no"],
+                    "raw": item["raw"],
+                    "source_id": item["source_id"],
+                }
+                for item in pending_body["items"]
+            ],
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ready"
+    assert body["requires_pending_reload"] is False
+    assert body["items"][0]["source_id"] == "docker.local.app"
+    assert body["items"][0]["wud_metadata"]["remote_tag"] == "2.0"
 
 
 def test_pending_endpoint_auto_falls_back_to_wud_file_when_api_unavailable(

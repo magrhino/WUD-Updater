@@ -289,6 +289,17 @@ def create_app(
         response_model=web_models.PendingResponse,
     )
     router.add_api_route(
+        "/pending/metadata",
+        web_pending.api_pending_metadata,
+        methods=["POST"],
+        response_model=web_models.PendingMetadataRefreshResponse,
+    )
+    router.add_api_route(
+        "/pending/metadata",
+        api_post_only_method_not_allowed,
+        methods=["GET"],
+    )
+    router.add_api_route(
         "/update-targets",
         web_pending.api_update_targets,
         methods=["GET"],

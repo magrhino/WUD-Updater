@@ -197,6 +197,34 @@ export interface PendingCleanupResponse {
   removed: PendingCleanupRemovedLine[];
 }
 
+export type PendingMetadataRefreshStatus = "ready" | "stale";
+
+export interface PendingMetadataRefreshLine {
+  line_no: number;
+  raw: string;
+  source_id: string;
+}
+
+export interface PendingMetadataRefreshRequest {
+  source_hash: string;
+  lines: PendingMetadataRefreshLine[];
+}
+
+export interface PendingMetadataRefreshItem {
+  line_no: number;
+  raw: string;
+  source_id: string;
+  wud_metadata: WudContainerMetadata | null;
+}
+
+export interface PendingMetadataRefreshResponse {
+  status: PendingMetadataRefreshStatus;
+  requires_pending_reload: boolean;
+  source_hash: string;
+  wud_api: WudApiStatus;
+  items: PendingMetadataRefreshItem[];
+}
+
 export type PendingRescanScope = "all" | "selected";
 export type PendingRescanStatus = "success" | "partial" | "blocked";
 
