@@ -144,6 +144,31 @@ describe("connection store", () => {
     expect(connection.status?.version).toBe("0.24.2");
   });
 
+  it("loads status silently without touching shared loading or error", async () => {
+    const fetchMock = mockFetch(statusResponse({ version: "0.24.3" }));
+    const connection = useConnectionStore();
+    connection.error = "existing connection error";
+    connection.loading = true;
+
+    await connection.loadStatus({ silent: true });
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/status");
+    expect(connection.status?.version).toBe("0.24.3");
+    expect(connection.error).toBe("existing connection error");
+    expect(connection.loading).toBe(true);
+  });
+
+  it("keeps shared errors unchanged when silent status loading fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+    const connection = useConnectionStore();
+    connection.error = "existing connection error";
+
+    await expect(connection.loadStatus({ silent: true })).rejects.toThrow("network down");
+
+    expect(connection.error).toBe("existing connection error");
+    expect(connection.loading).toBe(false);
+  });
+
   it("extracts error messages without accepting plain objects", () => {
     expect(errorMessage(new Error("plain error"))).toBe("plain error");
     expect(errorMessage("string error")).toBe("Request failed");

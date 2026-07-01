@@ -6,6 +6,7 @@ import type {
   CsrfResponse,
   DigestPinLabelRewriteApprovalRequest,
   PendingCleanupLine,
+  PendingMetadataRefreshRequest,
   PendingRescanLine,
   PendingRescanScope,
   ReleaseNotificationSource,
@@ -62,6 +63,11 @@ export function createDemoWebApi(): WebApi {
       _csrfToken: string,
     ) => state.updateCoreUpdateTour(status, step),
     pending: async () => state.pendingResponse(),
+    pendingMetadata: async (
+      request: PendingMetadataRefreshRequest,
+      _csrfToken: string,
+    ) =>
+      state.pendingMetadata(request),
     updateTargets: async () => state.updateTargets(),
     retagTargets: async () => state.retagTargets(),
     refreshRetagGithubLatest: async (_csrfToken: string) => state.retagTargets(),

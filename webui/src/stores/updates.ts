@@ -9,6 +9,8 @@ import {
   type DigestPinLabelRewriteApprovalRequest,
   type PendingCleanupLine,
   type PendingCleanupResponse,
+  type PendingGroupedItem,
+  type PendingMetadataRefreshItem,
   type PendingRemovalPlanResponse,
   type PendingRescanLine,
   type PendingRescanResponse,
@@ -34,6 +36,7 @@ import {
   type SecurityScanJobResponse,
   type SecurityScansResponse,
   type TagOverrideRequest,
+  type WudContainerMetadata,
   type UpdateTargetsResponse,
   webApi,
 } from "../api/client";
@@ -66,6 +69,50 @@ const TERMINAL_APPLY_JOB_STATUSES = new Set<ApplyJobResponse["status"]>([
   "success",
   "failure",
 ]);
+const WUD_METADATA_FIELDS: readonly (keyof WudContainerMetadata)[] = [
+  "id",
+  "name",
+  "display_name",
+  "status",
+  "watcher",
+  "local_tag",
+  "local_digest",
+  "remote_tag",
+  "remote_digest",
+  "update_kind",
+  "semver_diff",
+  "link",
+  "error",
+  "platform",
+  "platform_os",
+  "platform_architecture",
+  "platform_variant",
+];
+
+function wudMetadataChanged(
+  current: WudContainerMetadata | null | undefined,
+  next: WudContainerMetadata | null | undefined,
+): boolean {
+  const currentMetadata = current ?? null;
+  const nextMetadata = next ?? null;
+  if (currentMetadata === null || nextMetadata === null) {
+    return currentMetadata !== nextMetadata;
+  }
+  return WUD_METADATA_FIELDS.some(
+    (field) => currentMetadata[field] !== nextMetadata[field],
+  );
+}
+
+function pendingMetadataChanged(
+  item: PendingItem,
+  metadata: PendingMetadataRefreshItem,
+): boolean {
+  return (
+    item.raw !== metadata.raw ||
+    item.source_id !== metadata.source_id ||
+    wudMetadataChanged(item.wud_metadata, metadata.wud_metadata)
+  );
+}
 
 const TERMINAL_RETAG_PREVIEW_STATUSES = new Set<RetagPreviewJobResponse["status"]>([
   "success",
@@ -81,6 +128,7 @@ const SECURITY_SCAN_POLL_ATTEMPTS_PER_CANDIDATE = 720;
 
 export const useUpdatesStore = defineStore("updates", () => {
   const pending = ref<PendingResponse | null>(null);
+  const pendingWudMetadataCheckedAt = ref("");
   const updateTargets = ref<UpdateTargetsResponse | null>(null);
   const retagTargets = ref<RetagTargetsResponse | null>(null);
   const retagChoices = ref<Record<string, RetagTargetChoice>>({});
@@ -151,15 +199,49 @@ export const useUpdatesStore = defineStore("updates", () => {
   async function loadPending(
     options: { preserveCleanup?: boolean } = {},
   ): Promise<void> {
-    await loadWithState(async () => {
-      plan.value = null;
-      pendingRemovalPlan.value = null;
-      pendingRescan.value = null;
-      if (!options.preserveCleanup) {
-        pendingCleanup.value = null;
-      }
-      pending.value = await webApi.pending();
-    });
+    await loadWithState(() => reloadPending(options));
+  }
+
+  async function refreshPendingMetadata(): Promise<void> {
+    const current = pending.value;
+    if (current === null) {
+      return;
+    }
+    const auth = useAuthStore();
+    const lines = current.items
+      .filter((item) => item.wud_metadata !== null && item.wud_metadata !== undefined)
+      .map((item) => ({
+        line_no: item.line_no,
+        raw: item.raw,
+        source_id: item.source_id,
+      }));
+    const response = await webApi.pendingMetadata(
+      {
+        source_hash: current.source_hash ?? "",
+        lines,
+      },
+      await auth.ensureCsrf(),
+    );
+    if (response.requires_pending_reload) {
+      clearReleaseNoteDisplay();
+      await reloadPending({ preserveCleanup: true });
+      return;
+    }
+    if (pending.value !== current) {
+      return;
+    }
+    const metadataChanged = patchPendingMetadata(response.items);
+    if (pending.value) {
+      pending.value = {
+        ...pending.value,
+        source_hash: response.source_hash,
+        wud_api: response.wud_api,
+      };
+    }
+    pendingWudMetadataCheckedAt.value = response.wud_api.last_checked_at;
+    if (metadataChanged) {
+      clearReleaseNoteDisplay();
+    }
   }
 
   async function loadUpdateTargets(): Promise<void> {
@@ -795,7 +877,7 @@ export const useUpdatesStore = defineStore("updates", () => {
         await auth.ensureCsrf(),
       );
       pendingRescan.value = response;
-      pending.value = await webApi.pending();
+      setPending(await webApi.pending());
     });
     await loadReleaseNotes().catch(() => undefined);
     await loadSecurityScans().catch(() => undefined);
@@ -810,6 +892,67 @@ export const useUpdatesStore = defineStore("updates", () => {
   function clearPlan(): void {
     plan.value = null;
     pendingRemovalPlan.value = null;
+  }
+
+  async function reloadPending(
+    options: { preserveCleanup?: boolean } = {},
+  ): Promise<void> {
+    plan.value = null;
+    pendingRemovalPlan.value = null;
+    pendingRescan.value = null;
+    if (!options.preserveCleanup) {
+      pendingCleanup.value = null;
+    }
+    setPending(await webApi.pending());
+  }
+
+  function setPending(response: PendingResponse): void {
+    pending.value = response;
+    pendingWudMetadataCheckedAt.value = response.wud_api.last_checked_at;
+  }
+
+  function patchPendingMetadata(items: PendingMetadataRefreshItem[]): boolean {
+    const current = pending.value;
+    if (current === null) {
+      return false;
+    }
+    const byLine = new Map(items.map((item) => [item.line_no, item]));
+    let changed = false;
+    const patchItem = <T extends PendingItem>(item: T): T => {
+      const metadata = byLine.get(item.line_no);
+      if (!metadata) {
+        return item;
+      }
+      if (pendingMetadataChanged(item, metadata)) {
+        changed = true;
+      }
+      return {
+        ...item,
+        raw: metadata.raw,
+        source_id: metadata.source_id,
+        wud_metadata: metadata.wud_metadata,
+      };
+    };
+    pending.value = {
+      ...current,
+      items: current.items.map(patchItem),
+      grouping: {
+        ...current.grouping,
+        groups: current.grouping.groups.map((group) => ({
+          ...group,
+          items: group.items.map((item: PendingGroupedItem) => patchItem(item)),
+        })),
+        unmatched: current.grouping.unmatched.map((item) => patchItem(item)),
+      },
+    };
+    return changed;
+  }
+
+  function clearReleaseNoteDisplay(): void {
+    releaseNotes.value = null;
+    releaseNotesError.value = "";
+    releaseNotification.value = null;
+    releaseNotificationError.value = "";
   }
 
   async function createJob(
@@ -971,6 +1114,7 @@ export const useUpdatesStore = defineStore("updates", () => {
 
   return {
     pending,
+    pendingWudMetadataCheckedAt,
     updateTargets,
     retagTargets,
     retagChoices,
@@ -1009,6 +1153,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     securityScansError,
     error,
     loadPending,
+    refreshPendingMetadata,
     loadUpdateTargets,
     loadRetagTargets,
     setRetagGithubLatestFallback,

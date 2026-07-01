@@ -25,7 +25,11 @@ export const useConnectionStore = defineStore("connection", () => {
     await runWithStoreState(loading, error, work);
   }
 
-  async function loadStatus(): Promise<void> {
+  async function loadStatus(options: { silent?: boolean } = {}): Promise<void> {
+    if (options.silent) {
+      status.value = await webApi.status();
+      return;
+    }
     await loadWithState(async () => {
       status.value = await webApi.status();
     });

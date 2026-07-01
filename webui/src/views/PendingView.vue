@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { ShieldCheck } from "@lucide/vue";
 import {
   NAlert,
@@ -24,6 +24,7 @@ import PendingSelectionToolbar from "../components/pending/PendingSelectionToolb
 import PendingStackSelection from "../components/pending/PendingStackSelection.vue";
 import { useDataCardsBreakpoint } from "../responsive";
 import { useAuthStore } from "../stores/auth";
+import { useConnectionStore } from "../stores/connection";
 import { useRunsStore } from "../stores/runs";
 import { useSettingsStore } from "../stores/settings";
 import { useUpdatesStore } from "../stores/updates";
@@ -51,6 +52,7 @@ import { usePendingSelectionState } from "./pending/usePendingSelectionState";
 
 const updates = useUpdatesStore();
 const auth = useAuthStore();
+const connection = useConnectionStore();
 const runs = useRunsStore();
 const settings = useSettingsStore();
 const isMobile = useDataCardsBreakpoint();
@@ -116,6 +118,10 @@ const securityScanRefreshReadOnlyMessage =
 const securityScanRefreshMutationMessage =
   "Wait for the active WebUI mutation to finish before refreshing candidate " +
   "security scans.";
+const PENDING_METADATA_REFRESH_INTERVAL_MS = 30_000;
+const pendingMetadataRefreshInterval =
+  ref<ReturnType<typeof globalThis.setInterval> | null>(null);
+const pendingMetadataRefreshInFlight = ref(false);
 
 const {
   clearSelection,
@@ -604,10 +610,37 @@ async function refreshSecurityScans(): Promise<void> {
   await updates.refreshSecurityScans();
 }
 
+async function refreshPendingMetadataFromStatus(): Promise<void> {
+  if (pendingMetadataRefreshInFlight.value) {
+    return;
+  }
+  pendingMetadataRefreshInFlight.value = true;
+  try {
+    await connection.loadStatus({ silent: true });
+    const checkedAt = connection.status?.wud_api.last_checked_at ?? "";
+    if (!checkedAt || checkedAt === updates.pendingWudMetadataCheckedAt) {
+      return;
+    }
+    await updates.refreshPendingMetadata();
+  } finally {
+    pendingMetadataRefreshInFlight.value = false;
+  }
+}
+
 onMounted(() => {
   runInBackground(retryPendingLoad());
   runInBackground(settings.loadPendingSafetyCues());
   runInBackground(reconnectObservedApplyJob());
+  pendingMetadataRefreshInterval.value = globalThis.setInterval(() => {
+    runInBackground(refreshPendingMetadataFromStatus());
+  }, PENDING_METADATA_REFRESH_INTERVAL_MS);
+});
+
+onBeforeUnmount(() => {
+  if (pendingMetadataRefreshInterval.value !== null) {
+    globalThis.clearInterval(pendingMetadataRefreshInterval.value);
+    pendingMetadataRefreshInterval.value = null;
+  }
 });
 </script>
 

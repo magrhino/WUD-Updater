@@ -43,6 +43,9 @@ from .web_models import (
     PendingGroupedItem,
     PendingGrouping,
     PendingItem,
+    PendingMetadataRefreshItem,
+    PendingMetadataRefreshRequest,
+    PendingMetadataRefreshResponse,
     PendingRemovalPlanLine,
     PendingRemovalPlanRequest,
     PendingRemovalPlanResponse,
@@ -71,6 +74,13 @@ def configure(*, effective_config_loader: EffectiveConfigLoader) -> None:
 
 def api_pending(request: Request) -> PendingResponse:
     return pending_response(_settings(request))
+
+
+def api_pending_metadata(
+    payload: PendingMetadataRefreshRequest,
+    request: Request,
+) -> PendingMetadataRefreshResponse:
+    return pending_metadata_response(_settings(request), payload)
 
 
 def api_update_targets(request: Request) -> UpdateTargetsResponse:
@@ -360,6 +370,73 @@ def pending_response(
         grouping=grouping,
         wud_api=_wud_api_status(source.wud_snapshot),
         warnings=list(source.warnings),
+    )
+
+
+def pending_metadata_response(
+    settings: WebSettings,
+    payload: PendingMetadataRefreshRequest,
+) -> PendingMetadataRefreshResponse:
+    try:
+        source = web_pending_sources.resolve_pending_source(
+            settings,
+            include_wud_metadata=True,
+            force_api=False,
+        )
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read pending source",
+                exc,
+            ),
+        ) from exc
+
+    if source.source_hash != payload.source_hash:
+        return _stale_pending_metadata_response(source)
+
+    targets_by_line = {target.line_no: target for target in source.parsed.targets}
+    source_ids_by_line = dict(source.source_ids_by_line or {})
+    metadata_by_line = web_wud_api.metadata_response_by_line(
+        dict(source.metadata_by_line or {})
+    )
+    items: list[PendingMetadataRefreshItem] = []
+    for line in payload.lines:
+        target = targets_by_line.get(line.line_no)
+        if (
+            target is None
+            or target.raw != line.raw
+            or source_ids_by_line.get(line.line_no, "") != line.source_id
+        ):
+            return _stale_pending_metadata_response(source)
+        items.append(
+            PendingMetadataRefreshItem(
+                line_no=line.line_no,
+                raw=target.raw,
+                source_id=source_ids_by_line.get(line.line_no, ""),
+                wud_metadata=metadata_by_line.get(line.line_no),
+            )
+        )
+
+    return PendingMetadataRefreshResponse(
+        status="ready",
+        requires_pending_reload=False,
+        source_hash=source.source_hash,
+        wud_api=_wud_api_status(source.wud_snapshot),
+        items=items,
+    )
+
+
+def _stale_pending_metadata_response(
+    source: web_pending_sources.PendingSourceResult,
+) -> PendingMetadataRefreshResponse:
+    return PendingMetadataRefreshResponse(
+        status="stale",
+        requires_pending_reload=True,
+        source_hash=source.source_hash,
+        wud_api=_wud_api_status(source.wud_snapshot),
+        items=[],
     )
 
 

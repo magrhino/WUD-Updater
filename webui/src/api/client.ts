@@ -23,6 +23,11 @@ export type {
   PendingStackGroup,
   PendingGrouping,
   PendingResponse,
+  PendingMetadataRefreshStatus,
+  PendingMetadataRefreshLine,
+  PendingMetadataRefreshItem,
+  PendingMetadataRefreshRequest,
+  PendingMetadataRefreshResponse,
   PendingCleanupLine,
   PendingCleanupRemovedLine,
   PendingCleanupResponse,
@@ -178,6 +183,8 @@ import type {
   CoreUpdateTourStep,
   CoreUpdateTourResponse,
   PendingResponse,
+  PendingMetadataRefreshRequest,
+  PendingMetadataRefreshResponse,
   UpdateTargetsResponse,
   RetagTargetsResponse,
   RetagChoiceRequest,
@@ -433,6 +440,12 @@ const systemApi = {
 
 const pendingApi = {
   pending: () => apiRequest<PendingResponse>("/pending"),
+  pendingMetadata: (request: PendingMetadataRefreshRequest, csrfToken: string) =>
+    apiRequest<PendingMetadataRefreshResponse>("/pending/metadata", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify(request),
+    }),
   cleanupPending: (
     cleanupId: string,
     lines: PendingCleanupLine[],

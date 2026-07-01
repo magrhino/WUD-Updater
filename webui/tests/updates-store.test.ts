@@ -264,6 +264,287 @@ describe("updates store", () => {
     expect(updates.pendingCleanup).toBeNull();
   });
 
+  it("refreshes pending WUD metadata in place and clears release-note display", async () => {
+    const oldMetadata = wudContainerMetadata({ remote_tag: "1.1" });
+    const newMetadata = wudContainerMetadata({ remote_tag: "1.2" });
+    const groupedItem = pendingItem({
+      line_no: 1,
+      raw: "repo/app:1.0",
+      wud_metadata: oldMetadata,
+    });
+    const unmatchedItem = pendingItem({
+      line_no: 2,
+      raw: "repo/old:1.0",
+      image: "repo/old:1.0",
+      key: "repo/old",
+      repo: "repo/old",
+      source_id: "file:2",
+      wud_metadata: oldMetadata,
+    });
+    const untrackedItem = pendingItem({
+      line_no: 3,
+      raw: "repo/untracked:1.0",
+      image: "repo/untracked:1.0",
+      key: "repo/untracked",
+      repo: "repo/untracked",
+      source_id: "file:3",
+      wud_metadata: null,
+    });
+    const pending = {
+      ...pendingResponse([groupedItem, unmatchedItem, untrackedItem]),
+      wud_api: wudApiStatus({ last_checked_at: "old-check" }),
+      grouping: {
+        status: "ready" as const,
+        groups: [
+          {
+            name: "media",
+            directory: "/docker/media",
+            compose_file: "docker-compose.yml",
+            project_directory: "/docker/media",
+            services_label: "app",
+            services: ["app"],
+            line_numbers: [1],
+            items: [
+              {
+                ...groupedItem,
+                resolved_image: groupedItem.image,
+                target_image: `${groupedItem.repo}:${groupedItem.desired_tag}`,
+                compose_images: [groupedItem.image],
+                services: ["app"],
+                action: "tag-update",
+                diagnostic: null,
+              },
+            ],
+          },
+        ],
+        unmatched: [
+          {
+            ...unmatchedItem,
+            resolved_image: unmatchedItem.image,
+            target_image: unmatchedItem.image,
+            compose_images: [],
+            services: [],
+            action: "recreate_stack",
+            diagnostic: null,
+          },
+        ],
+        warnings: [],
+      },
+    };
+    const plan = planResponse();
+    const removalPlan = {
+      removal_id: "removal-test",
+      source_file: pending.source_file,
+      can_remove: true,
+      selected_line_numbers: [2],
+      lines: [
+        {
+          line_no: 2,
+          raw: "repo/old:1.0",
+          image: "repo/old:1.0",
+          desired_tag: "",
+          digest: "",
+        },
+      ],
+    };
+    const rescan = pendingRescanResponse();
+    const notes = releaseNotesResponse();
+    const notification = releaseNotificationResponse();
+    const scans = securityScansResponse([securityScanInfo()]);
+    const fetchMock = mockFetch({
+      status: "ready",
+      requires_pending_reload: false,
+      source_hash: pending.source_hash,
+      wud_api: wudApiStatus({ last_checked_at: "new-check" }),
+      items: [
+        {
+          line_no: 1,
+          raw: "repo/app:1.0",
+          source_id: "file:1",
+          wud_metadata: newMetadata,
+        },
+        {
+          line_no: 2,
+          raw: "repo/old:1.0",
+          source_id: "file:2",
+          wud_metadata: null,
+        },
+      ],
+    });
+    useConnectionStore();
+    useSettingsStore();
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-metadata");
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pending = pending;
+    updates.plan = plan;
+    updates.pendingRemovalPlan = removalPlan;
+    updates.pendingRescan = rescan;
+    updates.releaseNotes = notes;
+    updates.releaseNotesError = "stale notes";
+    updates.releaseNotification = notification;
+    updates.releaseNotificationError = "stale preview";
+    updates.securityScans = scans;
+
+    await updates.refreshPendingMetadata();
+
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      source_hash: pending.source_hash,
+      lines: [
+        { line_no: 1, raw: "repo/app:1.0", source_id: "file:1" },
+        { line_no: 2, raw: "repo/old:1.0", source_id: "file:2" },
+      ],
+    });
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-metadata");
+    expect(updates.pending?.items[0].wud_metadata?.remote_tag).toBe("1.2");
+    expect(updates.pending?.items[1].wud_metadata).toBeNull();
+    expect(updates.pending?.items[2].wud_metadata).toBeNull();
+    expect(
+      updates.pending?.grouping.groups[0].items[0].wud_metadata?.remote_tag,
+    ).toBe("1.2");
+    expect(updates.pending?.grouping.unmatched[0].wud_metadata).toBeNull();
+    expect(updates.pendingWudMetadataCheckedAt).toBe("new-check");
+    expect(updates.plan).toEqual(plan);
+    expect(updates.pendingRemovalPlan).toEqual(removalPlan);
+    expect(updates.pendingRescan).toEqual(rescan);
+    expect(updates.releaseNotes).toBeNull();
+    expect(updates.releaseNotesError).toBe("");
+    expect(updates.releaseNotification).toBeNull();
+    expect(updates.releaseNotificationError).toBe("");
+    expect(updates.securityScans).toEqual(scans);
+  });
+
+  it("keeps release-note display when pending WUD metadata is unchanged", async () => {
+    const metadata = wudContainerMetadata({ remote_tag: "1.1" });
+    const item = pendingItem({ wud_metadata: metadata });
+    const pending = {
+      ...pendingResponse([item]),
+      wud_api: wudApiStatus({ last_checked_at: "old-check" }),
+    };
+    const notes = releaseNotesResponse();
+    const notification = releaseNotificationResponse();
+    const fetchMock = mockFetch({
+      status: "ready",
+      requires_pending_reload: false,
+      source_hash: pending.source_hash,
+      wud_api: wudApiStatus({ last_checked_at: "new-check" }),
+      items: [
+        {
+          line_no: item.line_no,
+          raw: item.raw,
+          source_id: item.source_id,
+          wud_metadata: metadata,
+        },
+      ],
+    });
+    useConnectionStore();
+    useSettingsStore();
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-metadata");
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pending = pending;
+    updates.releaseNotes = notes;
+    updates.releaseNotification = notification;
+
+    await updates.refreshPendingMetadata();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(updates.pendingWudMetadataCheckedAt).toBe("new-check");
+    expect(updates.releaseNotes).toEqual(notes);
+    expect(updates.releaseNotification).toEqual(notification);
+  });
+
+  it("rejects metadata refresh failures without changing main loading state", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ detail: "metadata failed" }, 503)),
+    );
+    useConnectionStore();
+    useSettingsStore();
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-metadata");
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pending = pendingResponse();
+    updates.error = "keep me";
+    updates.loading = false;
+
+    await expect(updates.refreshPendingMetadata()).rejects.toMatchObject({
+      message: "metadata failed",
+    });
+
+    expect(updates.loading).toBe(false);
+    expect(updates.error).toBe("keep me");
+  });
+
+  it("reloads pending while preserving cleanup when metadata refresh is stale", async () => {
+    const refreshed = {
+      ...pendingResponse([
+        pendingItem({
+          line_no: 1,
+          raw: "repo/new:1.0",
+          image: "repo/new:1.0",
+          key: "repo/new",
+          repo: "repo/new",
+        }),
+      ]),
+      source_hash: "new-source-hash",
+      wud_api: wudApiStatus({ last_checked_at: "new-check" }),
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/v1/pending/metadata") {
+        return Promise.resolve(
+          jsonResponse({
+            status: "stale",
+            requires_pending_reload: true,
+            source_hash: "new-source-hash",
+            wud_api: wudApiStatus({ last_checked_at: "new-check" }),
+            items: [],
+          }),
+        );
+      }
+      if (url === "/api/v1/pending") {
+        return Promise.resolve(jsonResponse(refreshed));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    useConnectionStore();
+    useSettingsStore();
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-metadata");
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pending = pendingResponse();
+    updates.plan = planResponse();
+    updates.pendingRescan = pendingRescanResponse();
+    updates.releaseNotes = releaseNotesResponse();
+    updates.releaseNotification = releaseNotificationResponse();
+    updates.pendingCleanup = {
+      status: "success",
+      audit_run_id: 12,
+      removed_count: 0,
+      removed: [],
+    };
+
+    await updates.refreshPendingMetadata();
+
+    expect(updates.pending?.source_hash).toBe("new-source-hash");
+    expect(updates.pendingWudMetadataCheckedAt).toBe("new-check");
+    expect(updates.pendingCleanup?.audit_run_id).toBe(12);
+    expect(updates.plan).toBeNull();
+    expect(updates.pendingRescan).toBeNull();
+    expect(updates.releaseNotes).toBeNull();
+    expect(updates.releaseNotification).toBeNull();
+  });
+
   it("matches security scans only for the current pending source and line", () => {
     useConnectionStore();
     useSettingsStore();

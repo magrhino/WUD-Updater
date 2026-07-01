@@ -72,6 +72,11 @@ __all__ = (
     "PendingGrouping",
     "PendingGroupingStatus",
     "PendingItem",
+    "PendingMetadataRefreshItem",
+    "PendingMetadataRefreshLine",
+    "PendingMetadataRefreshRequest",
+    "PendingMetadataRefreshResponse",
+    "PendingMetadataRefreshStatus",
     "PendingRemovalPlanLine",
     "PendingRemovalPlanRequest",
     "PendingRemovalPlanResponse",
@@ -219,6 +224,7 @@ PendingGroupingStatus = Literal["ready", "unavailable"]
 PendingRescanScope = Literal["all", "selected"]
 
 PendingRescanStatus = Literal["success", "partial", "blocked"]
+PendingMetadataRefreshStatus = Literal["ready", "stale"]
 
 DoctorCheckStatus = Literal["PASS", "WARN", "FAIL"]
 
@@ -1416,6 +1422,28 @@ class PendingCleanupResponse(BaseModel):
     audit_run_id: int
     removed_count: int
     removed: list[PendingCleanupRemovedLine] = Field(default_factory=list)
+
+class PendingMetadataRefreshLine(BaseModel):
+    line_no: LineNumber
+    raw: str
+    source_id: str = ""
+
+class PendingMetadataRefreshRequest(BaseModel):
+    source_hash: str
+    lines: list[PendingMetadataRefreshLine] = Field(default_factory=list)
+
+class PendingMetadataRefreshItem(BaseModel):
+    line_no: LineNumber
+    raw: str
+    source_id: str = ""
+    wud_metadata: WudContainerMetadata | None = None
+
+class PendingMetadataRefreshResponse(BaseModel):
+    status: PendingMetadataRefreshStatus
+    requires_pending_reload: bool
+    source_hash: str
+    wud_api: WudApiStatus
+    items: list[PendingMetadataRefreshItem] = Field(default_factory=list)
 
 class PendingRescanSkippedLine(BaseModel):
     line_no: int
