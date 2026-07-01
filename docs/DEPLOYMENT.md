@@ -112,7 +112,8 @@ Run `doctor` after changing container mounts, Docker access, stack paths, script
 sync settings, or helper environment variables:
 
 ```bash
-docker compose -f docs/examples/docker-compose.webui.yml run --rm wudup doctor
+WEBUI_ENV="${WEBUI_ENV:-$HOME/.config/wudup/webui.env}"
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml run --rm wudup doctor
 ```
 
 Doctor is read-only except for short-lived permission probe files that it
@@ -147,8 +148,9 @@ For container-first deployments, pull the new image and recreate WUDup so
 startup sync refreshes the managed WUD script volume:
 
 ```bash
-docker compose pull wudup
-docker compose up -d --force-recreate wudup
+WEBUI_ENV="${WEBUI_ENV:-$HOME/.config/wudup/webui.env}"
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml pull wudup
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml up -d --force-recreate wudup
 ```
 
 For local image development and host installs, see

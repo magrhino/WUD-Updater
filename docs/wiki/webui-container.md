@@ -205,8 +205,9 @@ Pull the new image and recreate WUDup so startup sync refreshes the managed WUD
 script volume:
 
 ```bash
-docker compose pull wudup
-docker compose up -d --force-recreate wudup
+WEBUI_ENV="${WEBUI_ENV:-$HOME/.config/wudup/webui.env}"
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml pull wudup
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml up -d --force-recreate wudup
 ```
 
 For local image development, use the build example instead:
