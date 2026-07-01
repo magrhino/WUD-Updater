@@ -9,7 +9,6 @@ const editedFiles = unique([...danger.git.created_files, ...danger.git.modified_
 const pr = danger.github?.pr ?? {};
 const prBody = pr.body ?? "";
 const prBodyLower = prBody.toLowerCase();
-const prTitle = pr.title ?? "";
 const prAuthor = pr.user?.login ?? "";
 const globCache = new Map();
 const LARGE_FILE_IGNORE_PATTERNS = [
@@ -38,7 +37,7 @@ const releasePleaseBranch =
   typeof pr.head?.ref === "string" &&
   pr.head.ref.startsWith("release-please--branches--");
 const releasePleaseTitle = /^chore: release \d+\.\d+\.\d+ \[skip ci\]/i.test(
-  prTitle,
+  pr.title ?? "",
 );
 const dependencyBot =
   prAuthor === "dependabot[bot]" ||

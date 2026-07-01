@@ -30,6 +30,8 @@ import {
   pendingGrouping,
   pendingItem,
   pendingResponse,
+  pendingRescanResponse,
+  pendingSourceInfo,
   planResponse,
   releaseNoteInfo,
   releaseNotificationResponse,
@@ -62,6 +64,47 @@ import {
   stalePendingRecommendedActions,
   unmatchedPendingItem,
 } from "./helpers/viewSecurity";
+
+function apiBackedPendingResponse() {
+  return {
+    ...pendingResponse([
+      pendingItem({ source: "api", source_id: "docker.local.app" }),
+    ]),
+    source_file: "WUD API",
+    source: pendingSourceInfo({
+      configured: "api",
+      active: "api",
+      label: "WUD API",
+    }),
+  };
+}
+
+function mockApplyPlan(updates: ReturnType<typeof useUpdatesStore>): void {
+  vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+    updates.plan = planResponse();
+  });
+  vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
+    const job = applyJobResponse();
+    updates.setApplyJob(job);
+    return job;
+  });
+}
+
+async function previewAndApplyFirstUpdate(
+  wrapper: ReturnType<typeof mountPendingView>,
+): Promise<void> {
+  await wrapper
+    .findAll("button")
+    .find((button) => button.text().includes("Preview media plan"))
+    ?.trigger("click");
+  await flushPromises();
+  await wrapper
+    .find('[role="dialog"]')
+    .findAll("button")
+    .find((button) => button.text().includes("Apply 1 update"))
+    ?.trigger("click");
+  await flushPromises();
+}
 
 describe("pending view apply jobs", () => {
   beforeEach(() => {
@@ -250,6 +293,88 @@ describe("pending view apply jobs", () => {
     );
     expect(showOutputButton.attributes("aria-expanded")).toBe("true");
     expect(wrapper.find(".batch-action-bar").exists()).toBe(false);
+  });
+
+  it.each([
+    ["rescans api-backed pending updates after successful apply", true],
+    ["falls back to normal pending refresh when api rescan fails", false],
+  ])("%s", async (_label, rescanSucceeds) => {
+    const { pinia, settings, updates, runs } = setupStores(true);
+    updates.pending = apiBackedPendingResponse();
+    const { loadPending, loadReleaseNotes } = mockPendingLifecycle(settings, updates);
+    vi.spyOn(runs, "loadRuns").mockResolvedValue();
+    vi.spyOn(runs, "loadRunDetail").mockResolvedValue();
+    mockApplyPlan(updates);
+    const rescanPending = vi
+      .spyOn(updates, "rescanPending")
+      .mockImplementation(async () => {
+        if (!rescanSucceeds) {
+          throw new Error("selected rescan is stale");
+        }
+        return pendingRescanResponse();
+      });
+    const jobStream = mockApplyJobStream();
+    const wrapper = mountPendingView(pinia);
+
+    await previewAndApplyFirstUpdate(wrapper);
+
+    loadPending.mockClear();
+    loadReleaseNotes.mockClear();
+    jobStream.emitJob(applyJobResponse({ status: "success", run_id: 10 }));
+    await flushPromises();
+
+    expect(rescanPending).toHaveBeenCalledWith("selected", [1]);
+    if (rescanSucceeds) {
+      expect(loadPending).not.toHaveBeenCalled();
+      expect(loadReleaseNotes).not.toHaveBeenCalled();
+    } else {
+      expect(loadPending).toHaveBeenCalled();
+      expect(loadReleaseNotes).toHaveBeenCalled();
+    }
+  });
+
+  it("loads pending before api rescan for terminal remembered apply jobs", async () => {
+    window.sessionStorage.setItem("applyJobId", "job-terminal");
+    const { pinia, settings, updates, runs } = setupStores(true);
+    const apiPending = apiBackedPendingResponse();
+    let finishInitialPendingLoad: () => void = () => undefined;
+    const loadPending = vi.spyOn(updates, "loadPending").mockImplementation(async () => {
+      await new Promise<void>((resolve) => {
+        finishInitialPendingLoad = resolve;
+      });
+      updates.pending = apiPending;
+    });
+    vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "loadSecurityScans").mockResolvedValue();
+    vi.spyOn(updates, "loadApplyJobLogFromRun").mockResolvedValue(
+      applyJobLogResponse({ job_id: "job-terminal" }),
+    );
+    vi.spyOn(settings, "loadPendingSafetyCues").mockResolvedValue();
+    vi.spyOn(runs, "loadRuns").mockResolvedValue();
+    vi.spyOn(runs, "loadRunDetail").mockResolvedValue();
+    vi.spyOn(webApi, "job").mockResolvedValue(
+      applyJobResponse({
+        job_id: "job-terminal",
+        status: "success",
+        run_id: 10,
+      }),
+    );
+    const rescanPending = vi
+      .spyOn(updates, "rescanPending")
+      .mockResolvedValue(pendingRescanResponse());
+
+    mountPendingView(pinia);
+    await flushPromises();
+
+    expect(loadPending).toHaveBeenCalledTimes(1);
+    expect(rescanPending).not.toHaveBeenCalled();
+
+    finishInitialPendingLoad();
+    await flushPromises();
+
+    expect(loadPending).toHaveBeenCalledTimes(1);
+    expect(rescanPending).toHaveBeenCalledWith("selected", [1]);
   });
 
   it("keeps an earlier phase failure visible after a later same-phase success", async () => {

@@ -93,11 +93,26 @@ export function mockPendingLifecycle(
   settings: ReturnType<typeof useSettingsStore>,
   updates: ReturnType<typeof useUpdatesStore>,
 ) {
-  vi.spyOn(updates, "loadPending").mockResolvedValue();
-  vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
-  vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
-  vi.spyOn(updates, "loadSecurityScans").mockResolvedValue();
-  vi.spyOn(settings, "loadPendingSafetyCues").mockResolvedValue();
+  const loadPending = vi.spyOn(updates, "loadPending").mockResolvedValue();
+  const loadReleaseNotes = vi
+    .spyOn(updates, "loadReleaseNotes")
+    .mockResolvedValue();
+  const refreshReleaseNotes = vi
+    .spyOn(updates, "refreshReleaseNotes")
+    .mockResolvedValue();
+  const loadSecurityScans = vi
+    .spyOn(updates, "loadSecurityScans")
+    .mockResolvedValue();
+  const loadPendingSafetyCues = vi
+    .spyOn(settings, "loadPendingSafetyCues")
+    .mockResolvedValue();
+  return {
+    loadPending,
+    loadReleaseNotes,
+    refreshReleaseNotes,
+    loadSecurityScans,
+    loadPendingSafetyCues,
+  };
 }
 
 export function mountPendingView(pinia: ReturnType<typeof createPinia>) {
