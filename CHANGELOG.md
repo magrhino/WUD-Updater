@@ -4,6 +4,20 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.52.0](https://github.com/magrhino/wudup/compare/v0.51.0...v0.52.0) (2026-07-01)
+
+
+### Features
+
+* **api:** Make WUD API polling the default notification path ([#463](https://github.com/magrhino/wudup/issues/463)) ([ca95626](https://github.com/magrhino/wudup/commit/ca95626681d24103f9b2b5f01d7b02741a9086d3))
+* **api:** refresh pending metadata without reloading queue state ([#465](https://github.com/magrhino/wudup/issues/465)) ([7b90736](https://github.com/magrhino/wudup/commit/7b907368982b08f56deaf32011f84c964e4fb64c))
+* **notifications:** add notification delivery mode selector ([#466](https://github.com/magrhino/wudup/issues/466)) ([a979478](https://github.com/magrhino/wudup/commit/a979478207373a9a25b6db6fba6fe07830bf5ae3))
+
+
+### Documentation
+
+* refresh deployment docs ([#462](https://github.com/magrhino/wudup/issues/462)) ([53d19a6](https://github.com/magrhino/wudup/commit/53d19a65b29023be9f8d6e75954fee3f511bc0f4))
+
 ## [0.51.0](https://github.com/magrhino/wudup/compare/v0.50.0...v0.51.0) (2026-07-01)
 
 
