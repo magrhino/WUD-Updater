@@ -126,6 +126,15 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(status, 0, stdout.getvalue())
         self.assertIn("[WARN] WUD script sync: auto-sync inactive", stdout.getvalue())
 
+    def test_doctor_warns_when_legacy_scripts_are_disabled(self) -> None:
+        status, stdout = self._run_doctor({"WUDUP_LEGACY_SCRIPTS": "FALSE"})
+
+        self.assertEqual(status, 0, stdout)
+        self.assertIn(
+            "[WARN] WUD script sync: legacy WUD callbacks are disabled",
+            stdout,
+        )
+
     def test_doctor_result_includes_structured_checks(self) -> None:
         for path in self.stack_dir.iterdir():
             path.unlink()
@@ -165,6 +174,7 @@ class DoctorTests(unittest.TestCase):
     def test_doctor_fails_for_invalid_boolean_environment_values(self) -> None:
         labels = (
             "WUD_SYNC_SCRIPTS",
+            "WUDUP_LEGACY_SCRIPTS",
             "WUDUP_USE_SUDO",
             "TRUENAS_STATUS_CHECK",
         )

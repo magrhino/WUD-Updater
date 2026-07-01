@@ -62,11 +62,14 @@ services:
     depends_on:
       - socket-proxy-wudup
     environment:
-      # WUD watches Docker through the proxy and writes pending updates to
-      # /out/images.todo through the mounted callback scripts.
+      # WUD watches Docker through the proxy. Legacy mode writes pending
+      # updates to /out/images.todo through mounted callback scripts.
       WUD_WATCHER_LOCAL_HOST: socket-proxy-wudup
       WUD_WATCHER_LOCAL_PORT: "2375"
       WUD_WATCHER_LOCAL_WATCHEVENTS: "true"
+      # API-first release notes: configure a WUD HTTP trigger to POST to:
+      #   http://wudup:7417/api/v1/wud/triggers/update
+      # with bearer auth matching WUDUP_TRIGGER_TOKEN or WUDUP_TRIGGER_TOKEN_FILE.
     volumes:
       - wud-scripts:/wud:ro
       - wud-out:/out
@@ -112,6 +115,9 @@ services:
       WUD_API_AUTH_BASIC_PASSWORD_FILE: "${WUD_API_AUTH_BASIC_PASSWORD_FILE:-}"
       WUD_API_HEADERS_FILE: "${WUD_API_HEADERS_FILE:-}"
       WUD_PENDING_SOURCE: "${WUD_PENDING_SOURCE:-file}"
+      WUDUP_LEGACY_SCRIPTS: "${WUDUP_LEGACY_SCRIPTS:-true}"
+      WUDUP_TRIGGER_TOKEN: "${WUDUP_TRIGGER_TOKEN:-}"
+      WUDUP_TRIGGER_TOKEN_FILE: "${WUDUP_TRIGGER_TOKEN_FILE:-}"
       # Leave unset to manage from Settings; uncomment to force the env override.
       # WUD_RELEASE_NOTES_ENABLED: "true"
       # Use WUDUP_IMAGE=ghcr.io/magrhino/wudup:latest-trivy when enabling scans.

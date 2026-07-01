@@ -199,6 +199,7 @@ __all__ = (
     "WudApiStoreDiagnostics",
     "WudApiState",
     "WudApiStatus",
+    "WudTriggerUpdateResponse",
     "WudApiWatcherDiagnostics",
     "WudContainerMetadata",
 )
@@ -314,6 +315,7 @@ class WebSettings:
         default_factory=WudApiClientConfig
     )
     pending_source: PendingSourceMode = "file"
+    legacy_scripts_enabled: bool = True
     release_notes_enabled_env: bool | None = None
     security_scan: SecurityScanConfig = dataclass_field(
         default_factory=SecurityScanConfig
@@ -851,6 +853,13 @@ class ReleaseNotificationResponse(BaseModel):
     sent: bool = False
     audit_run_id: int = 0
     error: str = ""
+
+class WudTriggerUpdateResponse(BaseModel):
+    ok: bool
+    status: Literal["sent", "skipped"]
+    reason: str = ""
+    line_numbers: list[LineNumber] = Field(default_factory=list)
+    release_notifications: ReleaseNotificationResponse | None = None
 
 class HealthResponse(BaseModel):
     ok: bool

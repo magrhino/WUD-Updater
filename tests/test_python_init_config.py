@@ -80,6 +80,9 @@ class InitConfigTests(unittest.TestCase):
         self.assertIn("WUD_API_BASE_URL=http://wud:3000", content)
         self.assertIn("WUD_API_STARTUP_WAIT_SECONDS=5", content)
         self.assertIn("WUD_PENDING_SOURCE=file", content)
+        self.assertIn("WUDUP_LEGACY_SCRIPTS=true", content)
+        self.assertIn("WUDUP_TRIGGER_TOKEN=", content)
+        self.assertIn("WUDUP_TRIGGER_TOKEN_FILE=", content)
 
     def test_webui_lan_requires_public_origin_in_non_interactive_mode(self) -> None:
         with self.assertRaisesRegex(InitConfigError, "--public-origin"):
@@ -378,6 +381,15 @@ class InitConfigTests(unittest.TestCase):
             "${WUD_PENDING_SOURCE:-file}",
         )
         self.assertEqual(
+            environment["WUDUP_LEGACY_SCRIPTS"],
+            "${WUDUP_LEGACY_SCRIPTS:-true}",
+        )
+        self.assertEqual(environment["WUDUP_TRIGGER_TOKEN"], "${WUDUP_TRIGGER_TOKEN:-}")
+        self.assertEqual(
+            environment["WUDUP_TRIGGER_TOKEN_FILE"],
+            "${WUDUP_TRIGGER_TOKEN_FILE:-}",
+        )
+        self.assertEqual(
             parsed["services"]["wudup"]["depends_on"],
             {"wud": {"condition": "service_healthy"}},
         )
@@ -456,6 +468,18 @@ class InitConfigTests(unittest.TestCase):
         self.assertEqual(
             service["environment"]["WUD_PENDING_SOURCE"],
             "${WUD_PENDING_SOURCE:-file}",
+        )
+        self.assertEqual(
+            service["environment"]["WUDUP_LEGACY_SCRIPTS"],
+            "${WUDUP_LEGACY_SCRIPTS:-true}",
+        )
+        self.assertEqual(
+            service["environment"]["WUDUP_TRIGGER_TOKEN"],
+            "${WUDUP_TRIGGER_TOKEN:-}",
+        )
+        self.assertEqual(
+            service["environment"]["WUDUP_TRIGGER_TOKEN_FILE"],
+            "${WUDUP_TRIGGER_TOKEN_FILE:-}",
         )
         self.assertEqual(
             service["depends_on"],

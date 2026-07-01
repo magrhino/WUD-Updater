@@ -23,6 +23,31 @@ env_bool_enabled(){
   esac
 }
 
+legacy_wud_scripts_disabled(){
+  [[ -n "${WUDUP_LEGACY_SCRIPTS+x}" ]] || return 1
+  case "$WUDUP_LEGACY_SCRIPTS" in
+    0|[Ff][Aa][Ll][Ss][Ee]|[Nn][Oo]|[Oo][Ff][Ff])
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+validate_legacy_wud_scripts(){
+  [[ -n "${WUDUP_LEGACY_SCRIPTS+x}" ]] || return 0
+  case "$WUDUP_LEGACY_SCRIPTS" in
+    ""|0|1|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee]|[Yy][Ee][Ss]|[Nn][Oo]|[Oo][Nn]|[Oo][Ff][Ff])
+      return 0
+      ;;
+    *)
+      printf 'WUDUP_LEGACY_SCRIPTS must be one of true, false, 1, 0, yes, no, on, or off\n' >&2
+      return 1
+      ;;
+  esac
+}
+
 env_auto_enabled(){
   case "${1:-}" in
     [Aa][Uu][Tt][Oo])
@@ -187,6 +212,7 @@ sync_wud_scripts(){
     printf 'Packaged WUD scripts directory not found: %s\n' "$src" >&2
     return 1
   fi
+  validate_legacy_wud_scripts || return 1
 
   dst_canon="$(canonicalize_dir_target "$dst")" || {
     printf 'Unable to resolve WUD_SCRIPTS_DIR: %s\n' "$dst" >&2
@@ -225,7 +251,12 @@ sync_wud_scripts(){
   fi
 
   find "$dst_canon" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-  cp -R "$src"/. "$dst_canon"/
+  if legacy_wud_scripts_disabled; then
+    cp "$src/http-trigger.sh" "$dst_canon"/
+  else
+    cp -R "$src"/. "$dst_canon"/
+    rm -f "$dst_canon/http-trigger.sh"
+  fi
   find "$dst_canon" -type f -name '*.sh' -exec chmod +x {} +
   : > "$marker"
   printf 'Synced WUD scripts to %s\n' "$dst"

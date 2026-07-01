@@ -14,6 +14,7 @@ from .web_models import WebSettings
 SCRIPT_SYNC_STATUS_ENV = "WUD_SCRIPT_SYNC_STATUS"
 DOCTOR_COMMAND = "docker compose exec wudup doctor"
 TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+FALSE_VALUES = frozenset({"0", "false", "no", "off"})
 
 
 def print_web_startup_summary(
@@ -61,6 +62,10 @@ def _script_sync_summary(env: Mapping[str, str]) -> str:
     status = env.get(SCRIPT_SYNC_STATUS_ENV, "").strip()
     if status:
         return _script_sync_status_message(status, scripts_dir)
+
+    legacy_scripts = env.get("WUDUP_LEGACY_SCRIPTS")
+    if legacy_scripts is not None and legacy_scripts.strip().lower() in FALSE_VALUES:
+        return "disabled by WUDUP_LEGACY_SCRIPTS"
 
     configured_sync = env.get("WUD_SYNC_SCRIPTS")
     if configured_sync is not None:

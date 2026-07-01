@@ -55,6 +55,9 @@ DISCORD_WEBHOOK_TIMEOUT_SECONDS = 10.0
 DISCORD_WEBHOOK_USER_AGENT = "wudup-webui-release-notifications/1.0"
 DISCORD_COLOR = 0x57F287
 RUN_NOTIFICATION_STATUS_REASON = "updated"
+NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL = (
+    "no release-note notifications are available to send"
+)
 LOGGER = logging.getLogger(__name__)
 
 
@@ -80,7 +83,7 @@ def api_preview_release_notifications(
     request: Request,
 ) -> ReleaseNotificationResponse:
     settings = _settings(request)
-    return _notification_response(settings, payload, sent=False)
+    return preview_release_notifications(settings, payload)
 
 
 def api_send_release_notifications(
@@ -88,6 +91,19 @@ def api_send_release_notifications(
     request: Request,
 ) -> ReleaseNotificationResponse:
     settings = _settings(request)
+    return send_release_notifications(settings, payload, request=request)
+
+
+def preview_release_notifications(
+    settings: WebSettings,
+    payload: ReleaseNotificationPreviewRequest,
+    *,
+    sent: bool = False,
+) -> ReleaseNotificationResponse:
+    return _notification_response(settings, payload, sent=sent)
+
+
+def require_release_notification_sendable(settings: WebSettings) -> str:
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
     if not effective_release_notes_enabled(settings):
@@ -101,12 +117,23 @@ def api_send_release_notifications(
             status_code=422,
             detail="Discord release-note webhook is not configured",
         )
+    return webhook.value
+
+
+def send_release_notifications(
+    settings: WebSettings,
+    payload: ReleaseNotificationSendRequest,
+    *,
+    request: Request,
+    actor_type: str | None = None,
+) -> ReleaseNotificationResponse:
+    webhook = require_release_notification_sendable(settings)
 
     response = _notification_response(settings, payload, sent=False)
     if response.sendable_count <= 0:
         raise HTTPException(
             status_code=422,
-            detail="no release-note notifications are available to send",
+            detail=NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL,
         )
 
     audit_run_id = 0
@@ -119,9 +146,32 @@ def api_send_release_notifications(
             request,
             payload,
             response,
+            actor_type=actor_type,
         )
+        response = _reserve_release_notification_history(
+            settings,
+            response,
+            audit_run_id,
+        )
+        if response.sendable_count <= 0:
+            _finish_release_notification_audit(
+                settings,
+                audit_run_id,
+                response,
+                request=request,
+                payload=payload,
+                status="failure",
+                sent_count=0,
+                sent_batch_count=0,
+                error=NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL,
+                actor_type=actor_type,
+            )
+            raise HTTPException(
+                status_code=422,
+                detail=NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL,
+            )
         for batch in _payload_batches(response.items, response.mode):
-            _post_discord_payload(webhook.value, batch["payload"])
+            _post_discord_payload(webhook, batch["payload"])
             sent_batch_count += 1
             sent_count += int(batch.get("count") or 0)
             batch_items = list(batch.get("items") or [])
@@ -142,9 +192,10 @@ def api_send_release_notifications(
             status="success",
             sent_count=sent_count,
             sent_batch_count=sent_batch_count,
+            actor_type=actor_type,
         )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
-        detail = _safe_release_notification_exception_detail(settings, exc, webhook.value)
+        detail = _safe_release_notification_exception_detail(settings, exc, webhook)
         if audit_run_id:
             sent_keys = {item.notification_key for item in sent_items}
             remaining_items = [
@@ -168,6 +219,7 @@ def api_send_release_notifications(
                 error=detail,
                 sent_count=sent_count,
                 sent_batch_count=sent_batch_count,
+                actor_type=actor_type,
             )
         raise HTTPException(
             status_code=500,
@@ -968,6 +1020,8 @@ def _insert_release_notification_audit_start(
     request: Request,
     payload: ReleaseNotificationPreviewRequest,
     response: ReleaseNotificationResponse,
+    *,
+    actor_type: str | None = None,
 ) -> int:
     now = utc_timestamp()
     metadata = _release_notification_audit_metadata(
@@ -978,6 +1032,7 @@ def _insert_release_notification_audit_start(
         status="running",
         sent_count=0,
         sent_batch_count=0,
+        actor_type=actor_type,
     )
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
@@ -1016,6 +1071,7 @@ def _finish_release_notification_audit(
     sent_count: int,
     sent_batch_count: int,
     error: str = "",
+    actor_type: str | None = None,
 ) -> None:
     now = utc_timestamp()
     metadata = _release_notification_audit_metadata(
@@ -1027,6 +1083,7 @@ def _finish_release_notification_audit(
         sent_count=sent_count,
         sent_batch_count=sent_batch_count,
         error=error,
+        actor_type=actor_type,
     )
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
@@ -1075,6 +1132,7 @@ def _safe_finish_release_notification_audit_failure(
     error: str,
     sent_count: int,
     sent_batch_count: int,
+    actor_type: str | None = None,
 ) -> None:
     try:
         _finish_release_notification_audit(
@@ -1087,6 +1145,7 @@ def _safe_finish_release_notification_audit_failure(
             sent_count=sent_count,
             sent_batch_count=sent_batch_count,
             error=error,
+            actor_type=actor_type,
         )
     except (OSError, sqlite3.Error, DatabaseError):
         LOGGER.exception("failed to finalize Discord release-note notification audit")
@@ -1100,30 +1159,16 @@ def _record_release_notification_history(
     *,
     status: str,
 ) -> None:
-    config = web_release_notification_state.ReleaseNotificationConfig(
-        mode=response.mode,
-        resend_policy=response.resend_policy,
-    )
+    config = _release_notification_config(response)
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
         with conn:
             for item in items:
                 if not item.notification_key:
                     continue
-                identity = web_release_notification_state.NotificationIdentity(
-                    notification_key=item.notification_key,
-                    metadata={
-                        "line_no": item.line_no,
-                        "image": item.image,
-                        "service_key": item.service_key,
-                        "status": item.status,
-                        "release_tag": item.release_tag,
-                        "upstream_repo": item.upstream_repo,
-                    },
-                )
                 web_release_notification_state.upsert_notification_history(
                     conn,
-                    identity=identity,
+                    identity=_release_notification_identity(item),
                     config=config,
                     status=status,
                     audit_run_id=audit_run_id,
@@ -1150,6 +1195,87 @@ def _safe_record_release_notification_history(
         LOGGER.exception("failed to record Discord release-note notification history")
 
 
+def _reserve_release_notification_history(
+    settings: WebSettings,
+    response: ReleaseNotificationResponse,
+    audit_run_id: int,
+) -> ReleaseNotificationResponse:
+    config = _release_notification_config(response)
+    items: list[ReleaseNotificationItem] = []
+    with open_db(settings.config.db_path) as conn:
+        init_db(conn)
+        with conn:
+            for item in response.items:
+                if item.skipped_reason or not item.notification_key:
+                    items.append(item)
+                    continue
+                allow_existing = item.notification_status in {
+                    "manual_resend",
+                    "cooldown_ready",
+                }
+                reserved = web_release_notification_state.reserve_notification_history(
+                    conn,
+                    identity=_release_notification_identity(item),
+                    config=config,
+                    audit_run_id=audit_run_id,
+                    allow_existing=allow_existing,
+                )
+                items.append(item if reserved else _release_notification_reserved_item(item))
+    return _release_notification_response_with_items(response, items)
+
+
+def _release_notification_config(
+    response: ReleaseNotificationResponse,
+) -> web_release_notification_state.ReleaseNotificationConfig:
+    return web_release_notification_state.ReleaseNotificationConfig(
+        mode=response.mode,
+        resend_policy=response.resend_policy,
+    )
+
+
+def _release_notification_identity(
+    item: ReleaseNotificationItem,
+) -> web_release_notification_state.NotificationIdentity:
+    return web_release_notification_state.NotificationIdentity(
+        notification_key=item.notification_key,
+        metadata={
+            "line_no": item.line_no,
+            "image": item.image,
+            "service_key": item.service_key,
+            "status": item.status,
+            "release_tag": item.release_tag,
+            "upstream_repo": item.upstream_repo,
+        },
+    )
+
+
+def _release_notification_reserved_item(
+    item: ReleaseNotificationItem,
+) -> ReleaseNotificationItem:
+    return item.model_copy(
+        update={
+            "notification_status": "sending",
+            "skipped_reason": "Notification is already being sent.",
+        }
+    )
+
+
+def _release_notification_response_with_items(
+    response: ReleaseNotificationResponse,
+    items: Sequence[ReleaseNotificationItem],
+) -> ReleaseNotificationResponse:
+    sendable_count = sum(1 for item in items if not item.skipped_reason)
+    return response.model_copy(
+        update={
+            "count": len(items),
+            "sendable_count": sendable_count,
+            "skipped_count": len(items) - sendable_count,
+            "batch_count": _payload_batch_count(sendable_count, response.mode),
+            "items": list(items),
+        }
+    )
+
+
 def _release_notification_audit_metadata(
     settings: WebSettings,
     request: Request,
@@ -1160,6 +1286,7 @@ def _release_notification_audit_metadata(
     sent_count: int,
     sent_batch_count: int,
     error: str = "",
+    actor_type: str | None = None,
 ) -> dict[str, object]:
     target: dict[str, object] = {}
     if payload.run_id is not None:
@@ -1169,7 +1296,7 @@ def _release_notification_audit_metadata(
     metadata: dict[str, object] = {
         "source": "webui",
         "operation": "send_release_notifications",
-        "actor_type": _request_actor_type(settings, request),
+        "actor_type": actor_type or _request_actor_type(settings, request),
         "resource_type": "release_notifications",
         "resource_id": "discord",
         "status": status,
