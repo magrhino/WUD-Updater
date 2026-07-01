@@ -21,7 +21,6 @@ updates:
         dependency-type: "production"
         patterns:
           - "pydantic"
-          - "pydantic-core"
       python-production:
         dependency-type: "production"
         update-types:
@@ -36,6 +35,13 @@ updates:
           - "patch"
         patterns:
           - "*"
+    ignore:
+      # pydantic owns the compatible core pin; pip-compile refreshes it.
+      - dependency-name: "pydantic-core"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
 
   - package-ecosystem: "npm"
     directory: "/webui"
