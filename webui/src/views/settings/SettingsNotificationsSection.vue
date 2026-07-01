@@ -64,7 +64,7 @@ const {
           <p class="eyebrow">Managed notifications</p>
           <h2>Release-note notifications</h2>
           <p class="section-copy">
-            Discord delivery settings stored in SQLite and applied to new WebUI requests.
+            WUD API polling sends Discord updates through WUDup history and resend policy.
           </p>
         </div>
         <Bell :size="20" class="section-heading-icon" />

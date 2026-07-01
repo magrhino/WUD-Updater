@@ -39,15 +39,16 @@ After the first sync, configure WUD to call:
 ```
 
 Use `/wud/on-update.sh` only when you intentionally keep the legacy shell
-release-note notification path. API-first command-trigger deployments can call:
+release-note notification path. Optional instant wake-up deployments can call:
 
 ```text
 /wud/http-trigger.sh
 ```
 
 That helper reads `WUDUP_TRIGGER_TOKEN` or `WUDUP_TRIGGER_TOKEN_FILE` from the
-WUD container and posts to `WUDUP_TRIGGER_URL`, defaulting to WUDup on the
-Compose network.
+WUD container and posts to `WUDUP_TRIGGER_URL`. When unset, it defaults to
+`http://wudup:7417/api/v1/wud/triggers/update` on the Compose network. WebUI
+release-note polling does not require this helper.
 
 ## Safety Rules
 

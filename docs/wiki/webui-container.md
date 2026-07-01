@@ -101,9 +101,10 @@ The WebUI example starts WUD and syncs packaged callback scripts into a shared
 ```
 
 Use `/wud/on-update.sh` only when you intentionally keep the legacy shell
-release-note notification path. For API-first per-update release notes,
-configure WUD's HTTP trigger to post to WUDup with bearer auth matching
-`WUDUP_TRIGGER_TOKEN` or `WUDUP_TRIGGER_TOKEN_FILE`.
+release-note notification path. WUDup polls WUD's API for WebUI release-note
+notifications by default. Configure WUD's HTTP trigger with bearer auth matching
+`WUDUP_TRIGGER_TOKEN` or `WUDUP_TRIGGER_TOKEN_FILE` only when you want optional
+instant wake-ups.
 
 See [Container Script Sync](container-script-sync.md) for managed volume safety
 rules and manual sync commands.

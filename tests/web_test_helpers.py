@@ -12,12 +12,15 @@ from typing import Optional, TypeVar
 
 from fastapi.testclient import TestClient
 
+from wudup import web_release_notifications as notifications_module
 from wudup import web_wud_api
 from wudup.db import (
     open_db,
     init_db,
     insert_update_run,
 )
+from wudup.release_notes import ReleaseNoteInfo as ReleaseNoteData
+from wudup.release_notes import ReleaseNoteLink as ReleaseNoteLinkData
 from wudup.web import create_app
 
 DEFAULT_CLAIM_PHRASE = " ".join(("correct", "horse", "battery", "staple"))
@@ -133,6 +136,67 @@ def _wud_api_container(
         "error": {"message": ""},
         "updateAvailable": True,
     }
+
+
+def _fake_release_refresh(monkeypatch, *, body: str = "") -> None:
+    def fake_refresh_release_notes(
+        _conn,
+        targets,
+        _environ,
+        **_kwargs,
+    ):
+        return [
+            ReleaseNoteData(
+                line_no=target.line_no,
+                status="ready",
+                provider="github",
+                image_repo="acme/app",
+                upstream_repo="acme/app",
+                release_tag=target.desired_tag or "2.0.0",
+                title="v2.0.0",
+                body=body,
+                links=[
+                    ReleaseNoteLinkData(
+                        label="GitHub release",
+                        url="https://github.com/acme/app/releases/tag/v2.0.0",
+                        kind="github_release",
+                    )
+                ],
+            )
+            for target in targets
+        ]
+
+    monkeypatch.setattr(
+        notifications_module,
+        "refresh_release_notes",
+        fake_refresh_release_notes,
+    )
+
+
+def _capture_discord_posts(
+    monkeypatch,
+    *,
+    fail_on: int | None = None,
+) -> list[tuple[str, object]]:
+    posted: list[tuple[str, object]] = []
+
+    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
+        posted.append((webhook_url, payload))
+        if fail_on is not None and len(posted) == fail_on:
+            raise urllib.error.HTTPError(
+                webhook_url,
+                500,
+                "Discord webhook request failed webhook-secret",
+                {},
+                None,
+            )
+
+    monkeypatch.setattr(
+        notifications_module,
+        "_post_discord_payload",
+        fake_post_discord_payload,
+    )
+    return posted
 
 
 def _doctor_client(

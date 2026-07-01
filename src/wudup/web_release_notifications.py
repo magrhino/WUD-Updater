@@ -9,9 +9,11 @@ import urllib.error
 import urllib.request
 from collections.abc import Mapping, Sequence
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from threading import Event, Thread
+from typing import Any, cast
 
-from fastapi import HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 
 from . import web_pending_sources, web_release_notification_state, web_wud_api
 from .config import VALID_UPDATE_MODES
@@ -58,6 +60,13 @@ RUN_NOTIFICATION_STATUS_REASON = "updated"
 NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL = (
     "no release-note notifications are available to send"
 )
+MUTATIONS_DISABLED_DETAIL = "mutations are disabled"
+RELEASE_NOTIFICATIONS_DISABLED_DETAIL = "release-note notifications are disabled"
+DISCORD_WEBHOOK_NOT_CONFIGURED_DETAIL = (
+    "Discord release-note webhook is not configured"
+)
+RELEASE_NOTIFICATION_POLL_SECONDS = 60.0
+SCHEDULER_ACTOR_TYPE = "release-notification-scheduler"
 LOGGER = logging.getLogger(__name__)
 
 
@@ -94,6 +103,106 @@ def api_send_release_notifications(
     return send_release_notifications(settings, payload, request=request)
 
 
+def initialize_release_notification_scheduler_state(state: Any) -> None:
+    state.web_release_notification_stop = Event()
+    state.web_release_notification_thread = None
+
+
+def shutdown_release_notification_scheduler_state(state: Any) -> None:
+    stop_event: Event = state.web_release_notification_stop
+    stop_event.set()
+    thread = state.web_release_notification_thread
+    if thread is not None:
+        thread.join(timeout=1.0)
+
+
+def start_release_notification_scheduler(
+    app: FastAPI,
+    settings: WebSettings,
+) -> Thread | None:
+    if not settings.mutations_enabled:
+        return None
+    existing_thread = app.state.web_release_notification_thread
+    if existing_thread is not None and existing_thread.is_alive():
+        return existing_thread
+    with open_db(settings.config.db_path) as conn:
+        init_db(conn)
+    stop_event = Event()
+    app.state.web_release_notification_stop = stop_event
+    thread = Thread(
+        target=_release_notification_scheduler_loop,
+        args=(settings, stop_event),
+        name="wud-release-notification-scheduler",
+        daemon=True,
+    )
+    app.state.web_release_notification_thread = thread
+    thread.start()
+    return thread
+
+
+def _release_notification_scheduler_loop(
+    settings: WebSettings,
+    stop_event: Event,
+) -> None:
+    while not stop_event.wait(RELEASE_NOTIFICATION_POLL_SECONDS):
+        try:
+            poll_wud_api_release_notifications(settings)
+        except Exception:
+            LOGGER.exception("release notification scheduler tick failed")
+
+
+def poll_wud_api_release_notifications(
+    settings: WebSettings,
+) -> ReleaseNotificationResponse | None:
+    api_settings = cast(WebSettings, replace(settings, pending_source="api"))
+    try:
+        require_release_notification_sendable(api_settings)
+    except HTTPException as exc:
+        if (
+            exc.status_code in {403, 422}
+            and exc.detail
+            in {
+                MUTATIONS_DISABLED_DETAIL,
+                RELEASE_NOTIFICATIONS_DISABLED_DETAIL,
+                DISCORD_WEBHOOK_NOT_CONFIGURED_DETAIL,
+            }
+        ):
+            return None
+        raise
+
+    source = web_pending_sources.resolve_pending_source(
+        api_settings,
+        include_wud_metadata=True,
+        force_api=True,
+    )
+    if (
+        source.degraded
+        or source.wud_snapshot is None
+        or not source.wud_snapshot.status.metadata_available
+    ):
+        return None
+
+    line_numbers = [target.line_no for target in source.parsed.targets]
+    if not line_numbers:
+        return None
+
+    payload = ReleaseNotificationSendRequest(
+        line_numbers=line_numbers,
+        confirmation="send-release-notes",
+    )
+    try:
+        return send_release_notifications(
+            api_settings,
+            payload,
+            request=None,
+            actor_type=SCHEDULER_ACTOR_TYPE,
+        )
+    except HTTPException as exc:
+        if exc.status_code == 422 and exc.detail == NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL:
+            return None
+        raise
+
+
 def preview_release_notifications(
     settings: WebSettings,
     payload: ReleaseNotificationPreviewRequest,
@@ -105,17 +214,17 @@ def preview_release_notifications(
 
 def require_release_notification_sendable(settings: WebSettings) -> str:
     if not settings.mutations_enabled:
-        raise HTTPException(status_code=403, detail="mutations are disabled")
+        raise HTTPException(status_code=403, detail=MUTATIONS_DISABLED_DETAIL)
     if not effective_release_notes_enabled(settings):
         raise HTTPException(
             status_code=403,
-            detail="release-note notifications are disabled",
+            detail=RELEASE_NOTIFICATIONS_DISABLED_DETAIL,
         )
     webhook = _discord_webhook(settings)
     if not webhook.value:
         raise HTTPException(
             status_code=422,
-            detail="Discord release-note webhook is not configured",
+            detail=DISCORD_WEBHOOK_NOT_CONFIGURED_DETAIL,
         )
     return webhook.value
 
@@ -124,7 +233,7 @@ def send_release_notifications(
     settings: WebSettings,
     payload: ReleaseNotificationSendRequest,
     *,
-    request: Request,
+    request: Request | None,
     actor_type: str | None = None,
 ) -> ReleaseNotificationResponse:
     webhook = require_release_notification_sendable(settings)
@@ -234,12 +343,12 @@ def api_test_release_notification_webhook(
 ) -> ReleaseNotificationTestResponse:
     settings = _settings(request)
     if not settings.mutations_enabled:
-        raise HTTPException(status_code=403, detail="mutations are disabled")
+        raise HTTPException(status_code=403, detail=MUTATIONS_DISABLED_DETAIL)
     webhook = _discord_webhook(settings)
     if not webhook.value:
         raise HTTPException(
             status_code=422,
-            detail="Discord release-note webhook is not configured",
+            detail=DISCORD_WEBHOOK_NOT_CONFIGURED_DETAIL,
         )
 
     destination = ReleaseNotificationDestination(
@@ -1017,7 +1126,7 @@ def _release_notification_test_audit_metadata(
 
 def _insert_release_notification_audit_start(
     settings: WebSettings,
-    request: Request,
+    request: Request | None,
     payload: ReleaseNotificationPreviewRequest,
     response: ReleaseNotificationResponse,
     *,
@@ -1065,7 +1174,7 @@ def _finish_release_notification_audit(
     run_id: int,
     response: ReleaseNotificationResponse,
     *,
-    request: Request,
+    request: Request | None,
     payload: ReleaseNotificationPreviewRequest,
     status: str,
     sent_count: int,
@@ -1127,7 +1236,7 @@ def _safe_finish_release_notification_audit_failure(
     run_id: int,
     response: ReleaseNotificationResponse,
     *,
-    request: Request,
+    request: Request | None,
     payload: ReleaseNotificationPreviewRequest,
     error: str,
     sent_count: int,
@@ -1278,7 +1387,7 @@ def _release_notification_response_with_items(
 
 def _release_notification_audit_metadata(
     settings: WebSettings,
-    request: Request,
+    request: Request | None,
     payload: ReleaseNotificationPreviewRequest,
     response: ReleaseNotificationResponse,
     *,
@@ -1293,10 +1402,13 @@ def _release_notification_audit_metadata(
         target["run_id"] = payload.run_id
     else:
         target["line_numbers"] = list(payload.line_numbers)
+    actor_context = actor_type or (
+        "system" if request is None else _request_actor_type(settings, request)
+    )
     metadata: dict[str, object] = {
-        "source": "webui",
+        "source": "webui" if request is not None else actor_context,
         "operation": "send_release_notifications",
-        "actor_type": actor_type or _request_actor_type(settings, request),
+        "actor_type": actor_context,
         "resource_type": "release_notifications",
         "resource_id": "discord",
         "status": status,

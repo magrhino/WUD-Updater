@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import urllib.error
 from pathlib import Path
 from types import SimpleNamespace
 
 from wudup import web_release_notifications as notifications_module
 from wudup.db import init_db, insert_pending_update, insert_update_run, open_db
 from wudup.release_notes import ReleaseNoteInfo as ReleaseNoteData
-from wudup.release_notes import ReleaseNoteLink as ReleaseNoteLinkData
 
 from tests.web_test_helpers import (
+    _capture_discord_posts,
     _client,
     _csrf_headers,
+    _fake_release_refresh,
     _install_wud_api,
     _store_web_setting,
     _wud_api_container,
@@ -25,67 +25,6 @@ _RELEASE_NOTIFICATION_ENV = {
     "WUD_RELEASE_NOTES_ENABLED": "true",
     "DISCORD_WEBHOOK": "https://discord.test/webhook-secret",
 }
-
-
-def _fake_release_refresh(monkeypatch, *, body: str = "") -> None:
-    def fake_refresh_release_notes(
-        _conn,
-        targets,
-        _environ,
-        **_kwargs,
-    ):
-        return [
-            ReleaseNoteData(
-                line_no=target.line_no,
-                status="ready",
-                provider="github",
-                image_repo="acme/app",
-                upstream_repo="acme/app",
-                release_tag=target.desired_tag or "2.0.0",
-                title="v2.0.0",
-                body=body,
-                links=[
-                    ReleaseNoteLinkData(
-                        label="GitHub release",
-                        url="https://github.com/acme/app/releases/tag/v2.0.0",
-                        kind="github_release",
-                    )
-                ],
-            )
-            for target in targets
-        ]
-
-    monkeypatch.setattr(
-        notifications_module,
-        "refresh_release_notes",
-        fake_refresh_release_notes,
-    )
-
-
-def _capture_discord_posts(
-    monkeypatch,
-    *,
-    fail_on: int | None = None,
-) -> list[tuple[str, object]]:
-    posted: list[tuple[str, object]] = []
-
-    def fake_post_discord_payload(webhook_url: str, payload: object) -> None:
-        posted.append((webhook_url, payload))
-        if fail_on is not None and len(posted) == fail_on:
-            raise urllib.error.HTTPError(
-                webhook_url,
-                500,
-                "Discord webhook request failed webhook-secret",
-                {},
-                None,
-            )
-
-    monkeypatch.setattr(
-        notifications_module,
-        "_post_discord_payload",
-        fake_post_discord_payload,
-    )
-    return posted
 
 
 def _release_notification_client(tmp_path: Path, monkeypatch):
