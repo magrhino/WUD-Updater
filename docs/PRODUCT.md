@@ -12,6 +12,8 @@ WUDup is used by self-hosted operators who maintain Docker Compose stacks, revie
 
 The product helps operators see update status, understand risk, review affected stacks and images, manage snoozes or exclusions, capture diagnostics, and confirm readiness before applying updates. Success means the operator can move from "what needs attention" to a safe decision with minimal hunting, clear evidence, and explicit confirmation before mutation.
 
+For recent additions and versioned changes, see [CHANGELOG.md](../CHANGELOG.md).
+
 ## Brand Personality
 
 Calm, reliable, compact.
