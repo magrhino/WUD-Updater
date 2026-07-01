@@ -337,16 +337,11 @@ describe("pending view apply jobs", () => {
     window.sessionStorage.setItem("applyJobId", "job-terminal");
     const { pinia, settings, updates, runs } = setupStores(true);
     const apiPending = apiBackedPendingResponse();
-    let loadPendingCalls = 0;
     let finishInitialPendingLoad: () => void = () => undefined;
     const loadPending = vi.spyOn(updates, "loadPending").mockImplementation(async () => {
-      loadPendingCalls += 1;
-      if (loadPendingCalls === 1) {
-        await new Promise<void>((resolve) => {
-          finishInitialPendingLoad = resolve;
-        });
-        return;
-      }
+      await new Promise<void>((resolve) => {
+        finishInitialPendingLoad = resolve;
+      });
       updates.pending = apiPending;
     });
     vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
@@ -372,11 +367,14 @@ describe("pending view apply jobs", () => {
     mountPendingView(pinia);
     await flushPromises();
 
-    expect(loadPending).toHaveBeenCalledTimes(2);
-    expect(rescanPending).toHaveBeenCalledWith("selected", [1]);
+    expect(loadPending).toHaveBeenCalledTimes(1);
+    expect(rescanPending).not.toHaveBeenCalled();
 
     finishInitialPendingLoad();
     await flushPromises();
+
+    expect(loadPending).toHaveBeenCalledTimes(1);
+    expect(rescanPending).toHaveBeenCalledWith("selected", [1]);
   });
 
   it("keeps an earlier phase failure visible after a later same-phase success", async () => {

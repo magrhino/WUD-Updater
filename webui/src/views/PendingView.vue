@@ -110,6 +110,7 @@ const {
 
 let clearPreflightHandler: () => void = () => undefined;
 let loadPendingAndReleaseNotesHandler: () => Promise<void> = async () => undefined;
+let pendingLoadRetry: Promise<void> | null = null;
 const showReleaseNotificationModal = ref(false);
 const releaseNotificationSource = ref<ReleaseNotificationSource | null>(null);
 const securityScanRefreshReadOnlyMessage =
@@ -534,11 +535,30 @@ clearPreflightHandler = clearPreflight;
 loadPendingAndReleaseNotesHandler = () => loadPendingAndReleaseNotes();
 useRouteRefresh(() => updates.loadPending());
 
+function retryPendingLoadTracked(): Promise<void> {
+  if (pendingLoadRetry) {
+    return pendingLoadRetry;
+  }
+  const retry = retryPendingLoad().finally(() => {
+    if (pendingLoadRetry === retry) {
+      pendingLoadRetry = null;
+    }
+  });
+  pendingLoadRetry = retry;
+  return retry;
+}
+
 async function refreshAfterTerminalApplyJob(): Promise<void> {
   const job = updates.applyJob;
   if (job?.status === "success") {
     if (!updates.pending) {
-      await updates.loadPending();
+      if (pendingLoadRetry) {
+        await pendingLoadRetry;
+      } else if (updates.loading) {
+        return;
+      } else {
+        await updates.loadPending();
+      }
     }
     if (updates.pending?.source.active === "api") {
       try {
@@ -646,7 +666,7 @@ async function refreshPendingMetadataFromStatus(): Promise<void> {
 }
 
 onMounted(() => {
-  runInBackground(retryPendingLoad());
+  runInBackground(retryPendingLoadTracked());
   runInBackground(settings.loadPendingSafetyCues());
   runInBackground(reconnectObservedApplyJob());
   pendingMetadataRefreshInterval.value = globalThis.setInterval(() => {
@@ -980,7 +1000,7 @@ onBeforeUnmount(() => {
     >
       <strong>Pending updates did not load</strong>
       <span>Check the WebUI API connection, then try again.</span>
-      <n-button size="small" secondary :loading="updates.loading" @click="retryPendingLoad">
+      <n-button size="small" secondary :loading="updates.loading" @click="retryPendingLoadTracked">
         Retry pending load
       </n-button>
     </div>
