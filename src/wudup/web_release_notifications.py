@@ -100,13 +100,7 @@ def preview_release_notifications(
     return _notification_response(settings, payload, sent=sent)
 
 
-def send_release_notifications(
-    settings: WebSettings,
-    payload: ReleaseNotificationSendRequest,
-    *,
-    request: Request,
-    actor_type: str | None = None,
-) -> ReleaseNotificationResponse:
+def require_release_notification_sendable(settings: WebSettings) -> str:
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
     if not effective_release_notes_enabled(settings):
@@ -120,6 +114,17 @@ def send_release_notifications(
             status_code=422,
             detail="Discord release-note webhook is not configured",
         )
+    return webhook.value
+
+
+def send_release_notifications(
+    settings: WebSettings,
+    payload: ReleaseNotificationSendRequest,
+    *,
+    request: Request,
+    actor_type: str | None = None,
+) -> ReleaseNotificationResponse:
+    webhook = require_release_notification_sendable(settings)
 
     response = _notification_response(settings, payload, sent=False)
     if response.sendable_count <= 0:
@@ -163,7 +168,7 @@ def send_release_notifications(
                 detail="no release-note notifications are available to send",
             )
         for batch in _payload_batches(response.items, response.mode):
-            _post_discord_payload(webhook.value, batch["payload"])
+            _post_discord_payload(webhook, batch["payload"])
             sent_batch_count += 1
             sent_count += int(batch.get("count") or 0)
             batch_items = list(batch.get("items") or [])
@@ -187,7 +192,7 @@ def send_release_notifications(
             actor_type=actor_type,
         )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
-        detail = _safe_release_notification_exception_detail(settings, exc, webhook.value)
+        detail = _safe_release_notification_exception_detail(settings, exc, webhook)
         if audit_run_id:
             sent_keys = {item.notification_key for item in sent_items}
             remaining_items = [

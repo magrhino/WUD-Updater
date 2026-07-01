@@ -299,6 +299,23 @@ def test_wud_update_trigger_sends_release_notification_without_wud_file(
     assert len(posted) == 1
 
 
+def test_wud_update_trigger_reports_unavailable_wud_api(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(monkeypatch, containers=(500, {}))
+    client = _client(tmp_path, _TRIGGER_ENV)
+
+    response = client.post(
+        _TRIGGER_PATH,
+        json={"id": "docker.local.app", "updateAvailable": True},
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 503
+    assert "WUD API" in response.json()["detail"]
+
+
 def test_wud_update_trigger_skips_duplicate_release_notification(
     tmp_path: Path,
     monkeypatch,

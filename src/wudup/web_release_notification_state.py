@@ -14,6 +14,7 @@ from .db import utc_timestamp
 from .web_metadata import json_object, json_object_or_empty
 
 SENDING_RESERVATION_TTL_SECONDS = 600
+ALREADY_SENT_FOR_UPDATE_REASON = "Already sent for this update."
 
 
 @dataclass(frozen=True)
@@ -176,14 +177,14 @@ def notification_decision(
             if resend:
                 return "manual_resend", ""
             if history.send_count > 0:
-                return "skipped_duplicate", "Already sent for this update."
+                return "skipped_duplicate", ALREADY_SENT_FOR_UPDATE_REASON
             return "new", ""
         return "sending", "Notification is already being sent."
     if history.status != "sent":
         if resend:
             return "manual_resend", ""
         if history.send_count > 0:
-            return "skipped_duplicate", "Already sent for this update."
+            return "skipped_duplicate", ALREADY_SENT_FOR_UPDATE_REASON
         return history.status or "new", ""
     if resend:
         return "manual_resend", ""
@@ -191,7 +192,7 @@ def notification_decision(
         if _cooldown_elapsed(history.last_sent_at, config.cooldown_seconds, now):
             return "cooldown_ready", ""
         return "skipped_cooldown", "Notification cooldown has not elapsed."
-    return "skipped_duplicate", "Already sent for this update."
+    return "skipped_duplicate", ALREADY_SENT_FOR_UPDATE_REASON
 
 
 def upsert_notification_history(

@@ -1,11 +1,12 @@
 #!/bin/sh
 # POST WUD command-trigger events to WUDup's API trigger endpoint.
+set -eu
 
 TRIGGER_URL="${WUDUP_TRIGGER_URL:-http://wudup:7417/api/v1/wud/triggers/update}"
 TOKEN="${WUDUP_TRIGGER_TOKEN:-}"
 
 if [ -z "$TOKEN" ] && [ -n "${WUDUP_TRIGGER_TOKEN_FILE:-}" ]; then
-  TOKEN="$(cat "$WUDUP_TRIGGER_TOKEN_FILE" 2>/dev/null || true)"
+  TOKEN="$(cat "$WUDUP_TRIGGER_TOKEN_FILE")"
 fi
 
 if [ -z "$TOKEN" ]; then
@@ -30,13 +31,19 @@ PAYLOAD=$(jq -nc \
   --arg image_name "${image_name:-}" \
   --arg image_tag "${image_tag_value:-}" \
   '{updateAvailable:$updateAvailable,id:$id,container_id:$container_id,name:$name,image_name:$image_name,image:{name:$image_name,tag:$image_tag}}')
+if [ -z "$PAYLOAD" ]; then
+  echo "failed to build WUD trigger payload" >&2
+  exit 1
+fi
 
 curl --fail --silent --show-error \
   --retry 3 \
   --retry-delay 1 \
   --connect-timeout 5 \
   --max-time 20 \
-  -H "Authorization: Bearer $TOKEN" \
+  -K - \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" \
-  "$TRIGGER_URL" >/dev/null
+  "$TRIGGER_URL" >/dev/null <<EOF
+header = "Authorization: Bearer $TOKEN"
+EOF

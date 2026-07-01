@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 
-from fastapi import Header, HTTPException, Request
+from fastapi import APIRouter, FastAPI, Header, HTTPException, Request
 
 from . import web_pending_sources, web_release_notifications
 from .images import image_has_tag, image_matches_resolved_target
@@ -18,14 +18,21 @@ from .web_models import (
     WebSettings,
     WudTriggerUpdateResponse,
 )
-from .web_settings import (
-    effective_release_notification_webhook,
-    effective_release_notes_enabled,
-)
 
 TRIGGER_TOKEN_ENV = "WUDUP_TRIGGER_TOKEN"
 TRIGGER_TOKEN_FILE_ENV = "WUDUP_TRIGGER_TOKEN_FILE"
 TRIGGER_ACTOR_TYPE = "wud-trigger"
+
+
+def configure(app: FastAPI) -> None:
+    router = APIRouter(prefix="/api/v1/wud")
+    router.add_api_route(
+        "/triggers/update",
+        api_wud_update_trigger,
+        methods=["POST"],
+        response_model=WudTriggerUpdateResponse,
+    )
+    app.include_router(router)
 
 
 def api_wud_update_trigger(
@@ -58,10 +65,9 @@ def send_wud_update_release_notifications(
         force_api=True,
     )
     if source.degraded or source.wud_snapshot is None or not source.wud_snapshot.status.metadata_available:
-        return WudTriggerUpdateResponse(
-            ok=False,
-            status="skipped",
-            reason=source.detail or "WUD API pending source is unavailable",
+        raise HTTPException(
+            status_code=503,
+            detail=source.detail or "WUD API pending source is unavailable",
         )
 
     line_numbers = _matching_line_numbers(payload, source)
@@ -105,19 +111,7 @@ def send_wud_update_release_notifications(
 
 
 def _require_release_notification_sendable(settings: WebSettings) -> None:
-    if not settings.mutations_enabled:
-        raise HTTPException(status_code=403, detail="mutations are disabled")
-    if not effective_release_notes_enabled(settings):
-        raise HTTPException(
-            status_code=403,
-            detail="release-note notifications are disabled",
-        )
-    webhook, _source = effective_release_notification_webhook(settings)
-    if not webhook:
-        raise HTTPException(
-            status_code=422,
-            detail="Discord release-note webhook is not configured",
-        )
+    web_release_notifications.require_release_notification_sendable(settings)
 
 
 def _require_trigger_token(settings: WebSettings, authorization: str | None) -> None:
@@ -186,15 +180,30 @@ def _matching_line_numbers(
     source: web_pending_sources.PendingSourceResult,
 ) -> tuple[int, ...]:
     payload_ids = _payload_ids(payload)
-    matched: list[int] = []
+    matched = _matching_line_numbers_by_id(payload_ids, source)
     if payload_ids:
-        for line_no, container_ids in (source.container_ids_by_line or {}).items():
-            if any(container_id in payload_ids for container_id in container_ids):
-                matched.append(line_no)
-        return tuple(sorted(set(matched)))
+        return _line_number_tuple(matched)
+    return _line_number_tuple(_matching_line_numbers_by_name_or_image(payload, source))
 
+
+def _matching_line_numbers_by_id(
+    payload_ids: frozenset[str],
+    source: web_pending_sources.PendingSourceResult,
+) -> tuple[int, ...]:
+    matched: list[int] = []
+    for line_no, container_ids in (source.container_ids_by_line or {}).items():
+        if any(container_id in payload_ids for container_id in container_ids):
+            matched.append(line_no)
+    return tuple(matched)
+
+
+def _matching_line_numbers_by_name_or_image(
+    payload: Mapping[str, object],
+    source: web_pending_sources.PendingSourceResult,
+) -> tuple[int, ...]:
     names = _payload_names(payload)
     image_ref = _payload_image_ref(payload)
+    matched: list[int] = []
     for line_no, container in (source.metadata_by_line or {}).items():
         if names and any(
             name in {container.id, container.name, container.display_name}
@@ -207,7 +216,11 @@ def _matching_line_numbers(
             or image_matches_resolved_target(container.image, image_ref, True)
         ):
             matched.append(line_no)
-    return tuple(sorted(set(matched)))
+    return tuple(matched)
+
+
+def _line_number_tuple(line_numbers: tuple[int, ...]) -> tuple[int, ...]:
+    return tuple(sorted(set(line_numbers)))
 
 
 def _payload_ids(payload: Mapping[str, object]) -> frozenset[str]:

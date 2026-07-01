@@ -165,14 +165,7 @@ def create_app(
     )
     app.include_router(setup_router)
 
-    wud_trigger_router = APIRouter(prefix="/api/v1/wud")
-    wud_trigger_router.add_api_route(
-        "/triggers/update",
-        web_wud_triggers.api_wud_update_trigger,
-        methods=["POST"],
-        response_model=web_models.WudTriggerUpdateResponse,
-    )
-    app.include_router(wud_trigger_router)
+    web_wud_triggers.configure(app)
 
     auth_router = APIRouter(prefix="/api/v1/auth")
     auth_router.add_api_route(

@@ -39,6 +39,7 @@ MANAGED_SCRIPTS_MARKER = ".wudup-managed"
 LEGACY_MANAGED_SCRIPTS_MARKER = ".wud-updater-managed"
 DOCTOR_PROBE_NAME = ".wudup-doctor-probe"
 UPDATER_EXECUTABLE_CHECK = "updater executable"
+WUD_SCRIPT_SYNC_CHECK = "WUD script sync"
 REQUIRED_WUD_SCRIPTS = (
     "on-update.sh",
     "append-updates.sh",
@@ -533,12 +534,12 @@ class Doctor:
         if not self.options.legacy_scripts_enabled:
             self._record(
                 "WARN",
-                "WUD script sync",
+                WUD_SCRIPT_SYNC_CHECK,
                 "legacy WUD callbacks are disabled",
             )
             return
         if self.options.sync_scripts == "disabled":
-            self._record("WARN", "WUD script sync", "WUD_SYNC_SCRIPTS is disabled")
+            self._record("WARN", WUD_SCRIPT_SYNC_CHECK, "WUD_SYNC_SCRIPTS is disabled")
             return
         if self.options.sync_scripts == "auto" and not (
             self.options.scripts_dir.is_dir()
@@ -546,7 +547,7 @@ class Doctor:
         ):
             self._record(
                 "WARN",
-                "WUD script sync",
+                WUD_SCRIPT_SYNC_CHECK,
                 "auto-sync inactive; "
                 f"{self.options.scripts_dir} is not a writable directory",
             )
@@ -554,12 +555,12 @@ class Doctor:
 
         issue = self._script_sync_issue()
         if issue:
-            self._record("FAIL", "WUD script sync", issue)
+            self._record("FAIL", WUD_SCRIPT_SYNC_CHECK, issue)
         else:
             suffix = " (auto)" if self.options.sync_scripts == "auto" else ""
             self._record(
                 "PASS",
-                "WUD script sync",
+                WUD_SCRIPT_SYNC_CHECK,
                 f"{self.options.scripts_dir}{suffix}",
             )
 
@@ -854,7 +855,7 @@ def _suggestions_for(status: str, name: str) -> tuple[DoctorSuggestion, ...]:
                 snippet="WUD_LOG_DIR=/logs",
             ),
         )
-    if name in {"packaged WUD scripts", "WUD script sync"}:
+    if name in {"packaged WUD scripts", WUD_SCRIPT_SYNC_CHECK}:
         return (
             DoctorSuggestion(
                 label="Check script sync",

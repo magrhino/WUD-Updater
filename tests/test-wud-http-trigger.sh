@@ -14,7 +14,10 @@ setup_case(){
   TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-http-trigger-test.XXXXXX")"
   mkdir -p "$TEST_TMP/bin"
   cat > "$TEST_TMP/bin/curl" <<'FAKE_CURL'
-#!/usr/bin/env bash
+#!/bin/sh
+while IFS= read -r line; do
+  printf '%s\n' "$line"
+done > "${CURL_CONFIG_FILE:?}"
 printf '%s\n' "$@" > "${CURL_ARGS_FILE:?}"
 FAKE_CURL
   chmod +x "$TEST_TMP/bin/curl"
@@ -35,10 +38,16 @@ assert_no_arg(){
   ! grep -Fx -- "$unexpected" "$TEST_TMP/curl.args" >/dev/null || fail "unexpected curl arg: $unexpected"
 }
 
+assert_config(){
+  local expected="$1"
+  grep -Fx -- "$expected" "$TEST_TMP/curl.config" >/dev/null || fail "missing curl config: $expected"
+}
+
 test_posts_wud_payload(){
   setup_case
   PATH="$TEST_TMP/bin:$PATH" \
     CURL_ARGS_FILE="$TEST_TMP/curl.args" \
+    CURL_CONFIG_FILE="$TEST_TMP/curl.config" \
     WUDUP_TRIGGER_TOKEN=secret \
     update_available=true \
     id=docker.local.app \
@@ -47,7 +56,10 @@ test_posts_wud_payload(){
     image_tag_value=1.0 \
     "$SCRIPT"
 
-  assert_arg "Authorization: Bearer secret"
+  assert_arg "-K"
+  assert_arg "-"
+  assert_no_arg "Authorization: Bearer secret"
+  assert_config 'header = "Authorization: Bearer secret"'
   assert_arg "--connect-timeout"
   assert_arg "5"
   assert_arg "--max-time"
@@ -63,11 +75,13 @@ test_token_file_and_false_update(){
   printf 'file-secret\n' > "$TEST_TMP/token"
   PATH="$TEST_TMP/bin:$PATH" \
     CURL_ARGS_FILE="$TEST_TMP/curl.args" \
+    CURL_CONFIG_FILE="$TEST_TMP/curl.config" \
     WUDUP_TRIGGER_TOKEN_FILE="$TEST_TMP/token" \
     update_available=false \
     "$SCRIPT"
 
-  assert_arg "Authorization: Bearer file-secret"
+  assert_no_arg "Authorization: Bearer file-secret"
+  assert_config 'header = "Authorization: Bearer file-secret"'
   assert_arg '{"updateAvailable":false,"id":"","container_id":"","name":"","image_name":"","image":{"name":"","tag":""}}'
   teardown_case
 }
@@ -76,10 +90,24 @@ test_missing_update_available_fails_closed(){
   setup_case
   PATH="$TEST_TMP/bin:$PATH" \
     CURL_ARGS_FILE="$TEST_TMP/curl.args" \
+    CURL_CONFIG_FILE="$TEST_TMP/curl.config" \
     WUDUP_TRIGGER_TOKEN=secret \
     "$SCRIPT"
 
   assert_arg '{"updateAvailable":false,"id":"","container_id":"","name":"","image_name":"","image":{"name":"","tag":""}}'
+  teardown_case
+}
+
+test_jq_failure_fails_before_curl(){
+  setup_case
+  if PATH="$TEST_TMP/bin" \
+    CURL_ARGS_FILE="$TEST_TMP/curl.args" \
+    CURL_CONFIG_FILE="$TEST_TMP/curl.config" \
+    WUDUP_TRIGGER_TOKEN=secret \
+    "$SCRIPT" 2>"$TEST_TMP/err"; then
+    fail "missing jq unexpectedly succeeded"
+  fi
+  [[ ! -e "$TEST_TMP/curl.args" ]] || fail "curl ran after jq failed"
   teardown_case
 }
 
@@ -104,4 +132,5 @@ trap teardown_case EXIT
 run_test test_posts_wud_payload
 run_test test_token_file_and_false_update
 run_test test_missing_update_available_fails_closed
+run_test test_jq_failure_fails_before_curl
 run_test test_missing_token_fails_before_curl
