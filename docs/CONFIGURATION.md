@@ -65,7 +65,7 @@ Boolean values use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_API_HEADERS_FILE` | unset | Optional UTF-8 JSON object of static WUD API request headers, such as `{"X-Api-Key":"example"}`. Header names and values are validated, values are redacted, and an `Authorization` header cannot be combined with bearer or basic auth. |
 | `WUD_PENDING_SOURCE` | `file` | WebUI pending-update source: `file` reads `WUD_OUT_FILE`, `api` derives pending lines from WUD `/api/containers`, and `auto` uses API metadata when usable before falling back to `WUD_OUT_FILE`. Host CLI update commands remain legacy file-mode only. |
 | `WUDUP_LEGACY_SCRIPTS` | `true` | Set `false` to disable WebUI `images.todo` fallback and sync only `/wud/http-trigger.sh` into the managed WUD script directory. Remove WUD command triggers for legacy scripts and recreate the stack before disabling legacy mode. |
-| `WUDUP_TRIGGER_TOKEN_FILE` / `WUDUP_TRIGGER_TOKEN` | unset | Shared bearer token accepted by `POST /api/v1/wud/triggers/update`. Prefer the `_FILE` form in containers. Configure the WUD HTTP trigger to send the same token. |
+| `WUDUP_TRIGGER_TOKEN_FILE` / `WUDUP_TRIGGER_TOKEN` | unset | Shared bearer token accepted by optional `POST /api/v1/wud/triggers/update` wake-ups. Release-note polling does not require it. Prefer the `_FILE` form in containers when using WUD HTTP triggers. |
 | `WUDUP_TRIGGER_URL` | `http://wudup:7417/api/v1/wud/triggers/update` | Optional endpoint override used only by the mounted `/wud/http-trigger.sh` command-trigger helper. Native WUD HTTP triggers can set the URL directly in WUD. |
 
 ## Candidate Security Scans

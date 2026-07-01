@@ -67,9 +67,10 @@ services:
       WUD_WATCHER_LOCAL_HOST: socket-proxy-wudup
       WUD_WATCHER_LOCAL_PORT: "2375"
       WUD_WATCHER_LOCAL_WATCHEVENTS: "true"
-      # API-first release notes: configure a WUD HTTP trigger to POST to:
+      # Optional instant wake-up: configure a WUD HTTP trigger to POST to:
       #   http://wudup:7417/api/v1/wud/triggers/update
       # with bearer auth matching WUDUP_TRIGGER_TOKEN or WUDUP_TRIGGER_TOKEN_FILE.
+      # Release-note polling works through the WUD API without this trigger token.
     volumes:
       - wud-scripts:/wud:ro
       - wud-out:/out

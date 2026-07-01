@@ -87,6 +87,7 @@ def create_app(
     web_jobs.initialize_apply_job_state(app.state)
     web_security.initialize_security_scan_state(app.state, active_settings)
     web_retags.initialize_retag_preview_state(app.state)
+    web_release_notifications.initialize_release_notification_scheduler_state(app.state)
     app.state.web_login_throttle_lock = Lock()
     app.state.web_login_throttle = {}
     app.state.web_login_client_throttle = {}
@@ -107,8 +108,15 @@ def create_app(
             active_settings,
             effective_config_loader=web_settings._effective_config,
         )
+        app.state.web_release_notification_thread = (
+            web_release_notifications.start_release_notification_scheduler(
+                app,
+                active_settings,
+            )
+        )
 
     def shutdown_apply_executor() -> None:
+        web_release_notifications.shutdown_release_notification_scheduler_state(app.state)
         web_scheduler.shutdown_auto_update_scheduler_state(app.state)
         web_retags.shutdown_retag_preview_state(app.state)
         web_security.shutdown_security_scan_state(app.state)
