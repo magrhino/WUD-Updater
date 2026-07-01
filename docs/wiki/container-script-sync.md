@@ -46,8 +46,9 @@ release-note notification path. Optional instant wake-up deployments can call:
 ```
 
 That helper reads `WUDUP_TRIGGER_TOKEN` or `WUDUP_TRIGGER_TOKEN_FILE` from the
-WUD container and posts to `WUDUP_TRIGGER_URL`, defaulting to WUDup on the
-Compose network. WebUI release-note polling does not require this helper.
+WUD container and posts to `WUDUP_TRIGGER_URL`. When unset, it defaults to
+`http://wudup:7417/api/v1/wud/triggers/update` on the Compose network. WebUI
+release-note polling does not require this helper.
 
 ## Safety Rules
 

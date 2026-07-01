@@ -1402,11 +1402,13 @@ def _release_notification_audit_metadata(
         target["run_id"] = payload.run_id
     else:
         target["line_numbers"] = list(payload.line_numbers)
+    actor_context = actor_type or (
+        "system" if request is None else _request_actor_type(settings, request)
+    )
     metadata: dict[str, object] = {
-        "source": "webui",
+        "source": "webui" if request is not None else actor_context,
         "operation": "send_release_notifications",
-        "actor_type": actor_type
-        or ("system" if request is None else _request_actor_type(settings, request)),
+        "actor_type": actor_context,
         "resource_type": "release_notifications",
         "resource_id": "discord",
         "status": status,

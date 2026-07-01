@@ -72,9 +72,9 @@ def test_poll_sends_wud_api_notifications_without_trigger_token(
             """
         ).fetchone()
     assert row is not None
-    assert json.loads(row["metadata_json"])["actor_type"] == (
-        notifications_module.SCHEDULER_ACTOR_TYPE
-    )
+    metadata = json.loads(row["metadata_json"])
+    assert metadata["source"] == notifications_module.SCHEDULER_ACTOR_TYPE
+    assert metadata["actor_type"] == notifications_module.SCHEDULER_ACTOR_TYPE
 
 
 def test_poll_skips_duplicate_notifications(
