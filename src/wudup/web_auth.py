@@ -51,7 +51,6 @@ FALSE_VALUES = frozenset({"", "0", "false", "no", "off"})
 SECURE_COOKIE_MODES = frozenset({"auto", "true", "false"})
 CSRF_HEADER = "x-wud-csrf-token"
 CSRF_COOKIE = "wud_csrf_token"
-CSRF_EXEMPT_PATHS = frozenset({"/api/v1/wud/triggers/update"})
 SESSION_COOKIE = "wud_session"
 SETUP_CLAIM_HASH_KEY = "setup_claim_hash"
 SETUP_CLAIM_EXPIRES_KEY = "setup_claim_expires_at"
@@ -65,8 +64,6 @@ SENSITIVE_ENV_KEYS = (
     "WUD_API_AUTH_BEARER_TOKEN_FILE",
     "WUD_API_AUTH_BASIC_PASSWORD",
     "WUD_API_AUTH_BASIC_PASSWORD_FILE",
-    "WUDUP_TRIGGER_TOKEN",
-    "WUDUP_TRIGGER_TOKEN_FILE",
     "GITHUB_TOKEN",
     "DISCORD_WEBHOOK",
     "DISCORD_RELEASES_WEBHOOK",
@@ -1299,8 +1296,6 @@ def _clear_session_cookie(response: Response) -> None:
 
 
 def _requires_csrf_origin_check(request: Request) -> bool:
-    if request.url.path in CSRF_EXEMPT_PATHS:
-        return False
     return request.method.upper() not in SAFE_METHODS and request.url.path.startswith(
         "/api/v1/"
     )

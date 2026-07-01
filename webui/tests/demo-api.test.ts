@@ -8,6 +8,10 @@ import type {
 } from "../src/api/client";
 import { generatedFixtures } from "../src/api/demo/generatedFixtures";
 import { DemoApiState } from "../src/api/demo/state";
+import {
+  DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE,
+  RELEASE_NOTIFICATION_DELIVERY_MODE_ERROR,
+} from "../src/releaseNotifications";
 
 const postgresDigest =
   "sha256:1111111111111111111111111111111111111111111111111111111111111111";
@@ -114,6 +118,29 @@ describe("demo web API", () => {
         }),
       ]),
     });
+    await expect(
+      api.updateManagedSettings(
+        {
+          release_notifications_delivery_mode:
+            DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE,
+        },
+        "csrf",
+      ),
+    ).resolves.toMatchObject({
+      managed: expect.arrayContaining([
+        expect.objectContaining({
+          key: "release_notifications_delivery_mode",
+          value: DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE,
+          source: "configured",
+        }),
+      ]),
+    });
+    await expect(
+      api.updateManagedSettings(
+        { release_notifications_delivery_mode: "trigger" },
+        "csrf",
+      ),
+    ).rejects.toThrow(RELEASE_NOTIFICATION_DELIVERY_MODE_ERROR);
     await expect(
       api.updateManagedSettings(
         {

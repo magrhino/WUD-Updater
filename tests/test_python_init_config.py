@@ -81,8 +81,8 @@ class InitConfigTests(unittest.TestCase):
         self.assertIn("WUD_API_STARTUP_WAIT_SECONDS=5", content)
         self.assertIn("WUD_PENDING_SOURCE=file", content)
         self.assertIn("WUDUP_LEGACY_SCRIPTS=true", content)
-        self.assertIn("WUDUP_TRIGGER_TOKEN=", content)
-        self.assertIn("WUDUP_TRIGGER_TOKEN_FILE=", content)
+        self.assertNotIn("WUDUP_TRIGGER_TOKEN=", content)
+        self.assertNotIn("WUDUP_TRIGGER_TOKEN_FILE=", content)
 
     def test_webui_lan_requires_public_origin_in_non_interactive_mode(self) -> None:
         with self.assertRaisesRegex(InitConfigError, "--public-origin"):
@@ -384,11 +384,8 @@ class InitConfigTests(unittest.TestCase):
             environment["WUDUP_LEGACY_SCRIPTS"],
             "${WUDUP_LEGACY_SCRIPTS:-true}",
         )
-        self.assertEqual(environment["WUDUP_TRIGGER_TOKEN"], "${WUDUP_TRIGGER_TOKEN:-}")
-        self.assertEqual(
-            environment["WUDUP_TRIGGER_TOKEN_FILE"],
-            "${WUDUP_TRIGGER_TOKEN_FILE:-}",
-        )
+        self.assertNotIn("WUDUP_TRIGGER_TOKEN", environment)
+        self.assertNotIn("WUDUP_TRIGGER_TOKEN_FILE", environment)
         self.assertEqual(
             parsed["services"]["wudup"]["depends_on"],
             {"wud": {"condition": "service_healthy"}},
@@ -473,14 +470,8 @@ class InitConfigTests(unittest.TestCase):
             service["environment"]["WUDUP_LEGACY_SCRIPTS"],
             "${WUDUP_LEGACY_SCRIPTS:-true}",
         )
-        self.assertEqual(
-            service["environment"]["WUDUP_TRIGGER_TOKEN"],
-            "${WUDUP_TRIGGER_TOKEN:-}",
-        )
-        self.assertEqual(
-            service["environment"]["WUDUP_TRIGGER_TOKEN_FILE"],
-            "${WUDUP_TRIGGER_TOKEN_FILE:-}",
-        )
+        self.assertNotIn("WUDUP_TRIGGER_TOKEN", service["environment"])
+        self.assertNotIn("WUDUP_TRIGGER_TOKEN_FILE", service["environment"])
         self.assertEqual(
             service["depends_on"],
             {"wud": {"condition": "service_healthy"}},

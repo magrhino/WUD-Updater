@@ -23,7 +23,8 @@ WUDup polls WUD's API for pending updates and builds Discord payloads in Python
 from the shared pending-line representation. It previews the notification
 summary without the webhook URL, posts one embed per update in Discord-sized
 batches, and records send history so duplicates follow WUDup's resend policy.
-The optional WUD trigger endpoint only wakes up the same API-backed path.
+Use the delivery mode setting to choose API polling on detection or on-demand
+sends from preview/apply flows.
 
 If a legacy shell release-note callback is also configured, Discord can receive
 duplicate notifications for the same WUD update. Keep only one notification path
@@ -117,9 +118,7 @@ New WebUI-focused configurations should not use these shell notification
 wrappers. Keep them only for existing WUD callback setups that intentionally
 send release notes outside the WebUI.
 
-For optional instant wake-ups, WUD can `POST` to WUDup at
-`/api/v1/wud/triggers/update` with bearer auth matching `WUDUP_TRIGGER_TOKEN` or
-`WUDUP_TRIGGER_TOKEN_FILE`. This is not required for the default polling path.
+WUDup polls WUD's API directly for WebUI release-note notifications.
 Once WUD API metadata is healthy, set `WUDUP_LEGACY_SCRIPTS=false`, then remove
 WUD command triggers that call `/wud/append-updates.sh`, `/wud/on-update.sh`, or
 `/wud/tag-manager.sh` before recreating the stack.

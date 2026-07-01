@@ -39,6 +39,10 @@ import type {
   WudApiStatus,
   WudContainerMetadata,
 } from "../../src/api/client";
+import {
+  DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE,
+  RELEASE_NOTIFICATION_DELIVERY_MODE_VALUES,
+} from "../../src/releaseNotifications";
 
 type SettingsEntryFixture = SettingsResponse["updater"][number];
 type ManagedSettingFixture = SettingsResponse["managed"][number];
@@ -316,6 +320,11 @@ export function settingsResponse(
         "dismissed",
       ]),
       managedSettingEntry("release_notes_enabled", "false", ["false", "true"]),
+      managedSettingEntry(
+        "release_notifications_delivery_mode",
+        DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE,
+        Array.from(RELEASE_NOTIFICATION_DELIVERY_MODE_VALUES),
+      ),
       managedSettingEntry("release_notifications_mode", "digest", [
         "digest",
         "per_container",

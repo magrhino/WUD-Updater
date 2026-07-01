@@ -56,6 +56,13 @@ import type {
   UpdateTargetsResponse,
 } from "../types";
 import discordWebhookPolicy from "../../../../src/wudup/discord_webhook_policy.json";
+import {
+  DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE,
+  RELEASE_NOTIFICATION_DELIVERY_MODE_ERROR,
+  RELEASE_NOTIFICATION_DELIVERY_MODE_VALUES,
+  type ReleaseNotificationDeliveryMode,
+  isReleaseNotificationDeliveryMode,
+} from "../../releaseNotifications";
 import { DEMO_VERSION } from "./constants";
 import { generatedFixtures } from "./generatedFixtures";
 import {
@@ -97,6 +104,14 @@ const DISCORD_WEBHOOK_ALLOWED_HOSTS = new Set(
   discordWebhookPolicy.allowed_hosts,
 );
 const DISCORD_WEBHOOK_PATH_PREFIX = discordWebhookPolicy.path_prefix;
+
+function normalizeReleaseNotificationDeliveryMode(
+  value: string | undefined,
+): ReleaseNotificationDeliveryMode {
+  return isReleaseNotificationDeliveryMode(value)
+    ? value
+    : DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE;
+}
 
 type DemoSecurityScanDecision = {
   hasFindings: boolean;
@@ -523,6 +538,13 @@ export class DemoApiState {
       (entry) => entry.key === "release_notes_enabled",
     )?.value ?? "false";
   releaseNotesEnabledConfigured = false;
+  releaseNotificationDeliveryMode: ReleaseNotificationDeliveryMode =
+    normalizeReleaseNotificationDeliveryMode(
+      fixtures.settings.managed.find(
+        (entry) => entry.key === "release_notifications_delivery_mode",
+      )?.value,
+    );
+  releaseNotificationDeliveryModeConfigured = false;
   releaseNotificationMode: ReleaseNotificationResponse["mode"] =
     fixtures.settings.managed.find(
       (entry) => entry.key === "release_notifications_mode",
@@ -592,6 +614,12 @@ export class DemoApiState {
 
   settings(): SettingsResponse {
     const settings = clone(fixtures.settings);
+    this.ensureManagedEntry(
+      settings,
+      "release_notifications_delivery_mode",
+      DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE,
+      Array.from(RELEASE_NOTIFICATION_DELIVERY_MODE_VALUES),
+    );
     this.ensureManagedEntry(settings, "release_notifications_mode", "digest", [
       "digest",
       "per_container",
@@ -645,6 +673,12 @@ export class DemoApiState {
       "release_notes_enabled",
       this.releaseNotesEnabled,
       this.releaseNotesEnabledConfigured,
+    );
+    this.updateManagedEntry(
+      settings,
+      "release_notifications_delivery_mode",
+      this.releaseNotificationDeliveryMode,
+      this.releaseNotificationDeliveryModeConfigured,
     );
     this.updateManagedEntry(
       settings,
@@ -811,6 +845,13 @@ export class DemoApiState {
         }
         this.releaseNotesEnabled = value;
         this.releaseNotesEnabledConfigured = true;
+        return;
+      case "release_notifications_delivery_mode":
+        if (!isReleaseNotificationDeliveryMode(value)) {
+          throw new Error(RELEASE_NOTIFICATION_DELIVERY_MODE_ERROR);
+        }
+        this.releaseNotificationDeliveryMode = value;
+        this.releaseNotificationDeliveryModeConfigured = true;
         return;
       case "release_notifications_mode":
         if (!["digest", "per_container"].includes(value)) {

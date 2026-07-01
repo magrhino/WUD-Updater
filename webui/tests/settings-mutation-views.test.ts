@@ -8,6 +8,9 @@ import SettingsView from "../src/views/SettingsView.vue";
 import SettingsJumpNav from "../src/views/settings/SettingsJumpNav.vue";
 import SnoozesView from "../src/views/SnoozesView.vue";
 import TagExclusionsView from "../src/views/TagExclusionsView.vue";
+import {
+  RELEASE_NOTIFICATION_DELIVERY_MODE_ON_DEMAND,
+} from "../src/releaseNotifications";
 import { SETTINGS_NAV_GROUPS } from "../src/views/settings/settingsDisplay";
 import {
   coreUpdateTourResponse,
@@ -547,6 +550,13 @@ describe("settings mutation views", () => {
             if (entry.key === "release_notes_enabled") {
               return { ...entry, value: "true", source: "configured" as const };
             }
+            if (entry.key === "release_notifications_delivery_mode") {
+              return {
+                ...entry,
+                value: RELEASE_NOTIFICATION_DELIVERY_MODE_ON_DEMAND,
+                source: "configured" as const,
+              };
+            }
             if (entry.key === "release_notifications_mode") {
               return {
                 ...entry,
@@ -582,9 +592,10 @@ describe("settings mutation views", () => {
     await wrapper
       .find('input[aria-label="Discord webhook URL"]')
       .setValue("https://discord.com/api/webhooks/123/token-secret");
-    emitSelectValue(wrapper, 3, "full");
-    emitSelectValue(wrapper, 4, "per_container");
-    emitSelectValue(wrapper, 5, "cooldown");
+    emitSelectValue(wrapper, 3, RELEASE_NOTIFICATION_DELIVERY_MODE_ON_DEMAND);
+    emitSelectValue(wrapper, 4, "full");
+    emitSelectValue(wrapper, 5, "per_container");
+    emitSelectValue(wrapper, 6, "cooldown");
     await wrapper
       .find('input[aria-label="Release notification cooldown seconds"]')
       .setValue("00060");
@@ -596,6 +607,8 @@ describe("settings mutation views", () => {
 
     expect(updateManagedSettings).toHaveBeenCalledWith({
       release_notes_enabled: "true",
+      release_notifications_delivery_mode:
+        RELEASE_NOTIFICATION_DELIVERY_MODE_ON_DEMAND,
       release_notifications_mode: "per_container",
       release_notifications_resend_policy: "cooldown",
       release_notifications_cooldown_seconds: "60",

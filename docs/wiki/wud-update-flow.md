@@ -26,12 +26,10 @@ For WebUI deployments, `WUD_PENDING_SOURCE=api` skips the callback file and
 derives the same pending lines from WUD `/api/containers`; `auto` uses that API
 when available and falls back to `WUD_OUT_FILE`.
 
-For optional instant release-note wake-ups, WUD can call WUDup's
-`POST /api/v1/wud/triggers/update` endpoint through a WUD HTTP trigger. The
-default WebUI notification path polls WUD's API directly and does not require
-that trigger token. Set `WUDUP_LEGACY_SCRIPTS=false` only after removing legacy
-WUD command triggers and recreating the stack. In that mode, managed script sync
-mounts `/wud/http-trigger.sh` instead of the legacy file-mode callbacks.
+WUDup polls WUD's API directly for WebUI release-note notifications. Set
+`WUDUP_LEGACY_SCRIPTS=false` only after removing legacy WUD command triggers and
+recreating the stack. In that mode, managed script sync installs no WUD command
+scripts.
 
 ## Todo File Format
 

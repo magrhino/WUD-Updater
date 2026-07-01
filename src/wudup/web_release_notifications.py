@@ -44,6 +44,9 @@ from .web_models import (
     WudApiStatus,
 )
 from .web_release_notes import release_note_source_resolver, release_notes_disabled_state
+from .web_release_notification_state import (
+    RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DETECTION,
+)
 from .web_settings import (
     effective_release_notification_config,
     effective_release_notification_webhook,
@@ -155,6 +158,11 @@ def poll_wud_api_release_notifications(
     settings: WebSettings,
 ) -> ReleaseNotificationResponse | None:
     api_settings = cast(WebSettings, replace(settings, pending_source="api"))
+    if (
+        effective_release_notification_config(api_settings).delivery_mode
+        != RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DETECTION
+    ):
+        return None
     try:
         require_release_notification_sendable(api_settings)
     except HTTPException as exc:

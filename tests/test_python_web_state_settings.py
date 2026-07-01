@@ -103,7 +103,6 @@ def test_settings_reports_effective_non_secret_configuration(
     secret_values = {
         "WUD_WEB_TOKEN": "web-token-secret",
         "WUD_API_AUTH_BEARER_TOKEN": "wud-api-token-secret",
-        "WUDUP_TRIGGER_TOKEN": "trigger-token-secret",
         "GITHUB_TOKEN": "github-token-secret",
         "DISCORD_WEBHOOK": "discord-webhook-secret",
         "ADMIN_WEBHOOK": "admin-webhook-secret",
@@ -218,8 +217,8 @@ def test_settings_reports_effective_non_secret_configuration(
     assert secrets["WUD_WEB_TOKEN"]["configured"] is True
     assert secrets["WUD_API_AUTH_BEARER_TOKEN"]["configured"] is True
     assert secrets["WUD_API_AUTH_BEARER_TOKEN_FILE"]["configured"] is False
-    assert secrets["WUDUP_TRIGGER_TOKEN"]["configured"] is True
-    assert secrets["WUDUP_TRIGGER_TOKEN_FILE"]["configured"] is False
+    assert "WUDUP_TRIGGER_TOKEN" not in secrets
+    assert "WUDUP_TRIGGER_TOKEN_FILE" not in secrets
     assert "WUD_API_AUTH_BASIC_USER" not in secrets
     assert secrets["WUD_API_AUTH_BASIC_PASSWORD"]["configured"] is False
     assert secrets["WUD_API_AUTH_BASIC_PASSWORD_FILE"]["configured"] is False
@@ -424,6 +423,11 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
         json={"values": {"release_notes_enabled": "maybe"}},
         headers=headers,
     )
+    invalid_notification_delivery_mode = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"release_notifications_delivery_mode": "trigger"}},
+        headers=headers,
+    )
     invalid_notification_mode = client.post(
         "/api/v1/settings/managed",
         json={"values": {"release_notifications_mode": "automatic"}},
@@ -493,6 +497,11 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
     assert invalid_release_notes.status_code == 422
     assert invalid_release_notes.json()["detail"] == (
         "release_notes_enabled must be one of: false, true"
+    )
+    assert invalid_notification_delivery_mode.status_code == 422
+    assert invalid_notification_delivery_mode.json()["detail"] == (
+        "release_notifications_delivery_mode must be one of: "
+        f"{', '.join(settings_module.RELEASE_NOTIFICATIONS_DELIVERY_MODE_VALUES)}"
     )
     assert invalid_notification_mode.status_code == 422
     assert invalid_notification_mode.json()["detail"] == (
@@ -765,6 +774,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
                 "compose_ignore_paths": "old, archive/disabled",
                 "digest_pin_updates": "true",
                 "release_notes_enabled": "true",
+                "release_notifications_delivery_mode": (
+                    settings_module.DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE
+                ),
                 "release_notifications_mode": "per_container",
                 "release_notifications_resend_policy": "cooldown",
                 "release_notifications_cooldown_seconds": "60",
@@ -789,6 +801,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert managed["digest_pin_updates"]["source"] == "configured"
     assert managed["release_notes_enabled"]["value"] == "true"
     assert managed["release_notes_enabled"]["source"] == "configured"
+    assert managed["release_notifications_delivery_mode"]["value"] == (
+        settings_module.DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE
+    )
     assert managed["release_notifications_mode"]["value"] == "per_container"
     assert managed["release_notifications_resend_policy"]["value"] == "cooldown"
     assert managed["release_notifications_cooldown_seconds"]["value"] == "60"
@@ -815,6 +830,13 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         ).fetchone()
         release_notes_enabled = conn.execute(
             "SELECT value FROM web_settings WHERE key = 'release_notes.enabled'"
+        ).fetchone()
+        release_notifications_delivery_mode = conn.execute(
+            """
+            SELECT value
+            FROM web_settings
+            WHERE key = 'release_notifications.delivery_mode'
+            """
         ).fetchone()
         release_notifications_mode = conn.execute(
             "SELECT value FROM web_settings WHERE key = 'release_notifications.mode'"
@@ -863,6 +885,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert compose_ignore_paths["value"] == "old, archive/disabled"
     assert digest_pin_updates["value"] == "true"
     assert release_notes_enabled["value"] == "true"
+    assert release_notifications_delivery_mode["value"] == (
+        settings_module.DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE
+    )
     assert release_notifications_mode["value"] == "per_container"
     assert release_notifications_resend_policy["value"] == "cooldown"
     assert release_notifications_cooldown["value"] == "60"
@@ -877,6 +902,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
             "onboarding_checklist",
             "release_notes_enabled",
             "release_notifications_cooldown_seconds",
+            "release_notifications_delivery_mode",
             "release_notifications_discord_webhook",
             "release_notifications_mode",
             "release_notifications_resend_policy",
@@ -890,6 +916,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         "compose_ignore_paths": "old",
         "digest_pin_updates": "false",
         "release_notes_enabled": "false",
+        "release_notifications_delivery_mode": (
+            settings_module.DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE
+        ),
         "release_notifications_mode": "digest",
         "release_notifications_resend_policy": "remote_change",
         "release_notifications_cooldown_seconds": "86400",
@@ -902,6 +931,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         "compose_ignore_paths": "old, archive/disabled",
         "digest_pin_updates": "true",
         "release_notes_enabled": "true",
+        "release_notifications_delivery_mode": (
+            settings_module.DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE
+        ),
         "release_notifications_mode": "per_container",
         "release_notifications_resend_policy": "cooldown",
         "release_notifications_cooldown_seconds": "60",

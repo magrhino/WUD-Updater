@@ -88,8 +88,8 @@ WUDup's outbound WUD API client. Prefer `_FILE` variables for container secrets.
 After WUD API access is healthy, you can set `WUDUP_LEGACY_SCRIPTS=false`.
 Remove WUD command triggers that call `/wud/append-updates.sh`,
 `/wud/on-update.sh`, or `/wud/tag-manager.sh`, then recreate the stack so stale
-trigger environment is gone. In that mode, script sync installs only
-`/wud/http-trigger.sh`, and WebUI pending behavior is API-first.
+trigger configuration is gone. In that mode, script sync installs no WUD command
+scripts, and WebUI pending behavior is API-first.
 
 ## WUD Callback Scripts
 
@@ -102,9 +102,7 @@ The WebUI example starts WUD and syncs packaged callback scripts into a shared
 
 Use `/wud/on-update.sh` only when you intentionally keep the legacy shell
 release-note notification path. WUDup polls WUD's API for WebUI release-note
-notifications by default. Configure WUD's HTTP trigger with bearer auth matching
-`WUDUP_TRIGGER_TOKEN` or `WUDUP_TRIGGER_TOKEN_FILE` only when you want optional
-instant wake-ups.
+notifications by default.
 
 See [Container Script Sync](container-script-sync.md) for managed volume safety
 rules and manual sync commands.
