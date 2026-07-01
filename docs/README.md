@@ -10,8 +10,11 @@ short; detailed setup and behavior notes live here.
 | Project overview and quick commands | [../README.md](../README.md) |
 | Public static WebUI demo | [magrhino.github.io/wudup](https://magrhino.github.io/wudup/) |
 | Security policy and private vulnerability reporting | [../SECURITY.md](../SECURITY.md) |
-| Deployment reference | [DEPLOYMENT.md](DEPLOYMENT.md) |
-| Generated first-run configuration | [DEPLOYMENT.md#init-wizard](DEPLOYMENT.md#init-wizard) |
+| Deployment start guide | [DEPLOYMENT.md](DEPLOYMENT.md) |
+| WebUI container guide | [wiki/webui-container.md](wiki/webui-container.md) |
+| Command runner and host install | [COMMAND_RUNNER.md](COMMAND_RUNNER.md) |
+| Configuration reference | [CONFIGURATION.md](CONFIGURATION.md) |
+| Generated host/helper configuration | [COMMAND_RUNNER.md#init-wizard](COMMAND_RUNNER.md#init-wizard) |
 | Development, CI, and release automation | [DEVELOPMENT.md](DEVELOPMENT.md) |
 | Docker Compose example | [examples/docker-compose.example.yml](examples/docker-compose.example.yml) |
 | Long-running WebUI Docker Compose example | [examples/docker-compose.webui.yml](examples/docker-compose.webui.yml) |
@@ -30,7 +33,7 @@ short; detailed setup and behavior notes live here.
 | Digest verification behavior and trust policy | [wiki/digest-verification.md](wiki/digest-verification.md) |
 | Candidate security scanning approach | [wiki/security-scanning-signals.md](wiki/security-scanning-signals.md) |
 | Managed WUD script volume sync behavior | [wiki/container-script-sync.md](wiki/container-script-sync.md) |
-| Long-running WebUI container setup, login, and exposure notes | [wiki/webui-container.md](wiki/webui-container.md) |
+| Long-running WebUI container setup, login, pending sources, exposure, and mutation notes | [wiki/webui-container.md](wiki/webui-container.md) |
 | GitHub and Discord release-note notifications | [wiki/release-note-notifications.md](wiki/release-note-notifications.md) |
 
 ## Repository Areas

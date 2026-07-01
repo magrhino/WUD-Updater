@@ -67,10 +67,9 @@ a password with at least 12 characters, then sign in at
 `http://127.0.0.1:7417`. The example binds browser access to loopback by
 default.
 
-See [WebUI container deployment](docs/DEPLOYMENT.md#webui-container) for the
-full Compose walkthrough and [WebUI container operations](docs/wiki/webui-container.md)
-for login, admin recovery, LAN or reverse-proxy exposure, SQLite persistence,
-managed preferences, and mutation mode.
+See the [WebUI container guide](docs/wiki/webui-container.md) for the full
+Compose walkthrough, login, admin recovery, LAN or reverse-proxy exposure,
+SQLite persistence, managed preferences, and mutation mode.
 
 ## Other Deployment Paths
 
@@ -80,8 +79,8 @@ commands:
 
 | Path | Use when | Docs |
 |---|---|---|
-| Docker script runner | You want short-lived `docker compose run` commands for `doctor`, dry runs, and applies without a persistent WebUI. | [Docker script runner](docs/DEPLOYMENT.md#docker-script-runner) |
-| Host install | You want `updates` and `docker-update-from-wud` on the host `PATH` with host-managed WUD script mounts. | [Host install](docs/DEPLOYMENT.md#host-install) |
+| Docker script runner | You want short-lived `docker compose run` commands for `doctor`, dry runs, and applies without a persistent WebUI. | [Command runner](docs/COMMAND_RUNNER.md) |
+| Host install | You want `updates` and `docker-update-from-wud` on the host `PATH` with host-managed WUD script mounts. | [Host install](docs/COMMAND_RUNNER.md#host-install) |
 
 The WebUI/API is the primary supported workflow. The `updates` and
 `docker-update-from-wud` CLI paths are retained as legacy file-mode conveniences
@@ -94,17 +93,16 @@ WebUI/API first.
 | Topic | Where |
 |---|---|
 | Public WebUI demo | [magrhino.github.io/wudup](https://magrhino.github.io/wudup/) |
-| Full deployment reference | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
-| WebUI container deployment | [docs/DEPLOYMENT.md#webui-container](docs/DEPLOYMENT.md#webui-container) |
-| WebUI operations guide | [docs/wiki/webui-container.md](docs/wiki/webui-container.md) |
-| Docker script runner | [docs/DEPLOYMENT.md#docker-script-runner](docs/DEPLOYMENT.md#docker-script-runner) |
-| Host install | [docs/DEPLOYMENT.md#host-install](docs/DEPLOYMENT.md#host-install) |
+| Deployment start guide | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
+| WebUI container guide | [docs/wiki/webui-container.md](docs/wiki/webui-container.md) |
+| Command runner and host install | [docs/COMMAND_RUNNER.md](docs/COMMAND_RUNNER.md) |
+| Configuration reference | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) |
 | Digest verification and digest-pin updates | [docs/wiki/digest-verification.md](docs/wiki/digest-verification.md) |
 | Complete documentation index | [docs/README.md](docs/README.md) |
 | Security policy and private vulnerability reporting | [SECURITY.md](SECURITY.md) |
 | Release notes | [CHANGELOG.md](CHANGELOG.md) |
 
-## Apprieciate my work on this?
+## Appreciate my work on this?
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-orange?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/magrhino)
 
