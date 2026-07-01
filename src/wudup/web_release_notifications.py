@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 from contextlib import closing
 from dataclasses import dataclass, replace
 from threading import Event, Thread
-from typing import Any
+from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException, Request
 
@@ -154,7 +154,7 @@ def _release_notification_scheduler_loop(
 def poll_wud_api_release_notifications(
     settings: WebSettings,
 ) -> ReleaseNotificationResponse | None:
-    api_settings: WebSettings = replace(settings, pending_source="api")
+    api_settings = cast(WebSettings, replace(settings, pending_source="api"))
     try:
         require_release_notification_sendable(api_settings)
     except HTTPException as exc:
