@@ -12,6 +12,8 @@ const prBodyLower = prBody.toLowerCase();
 const prTitle = pr.title ?? "";
 const prAuthor = pr.user?.login ?? "";
 const globCache = new Map();
+const CONVENTIONAL_PR_TITLE =
+  /^(feat|fix|docs|test|refactor|chore|ci|build|perf|style|revert)(\([a-z0-9._-]+\))?!?: .+/;
 const LARGE_FILE_IGNORE_PATTERNS = [
   "**/package-lock.json",
   "**/npm-shrinkwrap.json",
@@ -180,6 +182,7 @@ if (releasePleaseBranch || releasePleaseTitle || dependencyBot) {
     "Danger maintainability review skipped for release automation or dependency bot PR.",
   );
 } else {
+  warnOnNonConventionalPrTitle();
   runCompanionTestRules();
   runReviewPromptRules();
   schedule(async () => {
@@ -256,6 +259,15 @@ function runReviewPromptRules() {
       ].join("\n"),
     );
   }
+}
+
+function warnOnNonConventionalPrTitle() {
+  if (CONVENTIONAL_PR_TITLE.test(prTitle.trim())) {
+    return;
+  }
+  warn(
+    "PR title should use Conventional Commit shape, like `fix(api): reject invalid config`.",
+  );
 }
 
 async function runDiffContentRules() {
