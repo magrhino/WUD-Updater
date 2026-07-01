@@ -104,7 +104,7 @@ WebUI/API first.
 | Security policy and private vulnerability reporting | [SECURITY.md](SECURITY.md) |
 | Release notes | [CHANGELOG.md](CHANGELOG.md) |
 
-## Apprieciate my work on this?
+## Appreciate my work on this?
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-orange?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/magrhino)
 
