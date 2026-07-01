@@ -616,7 +616,7 @@ async function refreshPendingMetadataFromStatus(): Promise<void> {
   }
   pendingMetadataRefreshInFlight.value = true;
   try {
-    await connection.loadStatus();
+    await connection.loadStatus({ silent: true });
     const checkedAt = connection.status?.wud_api.last_checked_at ?? "";
     if (!checkedAt || checkedAt === updates.pendingWudMetadataCheckedAt) {
       return;

@@ -202,6 +202,7 @@ describe("pending view selection actions", () => {
       await flushPromises();
 
       expect(loadStatus).toHaveBeenCalledTimes(1);
+      expect(loadStatus).toHaveBeenCalledWith({ silent: true });
       expect(refreshPendingMetadata).toHaveBeenCalledTimes(1);
       expect(selectedInput().element.checked).toBe(true);
 
