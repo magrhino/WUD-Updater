@@ -212,3 +212,37 @@ def test_release_notification_scheduler_starts_only_with_mutations(
     finally:
         _shutdown(read_only)
         _shutdown(mutating)
+
+
+def test_release_notification_scheduler_start_reuses_live_thread(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    try:
+        settings = client.app.state.web_settings
+        initial = client.app.state.web_release_notification_thread
+        first = notifications_module.start_release_notification_scheduler(
+            client.app,
+            settings,
+        )
+        second = notifications_module.start_release_notification_scheduler(
+            client.app,
+            settings,
+        )
+
+        assert initial is not None
+        assert initial.is_alive()
+        assert first is initial
+        assert second is initial
+        assert first is client.app.state.web_release_notification_thread
+        assert {thread for thread in (initial, first, second) if thread.is_alive()} == {
+            initial
+        }
+    finally:
+        _shutdown(client)
