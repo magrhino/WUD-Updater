@@ -205,14 +205,12 @@ def _resolve_missing_reported_digests(
             continue
         result = resolved_by_image.get(request.candidate_image)
         if result is None:
-            result = _cached_missing_digest_failure(request.candidate_image, now)
-            if result is not None:
-                resolved_by_image[request.candidate_image] = result
-        if result is None:
-            if resolver is None:
-                resolver = default_digest_verifier(settings)
-            result = resolver.resolve_tag_digest(request.candidate_image)
-            _remember_missing_digest_result(request.candidate_image, result, now)
+            result, resolver = _resolve_missing_reported_digest(
+                settings,
+                request.candidate_image,
+                now,
+                resolver,
+            )
             resolved_by_image[request.candidate_image] = result
         if result.ok and result.digest:
             updated.append(
@@ -235,6 +233,22 @@ def _resolve_missing_reported_digests(
             )
         )
     return tuple(updated)
+
+
+def _resolve_missing_reported_digest(
+    settings: "WebSettings",
+    image: str,
+    now: float,
+    resolver: DigestVerifier | None,
+) -> tuple[DigestResolveResult, DigestVerifier | None]:
+    result = _cached_missing_digest_failure(image, now)
+    if result is not None:
+        return result, resolver
+    if resolver is None:
+        resolver = default_digest_verifier(settings)
+    result = resolver.resolve_tag_digest(image)
+    _remember_missing_digest_result(image, result, now)
+    return result, resolver
 
 
 def _cached_missing_digest_failure(

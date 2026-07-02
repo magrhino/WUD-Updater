@@ -647,21 +647,7 @@ def test_security_scan_cache_readback_uses_unambiguous_cached_platform(
         },
     )
 
-    queued = client.post(
-        "/api/v1/security-scans/refresh",
-        headers=_csrf_headers(client),
-    )
-    assert queued.status_code == 200
-    result = _poll_until(
-        lambda: _completed_security_job(client, queued.json()["job_id"]),
-        timeout_message="security scan job did not complete",
-    )
-    assert result["status"] == "success"
-
-    cached = client.get("/api/v1/security-scans")
-
-    assert cached.status_code == 200
-    item = cached.json()["items"][0]
+    item = _refresh_and_read_cached_security_scan_item(client)
     assert item["state"] == "complete"
     assert item["verdict"] == "findings"
     assert item["severity_counts"]["high"] == 1
@@ -705,21 +691,7 @@ def test_security_scan_cache_readback_does_not_cross_platform_request_keys(
         },
     )
 
-    queued = client.post(
-        "/api/v1/security-scans/refresh",
-        headers=_csrf_headers(client),
-    )
-    assert queued.status_code == 200
-    result = _poll_until(
-        lambda: _completed_security_job(client, queued.json()["job_id"]),
-        timeout_message="security scan job did not complete",
-    )
-    assert result["status"] == "success"
-
-    cached = client.get("/api/v1/security-scans")
-
-    assert cached.status_code == 200
-    item = cached.json()["items"][0]
+    item = _refresh_and_read_cached_security_scan_item(client)
     assert item["state"] == "not_scanned"
 
 
@@ -935,6 +907,24 @@ def _completed_security_job(client, job_id: str) -> dict[str, object] | None:
     assert response.status_code == 200
     body = response.json()
     return body if body["status"] in {"success", "failure"} else None
+
+
+def _refresh_and_read_cached_security_scan_item(client) -> dict[str, object]:
+    queued = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+    assert queued.status_code == 200
+    result = _poll_until(
+        lambda: _completed_security_job(client, queued.json()["job_id"]),
+        timeout_message="security scan job did not complete",
+    )
+    assert result["status"] == "success"
+
+    cached = client.get("/api/v1/security-scans")
+
+    assert cached.status_code == 200
+    return cached.json()["items"][0]
 
 
 def _empty_security_context(tmp_path: Path) -> PendingSecurityContext:
