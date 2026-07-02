@@ -333,11 +333,34 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
     if (running) {
       return running;
     }
+    const lastStackStep =
+      applyJobProgressMode.value === "stack"
+        ? [...applyJobProgressSteps.value]
+            .reverse()
+            .find((step) => step.status !== "pending") ?? null
+        : null;
+    if (lastStackStep) {
+      const completePhase = stackCompletePhase(progressPhases);
+      const completeStacks = new Set(
+        applyJobStackProgressEvents.value
+          .filter(
+            (event) =>
+              event.phase === completePhase &&
+              (event.status === "success" || event.status === "skipped"),
+          )
+          .map((event) => event.stack),
+      );
+      if (
+        applyJobStackNames.value.every((stackName) => completeStacks.has(stackName))
+      ) {
+        return lastStackStep;
+      }
+    }
     const completion = displayApplyJobProgressByPhase.value.get("completion");
     if (completion?.status === "success") {
       return (
         applyJobProgressSteps.value.find((step) => step.key === "completion") ??
-        null
+        lastStackStep
       );
     }
     return [...applyJobProgressSteps.value].reverse().find((step) => step.event) ?? null;
@@ -737,14 +760,22 @@ function stackProgressStep(
     return stackStep(stackName, "running", "Running", running.message, running);
   }
   if (
-    latest &&
-    latest.phase === completePhase &&
+    latest?.phase === completePhase &&
     (latest.status === "success" || latest.status === "skipped")
   ) {
     return stackStep(stackName, "success", "Complete", latest.message, latest);
   }
   if (latest) {
     return stackStep(stackName, "running", "In progress", latest.message, latest);
+  }
+  if (jobStatus === "failure") {
+    return stackStep(
+      stackName,
+      "skipped",
+      "Not started",
+      `Job failed before ${stackName} started.`,
+      null,
+    );
   }
   return stackStep(
     stackName,

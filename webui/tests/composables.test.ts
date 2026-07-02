@@ -1061,6 +1061,58 @@ describe("usePendingApplyJob", () => {
 
     updates.setApplyJob(
       applyJobResponse({
+        status: "running",
+        selected_line_numbers: [1, 2, 3],
+        progress: [
+          {
+            job_id: "job-test",
+            phase: "health",
+            status: "success",
+            message: "[media] Health checks passed.",
+            created_at: "2026-05-28T12:00:05+00:00",
+            stack: "media",
+            services: ["sonarr"],
+            line_numbers: [1],
+          },
+          {
+            job_id: "job-test",
+            phase: "health",
+            status: "success",
+            message: "[infra] Health checks passed.",
+            created_at: "2026-05-28T12:00:06+00:00",
+            stack: "infra",
+            services: ["redis"],
+            line_numbers: [2],
+          },
+          {
+            job_id: "job-test",
+            phase: "health",
+            status: "success",
+            message: "[apps] Health checks passed.",
+            created_at: "2026-05-28T12:00:07+00:00",
+            stack: "apps",
+            services: ["api"],
+            line_numbers: [3],
+          },
+          {
+            job_id: "job-test",
+            phase: "completion",
+            status: "success",
+            message: "Updater completed successfully.",
+            created_at: "2026-05-28T12:00:08+00:00",
+            stack: "",
+            services: [],
+            line_numbers: [],
+          },
+        ],
+      }),
+    );
+
+    expect(state.applyJobProgressSummary.value).toBe("3/3 stacks complete");
+    expect(state.applyJobNowTitle.value).toBe("Completed: apps");
+
+    updates.setApplyJob(
+      applyJobResponse({
         status: "success",
         selected_line_numbers: [1, 2, 3],
         progress: updates.applyJob?.progress ?? [],
@@ -1087,6 +1139,53 @@ describe("usePendingApplyJob", () => {
       { message: "Stack update completed.", detail: "" },
       { message: "Stack update completed.", detail: "" },
       { message: "Stack update completed.", detail: "" },
+    ]);
+
+    updates.setApplyJob(
+      applyJobResponse({
+        status: "failure",
+        selected_line_numbers: [1, 2, 3],
+        progress: [
+          {
+            job_id: "job-test",
+            phase: "pull",
+            status: "failure",
+            message: "[media] Pull failed.",
+            created_at: "2026-05-28T12:00:05+00:00",
+            stack: "media",
+            services: ["sonarr"],
+            line_numbers: [1],
+          },
+        ],
+      }),
+    );
+
+    expect(
+      state.applyJobProgressSteps.value.map((step) => ({
+        label: step.label,
+        status: step.status,
+        statusLabel: step.statusLabel,
+        message: step.message,
+      })),
+    ).toEqual([
+      {
+        label: "media",
+        status: "failure",
+        statusLabel: "Failed",
+        message: "[media] Pull failed.",
+      },
+      {
+        label: "infra",
+        status: "skipped",
+        statusLabel: "Not started",
+        message: "Job failed before infra started.",
+      },
+      {
+        label: "apps",
+        status: "skipped",
+        statusLabel: "Not started",
+        message: "Job failed before apps started.",
+      },
     ]);
   });
 
