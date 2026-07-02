@@ -37,6 +37,7 @@ from .web_models import (
 
 EffectiveConfigLoader = Callable[[WebSettings], UpdaterConfig]
 _effective_config_loader: EffectiveConfigLoader | None = None
+_PLAN_CREATE_ERROR = "could not create plan"
 _PLAN_REVALIDATION_ERROR = "could not revalidate plan"
 
 
@@ -56,12 +57,12 @@ def api_create_plan(payload: PlanRequest, request: Request) -> PlanResponse:
     except ConfigError as exc:
         raise HTTPException(
             status_code=500,
-            detail=_safe_exception_detail(settings, "could not create plan", exc),
+            detail=_safe_exception_detail(settings, _PLAN_CREATE_ERROR, exc),
         ) from exc
     except OSError as exc:
         raise HTTPException(
             status_code=500,
-            detail=_safe_exception_detail(settings, "could not create plan", exc),
+            detail=_safe_exception_detail(settings, _PLAN_CREATE_ERROR, exc),
         ) from exc
     return plan_response(plan, settings, request)
 

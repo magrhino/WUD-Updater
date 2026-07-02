@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 from pathlib import Path
 from wudup import web as web_module
 from wudup import web_jobs
@@ -124,6 +125,41 @@ def test_refresh_api_pending_source_reports_degraded_detail(
     assert event.phase == "wud-api-refresh"
     assert event.status == "skipped"
     assert event.message == f"WUD API pending refresh skipped. {detail}"
+
+
+def test_refresh_api_pending_source_logs_unexpected_watch_error(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    settings = _settings_for_lock_timeout(tmp_path, {})
+    jobs = {
+        "job": web_module.WebApplyJob(
+            id="job",
+            status="running",
+            selected_line_numbers=(1,),
+        )
+    }
+
+    def fail_watch_all(_settings):
+        raise RuntimeError("watch exploded")
+
+    monkeypatch.setattr(web_jobs.web_wud_api, "watch_all", fail_watch_all)
+
+    with caplog.at_level(logging.ERROR, logger=web_jobs.LOGGER.name):
+        web_jobs._refresh_api_pending_source_after_apply(
+            settings,
+            jobs,
+            web_jobs.Condition(),
+            "job",
+        )
+
+    event = jobs["job"].progress[-1]
+    assert event.phase == "wud-api-refresh"
+    assert event.status == "skipped"
+    assert event.message == "WUD API pending refresh skipped."
+    assert "WUD API pending refresh failed" in caplog.text
+    assert "watch exploded" in caplog.text
 
 
 def test_apply_job_refreshes_only_api_pending_source(

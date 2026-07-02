@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import secrets
 import tempfile
 import time
@@ -53,6 +54,7 @@ WEB_APPLY_EXECUTOR_MAX_WORKERS = 1
 DEFAULT_JOB_LOG_TAIL_BYTES = 65_536
 JOB_STREAM_HEARTBEAT_SECONDS = 15.0
 JOB_STREAM_LOG_POLL_SECONDS = 1.0
+LOGGER = logging.getLogger(__name__)
 
 
 class EffectiveConfigLoader(Protocol):
@@ -552,12 +554,18 @@ def _refresh_api_pending_source_after_apply(
 ) -> None:
     status: ApplyJobProgressStatus = "success"
     message = "WUD API pending state refreshed."
-    result = web_wud_api.watch_all(settings)
-    if result.snapshot.status.state != "ready" or not result.watched:
+    try:
+        result = web_wud_api.watch_all(settings)
+    except Exception:  # noqa: BLE001 - best-effort refresh must not fail apply.
+        LOGGER.exception("WUD API pending refresh failed")
         status = "skipped"
         message = "WUD API pending refresh skipped."
-        if result.snapshot.status.detail:
-            message = f"{message} {result.snapshot.status.detail}"
+    else:
+        if result.snapshot.status.state != "ready" or not result.watched:
+            status = "skipped"
+            message = "WUD API pending refresh skipped."
+            if result.snapshot.status.detail:
+                message = f"{message} {result.snapshot.status.detail}"
     _append_apply_job_progress(
         jobs,
         apply_condition,
