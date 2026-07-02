@@ -71,15 +71,18 @@ def test_security_scans_get_uses_cache_only_context(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    calls: list[tuple[bool, bool]] = []
+    calls: list[tuple[bool, bool, bool]] = []
 
     def fake_context(
         _settings,
         *,
         include_compose: bool = True,
         include_wud_metadata: bool = True,
+        resolve_missing_digests: bool = True,
     ) -> PendingSecurityContext:
-        calls.append((include_compose, include_wud_metadata))
+        calls.append(
+            (include_compose, include_wud_metadata, resolve_missing_digests)
+        )
         return _empty_security_context(tmp_path)
 
     monkeypatch.setattr("wudup.web_security.pending_security_context", fake_context)
@@ -88,7 +91,7 @@ def test_security_scans_get_uses_cache_only_context(
     response = client.get("/api/v1/security-scans")
 
     assert response.status_code == 200
-    assert calls == [(False, False)]
+    assert calls == [(False, False, False)]
 
 
 def test_security_scans_get_missing_cache_table_uses_placeholders(

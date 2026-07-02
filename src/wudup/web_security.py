@@ -203,6 +203,7 @@ def security_scans_response(settings: WebSettings) -> SecurityScansResponse:
         settings,
         include_compose=False,
         include_wud_metadata=False,
+        resolve_missing_digests=False,
     )
     if not settings.security_scan.enabled:
         return _response_from_items(

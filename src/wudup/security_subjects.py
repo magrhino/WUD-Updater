@@ -57,6 +57,7 @@ def pending_security_context(
     *,
     include_compose: bool = True,
     include_wud_metadata: bool = True,
+    resolve_missing_digests: bool = True,
 ) -> PendingSecurityContext:
     source = resolve_pending_source(
         settings,
@@ -79,7 +80,8 @@ def pending_security_context(
         )
         for target in source.parsed.targets
     )
-    requests = _resolve_missing_reported_digests(settings, requests)
+    if resolve_missing_digests:
+        requests = _resolve_missing_reported_digests(settings, requests)
     return PendingSecurityContext(source=source, requests=requests, warnings=warnings)
 
 
