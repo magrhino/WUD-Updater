@@ -4,9 +4,9 @@ import json
 import urllib.parse
 from pathlib import Path
 
-from wudup import web as web_module
 from wudup import web_wud_api
 from wudup.db import open_db
+from wudup.web_models import WebApplyJob
 
 from tests.web_test_helpers import _client, _csrf_headers
 from tests.web_wud_rescan_helpers import (
@@ -252,7 +252,7 @@ def test_pending_rescan_rejects_active_apply_job_without_watch(
             "WUD_API_BASE_URL": "https://wud.rescan-active-job.test:3000",
         },
     )
-    client.app.state.web_apply_jobs["job-active"] = web_module.WebApplyJob(
+    client.app.state.web_apply_jobs["job-active"] = WebApplyJob(
         id="job-active",
         status="running",
         selected_line_numbers=(1,),

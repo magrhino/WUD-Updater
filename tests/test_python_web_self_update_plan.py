@@ -1,7 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
-from wudup import web as web_module
 from wudup import web_self_update as self_update_module
+from wudup.web_models import WebApplyJob
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -154,7 +154,7 @@ def test_self_update_plan_and_prepare_enforce_auth_csrf_read_only_and_active_job
             "WUD_WEB_RESTART_CONTAINER": "wudup",
         },
     )
-    mutating.app.state.web_apply_jobs["job-active"] = web_module.WebApplyJob(
+    mutating.app.state.web_apply_jobs["job-active"] = WebApplyJob(
         id="job-active",
         status="running",
         selected_line_numbers=(1,),
