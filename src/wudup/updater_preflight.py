@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import compose_rewrite, updater_logging
+from . import compose_rewrite, updater_audit, updater_logging
 from .command import CommandError
 from .compose import ComposeBindMount, ComposeRuntimePortIssue, ComposeStack
 from .updater_digest_pin import _digest_pin_match_tag
@@ -401,16 +401,22 @@ def finish_preflight_failure(
         for stack_index in failed_stack_indices
     }
 
-    runner._start_audit(parsed)
-    runner._mark_unmatched_pending(parsed, matches, skipped_tags)
-    runner._mark_matched_pending(
+    updater_audit.start_audit(runner, parsed)
+    updater_audit.mark_unmatched_pending(runner, parsed, matches, skipped_tags)
+    updater_audit.mark_matched_pending(
+        runner,
         skipped_matches,
         status="pending",
         status_reason="preflight-skipped",
     )
-    runner._mark_failed_pending(failed_matches, stack_statuses, failed_lines)
+    updater_audit.mark_failed_pending(
+        runner,
+        failed_matches,
+        stack_statuses,
+        failed_lines,
+    )
     runner._mark_failed_lines_restored(())
-    runner._finish_audit_run("failure")
+    updater_audit.finish_audit_run(runner, "failure")
 
     error_report = runner._write_error_report()
     if error_report is not None:

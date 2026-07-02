@@ -13,25 +13,6 @@ from wudup.compose_rewrite import (
 )
 
 
-class ComposeRewriteCompatibilityTests(unittest.TestCase):
-    def test_updater_reexports_compose_rewrite_helpers(self) -> None:
-        from wudup import updater
-
-        names = (
-            "apply_compose_tag_updates",
-            "apply_compose_tag_exclusions",
-            "apply_compose_digest_pins",
-            "render_compose_digest_pins",
-            "render_compose_tag_exclusions",
-            "exact_tags_regex",
-            "merge_wud_exclude_regex",
-            "_is_simple_exact_tag_include",
-        )
-        for name in names:
-            with self.subTest(name=name):
-                self.assertIs(getattr(updater, name), getattr(compose_rewrite, name))
-
-
 class ComposeExactTagRegexTests(unittest.TestCase):
     def test_exact_tags_regex_sorts_deduplicates_and_escapes_tags(self) -> None:
         self.assertEqual(exact_tags_regex(()), "")

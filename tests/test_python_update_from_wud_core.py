@@ -22,6 +22,21 @@ from tests.update_from_wud_helpers import (
     manifest_image,
 )
 
+class UpdateFromWudFacadeTests(unittest.TestCase):
+    def test_updater_facade_exposes_runner_entrypoints(self) -> None:
+        from wudup import updater
+
+        self.assertTrue(callable(updater.UpdateFromWudRunner))
+        self.assertTrue(callable(updater.run_update_from_wud))
+
+    def test_updater_facade_does_not_expose_compose_rewrite_helpers(self) -> None:
+        from wudup import updater
+
+        self.assertFalse(hasattr(updater, "apply_compose_tag_updates"))
+        self.assertFalse(hasattr(updater, "apply_compose_service_updates"))
+        self.assertFalse(hasattr(updater, "rewrite_compose_file"))
+
+
 class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
     def test_expected_digest_failure_reason_requires_all_matches_stale(self) -> None:
         stack_dir = self.make_stack(
