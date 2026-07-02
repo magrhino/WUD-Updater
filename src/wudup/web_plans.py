@@ -37,6 +37,7 @@ from .web_models import (
 
 EffectiveConfigLoader = Callable[[WebSettings], UpdaterConfig]
 _effective_config_loader: EffectiveConfigLoader | None = None
+_PLAN_REVALIDATION_ERROR = "could not revalidate plan"
 
 
 def configure(*, effective_config_loader: EffectiveConfigLoader) -> None:
@@ -101,7 +102,7 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
                 status_code=409,
                 detail=_safe_exception_detail(
                     settings,
-                    "could not revalidate plan",
+                    _PLAN_REVALIDATION_ERROR,
                     exc,
                 ),
             ) from exc
@@ -110,7 +111,7 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
                 status_code=500,
                 detail=_safe_exception_detail(
                     settings,
-                    "could not revalidate plan",
+                    _PLAN_REVALIDATION_ERROR,
                     exc,
                 ),
             ) from exc
@@ -157,7 +158,7 @@ def _resolve_pending_source_for_apply(
             status_code=500,
             detail=_safe_exception_detail(
                 settings,
-                "could not revalidate plan",
+                _PLAN_REVALIDATION_ERROR,
                 exc,
             ),
         ) from exc

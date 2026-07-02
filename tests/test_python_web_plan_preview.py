@@ -41,18 +41,18 @@ def test_plan_endpoint_wraps_config_error(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    secret = "plan-secret-token"
+    redacted_value = "plan-redaction-fixture"
 
     def invalid_config(_settings):
         raise ConfigError(
-            f"failed to parse {tmp_path / 'state' / 'config.env'} with {secret}"
+            f"failed to parse {tmp_path / 'state' / 'config.env'} with {redacted_value}"
         )
 
     client = _client(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_TOKEN": secret,
+            "WUD_WEB_TOKEN": redacted_value,
         },
     )
     monkeypatch.setattr(plans_module, "_effective_config_loader", invalid_config)
@@ -66,7 +66,7 @@ def test_plan_endpoint_wraps_config_error(
 
     assert response.status_code == 500
     assert detail.startswith("could not create plan: ")
-    assert secret not in detail
+    assert redacted_value not in detail
     assert str(tmp_path) not in detail
     assert "<redacted>" in detail
     assert "[REDACTED_PATH]" in detail
@@ -76,18 +76,18 @@ def test_plan_endpoint_wraps_source_oserror(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    secret = "plan-oserror-secret"
+    redacted_value = "plan-oserror-redaction-fixture"
 
     def fail_pending_source(*_args, **_kwargs):
         raise OSError(
-            f"open failed for {tmp_path / 'state' / 'images.todo'} with {secret}"
+            f"open failed for {tmp_path / 'state' / 'images.todo'} with {redacted_value}"
         )
 
     client = _client(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_TOKEN": secret,
+            "WUD_WEB_TOKEN": redacted_value,
         },
     )
     monkeypatch.setattr(
@@ -105,7 +105,7 @@ def test_plan_endpoint_wraps_source_oserror(
 
     assert response.status_code == 500
     assert detail.startswith("could not create plan: ")
-    assert secret not in detail
+    assert redacted_value not in detail
     assert str(tmp_path) not in detail
     assert "<redacted>" in detail
     assert "[REDACTED_PATH]" in detail
