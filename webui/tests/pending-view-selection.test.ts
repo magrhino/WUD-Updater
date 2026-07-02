@@ -12,8 +12,6 @@ import {
   pendingRescanResponse,
   pendingSourceInfo,
   planResponse,
-  releaseNotificationResponse,
-  releaseNotesResponse,
   snooze,
   statusResponse,
   wudApiStatus,
@@ -422,220 +420,9 @@ describe("pending view selection actions", () => {
     expect(createRemovalPlan).not.toHaveBeenCalled();
   });
 
-  it("previews and sends Discord release notes for selected pending updates", async () => {
+  it("keeps release-note notifications post-run only", async () => {
     const { pinia, settings, updates } = setupStores(true);
     updates.pending = pendingResponse();
-    updates.releaseNotes = releaseNotesResponse();
-    mockPendingLifecycle(settings, updates);
-    const previewReleaseNotifications = vi
-      .spyOn(updates, "previewReleaseNotifications")
-      .mockImplementation(async () => {
-        updates.releaseNotification = releaseNotificationResponse();
-      });
-    const sendReleaseNotifications = vi
-      .spyOn(updates, "sendReleaseNotifications")
-      .mockImplementation(async () => {
-        updates.releaseNotification = releaseNotificationResponse({
-          sent: true,
-          audit_run_id: 79,
-        });
-      });
-    const wrapper = mountPendingView(pinia);
-
-    await wrapper
-      .find('input[aria-label="Select stack media"]')
-      .setValue(true);
-    await flushPromises();
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Preview release notes"))
-      ?.trigger("click");
-    await flushPromises();
-
-    expect(previewReleaseNotifications).toHaveBeenCalledWith({ line_numbers: [1] });
-    expect(wrapper.find("dialog").text()).toContain(
-      "Send Discord notifications",
-    );
-
-    await wrapper
-      .find("dialog")
-      .findAll("button")
-      .find((button) => button.text().includes("Send to Discord"))
-      ?.trigger("click");
-    await flushPromises();
-
-    expect(sendReleaseNotifications).toHaveBeenCalledWith({ line_numbers: [1] });
-    expect(wrapper.find("dialog").text()).toContain(
-      "Release-note notifications sent. Audit run #79.",
-    );
-  });
-
-  it("previews manual resend for skipped Discord release-note duplicates", async () => {
-    const { pinia, settings, updates } = setupStores(true);
-    updates.pending = pendingResponse();
-    updates.releaseNotes = releaseNotesResponse();
-    mockPendingLifecycle(settings, updates);
-    const previewReleaseNotifications = vi
-      .spyOn(updates, "previewReleaseNotifications")
-      .mockImplementation(async (source) => {
-        const response =
-          source.resend === true
-            ? releaseNotificationResponse({
-                sendable_count: 1,
-                skipped_count: 0,
-                items: [
-                  {
-                    ...releaseNotificationResponse().items[0],
-                    notification_status: "manual_resend",
-                    skipped_reason: "",
-                  },
-                ],
-              })
-            : releaseNotificationResponse({
-                sendable_count: 0,
-                skipped_count: 1,
-                items: [
-                  {
-                    ...releaseNotificationResponse().items[0],
-                    notification_status: "skipped_duplicate",
-                    notification_last_sent_at: "2026-01-02T00:00:00Z",
-                    notification_send_count: 1,
-                    skipped_reason: "Already sent for this update.",
-                  },
-                ],
-              });
-        updates.releaseNotification = response;
-        return response;
-      });
-    const wrapper = mountPendingView(pinia);
-
-    await wrapper
-      .find('input[aria-label="Select stack media"]')
-      .setValue(true);
-    await flushPromises();
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Preview release notes"))
-      ?.trigger("click");
-    await flushPromises();
-
-    expect(wrapper.find("dialog").text()).toContain("Already notified");
-    expect(wrapper.find("dialog").text()).toContain(
-      "Duplicate notifications are skipped. Preview resend to send them again.",
-    );
-
-    await wrapper
-      .find("dialog")
-      .findAll("button")
-      .find((button) => button.text().includes("Preview resend"))
-      ?.trigger("click");
-    await flushPromises();
-
-    expect(previewReleaseNotifications).toHaveBeenNthCalledWith(1, {
-      line_numbers: [1],
-    });
-    expect(previewReleaseNotifications).toHaveBeenNthCalledWith(2, {
-      line_numbers: [1],
-      resend: true,
-    });
-    expect(wrapper.find("dialog").text()).toContain("Manual resend");
-  });
-
-  it("uses generic resend copy for cooldown-skipped release notifications", async () => {
-    const { pinia, settings, updates } = setupStores(true);
-    updates.pending = pendingResponse();
-    updates.releaseNotes = releaseNotesResponse();
-    mockPendingLifecycle(settings, updates);
-    vi.spyOn(updates, "previewReleaseNotifications").mockImplementation(async () => {
-      const response = releaseNotificationResponse({
-        sendable_count: 0,
-        skipped_count: 1,
-        items: [
-          {
-            ...releaseNotificationResponse().items[0],
-            notification_status: "skipped_cooldown",
-            skipped_reason: "Notification cooldown has not elapsed.",
-          },
-        ],
-      });
-      updates.releaseNotification = response;
-      return response;
-    });
-    const wrapper = mountPendingView(pinia);
-
-    await wrapper
-      .find('input[aria-label="Select stack media"]')
-      .setValue(true);
-    await flushPromises();
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Preview release notes"))
-      ?.trigger("click");
-    await flushPromises();
-
-    expect(wrapper.find("dialog").text()).toContain(
-      "Release-note notifications are skipped by the resend policy.",
-    );
-    expect(wrapper.find("dialog").text()).not.toContain(
-      "Duplicate notifications are skipped.",
-    );
-  });
-
-  it("keeps Discord release-note send disabled when preview fails", async () => {
-    const { pinia, settings, updates } = setupStores(true);
-    updates.pending = pendingResponse();
-    updates.releaseNotes = releaseNotesResponse();
-    mockPendingLifecycle(settings, updates);
-    const previewReleaseNotifications = vi
-      .spyOn(updates, "previewReleaseNotifications")
-      .mockImplementation(async () => {
-        updates.releaseNotification = null;
-        updates.releaseNotificationError = "preview failed";
-        throw new Error("preview failed");
-      });
-    const sendReleaseNotifications = vi.spyOn(updates, "sendReleaseNotifications");
-    const wrapper = mountPendingView(pinia);
-
-    await wrapper
-      .find('input[aria-label="Select stack media"]')
-      .setValue(true);
-    await flushPromises();
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Preview release notes"))
-      ?.trigger("click");
-    await flushPromises();
-
-    const dialog = wrapper.find("dialog");
-    expect(previewReleaseNotifications).toHaveBeenCalledWith({ line_numbers: [1] });
-    expect(dialog.text()).toContain(
-      "Release-note notification is unavailable: preview failed",
-    );
-    expect(dialog.text()).toContain(
-      "Preview release-note notifications before sending.",
-    );
-    expect(dialog.text()).not.toContain("Release-note notifications are disabled.");
-    expect(dialog.text()).not.toContain("Discord release-note webhook is not configured.");
-    expect(dialog.text()).not.toContain("Missing");
-    const sendButton = dialog
-      .findAll("button")
-      .find((button) => button.text().includes("Send to Discord"));
-    expect(sendButton?.attributes("disabled")).toBeDefined();
-
-    await sendButton?.trigger("click");
-    await flushPromises();
-
-    expect(sendReleaseNotifications).not.toHaveBeenCalled();
-  });
-
-  it("disables selected release-note notifications from metadata notification state", async () => {
-    const { pinia, settings, updates } = setupStores(true);
-    updates.pending = pendingResponse();
-    updates.releaseNotes = {
-      ...releaseNotesResponse(),
-      notifications_enabled: false,
-      notifications_disabled_reason: "Release-note notifications are disabled.",
-    };
     mockPendingLifecycle(settings, updates);
     const previewReleaseNotifications = vi.spyOn(
       updates,
@@ -648,11 +435,10 @@ describe("pending view selection actions", () => {
       .setValue(true);
     await flushPromises();
 
-    expect(wrapper.text()).toContain("Release-note notifications are disabled.");
     const previewButton = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Preview release notes"));
-    expect(previewButton?.attributes("disabled")).toBeDefined();
+    expect(previewButton).toBeUndefined();
     await previewButton?.trigger("click");
 
     expect(previewReleaseNotifications).not.toHaveBeenCalled();

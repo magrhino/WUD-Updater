@@ -257,20 +257,6 @@ const releaseNotificationsDisabledReason = computed(() => {
   }
   return "";
 });
-const selectedReleaseNotificationsDisabledMessage = computed(() => {
-  if (releaseNotificationsDisabledReason.value) {
-    return releaseNotificationsDisabledReason.value;
-  }
-  if (updates.releaseNotificationLoading) {
-    return "Release-note notification preview is loading.";
-  }
-  return "";
-});
-const selectedReleaseNotificationsDisabled = computed(
-  () =>
-    updates.releaseNotificationLoading ||
-    Boolean(selectedReleaseNotificationsDisabledMessage.value),
-);
 const applyJobReleaseNotificationsVisible = computed(
   () => updates.applyJob?.status === "success" && Boolean(updates.applyJob.run_id),
 );
@@ -592,15 +578,6 @@ async function rescanSelectedPending(): Promise<void> {
   await updates.rescanPending("selected", selectedLineNumbers.value);
 }
 
-async function previewSelectedReleaseNotifications(): Promise<void> {
-  if (selectedReleaseNotificationsDisabled.value || !selectedLineNumbers.value.length) {
-    return;
-  }
-  await previewReleaseNotifications({
-    line_numbers: [...selectedLineNumbers.value],
-  });
-}
-
 async function previewApplyJobReleaseNotifications(): Promise<void> {
   const runId = updates.applyJob?.run_id;
   if (applyJobReleaseNotificationsDisabled.value || !runId) {
@@ -889,8 +866,6 @@ onBeforeUnmount(() => {
       :removal-button-label="removalButtonLabel"
       :remove-selected-disabled="removeSelectedDisabled"
       :remove-selected-disabled-message="removeSelectedDisabledMessage"
-      :release-notifications-disabled="selectedReleaseNotificationsDisabled"
-      :release-notifications-disabled-message="selectedReleaseNotificationsDisabledMessage"
       :selectable-count="visibleSelectableLineNumbers.length"
       :select-all-label="visibleSelectAllLabel"
       :selected-count="selectedLineNumbers.length"
@@ -903,7 +878,6 @@ onBeforeUnmount(() => {
       :unmatched-review-count-label="visibleUnmatchedReviewCountLabel"
       :update-selected-disabled="updateSelectedDisabled"
       @clear-selection="clearSelection"
-      @preview-release-notifications="previewSelectedReleaseNotifications"
       @rescan-all="rescanAllPending"
       @rescan-selected="rescanSelectedPending"
       @select-all="selectAllVisible"

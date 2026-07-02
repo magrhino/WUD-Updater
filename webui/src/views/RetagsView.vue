@@ -427,6 +427,7 @@ function createRetagApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
           update.target_id ||
           `${stack.directory}-${stack.compose_file}-${stack.project_directory}-${update.service_key}`,
         lineNo: null,
+        stackName: stack.stack,
         scopeLabel: stack.stack || "Retag",
         serviceLabel: update.service_key,
         tagRewriteLabel: "",

@@ -196,8 +196,8 @@ describe("pending view apply jobs", () => {
     const panelProgress = wrapper.find(
       '[aria-labelledby="apply-job-progress-title"]',
     ).element;
-    const panelVerification = wrapper.find(".run-verification-panel").element;
     const panelDetails = wrapper.find(".apply-job-details").element;
+    expect(wrapper.find(".run-verification-panel").exists()).toBe(false);
     expect(focus.mock.contexts).toContain(panel);
     expect(
       Boolean(panelStatus.compareDocumentPosition(panelLatestLog) & Node.DOCUMENT_POSITION_FOLLOWING),
@@ -207,12 +207,6 @@ describe("pending view apply jobs", () => {
     ).toBe(true);
     expect(
       Boolean(panelProgress.compareDocumentPosition(panelDetails) & Node.DOCUMENT_POSITION_FOLLOWING),
-    ).toBe(true);
-    expect(
-      Boolean(panelProgress.compareDocumentPosition(panelVerification) & Node.DOCUMENT_POSITION_FOLLOWING),
-    ).toBe(true);
-    expect(
-      Boolean(panelVerification.compareDocumentPosition(panelDetails) & Node.DOCUMENT_POSITION_FOLLOWING),
     ).toBe(true);
     expect(wrapper.find(".apply-job-details").attributes("open")).toBeUndefined();
     expect(applyPanel.text()).toContain("repo/app:1.0");
@@ -235,6 +229,9 @@ describe("pending view apply jobs", () => {
     expect(wrapper.find(".apply-job-panel").text()).toContain("media");
     expect(wrapper.find(".apply-job-panel").text()).toContain("Running: Pull images");
     expect(wrapper.find(".apply-job-panel").text()).toContain("media / calibre / lines 1");
+    expect(wrapper.find(".apply-progress-step-running").attributes("aria-current")).toBe(
+      "step",
+    );
 
     jobStream.emitLog(
       applyJobLogResponse({
@@ -258,7 +255,7 @@ describe("pending view apply jobs", () => {
     expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
     expect(wrapper.find(".apply-job-panel").text()).toContain("#10");
     expect(wrapper.find(".apply-job-panel").text()).toContain("Update complete");
-    expect(wrapper.find(".apply-job-panel").text()).toContain("Verification");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Post-update verification");
     expect(wrapper.find(".apply-job-panel").text()).toContain("Verified");
     expect(wrapper.find(".apply-job-panel").text()).toContain("New image running");
     expect(wrapper.find(".apply-job-panel").text()).toContain("WUD line removed");
