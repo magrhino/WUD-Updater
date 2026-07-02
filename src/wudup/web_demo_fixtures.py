@@ -37,6 +37,9 @@ DEMO_COMPOSE_CONFIG_CODE_RE = re.compile(
 DEMO_TEMP_LOG_PATH_RE = re.compile(
     r"/[^\s\"']*wud-static-demo-[^\s\"']*\.log"
 )
+STATIC_DEMO_READ_ONLY_MESSAGE = (
+    "The public static demo is read-only. Run WUDup locally to apply changes."
+)
 
 from wudup.db import (  # noqa: E402
     open_db,
@@ -584,7 +587,7 @@ def generate_static_demo_fixtures() -> dict[str, Any]:
             try:
                 with _static_demo_default_static_dir(context.paths["static_dir"]):
                     data = _fixture_payload(context)
-                return _sanitize_payload(data, context.paths)
+                return _static_demo_payload(_sanitize_payload(data, context.paths))
             finally:
                 web_jobs.shutdown_apply_job_state(context.state)
 
@@ -707,7 +710,6 @@ def _safe_case_part(value: str) -> str:
 def _fixture_payload(context: SimpleNamespace) -> dict[str, Any]:
     request = context.request
     settings = context.settings
-    parsed = web_pending.parse_pending_file(settings)[1]
     retag_targets = _dump(web_retags.retag_targets_response(settings))
     runs = [_normalize_run_record(_dump(run)) for run in web_runs.api_runs(request)]
     cached_doctor = web_diagnostics.web_doctor_result(settings, request)
@@ -725,10 +727,10 @@ def _fixture_payload(context: SimpleNamespace) -> dict[str, Any]:
             "onboarding": _dump(web_onboarding.api_onboarding_checklist(request)),
             "pending": _dump(web_pending.pending_response(settings)),
             "updateTargets": _dump(web_pending.update_targets_response(settings)),
-            "planCases": _plan_cases(context, parsed),
-            "removalCases": _removal_cases(settings, parsed),
+            "planCases": [],
+            "removalCases": [],
             "retagTargets": retag_targets,
-            "retagCases": _retag_cases(settings, retag_targets),
+            "retagCases": [],
             "releaseNotes": _dump(web_release_notes.api_release_notes(request)),
             "selfUpdate": _dump(web_self_update.api_self_update(request)),
             "selfUpdatePlan": _normalize_self_update_plan(
@@ -764,6 +766,143 @@ def _fixture_payload(context: SimpleNamespace) -> dict[str, Any]:
         }
     finally:
         web_diagnostics.web_doctor_result = original_web_doctor_result
+
+
+def _static_demo_payload(data: dict[str, Any]) -> dict[str, Any]:
+    payload = copy.deepcopy(data)
+    auth = payload.get("auth")
+    if isinstance(auth, dict):
+        _static_demo_auth_response(auth.get("session"))
+        _static_demo_auth_response(auth.get("setupStatus"))
+
+    _static_demo_status(payload.get("status"))
+    _static_demo_settings(payload.get("settings"))
+    _static_demo_doctor(payload.get("doctor"))
+    _static_demo_self_update_plan(payload.get("selfUpdatePlan"))
+
+    diagnostics = payload.get("diagnostics")
+    if isinstance(diagnostics, dict):
+        _static_demo_status(diagnostics.get("status"))
+        _static_demo_settings(diagnostics.get("settings"))
+        _static_demo_doctor(diagnostics.get("doctor_result"))
+
+    payload["planCases"] = []
+    payload["removalCases"] = []
+    payload["retagCases"] = []
+    return payload
+
+
+def _static_demo_auth_response(value: Any) -> None:
+    if not isinstance(value, dict):
+        return
+    value["auth_required"] = False
+    value["authenticated"] = True
+    value["dev_auth_bypass"] = False
+    value["mutations_enabled"] = False
+
+
+def _static_demo_status(value: Any) -> None:
+    if not isinstance(value, dict):
+        return
+    value["auth_required"] = False
+    value["dev_auth_bypass"] = False
+    value["mutations_enabled"] = False
+    value["auto_update_scheduler_enabled"] = False
+
+
+def _static_demo_settings(value: Any) -> None:
+    if not isinstance(value, dict):
+        return
+    webui = value.get("webui")
+    if isinstance(webui, list):
+        _static_demo_setting_entry(webui, "WUD_WEB_DEV_NO_AUTH", "false", "default")
+        _static_demo_setting_entry(
+            webui,
+            "WUD_WEB_MUTATIONS_ENABLED",
+            "false",
+            "default",
+        )
+        _static_demo_setting_entry(
+            webui,
+            "WUD_WEB_AUTO_UPDATE_SCHEDULER_ENABLED",
+            "false",
+            "derived",
+        )
+
+
+def _static_demo_setting_entry(
+    entries: list[Any],
+    name: str,
+    value: str,
+    source: str,
+) -> None:
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("name") != name:
+            continue
+        entry["value"] = value
+        entry["configured"] = False
+        entry["source"] = source
+        return
+
+
+def _static_demo_doctor(value: Any) -> None:
+    if not isinstance(value, dict):
+        return
+    checks = value.get("checks")
+    if not isinstance(checks, list):
+        return
+    for check in checks:
+        if not isinstance(check, dict):
+            continue
+        if check.get("code") == "webui-authentication":
+            check["status"] = "PASS"
+            check["detail"] = "development auth bypass is disabled"
+            check["suggestions"] = []
+        if check.get("code") == "webui-mutation-gate":
+            check["status"] = "PASS"
+            check["detail"] = "browser mutations are disabled"
+            check["suggestions"] = []
+    _refresh_check_summary(value)
+
+
+def _static_demo_self_update_plan(value: Any) -> None:
+    if not isinstance(value, dict):
+        return
+    plan = value.get("plan")
+    if isinstance(plan, dict):
+        _static_demo_apply_preflight(plan.get("apply_preflight"))
+
+
+def _static_demo_apply_preflight(value: Any) -> None:
+    if not isinstance(value, dict):
+        return
+    checks = value.get("checks")
+    if not isinstance(checks, list):
+        return
+    for check in checks:
+        if not isinstance(check, dict) or check.get("code") != "mutations-enabled":
+            continue
+        check["status"] = "FAIL"
+        check["detail"] = STATIC_DEMO_READ_ONLY_MESSAGE
+        check["source_check_codes"] = ["webui-mutation-gate"]
+    _refresh_check_summary(value)
+
+
+def _refresh_check_summary(value: dict[str, Any]) -> None:
+    checks = value.get("checks", [])
+    failures = sum(
+        1
+        for check in checks
+        if isinstance(check, dict) and check.get("status") == "FAIL"
+    )
+    warnings = sum(
+        1
+        for check in checks
+        if isinstance(check, dict) and check.get("status") == "WARN"
+    )
+    value["failures"] = failures
+    value["warnings"] = warnings
+    value["ok"] = failures == 0
 
 
 def _plan_cases(context: SimpleNamespace, parsed: Any) -> list[dict[str, Any]]:

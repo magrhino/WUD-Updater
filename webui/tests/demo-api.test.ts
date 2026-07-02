@@ -53,7 +53,35 @@ describe("demo web API", () => {
       8,
     ]);
 
-    await expect(api.doctor("csrf")).resolves.toMatchObject({ ok: true });
+    const doctor = await api.doctor("csrf");
+    expect(doctor).toMatchObject({ ok: true });
+    expect(doctor.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "webui-authentication",
+          detail: "development auth bypass is disabled",
+          status: "PASS",
+          suggestions: [],
+        }),
+        expect.objectContaining({
+          code: "webui-mutation-gate",
+          detail: "browser mutations are disabled",
+          status: "PASS",
+          suggestions: [],
+        }),
+      ]),
+    );
+    await expect(api.diagnosticsSupportBundle()).resolves.toMatchObject({
+      doctor_result: {
+        checks: expect.arrayContaining([
+          expect.objectContaining({
+            code: "webui-mutation-gate",
+            detail: "browser mutations are disabled",
+            status: "PASS",
+          }),
+        ]),
+      },
+    });
     await expect(api.releaseNotes()).resolves.toMatchObject({ count: 7 });
     await expect(api.updateTargets()).resolves.toMatchObject({ count: 4 });
     await expect(api.retagTargets()).resolves.toMatchObject({ count: 4 });
@@ -97,6 +125,15 @@ describe("demo web API", () => {
     const api = createDemoWebApi();
     const update = await api.selfUpdate();
     const selfUpdatePlan = await api.planSelfUpdate("csrf");
+    expect(selfUpdatePlan.plan.apply_preflight.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "mutations-enabled",
+          detail: READ_ONLY_MESSAGE,
+          status: "FAIL",
+        }),
+      ]),
+    );
     const mutationExpectations = [
       api.updateManagedSettings({ theme_preference: "dark" }, "csrf"),
       api.dismissOnboarding("csrf"),
