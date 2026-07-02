@@ -14,7 +14,7 @@ from unittest import mock
 from wudup.banner import current_tag
 from wudup.cli import main
 from wudup.db import init_db, open_db, utc_timestamp
-from wudup.web import PASSWORD_HASHER
+from wudup.web_auth import PASSWORD_HASHER
 
 
 class CliTests(unittest.TestCase):

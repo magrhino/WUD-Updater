@@ -2,9 +2,9 @@ from __future__ import annotations
 import sqlite3
 import stat
 from pathlib import Path
-from wudup import web as web_module
 from wudup import web_pending as pending_module
 from wudup.locks import lock_dir_for
+from wudup.web_models import WebApplyJob
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -285,7 +285,7 @@ def test_pending_cleanup_rejects_active_apply_job_without_mutation(
     )
     wud_file = tmp_path / "state" / "images.todo"
     wud_file.write_text("repo/old:latest\n", encoding="utf-8")
-    client.app.state.web_apply_jobs["job-active"] = web_module.WebApplyJob(
+    client.app.state.web_apply_jobs["job-active"] = WebApplyJob(
         id="job-active",
         status="running",
         selected_line_numbers=(1,),

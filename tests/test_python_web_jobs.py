@@ -1,12 +1,11 @@
 from __future__ import annotations
 import logging
 from pathlib import Path
-from wudup import web as web_module
 from wudup import web_jobs
 from wudup import web_wud_api
 from wudup import web_self_update as self_update_module
 from wudup.config import UpdaterConfig
-from wudup.web_models import WebSettings
+from wudup.web_models import WebApplyJob, WebSettings
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -86,7 +85,7 @@ def test_refresh_api_pending_source_reports_degraded_detail(
 ) -> None:
     settings = _settings_for_lock_timeout(tmp_path, {})
     jobs = {
-        "job": web_module.WebApplyJob(
+        "job": WebApplyJob(
             id="job",
             status="running",
             selected_line_numbers=(1,),
@@ -134,7 +133,7 @@ def test_refresh_api_pending_source_logs_unexpected_watch_error(
 ) -> None:
     settings = _settings_for_lock_timeout(tmp_path, {})
     jobs = {
-        "job": web_module.WebApplyJob(
+        "job": WebApplyJob(
             id="job",
             status="running",
             selected_line_numbers=(1,),
@@ -168,7 +167,7 @@ def test_apply_job_refreshes_only_api_pending_source(
 ) -> None:
     settings = _settings_for_lock_timeout(tmp_path, {})
     jobs = {
-        "job": web_module.WebApplyJob(
+        "job": WebApplyJob(
             id="job",
             status="queued",
             selected_line_numbers=(1,),
@@ -256,7 +255,7 @@ def test_self_update_endpoint_enforces_auth_csrf_read_only_and_active_job(
             "WUD_WEB_RESTART_CONTAINER": "wudup",
         },
     )
-    mutating.app.state.web_apply_jobs["job-active"] = web_module.WebApplyJob(
+    mutating.app.state.web_apply_jobs["job-active"] = WebApplyJob(
         id="job-active",
         status="running",
         selected_line_numbers=(1,),
@@ -301,7 +300,7 @@ def test_job_stream_returns_404_for_missing_job(tmp_path: Path) -> None:
 def test_job_status_snapshots_while_locked(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
     job_id = "job-active"
-    client.app.state.web_apply_jobs[job_id] = web_module.WebApplyJob(
+    client.app.state.web_apply_jobs[job_id] = WebApplyJob(
         id=job_id,
         status="running",
         selected_line_numbers=(1,),

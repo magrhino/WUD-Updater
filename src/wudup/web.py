@@ -24,7 +24,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from . import (
     __version__,
     web_auth,
-    web_compat as _web_compat,
     web_database,
     web_diagnostics,
     web_health,
@@ -56,14 +55,6 @@ from .config import (
 )
 
 DEFAULT_WEB_PORT = 7417
-
-
-def __getattr__(name: str) -> Any:
-    return _web_compat.resolve_legacy_export(name)
-
-
-def __dir__() -> list[str]:
-    return sorted(set(globals()) | set(_web_compat.LEGACY_EXPORT_NAMES))
 
 
 def create_app(
