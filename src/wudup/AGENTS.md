@@ -7,7 +7,7 @@ Rules for files under `src/wudup/`. Root `AGENTS.md` controls repo-wide safety, 
 ## Context Budget
 
 - Read the owning module, the nearest focused tests, and `tests/run-all.sh` before changing Python backend behavior.
-- Treat `web.py` and `updater.py` as facades first: inspect them for app/CLI wiring and compatibility imports, then move to the focused module that owns the behavior.
+- Treat `web.py` and `updater.py` as facades first: inspect them for app/CLI wiring and intentional public entrypoints, then move to the focused module that owns the behavior.
 - Avoid broad reads of all backend modules unless the dependency boundary is unclear.
 
 ## Backend Ownership
@@ -28,7 +28,7 @@ Prefer small modules with one clear reason to change:
 | Web apply jobs, streams, plan apply | `web_jobs.py` | Preserve one-job-at-a-time, stale-plan rejection, WUD locks, audit, and progress events. |
 | Web auto-update scheduler | `web_scheduler.py` | Keep disabled unless mutations are enabled; preserve reservations and timing behavior. |
 | Web self-update and container restart | `web_self_update.py` | Preserve plan TTL, image/tag validation, restart validation, audit, and redaction. |
-| Updater CLI facade and runner orchestration | `updater.py` | Keep public compatibility imports working during extraction. |
+| Updater CLI facade and runner orchestration | `updater.py` | Preserve `UpdateFromWudRunner` and `run_update_from_wud`; helper APIs belong in their owning modules, not facade re-exports. |
 | Updater dataclasses, typed records, exceptions | `updater_models.py` | Preserve dataclass options, defaults, and custom exception classes. |
 | Compose YAML tag/digest/exclusion rewrites | `compose_rewrite.py` | Preserve fail-closed YAML handling, atomic writes, file mode/owner, and cleanup. |
 
