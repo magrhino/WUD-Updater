@@ -3,6 +3,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { touchTargetSizePx } from "../../src/touchTargets";
 
 const demoBasePath = process.env.PLAYWRIGHT_WEBUI_DEMO_BASE_PATH ?? "";
+const READ_ONLY_DEMO_MESSAGE =
+  "The public static demo is read-only. Run WUDup locally to apply changes.";
 const browserFailures = new WeakMap<Page, string[]>();
 
 test.skip(
@@ -58,7 +60,7 @@ async function expectTouchTargetHeight(page: Page, buttonName: string) {
   expect(box.width).toBeGreaterThanOrEqual(touchTargetSizePx);
 }
 
-test("static demo renders current pending state and completes apply flow", async ({
+test("static demo renders current pending state in read-only mode", async ({
   page,
 }) => {
   await page.goto(demoRoute("/#/pending"));
@@ -67,7 +69,7 @@ test("static demo renders current pending state and completes apply flow", async
     page.getByRole("heading", { name: "Pending updates", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("7 pending updates")).toBeVisible();
-  await expect(page.getByText("Mutations enabled")).toBeVisible();
+  await expect(page.getByText("Read-only", { exact: true })).toBeVisible();
   await expect(page.getByText("3 items need review")).toBeVisible();
   await expect(
     page.getByTitle("ghcr.io/home-assistant/home-assistant:2026.5.1").first(),
@@ -75,31 +77,15 @@ test("static demo renders current pending state and completes apply flow", async
 
   await page.getByRole("button", { name: /Preview home plan/ }).click();
   await expect(page.getByRole("heading", { name: "Review home plan" })).toBeVisible();
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: /Apply 1 update/ })
-    .click();
-
-  const applyPanel = page.locator(".apply-job-panel");
-  await expect(applyPanel.getByRole("heading", { name: "Apply complete" })).toBeVisible();
-  await expect(applyPanel.locator(".apply-job-latest-log code")).toContainText(
-    "Done. See log",
-  );
-  await expect(applyPanel.locator(".apply-job-log-viewer")).toBeHidden();
-  await applyPanel.getByRole("button", { name: "Show output" }).click();
-  await expect(applyPanel.locator(".apply-job-log-viewer")).toBeVisible();
-  await expect(applyPanel.locator(".apply-job-log-viewer")).toContainText(
-    "docker-update-from-wud-v2",
-  );
-  await expect(page.getByText("6 pending updates")).toBeVisible();
-
-  await applyPanel.getByRole("link", { name: "Details" }).click();
-  await expect(page.getByRole("heading", { name: "#7" })).toBeVisible();
-  await expect(page.getByText("Pending records")).toBeVisible();
-
-  await page.getByRole("link", { name: "View log" }).click();
-  await expect(page.getByRole("heading", { name: "#7 log" })).toBeVisible();
-  await expect(page.getByText("Done. See log")).toBeVisible();
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("button", { name: /Apply 1 update/ }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText(READ_ONLY_DEMO_MESSAGE, { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("7 pending updates")).toBeVisible();
 });
 
 test("static demo renders seeded audit log records", async ({ page }) => {
@@ -124,11 +110,11 @@ test("static demo renders retag review fixtures", async ({ page }) => {
   await expect(page.getByText("Retag available").first()).toBeVisible();
   await expect(page.getByText("home/home-assistant")).toBeVisible();
   await expect(
-    page.getByText("Demo mode previews retag apply without changing local Compose files."),
+    page.getByText("Read-only mode keeps retag switch/apply disabled."),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Preview retag changes" }),
-  ).toBeEnabled();
+  ).toBeDisabled();
   const blockedServiceRow = page
     .getByRole("row")
     .filter({ hasText: "home/home-assistant" });

@@ -78,10 +78,12 @@ Build the public static WebUI demo for GitHub Pages with:
 npm --prefix webui run build:demo
 ```
 
-The Pages demo is fixture-backed and runs entirely in the browser. It uses the
-same Vue routes, stores, components, and theme as the real WebUI, but it never
-starts FastAPI, SQLite, fake Docker, or live Docker/Compose operations. Fixture
-paths are sanitized to `demo/...`, and reloads reset the in-browser demo state.
+The Pages demo is fixture-backed, read-only, and runs entirely in the browser.
+It uses the same Vue routes, stores, components, and theme as the real WebUI,
+but it never starts FastAPI, SQLite, fake Docker, or live Docker/Compose
+operations. Fixture paths are sanitized to `demo/...`, plan preview stays
+non-applyable, and static mutation endpoints reject with the demo read-only
+message. See [Public WebUI Demo](wiki/demo.md) for the maintenance boundary.
 
 Browser smoke tests use Playwright Chromium with mocked local API fixtures, and
 demo testing includes the `assert:demo-dist` pre-flight step to harden static
@@ -106,8 +108,9 @@ make webui-demo
 origin for CSRF/Origin checks. The demo uses `local-dev/` for disposable Docker
 fixtures, WUD output, logs, and `WUD_DB_PATH`.
 
-This local demo is intentionally different from the public GitHub Pages demo:
-it exercises the real backend and updater code paths against fake Docker state.
+This local demo is intentionally different from the public GitHub Pages demo and
+is a contributor development harness, not a public demo contract. It exercises
+the real backend and updater code paths against fake Docker state.
 The wrapper puts the checked-in fake Docker command first on `PATH` and points
 it at `local-dev/fake-docker`, so interactive actions exercise the real WebUI
 backend and updater code paths without using the host Docker daemon. You can

@@ -498,6 +498,170 @@ function pendingLineFixture(
   };
 }
 
+function readOnlyPlanFromPending(
+  pending: PendingResponse,
+  selectedLineNumbers: number[],
+): PlanResponse {
+  const selected = new Set(selectedLineNumbers);
+  const selectedGroups = pending.grouping.groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => selected.has(item.line_no)),
+    }))
+    .filter((group) => group.items.length > 0);
+  const selectedUnmatched = pending.grouping.unmatched.filter((item) =>
+    selected.has(item.line_no),
+  );
+  const stacks = selectedGroups.map((group) => readOnlyPlanStack(group));
+  const matchedTargets = stacks.flatMap((stack) =>
+    stack.lines.map((line) => ({
+      line_no: line.line_no,
+      raw: line.raw,
+      image: line.image,
+      resolved_image: line.resolved_image,
+      digest: line.digest,
+      desired_tag: line.desired_tag,
+      matched: true,
+      action: line.action,
+    })),
+  );
+  const skipped = selectedUnmatched.map((item) => ({
+    line_no: item.line_no,
+    raw: item.raw,
+    image: item.image,
+    desired_tag: item.desired_tag,
+    reason: item.diagnostic?.code ?? "unmatched",
+  }));
+  const issues = selectedUnmatched.map((item) => ({
+    severity: "error",
+    code: item.diagnostic?.code ?? "unmatched",
+    message:
+      item.diagnostic?.message ??
+      "This pending update is not matched to a discovered Compose service.",
+    line_no: item.line_no,
+    stack: item.diagnostic?.stack ?? "",
+    service: item.diagnostic?.service ?? "",
+    hint: item.diagnostic?.hint ?? "",
+    details: item.diagnostic?.details ?? {},
+  }));
+  const serviceCount = new Set(
+    stacks.flatMap((stack) =>
+      stack.lines.map((line) => `${stack.name}/${line.service}`),
+    ),
+  ).size;
+
+  return {
+    plan_id: `demo-read-only-${selectedLineNumbers.join("-") || "empty"}`,
+    dry_run: true,
+    can_apply: false,
+    status: selectedLineNumbers.length === 0 ? "empty" : "ready",
+    source_file: pending.source_file,
+    source: clone(pending.source),
+    mode: "stop",
+    max_wait: 180,
+    digest_pin_updates: false,
+    selected_line_numbers: selectedLineNumbers,
+    summary: {
+      target_count: selectedLineNumbers.length,
+      matched_target_count: matchedTargets.length,
+      stack_count: stacks.length,
+      service_count: serviceCount,
+      skipped_count: skipped.length,
+      issue_count: issues.length,
+    },
+    targets: [
+      ...matchedTargets,
+      ...selectedUnmatched.map((item) => ({
+        line_no: item.line_no,
+        raw: item.raw,
+        image: item.image,
+        resolved_image: item.resolved_image,
+        digest: item.digest,
+        desired_tag: item.desired_tag,
+        matched: false,
+        action: item.action,
+      })),
+    ],
+    stacks,
+    skipped,
+    issues,
+    cleanup: {
+      cleanup_id: "demo-read-only-cleanup",
+      can_remove_unmatched: false,
+      items: selectedUnmatched.map((item) => ({
+        line_no: item.line_no,
+        raw: item.raw,
+        image: item.image,
+        desired_tag: item.desired_tag,
+        digest: item.digest,
+        reason: item.diagnostic?.code ?? "unmatched",
+        diagnostic: item.diagnostic,
+      })),
+    },
+    apply_preflight: {
+      ok: false,
+      failures: 1,
+      warnings: 0,
+      checks: [
+        {
+          status: "FAIL",
+          code: "mutations-enabled",
+          label: "Mutations enabled",
+          detail:
+            "The public static demo is read-only. Run WUDup locally to apply changes.",
+          source_check_codes: ["webui-mutation-gate"],
+        },
+      ],
+    },
+  };
+}
+
+function readOnlyPlanStack(
+  group: PendingResponse["grouping"]["groups"][number],
+): PlanResponse["stacks"][number] {
+  const lines = group.items.map((item) => {
+    const composeImage = item.compose_images[0] ?? item.resolved_image;
+    return {
+      line_no: item.line_no,
+      raw: item.raw,
+      image: item.image,
+      resolved_image: item.resolved_image,
+      compose_image: composeImage,
+      target_image: item.target_image || item.resolved_image,
+      service: item.services[0] ?? item.repo,
+      digest: item.digest,
+      desired_tag: item.desired_tag,
+      action: item.action,
+      digest_provenance: item.digest_provenance ?? null,
+    };
+  });
+  const services = [...new Set(lines.map((line) => line.service))];
+  return {
+    name: group.name,
+    directory: group.directory,
+    compose_file: group.compose_file,
+    project_directory: group.project_directory,
+    services_label: group.services_label,
+    services,
+    pull_services: services,
+    stop_services: services,
+    force_recreate: lines.some((line) => line.action !== "tag-update"),
+    up_no_deps: true,
+    tag_updates: lines
+      .filter((line) => line.action === "tag-update")
+      .map((line) => ({
+        old_image: line.compose_image,
+        desired_tag: line.desired_tag,
+        new_image: line.target_image,
+        services: [line.service],
+      })),
+    digest_pin_updates: [],
+    digest_unpin_updates: [],
+    actions: [],
+    lines,
+  };
+}
+
 export class DemoApiState {
   private readonly activePendingLineKeys = new Set(
     fixtures.pending.items.map((item) => cleanupLineKey(item)),
@@ -597,18 +761,29 @@ export class DemoApiState {
   >();
 
   session(): AuthSessionResponse {
-    return clone(fixtures.auth.session);
+    return {
+      ...clone(fixtures.auth.session),
+      dev_auth_bypass: false,
+      mutations_enabled: false,
+    };
   }
 
   setupStatus(): SetupStatusResponse {
-    return clone(fixtures.auth.setupStatus);
+    return {
+      ...clone(fixtures.auth.setupStatus),
+      dev_auth_bypass: false,
+      mutations_enabled: false,
+    };
   }
 
   status(): StatusResponse {
     return {
       ...clone(fixtures.status),
       version: DEMO_VERSION,
-      pending_count: this.activePendingLineKeys.size,
+      dev_auth_bypass: false,
+      mutations_enabled: false,
+      auto_update_scheduler_enabled: false,
+      pending_count: fixtures.pending.count,
     };
   }
 
@@ -710,7 +885,38 @@ export class DemoApiState {
       this.releaseNotificationVerbosity,
       this.releaseNotificationVerbosityConfigured,
     );
+    this.updateSettingsEntry(settings.webui, "WUD_WEB_DEV_NO_AUTH", "false", false, "default");
+    this.updateSettingsEntry(
+      settings.webui,
+      "WUD_WEB_MUTATIONS_ENABLED",
+      "false",
+      false,
+      "default",
+    );
+    this.updateSettingsEntry(
+      settings.webui,
+      "WUD_WEB_AUTO_UPDATE_SCHEDULER_ENABLED",
+      "false",
+      false,
+      "derived",
+    );
     return settings;
+  }
+
+  private updateSettingsEntry(
+    entries: SettingsResponse["webui"],
+    name: string,
+    value: string,
+    configured: boolean,
+    source: SettingsResponse["webui"][number]["source"],
+  ): void {
+    const entry = entries.find((item) => item.name === name);
+    if (!entry) {
+      return;
+    }
+    entry.value = value;
+    entry.configured = configured;
+    entry.source = source;
   }
 
   private ensureManagedEntry(
@@ -1294,13 +1500,13 @@ export class DemoApiState {
 
   createPlan(
     lineNumbers: number[],
-    allowTagUpdates: boolean,
-    tagOverrides: TagOverrideRequest[],
+    _allowTagUpdates: boolean,
+    _tagOverrides: TagOverrideRequest[],
     _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
   ): PlanResponse {
-    const planCase = this.planCase(lineNumbers, allowTagUpdates, tagOverrides);
-    this.requireActiveLines(lineNumbers);
-    return clone(planCase.response);
+    const selectedLineNumbers = uniqueSortedNumbers(lineNumbers);
+    this.requireActiveLines(selectedLineNumbers);
+    return readOnlyPlanFromPending(this.pendingResponse(), selectedLineNumbers);
   }
 
   cleanupPending(

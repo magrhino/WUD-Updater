@@ -1,6 +1,5 @@
 import type { WebApi } from "../client";
 import type {
-  ContainerRestartResponse,
   CoreUpdateTourStatus,
   CoreUpdateTourStep,
   CsrfResponse,
@@ -9,21 +8,25 @@ import type {
   PendingMetadataRefreshRequest,
   PendingRescanLine,
   PendingRescanScope,
-  ReleaseNotificationSource,
   RetagChoiceRequest,
-  SelfUpdateApplyResponse,
   SelfUpdatePlanResponse,
-  SelfUpdatePrepareResponse,
   SelfUpdateResponse,
   SnoozeState,
   StateOperation,
   TagExclusionStatusFilter,
   TagOverrideRequest,
 } from "../types";
-import { DEMO_CSRF_TOKEN, DEMO_LATEST_VERSION, DEMO_VERSION } from "./constants";
+import { DEMO_CSRF_TOKEN } from "./constants";
 import { clone } from "./helpers";
 import { DemoApiState } from "./state";
 import type { DemoJobRecord } from "./types";
+
+const STATIC_DEMO_READ_ONLY =
+  "The public static demo is read-only. Run WUDup locally to apply changes.";
+
+function rejectStaticDemoMutation(): never {
+  throw new Error(STATIC_DEMO_READ_ONLY);
+}
 
 export function createDemoWebApi(): WebApi {
   const state = new DemoApiState();
@@ -50,18 +53,18 @@ export function createDemoWebApi(): WebApi {
     status: async () => state.status(),
     settings: async () => state.settings(),
     updateManagedSettings: async (
-      values: Record<string, string>,
+      _values: Record<string, string>,
       _csrfToken: string,
-    ) => state.updateManagedSettings(values),
+    ) => rejectStaticDemoMutation(),
     doctor: async (_csrfToken: string) => state.doctor(),
     onboardingChecklist: async (_csrfToken: string) => state.onboardingChecklist(),
-    dismissOnboarding: async (_csrfToken: string) => state.dismissOnboarding(),
+    dismissOnboarding: async (_csrfToken: string) => rejectStaticDemoMutation(),
     coreUpdateTour: async () => state.coreUpdateTour,
     updateCoreUpdateTour: async (
-      status: CoreUpdateTourStatus,
-      step: CoreUpdateTourStep,
+      _status: CoreUpdateTourStatus,
+      _step: CoreUpdateTourStep,
       _csrfToken: string,
-    ) => state.updateCoreUpdateTour(status, step),
+    ) => rejectStaticDemoMutation(),
     pending: async () => state.pendingResponse(),
     pendingMetadata: async (
       request: PendingMetadataRefreshRequest,
@@ -70,38 +73,39 @@ export function createDemoWebApi(): WebApi {
       state.pendingMetadata(request),
     updateTargets: async () => state.updateTargets(),
     retagTargets: async () => state.retagTargets(),
-    refreshRetagGithubLatest: async (_csrfToken: string) => state.retagTargets(),
+    refreshRetagGithubLatest: async (_csrfToken: string) =>
+      rejectStaticDemoMutation(),
     startRetagPreview: async (
-      choices: RetagChoiceRequest[],
+      _choices: RetagChoiceRequest[],
       _csrfToken: string,
       _options = {},
-    ) => state.createRetagPreviewJob(choices),
+    ) => rejectStaticDemoMutation(),
     retagPreviewJob: async (previewJobId: string) =>
       state.retagPreviewJob(previewJobId),
     createRetagPlan: async (
-      choices: RetagChoiceRequest[],
+      _choices: RetagChoiceRequest[],
       _csrfToken: string,
       _options = {},
-    ) => state.createRetagPlan(choices),
+    ) => rejectStaticDemoMutation(),
     applyRetagPlan: async (
-      planId: string,
-      choices: RetagChoiceRequest[],
+      _planId: string,
+      _choices: RetagChoiceRequest[],
       _csrfToken: string,
       _options = {},
-    ) => state.createRetagJob(planId, choices),
+    ) => rejectStaticDemoMutation(),
     diagnosticsSupportBundle: async () => state.diagnosticsSupportBundle(),
     cleanupPending: async (
-      cleanupId: string,
-      lines: PendingCleanupLine[],
+      _cleanupId: string,
+      _lines: PendingCleanupLine[],
       _csrfToken: string,
-    ) => state.cleanupPending(cleanupId, lines),
-    createRemovalPlan: async (lineNumbers: number[], _csrfToken: string) =>
-      state.createRemovalPlan(lineNumbers),
+    ) => rejectStaticDemoMutation(),
+    createRemovalPlan: async (_lineNumbers: number[], _csrfToken: string) =>
+      rejectStaticDemoMutation(),
     removeSelectedPending: async (
-      removalId: string,
-      lines: PendingCleanupLine[],
+      _removalId: string,
+      _lines: PendingCleanupLine[],
       _csrfToken: string,
-    ) => state.removeSelectedPending(removalId, lines),
+    ) => rejectStaticDemoMutation(),
     rescanPending: async (
       scope: PendingRescanScope,
       lines: PendingRescanLine[],
@@ -109,58 +113,35 @@ export function createDemoWebApi(): WebApi {
     ) => state.rescanPending(scope, lines),
     releaseNotes: async () => state.releaseNotes(),
     refreshReleaseNotes: async (_csrfToken: string) => state.releaseNotes(),
-    previewReleaseNotifications: async (
-      source: ReleaseNotificationSource,
-      _csrfToken: string,
-    ) => state.releaseNotifications(source, false),
-    sendReleaseNotifications: async (
-      source: ReleaseNotificationSource,
-      _csrfToken: string,
-    ) => state.releaseNotifications(source, true),
+    previewReleaseNotifications: async (_source, _csrfToken: string) =>
+      rejectStaticDemoMutation(),
+    sendReleaseNotifications: async (_source, _csrfToken: string) =>
+      rejectStaticDemoMutation(),
     testReleaseNotificationWebhook: async (_csrfToken: string) =>
-      state.testReleaseNotificationWebhook(),
+      rejectStaticDemoMutation(),
     securityScans: async () => state.securityScans(),
     refreshSecurityScans: async (_csrfToken: string) =>
-      state.securityScanJob("demo-security-scan"),
+      rejectStaticDemoMutation(),
     securityScanJob: async (jobId: string) => state.securityScanJob(jobId),
     selfUpdate: async () => state.selfUpdate(),
     planSelfUpdate: async (_csrfToken: string) => state.selfUpdatePlan(),
     applySelfUpdate: async (
       _csrfToken: string,
       _update: SelfUpdateResponse,
-    ): Promise<SelfUpdateApplyResponse> => ({
-      status: "image_pulled",
-      audit_run_id: 9002,
-      current_tag: `v${DEMO_VERSION}`,
-      latest_tag: DEMO_LATEST_VERSION,
-      target_image: "ghcr.io/magrhino/wudup:latest",
-      container: "demo-wudup",
-    }),
+    ) => rejectStaticDemoMutation(),
     prepareSelfUpdate: async (
       _csrfToken: string,
       _update: SelfUpdateResponse,
       _plan: SelfUpdatePlanResponse,
-    ): Promise<SelfUpdatePrepareResponse> => ({
-      status: "tag_prepared",
-      audit_run_id: 9003,
-      current_tag: "v0.25.0",
-      latest_tag: "v0.26.0",
-      target_image: "ghcr.io/magrhino/wudup:v0.26.0",
-      container: "demo-wudup",
-      external_recreate_required: true,
-    }),
+    ) => rejectStaticDemoMutation(),
     servicePolicies: async () => state.servicePolicies(),
     snoozes: async (snoozeState: SnoozeState = "active") =>
       state.snoozeRecords(snoozeState),
     tagExclusions: async (status: TagExclusionStatusFilter = "active") =>
       state.tagExclusionRecords(status),
-    stateOperation: async (operation: StateOperation, _csrfToken: string) =>
-      state.stateOperation(operation),
-    restartContainer: async (_csrfToken: string): Promise<ContainerRestartResponse> => ({
-      status: "scheduled",
-      audit_run_id: 9001,
-      container: "demo-wudup",
-    }),
+    stateOperation: async (_operation: StateOperation, _csrfToken: string) =>
+      rejectStaticDemoMutation(),
+    restartContainer: async (_csrfToken: string) => rejectStaticDemoMutation(),
     createPlan: async (
       lineNumbers: number[],
       allowTagUpdates: boolean,
@@ -175,35 +156,21 @@ export function createDemoWebApi(): WebApi {
         digestPinLabelRewriteApprovals,
       ),
     createJob: async (
-      planId: string,
-      lineNumbers: number[],
-      allowTagUpdates: boolean,
-      tagOverrides: TagOverrideRequest[],
-      digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
+      _planId: string,
+      _lineNumbers: number[],
+      _allowTagUpdates: boolean,
+      _tagOverrides: TagOverrideRequest[],
+      _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
       _csrfToken: string,
-    ) =>
-      state.createJob(
-        planId,
-        lineNumbers,
-        allowTagUpdates,
-        tagOverrides,
-        digestPinLabelRewriteApprovals,
-      ),
+    ) => rejectStaticDemoMutation(),
     applyPlan: async (
-      planId: string,
-      lineNumbers: number[],
-      allowTagUpdates: boolean,
-      tagOverrides: TagOverrideRequest[],
-      digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
+      _planId: string,
+      _lineNumbers: number[],
+      _allowTagUpdates: boolean,
+      _tagOverrides: TagOverrideRequest[],
+      _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
       _csrfToken: string,
-    ) =>
-      state.createJob(
-        planId,
-        lineNumbers,
-        allowTagUpdates,
-        tagOverrides,
-        digestPinLabelRewriteApprovals,
-      ),
+    ) => rejectStaticDemoMutation(),
     job: async (jobId: string) => clone(requireJob(state, jobId).job),
     applyJob: async (jobId: string) => clone(requireJob(state, jobId).job),
     openJobStream: (jobId: string) =>
