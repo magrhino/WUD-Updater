@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, cast
 
 from .command import CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError, ServiceImage
-from .digest_verifier import DigestVerifier, ResolvedImageSubject
+from .digest_verifier import DigestResolveResult, DigestVerifier, ResolvedImageSubject
 from .docker_cli import DockerCli
 from .images import image_with_tag
 from .plan_matching import _match_targets
@@ -57,6 +57,7 @@ def pending_security_context(
     *,
     include_compose: bool = True,
     include_wud_metadata: bool = True,
+    digest_verifier: DigestVerifier | None = None,
 ) -> PendingSecurityContext:
     source = resolve_pending_source(
         settings,
@@ -78,6 +79,11 @@ def pending_security_context(
             wud_platform=_wud_platform(source, target),
         )
         for target in source.parsed.targets
+    )
+    requests = _resolve_missing_reported_digests(
+        settings,
+        requests,
+        digest_verifier=digest_verifier,
     )
     return PendingSecurityContext(source=source, requests=requests, warnings=warnings)
 
@@ -162,6 +168,67 @@ def _request_for_target(
         identity_status=identity_status,
         error=error,
     )
+
+
+def _resolve_missing_reported_digests(
+    settings: "WebSettings",
+    requests: tuple[PendingSecurityRequest, ...],
+    *,
+    digest_verifier: DigestVerifier | None,
+) -> tuple[PendingSecurityRequest, ...]:
+    if not settings.security_scan.enabled:
+        return requests
+    resolver = digest_verifier
+    resolved_by_image: dict[str, DigestResolveResult] = {}
+    updated: list[PendingSecurityRequest] = []
+    for request in requests:
+        if not _needs_reported_digest_lookup(request):
+            updated.append(request)
+            continue
+        if resolver is None:
+            resolver = default_digest_verifier(settings)
+        result = resolved_by_image.get(request.candidate_image)
+        if result is None:
+            result = resolver.resolve_tag_digest(request.candidate_image)
+            resolved_by_image[request.candidate_image] = result
+        if result.ok and result.digest:
+            updated.append(
+                replace(
+                    request,
+                    reported_digest=result.digest,
+                    identity_status="pending",
+                    error="",
+                )
+            )
+            continue
+        updated.append(
+            replace(
+                request,
+                warnings=(
+                    *request.warnings,
+                    _reported_digest_lookup_warning(request, result),
+                ),
+            )
+        )
+    return tuple(updated)
+
+
+def _needs_reported_digest_lookup(request: PendingSecurityRequest) -> bool:
+    return (
+        not request.reported_digest
+        and request.platform is not None
+        and request.identity_status == "unsupported"
+        and request.error == "reported digest is required"
+    )
+
+
+def _reported_digest_lookup_warning(
+    request: PendingSecurityRequest,
+    result: DigestResolveResult,
+) -> str:
+    detail = result.error or result.reason or result.status
+    suffix = f": {detail}" if detail else ""
+    return f"Could not resolve reported digest for {request.candidate_image}{suffix}"
 
 
 def _wud_platform(

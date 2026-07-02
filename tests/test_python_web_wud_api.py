@@ -50,6 +50,8 @@ def _container_payload(
     image: str = "registry.example/acme/app",
     tag: str = "1.0.0",
     remote_tag: str = "1.1.0",
+    result_digest: str = "sha256:remote",
+    remote_value: str | None = None,
     source: str = "https://github.com/acme/app",
     link: str = "https://github.com/acme/app/releases/tag/v1.1.0",
     update_available: bool = True,
@@ -71,13 +73,13 @@ def _container_payload(
         "image": image_payload,
         "result": {
             "tag": remote_tag,
-            "digest": "sha256:remote",
+            "digest": result_digest,
             "link": link,
         },
         "updateKind": {
             "kind": "tag",
             "localValue": tag,
-            "remoteValue": remote_tag,
+            "remoteValue": remote_tag if remote_value is None else remote_value,
             "semverDiff": "minor",
         },
         "labels": {
@@ -137,6 +139,35 @@ def test_wud_api_snapshot_reads_update_metadata(tmp_path: Path, monkeypatch) -> 
     assert container.remote_digest == "sha256:remote"
     assert container.update_kind == "tag"
     assert container.semver_diff == "minor"
+
+
+def test_wud_api_snapshot_reads_tag_digest_from_remote_value(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    digest = f"sha256:{'b' * 64}"
+    _install_wud_api(
+        monkeypatch,
+        containers=(
+            200,
+            [
+                _container_payload(
+                    result_digest="",
+                    remote_value=f"registry.example/acme/app:1.1.0@{digest}",
+                ),
+            ],
+        ),
+    )
+
+    snapshot = web_wud_api.get_snapshot(
+        _settings(tmp_path, "https://wud.tag-digest.test:3000"),
+        include_containers=True,
+        force=True,
+    )
+
+    assert len(snapshot.containers) == 1
+    assert snapshot.containers[0].remote_tag == "1.1.0"
+    assert snapshot.containers[0].remote_digest == digest
 
 
 def test_wud_api_watch_uses_longer_timeout_than_metadata_reads(

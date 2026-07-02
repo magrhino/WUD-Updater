@@ -1097,7 +1097,7 @@ def _remote_digest(
     result_digest = _digest_from_value(_string(result.get("digest")))
     if result_digest:
         return result_digest
-    if _string(update_kind.get("kind")) != "digest":
+    if _string(update_kind.get("kind")) not in {"digest", "tag"}:
         return ""
     return _digest_from_value(_string(update_kind.get("remoteValue")))
 
