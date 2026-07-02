@@ -5,6 +5,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 from unittest import mock
 
+from wudup import security_subjects as security_subjects_module
 from wudup.digest_verifier import DigestResolveResult
 from wudup.platforms import ImagePlatform
 from wudup.security_subjects import (
@@ -19,6 +20,9 @@ from wudup.wud_file import parse_wud_text
 
 
 class SecuritySubjectTests(unittest.TestCase):
+    def setUp(self) -> None:
+        security_subjects_module._missing_digest_failure_cache.clear()
+
     def test_request_prefers_compose_platform_and_reports_conflict(self) -> None:
         target = parse_wud_text(
             "repo/app:1.0 tag=2.0 platform=linux/amd64 "
@@ -177,6 +181,49 @@ class SecuritySubjectTests(unittest.TestCase):
                 "registry auth failed",
             ),
         )
+
+    def test_context_backs_off_failed_missing_digest_resolution(self) -> None:
+        verifier = mock.Mock()
+        verifier.resolve_tag_digest.return_value = DigestResolveResult(
+            ok=False,
+            status="failed",
+            reason="manifest-unavailable",
+            error="registry auth failed",
+        )
+        source = _pending_source("repo/app:1.0 tag=2.0 platform=linux/amd64\n")
+
+        with mock.patch(
+            "wudup.security_subjects.resolve_pending_source",
+            return_value=source,
+        ), mock.patch(
+            "wudup.security_subjects.default_digest_verifier",
+            return_value=verifier,
+        ) as verifier_factory:
+            with mock.patch("wudup.security_subjects.time.monotonic", return_value=100.0):
+                first = pending_security_context(
+                    _settings(),
+                    options=PendingSecurityOptions(include_compose=False),
+                )
+                second = pending_security_context(
+                    _settings(),
+                    options=PendingSecurityOptions(include_compose=False),
+                )
+            with mock.patch(
+                "wudup.security_subjects.time.monotonic",
+                return_value=(
+                    100.0
+                    + security_subjects_module._MISSING_DIGEST_FAILURE_CACHE_TTL_SECONDS
+                    + 0.1
+                ),
+            ):
+                pending_security_context(
+                    _settings(),
+                    options=PendingSecurityOptions(include_compose=False),
+                )
+
+        self.assertEqual(verifier.resolve_tag_digest.call_count, 2)
+        self.assertEqual(verifier_factory.call_count, 2)
+        self.assertEqual(first.requests[0].warnings, second.requests[0].warnings)
 
     def test_missing_digest_resolution_uses_request_flag_not_messages(self) -> None:
         digest = f"sha256:{'b' * 64}"

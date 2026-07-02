@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import time
 from dataclasses import dataclass, replace
+from threading import Lock
 from typing import TYPE_CHECKING, cast
 
 from .command import CommandRunner
@@ -66,6 +68,9 @@ PENDING_SECURITY_CACHE_OPTIONS = PendingSecurityOptions(
     include_wud_metadata=False,
     resolve_missing_digests=False,
 )
+_MISSING_DIGEST_FAILURE_CACHE_TTL_SECONDS = 30.0
+_missing_digest_failure_cache: dict[str, tuple[float, DigestResolveResult]] = {}
+_missing_digest_failure_cache_lock = Lock()
 
 
 def pending_security_context(
@@ -193,15 +198,21 @@ def _resolve_missing_reported_digests(
     resolver: DigestVerifier | None = None
     resolved_by_image: dict[str, DigestResolveResult] = {}
     updated: list[PendingSecurityRequest] = []
+    now = time.monotonic()
     for request in requests:
         if not request.missing_reported_digest_resolvable:
             updated.append(request)
             continue
-        if resolver is None:
-            resolver = default_digest_verifier(settings)
         result = resolved_by_image.get(request.candidate_image)
         if result is None:
+            result = _cached_missing_digest_failure(request.candidate_image, now)
+            if result is not None:
+                resolved_by_image[request.candidate_image] = result
+        if result is None:
+            if resolver is None:
+                resolver = default_digest_verifier(settings)
             result = resolver.resolve_tag_digest(request.candidate_image)
+            _remember_missing_digest_result(request.candidate_image, result, now)
             resolved_by_image[request.candidate_image] = result
         if result.ok and result.digest:
             updated.append(
@@ -224,6 +235,43 @@ def _resolve_missing_reported_digests(
             )
         )
     return tuple(updated)
+
+
+def _cached_missing_digest_failure(
+    image: str,
+    now: float,
+) -> DigestResolveResult | None:
+    with _missing_digest_failure_cache_lock:
+        cached = _missing_digest_failure_cache.get(image)
+        if cached is None:
+            return None
+        checked_at, result = cached
+        if now - checked_at < _MISSING_DIGEST_FAILURE_CACHE_TTL_SECONDS:
+            return result
+        _missing_digest_failure_cache.pop(image, None)
+    return None
+
+
+def _remember_missing_digest_result(
+    image: str,
+    result: DigestResolveResult,
+    now: float,
+) -> None:
+    with _missing_digest_failure_cache_lock:
+        expired = [
+            cached_image
+            for cached_image, (
+                checked_at,
+                _result,
+            ) in _missing_digest_failure_cache.items()
+            if now - checked_at >= _MISSING_DIGEST_FAILURE_CACHE_TTL_SECONDS
+        ]
+        for cached_image in expired:
+            _missing_digest_failure_cache.pop(cached_image, None)
+        if result.ok and result.digest:
+            _missing_digest_failure_cache.pop(image, None)
+        else:
+            _missing_digest_failure_cache[image] = (now, result)
 
 
 def _reported_digest_lookup_warning(
