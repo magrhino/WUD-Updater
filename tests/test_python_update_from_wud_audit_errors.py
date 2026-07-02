@@ -179,6 +179,41 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
 
         called_paths = [Path(call.args[0]) for call in apply_owner.call_args_list]
         self.assertEqual(called_paths, [db_path.parent, *sidecars])
+
+    def test_apply_sqlite_owner_no_state_files_updates_created_parent_only(
+        self,
+    ) -> None:
+        db_path = self.root / "empty-state" / "wudup.sqlite"
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        owner = OwnerConfig.from_values(str(os.getuid()), str(os.getgid()))
+
+        apply_owner = mock.Mock()
+        updater_audit.apply_sqlite_owner(
+            db_path,
+            owner,
+            chown_parent=True,
+            apply_owner=apply_owner,
+        )
+
+        called_paths = [Path(call.args[0]) for call in apply_owner.call_args_list]
+        self.assertEqual(called_paths, [db_path.parent])
+
+    def test_apply_sqlite_owner_no_state_files_without_parent_chown_is_noop(
+        self,
+    ) -> None:
+        db_path = self.root / "empty-state" / "wudup.sqlite"
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        owner = OwnerConfig.from_values(str(os.getuid()), str(os.getgid()))
+
+        apply_owner = mock.Mock()
+        updater_audit.apply_sqlite_owner(
+            db_path,
+            owner,
+            chown_parent=False,
+            apply_owner=apply_owner,
+        )
+
+        apply_owner.assert_not_called()
     def test_applied_rewrite_validators_accept_stack_level_records(self) -> None:
         runner = UpdateFromWudRunner(
             UpdaterOptions(
