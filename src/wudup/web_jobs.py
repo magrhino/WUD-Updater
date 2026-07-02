@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import secrets
 import tempfile
 import time
@@ -17,6 +18,7 @@ from typing import Any, Protocol, cast
 from fastapi import HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 
+from . import web_wud_api
 from .command import CommandRunner
 from .config import UpdaterConfig
 from .db import utc_timestamp
@@ -41,6 +43,7 @@ from .web_models import (
     ApplyJobResponse,
     ApplyJobStatus,
     LogTail,
+    PendingSourceActive,
     TERMINAL_APPLY_JOB_STATUSES,
     WebApplyJob,
     WebApplyJobProgressEvent,
@@ -51,6 +54,7 @@ WEB_APPLY_EXECUTOR_MAX_WORKERS = 1
 DEFAULT_JOB_LOG_TAIL_BYTES = 65_536
 JOB_STREAM_HEARTBEAT_SECONDS = 15.0
 JOB_STREAM_LOG_POLL_SECONDS = 1.0
+LOGGER = logging.getLogger(__name__)
 
 
 class EffectiveConfigLoader(Protocol):
@@ -83,6 +87,7 @@ class ApplyJobRunContext:
     metadata_extra: Mapping[str, Any] | None = None
     auto_update_schedule_keys: tuple[str, ...] = ()
     start_event: Event | None = None
+    pending_source_active: PendingSourceActive = "file"
     pending_source_text: str | None = None
     pending_source_label: str = ""
 
@@ -469,6 +474,17 @@ def _run_apply_job(
         )
         status_code = runner.run()
         job_status: ApplyJobStatus = "success" if status_code == 0 else "failure"
+        if (
+            status_code == 0
+            and run_context.pending_source_active == "api"
+            and run_context.pending_source_text is not None
+        ):
+            _refresh_api_pending_source_after_apply(
+                settings,
+                jobs,
+                apply_condition,
+                job_id,
+            )
         auto_update_schedule_run_updater(
             settings,
             run_context.auto_update_schedule_keys,
@@ -528,6 +544,38 @@ def _run_apply_job(
         )
     if cleanup_error is not None:
         raise cleanup_error
+
+
+def _refresh_api_pending_source_after_apply(
+    settings: WebSettings,
+    jobs: dict[str, WebApplyJob],
+    apply_condition: Condition,
+    job_id: str,
+) -> None:
+    status: ApplyJobProgressStatus = "success"
+    message = "WUD API pending state refreshed."
+    try:
+        result = web_wud_api.watch_all(settings)
+    except Exception:  # noqa: BLE001 - best-effort refresh must not fail apply.
+        LOGGER.exception("WUD API pending refresh failed")
+        status = "skipped"
+        message = "WUD API pending refresh skipped."
+    else:
+        if result.snapshot.status.state != "ready" or not result.watched:
+            status = "skipped"
+            message = "WUD API pending refresh skipped."
+            if result.snapshot.status.detail:
+                message = f"{message} {result.snapshot.status.detail}"
+    _append_apply_job_progress(
+        jobs,
+        apply_condition,
+        job_id,
+        UpdaterProgressEvent(
+            phase="wud-api-refresh",
+            status=status,
+            message=message,
+        ),
+    )
 
 
 def _update_apply_job(

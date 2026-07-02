@@ -37,6 +37,8 @@ from .web_models import (
 
 EffectiveConfigLoader = Callable[[WebSettings], UpdaterConfig]
 _effective_config_loader: EffectiveConfigLoader | None = None
+_PLAN_CREATE_ERROR = "could not create plan"
+_PLAN_REVALIDATION_ERROR = "could not revalidate plan"
 
 
 def configure(*, effective_config_loader: EffectiveConfigLoader) -> None:
@@ -55,12 +57,12 @@ def api_create_plan(payload: PlanRequest, request: Request) -> PlanResponse:
     except ConfigError as exc:
         raise HTTPException(
             status_code=500,
-            detail=_safe_exception_detail(settings, "could not create plan", exc),
+            detail=_safe_exception_detail(settings, _PLAN_CREATE_ERROR, exc),
         ) from exc
     except OSError as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not create plan: {exc}",
+            detail=_safe_exception_detail(settings, _PLAN_CREATE_ERROR, exc),
         ) from exc
     return plan_response(plan, settings, request)
 
@@ -101,14 +103,18 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
                 status_code=409,
                 detail=_safe_exception_detail(
                     settings,
-                    "could not revalidate plan",
+                    _PLAN_REVALIDATION_ERROR,
                     exc,
                 ),
             ) from exc
         except OSError as exc:
             raise HTTPException(
                 status_code=500,
-                detail=f"could not revalidate plan: {exc}",
+                detail=_safe_exception_detail(
+                    settings,
+                    _PLAN_REVALIDATION_ERROR,
+                    exc,
+                ),
             ) from exc
 
         if not secrets.compare_digest(plan.plan_id, payload.plan_id):
@@ -153,7 +159,7 @@ def _resolve_pending_source_for_apply(
             status_code=500,
             detail=_safe_exception_detail(
                 settings,
-                "could not revalidate plan",
+                _PLAN_REVALIDATION_ERROR,
                 exc,
             ),
         ) from exc
@@ -322,6 +328,7 @@ def submit_apply_job(
             pending_source_text=(
                 pending_source.text if pending_source.active == "api" else None
             ),
+            pending_source_active=pending_source.active,
             pending_source_label=pending_source.label,
         ),
     )

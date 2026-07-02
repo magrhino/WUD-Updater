@@ -595,4 +595,5 @@ def test_auto_update_scheduler_uses_api_pending_source_without_wud_lock(
     run_context = submit_kwargs["run_context"]
     assert submit_kwargs["wud_lock"] is None
     assert run_context.pending_source_text == f"repo/app:latest@{remote_digest}\n"
+    assert run_context.pending_source_active == "api"
     assert run_context.pending_source_label == "WUD API"

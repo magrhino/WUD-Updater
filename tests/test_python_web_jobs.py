@@ -1,7 +1,9 @@
 from __future__ import annotations
+import logging
 from pathlib import Path
 from wudup import web as web_module
 from wudup import web_jobs
+from wudup import web_wud_api
 from wudup import web_self_update as self_update_module
 from wudup.config import UpdaterConfig
 from wudup.web_models import WebSettings
@@ -76,6 +78,154 @@ def test_acquire_apply_wud_lock_coerces_env_timeout_to_int(
 
     assert observed == [5, 30, 30, 30]
     assert all(isinstance(timeout_seconds, int) for timeout_seconds in observed)
+
+
+def test_refresh_api_pending_source_reports_degraded_detail(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = _settings_for_lock_timeout(tmp_path, {})
+    jobs = {
+        "job": web_module.WebApplyJob(
+            id="job",
+            status="running",
+            selected_line_numbers=(1,),
+        )
+    }
+    detail = "WUD API watch request failed: connection refused"
+    snapshot = web_wud_api.WudApiSnapshot(
+        status=web_wud_api.WudApiStatus(
+            state="error",
+            available=True,
+            metadata_available=False,
+            last_checked_at="2026-01-01T00:00:00+00:00",
+            detail=detail,
+        )
+    )
+
+    monkeypatch.setattr(
+        web_jobs.web_wud_api,
+        "watch_all",
+        lambda _settings: web_wud_api.WudApiWatchResult(
+            snapshot=snapshot,
+            watched=False,
+            requested_count=1,
+            watched_count=0,
+        ),
+    )
+
+    web_jobs._refresh_api_pending_source_after_apply(
+        settings,
+        jobs,
+        web_jobs.Condition(),
+        "job",
+    )
+
+    event = jobs["job"].progress[-1]
+    assert event.phase == "wud-api-refresh"
+    assert event.status == "skipped"
+    assert event.message == f"WUD API pending refresh skipped. {detail}"
+
+
+def test_refresh_api_pending_source_logs_unexpected_watch_error(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    settings = _settings_for_lock_timeout(tmp_path, {})
+    jobs = {
+        "job": web_module.WebApplyJob(
+            id="job",
+            status="running",
+            selected_line_numbers=(1,),
+        )
+    }
+
+    def fail_watch_all(_settings):
+        raise RuntimeError("watch exploded")
+
+    monkeypatch.setattr(web_jobs.web_wud_api, "watch_all", fail_watch_all)
+
+    with caplog.at_level(logging.ERROR, logger=web_jobs.LOGGER.name):
+        web_jobs._refresh_api_pending_source_after_apply(
+            settings,
+            jobs,
+            web_jobs.Condition(),
+            "job",
+        )
+
+    event = jobs["job"].progress[-1]
+    assert event.phase == "wud-api-refresh"
+    assert event.status == "skipped"
+    assert event.message == "WUD API pending refresh skipped."
+    assert "WUD API pending refresh failed" in caplog.text
+    assert "watch exploded" in caplog.text
+
+
+def test_apply_job_refreshes_only_api_pending_source(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = _settings_for_lock_timeout(tmp_path, {})
+    jobs = {
+        "job": web_module.WebApplyJob(
+            id="job",
+            status="queued",
+            selected_line_numbers=(1,),
+        )
+    }
+    schedule_updates: list[tuple[tuple[str, ...], str, int | None, str]] = []
+
+    class FakeRunner:
+        def __init__(self, *_args, **_kwargs) -> None:
+            self.audit_run_id = 7
+            self.log_file = tmp_path / "apply.log"
+
+        def run(self) -> int:
+            return 0
+
+    def fail_watch_all(_settings):
+        raise AssertionError("watch_all called")
+
+    def record_schedule_update(
+        _settings,
+        schedule_keys,
+        *,
+        status,
+        run_id,
+        error="",
+    ) -> None:
+        schedule_updates.append((tuple(schedule_keys), status, run_id, error))
+
+    monkeypatch.setattr(web_jobs, "UpdateFromWudRunner", FakeRunner)
+    monkeypatch.setattr(web_jobs.web_wud_api, "watch_all", fail_watch_all)
+
+    web_jobs._run_apply_job(
+        settings,
+        "plan",
+        (1,),
+        False,
+        (),
+        (),
+        (),
+        (),
+        jobs,
+        web_jobs.Condition(),
+        "job",
+        None,
+        lambda settings: settings.config,
+        record_schedule_update,
+        web_jobs.ApplyJobRunContext(
+            pending_source_active="file",
+            pending_source_text="repo/app:latest\n",
+        ),
+    )
+
+    job = jobs["job"]
+    assert job.status == "success"
+    assert job.run_id == 7
+    assert all(event.phase != "wud-api-refresh" for event in job.progress)
+    assert schedule_updates == [((), "success", 7, "")]
 
 
 def test_self_update_endpoint_enforces_auth_csrf_read_only_and_active_job(
