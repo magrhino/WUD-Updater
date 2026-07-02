@@ -175,19 +175,18 @@ const retagTargetTagError = computed(() => {
 const unavailable = computed(() => updates.retagTargets?.status === "unavailable");
 const loaded = computed(() => updates.retagTargets !== null);
 const mutationsEnabled = computed(() => auth.session?.mutations_enabled === true);
-const retagMutationDisabled = computed(() => !mutationsEnabled.value);
+const retagMutationDisabled = computed(() => !isDemoMode && !mutationsEnabled.value);
 const retagMutationNotice = computed(() => {
+  if (isDemoMode) {
+    return "Demo mode retag apply runs only in this browser session.";
+  }
   if (!mutationsEnabled.value) {
     return "Read-only mode keeps retag switch/apply disabled.";
-  }
-  if (isDemoMode) {
-    return "Demo mode shows retag candidates without changing Compose files.";
   }
   return "";
 });
 const previewDisabled = computed(
   () =>
-    isDemoMode ||
     updates.loading ||
     applyJobActive.value ||
     unavailable.value ||

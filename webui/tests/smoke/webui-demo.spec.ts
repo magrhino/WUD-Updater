@@ -3,8 +3,6 @@ import { expect, test, type Page } from "@playwright/test";
 import { touchTargetSizePx } from "../../src/touchTargets";
 
 const demoBasePath = process.env.PLAYWRIGHT_WEBUI_DEMO_BASE_PATH ?? "";
-const READ_ONLY_DEMO_MESSAGE =
-  "The public static demo is read-only. Run WUDup locally to apply changes.";
 const browserFailures = new WeakMap<Page, string[]>();
 
 test.skip(
@@ -77,15 +75,14 @@ test("static demo renders current pending state in read-only mode", async ({
 
   await page.getByRole("button", { name: /Preview home plan/ }).click();
   await expect(page.getByRole("heading", { name: "Review home plan" })).toBeVisible();
-  await expect(
-    page
-      .getByRole("dialog")
-      .getByRole("button", { name: /Apply 1 update/ }),
-  ).toBeDisabled();
-  await expect(
-    page.getByText(READ_ONLY_DEMO_MESSAGE, { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText("7 pending updates")).toBeVisible();
+  const applyButton = page
+    .getByRole("dialog")
+    .getByRole("button", { name: /Apply 1 update/ });
+  await expect(applyButton).toBeEnabled();
+  await applyButton.click();
+  await expect(page.getByRole("heading", { name: "Apply complete" })).toBeVisible();
+  await expect(page.getByText("1 update finished. Pending updates and run history were refreshed.")).toBeVisible();
+  await expect(page.getByText("6 pending updates")).toBeVisible();
 });
 
 test("static demo renders seeded audit log records", async ({ page }) => {
@@ -110,18 +107,37 @@ test("static demo renders retag review fixtures", async ({ page }) => {
   await expect(page.getByText("Retag available").first()).toBeVisible();
   await expect(page.getByText("home/home-assistant")).toBeVisible();
   await expect(
-    page.getByText("Read-only mode keeps retag switch/apply disabled."),
+    page.getByText("Demo mode retag apply runs only in this browser session."),
   ).toBeVisible();
+  const serviceRow = page
+    .getByRole("row")
+    .filter({ hasText: "media/wudup" });
+  await expect(
+    serviceRow.getByRole("radio", { name: "Retag" }),
+  ).toBeEnabled();
+  await serviceRow
+    .getByRole("button", { name: "Retag only media/wudup" })
+    .click();
   await expect(
     page.getByRole("button", { name: "Preview retag changes" }),
-  ).toBeDisabled();
-  const blockedServiceRow = page
-    .getByRole("row")
-    .filter({ hasText: "home/home-assistant" });
-  await expect(blockedServiceRow.getByText("Concrete tracking")).toBeVisible();
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Preview retag changes" }).click();
   await expect(
-    blockedServiceRow.getByRole("radio", { name: "Retag" }),
-  ).toBeDisabled();
+    page.getByRole("heading", { name: "Review retag preview" }),
+  ).toBeVisible();
+  await expect(page.getByText("1 service ready to retag.")).toBeVisible();
+  await page
+    .getByLabel("Review retag preview")
+    .getByRole("button", { name: "Apply selected retags" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Apply selected retags" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Confirm and apply" }).click();
+  await expect(page.getByText("Retag complete")).toBeVisible();
+  await expect(
+    page.getByText("1 retag finished. Retag targets and run history were refreshed."),
+  ).toBeVisible();
 });
 
 test("static demo mobile layout stays within the viewport", async ({ page }) => {

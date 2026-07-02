@@ -76,23 +76,23 @@ export function createDemoWebApi(): WebApi {
     refreshRetagGithubLatest: async (_csrfToken: string) =>
       rejectStaticDemoMutation(),
     startRetagPreview: async (
-      _choices: RetagChoiceRequest[],
+      choices: RetagChoiceRequest[],
       _csrfToken: string,
       _options = {},
-    ) => rejectStaticDemoMutation(),
+    ) => state.createRetagPreviewJob(choices),
     retagPreviewJob: async (previewJobId: string) =>
       state.retagPreviewJob(previewJobId),
     createRetagPlan: async (
-      _choices: RetagChoiceRequest[],
+      choices: RetagChoiceRequest[],
       _csrfToken: string,
       _options = {},
-    ) => rejectStaticDemoMutation(),
+    ) => state.createRetagPlan(choices),
     applyRetagPlan: async (
-      _planId: string,
-      _choices: RetagChoiceRequest[],
+      planId: string,
+      choices: RetagChoiceRequest[],
       _csrfToken: string,
       _options = {},
-    ) => rejectStaticDemoMutation(),
+    ) => state.createRetagJob(planId, choices),
     diagnosticsSupportBundle: async () => state.diagnosticsSupportBundle(),
     cleanupPending: async (
       _cleanupId: string,
@@ -156,21 +156,35 @@ export function createDemoWebApi(): WebApi {
         digestPinLabelRewriteApprovals,
       ),
     createJob: async (
-      _planId: string,
-      _lineNumbers: number[],
-      _allowTagUpdates: boolean,
-      _tagOverrides: TagOverrideRequest[],
-      _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
+      planId: string,
+      lineNumbers: number[],
+      allowTagUpdates: boolean,
+      tagOverrides: TagOverrideRequest[],
+      digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
       _csrfToken: string,
-    ) => rejectStaticDemoMutation(),
+    ) =>
+      state.createJob(
+        planId,
+        lineNumbers,
+        allowTagUpdates,
+        tagOverrides,
+        digestPinLabelRewriteApprovals,
+      ),
     applyPlan: async (
-      _planId: string,
-      _lineNumbers: number[],
-      _allowTagUpdates: boolean,
-      _tagOverrides: TagOverrideRequest[],
-      _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
+      planId: string,
+      lineNumbers: number[],
+      allowTagUpdates: boolean,
+      tagOverrides: TagOverrideRequest[],
+      digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
       _csrfToken: string,
-    ) => rejectStaticDemoMutation(),
+    ) =>
+      state.createJob(
+        planId,
+        lineNumbers,
+        allowTagUpdates,
+        tagOverrides,
+        digestPinLabelRewriteApprovals,
+      ),
     job: async (jobId: string) => clone(requireJob(state, jobId).job),
     applyJob: async (jobId: string) => clone(requireJob(state, jobId).job),
     openJobStream: (jobId: string) =>

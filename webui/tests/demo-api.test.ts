@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { ApplyJobResponse } from "../src/api/client";
 import { createDemoWebApi } from "../src/api/demo";
 import { generatedFixtures } from "../src/api/demo/generatedFixtures";
 
@@ -90,12 +91,13 @@ describe("demo web API", () => {
     );
   });
 
-  it("previews pending plans without enabling apply", async () => {
+  it("previews and applies pending plans in memory", async () => {
     const api = createDemoWebApi();
-    const plan = await api.createPlan([2], false, [], [], "csrf");
+    const tagOverrides = [{ line_no: 2, tag: "2026.6.0" }];
+    const plan = await api.createPlan([2], true, tagOverrides, [], "csrf");
 
     expect(plan).toMatchObject({
-      can_apply: false,
+      can_apply: true,
       status: "ready",
       selected_line_numbers: [2],
       summary: {
@@ -105,18 +107,128 @@ describe("demo web API", () => {
         service_count: 1,
       },
       apply_preflight: {
-        ok: false,
-        failures: 1,
+        ok: true,
+        failures: 0,
       },
     });
     expect(plan.apply_preflight.checks[0]).toMatchObject({
-      code: "mutations-enabled",
-      detail: READ_ONLY_MESSAGE,
+      code: "static-demo-session-job",
+      status: "PASS",
     });
     expect(plan.stacks[0]?.lines[0]).toMatchObject({
       line_no: 2,
       service: "home-assistant",
       action: "tag-update",
+      desired_tag: "2026.6.0",
+      target_image: "ghcr.io/home-assistant/home-assistant:2026.6.0",
+    });
+
+    await expect(
+      api.applyPlan(
+        plan.plan_id,
+        [2],
+        true,
+        [{ line_no: 2, tag: "2026.6.1" }],
+        [],
+        "csrf",
+      ),
+    ).rejects.toThrow("Demo plan is stale.");
+
+    const job = await api.applyPlan(plan.plan_id, [2], true, tagOverrides, [], "csrf");
+    expect(job).toMatchObject({ status: "queued", selected_line_numbers: [2] });
+    await expect(api.status()).resolves.toMatchObject({ pending_count: 7 });
+
+    const completed = await waitForDemoJob(api.openJobStream(job.job_id));
+    expect(completed).toMatchObject({
+      status: "success",
+      run_id: expect.any(Number),
+    });
+    await expect(api.status()).resolves.toMatchObject({ pending_count: 6 });
+    await expect(api.pending()).resolves.toMatchObject({ count: 6 });
+    await expect(api.runLog(completed.run_id ?? 0)).resolves.toMatchObject({
+      content: expect.stringContaining(
+        "ghcr.io/home-assistant/home-assistant:2026.6.0",
+      ),
+    });
+  });
+
+  it("mirrors tag update and approval validation in demo plans", async () => {
+    const api = createDemoWebApi();
+
+    await expect(api.createPlan([2], false, [], [], "csrf")).resolves.toMatchObject({
+      can_apply: false,
+      status: "empty",
+      skipped: [
+        expect.objectContaining({
+          line_no: 2,
+          reason: "tag-updates-disabled",
+        }),
+      ],
+      stacks: [],
+    });
+    await expect(
+      api.createPlan([2], false, [{ line_no: 2, tag: "2026.6.0" }], [], "csrf"),
+    ).rejects.toThrow("allow_tag_updates=true");
+    await expect(
+      api.createPlan([4], true, [{ line_no: 4, tag: "17" }], [], "csrf"),
+    ).rejects.toThrow("does not target a tag update");
+    await expect(
+      api.createPlan(
+        [2],
+        true,
+        [],
+        [
+          {
+            stack: "home",
+            service: "home-assistant",
+            label_key: "demo.label",
+            current_label_value: "2026.5.1",
+            planned_tag: "2026.6.0",
+            proposed_label_value: "2026.6.0",
+          },
+        ],
+        "csrf",
+      ),
+    ).rejects.toThrow("wud.tag.include");
+  });
+
+  it("previews and applies retag plans in memory", async () => {
+    const api = createDemoWebApi();
+    const targets = await api.retagTargets();
+    const serviceCounts = new Map<string, number>();
+    for (const item of targets.items) {
+      serviceCounts.set(item.service_key, (serviceCounts.get(item.service_key) ?? 0) + 1);
+    }
+    const target = targets.items.find(
+      (item) => item.retag_available && serviceCounts.get(item.service_key) === 1,
+    );
+    expect(target).toBeDefined();
+    const choices = [
+      {
+        service_key: target?.service_key ?? "",
+        choice: "switch-to-concrete" as const,
+      },
+    ];
+
+    const preview = await api.startRetagPreview(choices, "csrf");
+    expect(preview).toMatchObject({
+      status: "success",
+      plan: {
+        can_apply: true,
+        selected_count: 1,
+      },
+    });
+
+    const planId = preview.plan?.plan_id ?? "";
+    const job = await api.applyRetagPlan(planId, choices, "csrf");
+    expect(job).toMatchObject({ status: "queued" });
+    const completed = await waitForDemoJob(api.openJobStream(job.job_id));
+    expect(completed).toMatchObject({
+      status: "success",
+      run_id: expect.any(Number),
+    });
+    await expect(api.runLog(completed.run_id ?? 0)).resolves.toMatchObject({
+      content: expect.stringContaining("Demo retag apply finished"),
     });
     await expect(api.status()).resolves.toMatchObject({ pending_count: 7 });
   });
@@ -138,10 +250,7 @@ describe("demo web API", () => {
       api.updateManagedSettings({ theme_preference: "dark" }, "csrf"),
       api.dismissOnboarding("csrf"),
       api.updateCoreUpdateTour("completed", "runs_history", "csrf"),
-      api.startRetagPreview([], "csrf"),
       api.refreshRetagGithubLatest("csrf"),
-      api.createRetagPlan([], "csrf"),
-      api.applyRetagPlan("demo", [], "csrf"),
       api.cleanupPending("demo", [{ line_no: 6, raw: "" }], "csrf"),
       api.createRemovalPlan([6], "csrf"),
       api.removeSelectedPending("demo", [{ line_no: 6, raw: "" }], "csrf"),
@@ -159,8 +268,6 @@ describe("demo web API", () => {
         "csrf",
       ),
       api.restartContainer("csrf"),
-      api.createJob("demo", [2], false, [], [], "csrf"),
-      api.applyPlan("demo", [2], false, [], [], "csrf"),
     ];
 
     for (const promise of mutationExpectations) {
@@ -175,3 +282,19 @@ describe("demo web API", () => {
     expect(generatedFixtures.retagCases).toEqual([]);
   });
 });
+
+function waitForDemoJob(stream: EventSource): Promise<ApplyJobResponse> {
+  return new Promise((resolve, reject) => {
+    stream.addEventListener("job", (event) => {
+      const job = JSON.parse((event as MessageEvent).data);
+      if (job.status === "success" || job.status === "failure") {
+        stream.close();
+        resolve(job);
+      }
+    });
+    stream.onerror = (event) => {
+      stream.close();
+      reject(event);
+    };
+  });
+}

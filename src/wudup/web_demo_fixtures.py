@@ -5,15 +5,12 @@ from __future__ import annotations
 import argparse
 import contextlib
 import copy
-import io
-import itertools
 import json
 import os
 import re
 import shutil
 import tempfile
 import time
-from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -21,21 +18,9 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GENERATED_FIXTURE_PATH = REPO_ROOT / "webui" / "src" / "api" / "demo" / "generatedFixtures.ts"
-DEMO_FIXTURE_STARTED_AT = "2026-05-30T20:12:26+00:00"
-DEMO_FIXTURE_FINISHED_AT = "2026-05-30T20:12:28+00:00"
-DEMO_TAG_OVERRIDE_PREFIX = "demooverride"
 DEMO_PYTHON_RUNTIME_DETAIL = "Python 3.x"
-DEMO_FIXTURE_TIMESTAMP_RE = re.compile(
-    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\+00:00|Z)"
-)
-DEMO_FIXTURE_LOG_TIMESTAMP_RE = re.compile(
-    r"\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\]"
-)
 DEMO_COMPOSE_CONFIG_CODE_RE = re.compile(
     r"compose-config-[a-z0-9._-]+-state-docker-([a-z0-9._-]+)-docker-compose-yml"
-)
-DEMO_TEMP_LOG_PATH_RE = re.compile(
-    r"/[^\s\"']*wud-static-demo-[^\s\"']*\.log"
 )
 STATIC_DEMO_READ_ONLY_MESSAGE = (
     "The public static demo is read-only. Run WUDup locally to apply changes."
@@ -52,9 +37,7 @@ from wudup.db import (  # noqa: E402
     upsert_known_image,
     upsert_tag_exclusion_rule,
 )
-from wudup import command as command_module  # noqa: E402
 from wudup.digest_verifier import (  # noqa: E402
-    DigestResolveResult,
     ResolvedImageSubject,
 )
 from wudup.digest_provenance import DigestTagProvenance  # noqa: E402
@@ -88,12 +71,6 @@ web_static: Any = None
 web_wud_api: Any = None
 GitHubClient: Any = None
 refresh_release_notes: Any = None
-ApplyJobLogResponse: Any = None
-PlanRequest: Any = None
-TagOverrideRequest: Any = None
-RetagChoiceRequest: Any = None
-RetagPlanRequest: Any = None
-RetagPreviewJobResponse: Any = None
 SelfUpdateResponse: Any = None
 SelfUpdatePlanResponse: Any = None
 WebSettings: Any = None
@@ -107,8 +84,6 @@ def _ensure_web_fixture_imports() -> None:
     global web_runs, web_self_update, web_settings, web_state, web_static
     global web_wud_api
     global GitHubClient, refresh_release_notes
-    global ApplyJobLogResponse, PlanRequest, TagOverrideRequest
-    global RetagChoiceRequest, RetagPlanRequest, RetagPreviewJobResponse
     global SelfUpdateResponse, SelfUpdatePlanResponse
     global WebSettings
 
@@ -137,12 +112,6 @@ def _ensure_web_fixture_imports() -> None:
         refresh_release_notes as _refresh_release_notes,
     )
     from wudup.web_models import (
-        ApplyJobLogResponse as _ApplyJobLogResponse,
-        PlanRequest as _PlanRequest,
-        TagOverrideRequest as _TagOverrideRequest,
-        RetagChoiceRequest as _RetagChoiceRequest,
-        RetagPlanRequest as _RetagPlanRequest,
-        RetagPreviewJobResponse as _RetagPreviewJobResponse,
         SelfUpdateResponse as _SelfUpdateResponse,
         SelfUpdatePlanResponse as _SelfUpdatePlanResponse,
         WebSettings as _WebSettings,
@@ -167,12 +136,6 @@ def _ensure_web_fixture_imports() -> None:
     web_wud_api = _web_wud_api
     GitHubClient = _GitHubClient
     refresh_release_notes = _refresh_release_notes
-    ApplyJobLogResponse = _ApplyJobLogResponse
-    PlanRequest = _PlanRequest
-    TagOverrideRequest = _TagOverrideRequest
-    RetagChoiceRequest = _RetagChoiceRequest
-    RetagPlanRequest = _RetagPlanRequest
-    RetagPreviewJobResponse = _RetagPreviewJobResponse
     SelfUpdateResponse = _SelfUpdateResponse
     SelfUpdatePlanResponse = _SelfUpdatePlanResponse
     WebSettings = _WebSettings
@@ -654,59 +617,6 @@ def _resolve_repo_output_path(path: Path) -> Path:
     return resolved
 
 
-def _non_empty_subsets(values: list[int]) -> list[list[int]]:
-    return [
-        list(group)
-        for size in range(1, len(values) + 1)
-        for group in itertools.combinations(values, size)
-    ]
-
-
-def _line_set_key(line_numbers: list[int]) -> str:
-    return "lines-" + "-".join(str(line_no) for line_no in line_numbers)
-
-
-def _tag_token(line_no: int) -> str:
-    return f"{DEMO_TAG_OVERRIDE_PREFIX}{line_no}"
-
-
-def _tag_tokens(
-    line_numbers: list[int],
-    taggable_lines: dict[int, str],
-) -> list[dict[str, Any]]:
-    return [
-        {
-            "line_no": line_no,
-            "token": _tag_token(line_no),
-            "default_tag": taggable_lines[line_no],
-        }
-        for line_no in line_numbers
-        if line_no in taggable_lines
-    ]
-
-
-def _plan_case_key(
-    line_numbers: list[int],
-    allow_tag_updates: bool,
-    tag_tokens: list[dict[str, Any]],
-) -> str:
-    parts = [
-        _line_set_key(line_numbers),
-        "allow-tags" if allow_tag_updates else "block-tags",
-    ]
-    if tag_tokens:
-        parts.append(
-            "overrides-" + "-".join(token["token"] for token in tag_tokens)
-        )
-    else:
-        parts.append("default-tags")
-    return "__".join(parts)
-
-
-def _safe_case_part(value: str) -> str:
-    return re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip("-").lower() or "item"
-
-
 def _fixture_payload(context: SimpleNamespace) -> dict[str, Any]:
     request = context.request
     settings = context.settings
@@ -905,421 +815,6 @@ def _refresh_check_summary(value: dict[str, Any]) -> None:
     value["ok"] = failures == 0
 
 
-def _plan_cases(context: SimpleNamespace, parsed: Any) -> list[dict[str, Any]]:
-    with _cached_command_capture():
-        cases: list[dict[str, Any]] = []
-        line_numbers = sorted(target.line_no for target in parsed.targets)
-        taggable_lines = {
-            target.line_no: target.desired_tag
-            for target in parsed.targets
-            if target.desired_tag
-        }
-        for selected in _non_empty_subsets(line_numbers):
-            cases.append(
-                _plan_case(
-                    context,
-                    selected,
-                    allow_tag_updates=False,
-                    tag_tokens=_tag_tokens(selected, taggable_lines),
-                )
-            )
-            cases.append(
-                _plan_case(
-                    context,
-                    selected,
-                    allow_tag_updates=True,
-                    tag_tokens=_tag_tokens(selected, taggable_lines),
-                )
-            )
-        return cases
-
-
-@contextlib.contextmanager
-def _cached_command_capture():
-    original_capture = command_module.CommandRunner.capture
-    cache: dict[
-        tuple[
-            tuple[str, ...],
-            str,
-            tuple[tuple[str, str], ...],
-            tuple[tuple[str, str], ...],
-        ],
-        command_module.CommandResult,
-    ] = {}
-
-    def cached_capture(
-        runner,
-        args,
-        *,
-        cwd=None,
-        env=None,
-        check=True,
-    ):
-        argv = command_module.normalize_args(args)
-        cwd_key = str(Path(cwd).resolve()) if cwd is not None else ""
-        base_env_key = tuple(sorted((getattr(runner, "_env", None) or {}).items()))
-        env_key = tuple(sorted((env or {}).items()))
-        key = (argv, cwd_key, base_env_key, env_key)
-        if key not in cache:
-            cache[key] = original_capture(
-                runner,
-                args,
-                cwd=cwd,
-                env=env,
-                check=False,
-            )
-        result = cache[key]
-        if check and not result.ok:
-            raise command_module.CommandError(result)
-        return result
-
-    command_module.CommandRunner.capture = cached_capture
-    try:
-        yield
-    finally:
-        command_module.CommandRunner.capture = original_capture
-
-
-def _plan_case(
-    context: SimpleNamespace,
-    line_numbers: list[int],
-    *,
-    allow_tag_updates: bool,
-    tag_tokens: list[dict[str, Any]],
-) -> dict[str, Any]:
-    key = _plan_case_key(line_numbers, allow_tag_updates, [])
-    payload = PlanRequest(
-        line_numbers=line_numbers,
-        allow_tag_updates=allow_tag_updates,
-    )
-    plan = web_plans.build_web_plan(context.settings, payload)
-    response = web_plans.plan_response(
-        plan,
-        context.settings,
-        context.request,
-    )
-    data = _dump(response)
-    data["plan_id"] = f"demo-plan-{key}"
-    if data.get("cleanup", {}).get("cleanup_id"):
-        data["cleanup"]["cleanup_id"] = f"demo-plan-{key}-cleanup"
-    case: dict[str, Any] = {
-        "key": key,
-        "request": {
-            "line_numbers": line_numbers,
-            "allow_tag_updates": allow_tag_updates,
-            "tag_override_lines": [],
-        },
-        "tagTokens": tag_tokens,
-        "response": data,
-    }
-    return case
-
-
-def _removal_cases(settings: WebSettings, parsed: Any) -> list[dict[str, Any]]:
-    line_numbers = sorted(target.line_no for target in parsed.targets)
-    return [
-        {
-            "key": f"remove-{_line_set_key(selected)}",
-            "request": {"line_numbers": selected},
-            "response": _normalize_removal_plan(
-                web_pending.pending_removal_plan(settings, selected, parsed=parsed),
-                f"demo-removal-{_line_set_key(selected)}",
-            ),
-        }
-        for selected in _non_empty_subsets(line_numbers)
-    ]
-
-
-def _tokenize_job_template(
-    job_template: dict[str, Any],
-    tag_tokens: list[dict[str, Any]],
-) -> dict[str, Any]:
-    replacements = {
-        token["default_tag"]: token["token"]
-        for token in tag_tokens
-    }
-    return _replace_many(job_template, replacements)
-
-
-def _retag_plan_case(
-    settings: WebSettings,
-    plan_id: str,
-    choices: list[RetagChoiceRequest],
-) -> dict[str, Any]:
-    plan = web_retags.build_retag_plan(
-        settings,
-        RetagPlanRequest(choices=choices),
-    ).response
-    data = _dump(plan)
-    data["plan_id"] = plan_id
-    return data
-
-
-def _normalize_removal_plan(plan: Any, removal_id: str) -> dict[str, Any]:
-    data = _dump(plan)
-    data["removal_id"] = removal_id
-    return data
-
-
-def _retag_cases(
-    settings: WebSettings,
-    retag_targets: dict[str, Any],
-) -> list[dict[str, Any]]:
-    targets = [
-        item for item in retag_targets.get("items", []) if isinstance(item, dict)
-    ]
-    service_keys = [str(item["service_key"]) for item in targets]
-    service_counts = Counter(service_keys)
-    duplicate_service_keys = {
-        service_key for service_key, count in service_counts.items() if count > 1
-    }
-    cases: list[dict[str, Any]] = []
-    seen: set[tuple[tuple[str, str, str, str], ...]] = set()
-
-    def append_case(choices: list[RetagChoiceRequest]) -> None:
-        signature = _retag_choices_signature(choices)
-        if signature in seen:
-            return
-        seen.add(signature)
-        key = _retag_case_key(
-            choices,
-            duplicate_service_keys=duplicate_service_keys,
-        )
-        with _demo_retag_digest_resolution():
-            response = _retag_plan_case(settings, f"demo-retag-plan-{key}", choices)
-            case: dict[str, Any] = {
-                "key": key,
-                "request": {"choices": _dump_retag_choices(choices)},
-                "response": response,
-                "preview": _retag_preview_fixture(
-                    f"demo-retag-preview-{key}",
-                    response,
-                ),
-            }
-            if response.get("can_apply"):
-                case["jobTemplate"] = _generate_retag_job_fixture(key, choices)
-        cases.append(case)
-
-    for choices_tuple in itertools.product(
-        ("keep-current", "switch-to-concrete"),
-        repeat=len(targets),
-    ):
-        append_case(
-            [
-                _retag_choice_for_target(target, choice=choice)
-                for target, choice in zip(
-                    targets,
-                    choices_tuple,
-                    strict=True,
-                )
-            ]
-        )
-
-    switchable_targets = [item for item in targets if item.get("retag_available")]
-    manual_targets = [
-        item
-        for item in targets
-        if str(item["service_key"]) in DEMO_MANUAL_RETAG_TARGETS
-    ]
-    for manual_tuple in itertools.product(
-        (False, True),
-        repeat=len(manual_targets),
-    ):
-        if not any(manual_tuple):
-            continue
-        manual_by_target = dict(
-            zip(
-                (_retag_target_case_key(item) for item in manual_targets),
-                manual_tuple,
-                strict=True,
-            )
-        )
-        for switch_tuple in itertools.product(
-            ("keep-current", "switch-to-concrete"),
-            repeat=len(switchable_targets),
-        ):
-            switch_by_target = dict(
-                zip(
-                    (_retag_target_case_key(item) for item in switchable_targets),
-                    switch_tuple,
-                    strict=True,
-                )
-            )
-            choices = []
-            for target in targets:
-                target_key = _retag_target_case_key(target)
-                service_key = str(target["service_key"])
-                if manual_by_target.get(target_key):
-                    choices.append(
-                        _retag_choice_for_target(
-                            target,
-                            choice="switch-to-concrete",
-                            target_tag=DEMO_MANUAL_RETAG_TARGETS[service_key],
-                        )
-                    )
-                    continue
-                choices.append(
-                    _retag_choice_for_target(
-                        target,
-                        choice=switch_by_target.get(target_key, "keep-current"),
-                    )
-                )
-            append_case(choices)
-    return cases
-
-
-def _retag_choice_for_target(
-    target: dict[str, Any],
-    *,
-    choice: str,
-    target_tag: str | None = None,
-) -> RetagChoiceRequest:
-    target_id = target.get("target_id")
-    return RetagChoiceRequest(
-        service_key=str(target["service_key"]),
-        target_id=target_id if isinstance(target_id, str) and target_id else None,
-        choice=choice,
-        target_tag=target_tag,
-    )
-
-
-def _retag_target_case_key(target: dict[str, Any]) -> str:
-    target_id = target.get("target_id")
-    if isinstance(target_id, str) and target_id:
-        return target_id
-    return str(target["service_key"])
-
-
-def _retag_case_key(
-    choices: list[Any],
-    *,
-    duplicate_service_keys: set[str] | frozenset[str] = frozenset(),
-) -> str:
-    selected = []
-    for choice in choices:
-        if choice.choice != "switch-to-concrete":
-            continue
-        identity = _retag_choice_case_identity(choice, duplicate_service_keys)
-        target_tag = getattr(choice, "target_tag", None)
-        selected.append(
-            _safe_case_part(
-                f"{identity}-{target_tag}" if target_tag else identity
-            )
-        )
-    if not selected:
-        return "keep-all"
-    return "switch-" + "-".join(selected)
-
-
-def _retag_choice_case_identity(
-    choice: Any,
-    duplicate_service_keys: set[str] | frozenset[str],
-) -> str:
-    target_id = getattr(choice, "target_id", None)
-    if choice.service_key in duplicate_service_keys and target_id:
-        return str(target_id)
-    return str(choice.service_key)
-
-
-def _retag_choices_signature(
-    choices: list[RetagChoiceRequest],
-) -> tuple[tuple[str, str, str, str], ...]:
-    return tuple(
-        sorted(
-            (
-                choice.service_key,
-                choice.target_id or "",
-                choice.choice,
-                (choice.target_tag or "").strip(),
-            )
-            for choice in choices
-        )
-    )
-
-
-def _dump_retag_choices(choices: list[RetagChoiceRequest]) -> list[dict[str, Any]]:
-    return [
-        choice.model_dump(mode="json", exclude_none=True)
-        for choice in choices
-    ]
-
-
-@contextlib.contextmanager
-def _demo_retag_digest_resolution():
-    original_digest_verifier = web_retags.DigestVerifier
-
-    class DemoDigestVerifier:
-        def __init__(
-            self,
-            *_args: Any,
-            digest_map: dict[str, str] | None = None,
-            **_kwargs: Any,
-        ) -> None:
-            self._digest_map = dict(
-                DEMO_RETAG_DIGESTS_BY_IMAGE if digest_map is None else digest_map
-            )
-
-        def resolve_tag_digest(self, image: str) -> DigestResolveResult:
-            digest = self._digest_map.get(image, "")
-            return DigestResolveResult(
-                ok=bool(digest),
-                status="resolved" if digest else "unavailable",
-                reason="tag-digest-resolved" if digest else "manifest-unavailable",
-                digest=digest,
-                source="demo",
-            )
-
-    web_retags.DigestVerifier = DemoDigestVerifier
-    try:
-        yield
-    finally:
-        web_retags.DigestVerifier = original_digest_verifier
-
-
-def _retag_preview_fixture(
-    preview_job_id: str,
-    plan: dict[str, Any],
-) -> dict[str, Any]:
-    queued = RetagPreviewJobResponse(
-        preview_job_id=preview_job_id,
-        status="queued",
-        plan=None,
-        warnings=[],
-        progress=[
-            {
-                "job_id": preview_job_id,
-                "phase": "refresh",
-                "status": "running",
-                "message": "Refreshing demo retag candidates.",
-                "created_at": DEMO_FIXTURE_STARTED_AT,
-                "stack": "",
-                "services": [],
-                "line_numbers": [],
-            }
-        ],
-    )
-    complete = RetagPreviewJobResponse(
-        preview_job_id=preview_job_id,
-        status="success",
-        plan=plan,
-        warnings=plan.get("warnings", []),
-        progress=[
-            *queued.progress,
-            {
-                "job_id": preview_job_id,
-                "phase": "preview",
-                "status": "success",
-                "message": "Demo retag preview is ready.",
-                "created_at": DEMO_FIXTURE_FINISHED_AT,
-                "stack": "",
-                "services": [],
-                "line_numbers": [],
-            },
-        ],
-    )
-    return {"queued": _dump(queued), "complete": _dump(complete)}
-
-
 def _demo_self_update_plan(
     settings: WebSettings,
     request: Request,
@@ -1365,277 +860,6 @@ def _normalize_self_update_plan(plan: SelfUpdatePlanResponse) -> dict[str, Any]:
     return data
 
 
-def _generate_apply_job_fixture(
-    case_key: str,
-    line_numbers: list[int],
-    *,
-    allow_tag_updates: bool,
-    tag_tokens: list[dict[str, Any]],
-) -> dict[str, Any]:
-    with tempfile.TemporaryDirectory(prefix=f"wud-static-demo-{case_key}.") as tmpdir:
-        context = _demo_context(Path(tmpdir) / "state")
-        try:
-            payload = PlanRequest(
-                line_numbers=line_numbers,
-                allow_tag_updates=allow_tag_updates,
-                tag_overrides=[
-                    TagOverrideRequest(line_no=token["line_no"], tag=token["token"])
-                    for token in tag_tokens
-                ],
-            )
-            plan = web_plans.build_web_plan(context.settings, payload)
-            wud_lock = web_jobs._acquire_apply_wud_lock(context.settings)
-            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
-                io.StringIO()
-            ):
-                queued = web_jobs._submit_apply_job_state(
-                    context.state,
-                    context.settings,
-                    plan,
-                    allow_tag_updates=allow_tag_updates,
-                    tag_overrides=tuple(web_plans.tag_overrides_from_payload(payload)),
-                    digest_pin_label_rewrite_approvals=(),
-                    wud_lock=wud_lock,
-                    effective_config_loader=web_settings._effective_config,
-                    auto_update_schedule_run_updater=lambda *_args, **_kwargs: None,
-                )
-                terminal = _wait_for_job(context.state, queued.job_id)
-            fixture = _job_fixture_from_terminal(
-                context,
-                queued,
-                terminal,
-                stable_job_id=f"demo-job-{case_key}",
-                stable_log_file=f"demo/logs/demo-apply-{case_key}.log",
-                remove_line_numbers=line_numbers,
-            )
-            return _sanitize_payload(fixture, context.paths)
-        finally:
-            web_jobs.shutdown_apply_job_state(context.state)
-
-
-def _generate_retag_job_fixture(
-    case_key: str,
-    choices: list[RetagChoiceRequest],
-) -> dict[str, Any]:
-    with tempfile.TemporaryDirectory(prefix=f"wud-static-demo-retag-{case_key}.") as tmpdir:
-        context = _demo_context(Path(tmpdir) / "state")
-        try:
-            current_choices = _retag_choices_for_current_targets(
-                context.settings,
-                choices,
-            )
-            build = web_retags.build_retag_plan(
-                context.settings,
-                RetagPlanRequest(choices=current_choices),
-            )
-            wud_lock = web_jobs._acquire_apply_wud_lock(context.settings)
-            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
-                io.StringIO()
-            ):
-                queued = web_retags._submit_retag_apply_job(
-                    context.request,
-                    context.settings,
-                    build,
-                    wud_lock,
-                )
-                terminal = _wait_for_job(context.state, queued.job_id)
-            fixture = _job_fixture_from_terminal(
-                context,
-                queued,
-                terminal,
-                stable_job_id=f"demo-retag-job-{case_key}",
-                stable_log_file=f"demo/logs/demo-retag-{case_key}.log",
-                remove_line_numbers=[],
-            )
-            return _sanitize_payload(fixture, context.paths)
-        finally:
-            web_jobs.shutdown_apply_job_state(context.state)
-
-
-def _retag_choices_for_current_targets(
-    settings: WebSettings,
-    choices: list[RetagChoiceRequest],
-) -> list[RetagChoiceRequest]:
-    targets = web_retags.retag_targets_response(settings).items
-    service_counts = Counter(target.service_key for target in targets)
-    unique_targets_by_service = {
-        target.service_key: target
-        for target in targets
-        if service_counts[target.service_key] == 1
-    }
-    translated: list[RetagChoiceRequest] = []
-    for index, choice in enumerate(choices):
-        target = None
-        if index < len(targets) and targets[index].service_key == choice.service_key:
-            target = targets[index]
-        if target is None:
-            target = unique_targets_by_service.get(choice.service_key)
-        translated.append(
-            RetagChoiceRequest(
-                service_key=choice.service_key,
-                target_id=None if target is None else target.target_id,
-                choice=choice.choice,
-                target_tag=choice.target_tag,
-            )
-        )
-    return translated
-
-
-def _job_fixture_from_terminal(
-    context: SimpleNamespace,
-    queued: Any,
-    terminal: Any,
-    *,
-    stable_job_id: str,
-    stable_log_file: str,
-    remove_line_numbers: list[int],
-) -> dict[str, Any]:
-    terminal_response = web_jobs._apply_job_response(terminal)
-    log = web_jobs._apply_job_log_response(
-        context.settings,
-        terminal_response,
-        max_bytes=65_536,
-        safe_log_path=web_runs._safe_log_path,
-        read_log_tail=web_runs._read_log_tail,
-    ) or ApplyJobLogResponse(
-        job_id=terminal_response.job_id,
-        log_file="",
-        exists=False,
-        content="",
-        truncated=False,
-        max_bytes=65_536,
-    )
-    run = None
-    if terminal_response.run_id is not None:
-        run_id = terminal_response.run_id
-        run = {
-            "summary": _dump(
-                next(
-                    item
-                    for item in web_runs.api_runs(context.request)
-                    if item.id == run_id
-                )
-            ),
-            "detail": _dump(web_runs.api_run_detail(run_id, context.request)),
-            "log": _dump(
-                web_runs.api_run_log(run_id, context.request, tail_bytes=262_144)
-            ),
-        }
-    fixture = {
-        "queued": _dump(queued),
-        "terminal": _dump(terminal_response),
-        "log": _dump(log),
-        "run": run,
-        "removeLineNumbers": remove_line_numbers,
-    }
-    normalized = _normalize_job_fixture(
-        fixture,
-        original_job_id=terminal_response.job_id,
-        stable_job_id=stable_job_id,
-        stable_log_file=stable_log_file,
-    )
-    _populate_missing_job_log(normalized)
-    return normalized
-
-
-def _populate_missing_job_log(fixture: dict[str, Any]) -> None:
-    terminal = fixture["terminal"]
-    progress = terminal.get("progress", [])
-    log_file = terminal.get("log_file", "")
-    if not progress or not log_file:
-        return
-
-    content = _job_progress_log_content(progress, str(log_file))
-    log = fixture["log"]
-    if not log.get("exists") or not log.get("content"):
-        log["exists"] = True
-        log["log_file"] = log_file
-        log["content"] = content
-        log["truncated"] = False
-        log["error"] = ""
-
-    run = fixture.get("run")
-    if run and (not run["log"].get("exists") or not run["log"].get("content")):
-        run["log"]["exists"] = True
-        run["log"]["log_file"] = log_file
-        run["log"]["content"] = content
-        run["log"]["truncated"] = False
-
-
-def _job_progress_log_content(
-    progress: list[dict[str, Any]],
-    log_file: str,
-) -> str:
-    lines = []
-    for event in progress:
-        created_at = event.get("created_at") or DEMO_FIXTURE_FINISHED_AT
-        phase = event.get("phase") or "progress"
-        message = event.get("message") or ""
-        lines.append(f"[{created_at}] [INFO] [{phase}] {message}".rstrip())
-    lines.append(f"[{DEMO_FIXTURE_FINISHED_AT}] [INFO] Done. See log: {log_file}")
-    return "\n".join(lines) + "\n"
-
-
-def _wait_for_job(state: Any, job_id: str) -> Any:
-    deadline = time.monotonic() + 15
-    condition = state.web_apply_condition
-    with condition:
-        while True:
-            job = state.web_apply_jobs[job_id]
-            if job.status not in {"queued", "running"}:
-                return job
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise TimeoutError(f"demo fixture job {job_id} did not finish")
-            condition.wait(min(remaining, 0.05))
-
-
-def _normalize_job_fixture(
-    fixture: dict[str, Any],
-    *,
-    original_job_id: str,
-    stable_job_id: str,
-    stable_log_file: str,
-) -> dict[str, Any]:
-    normalized = _replace_string(fixture, original_job_id, stable_job_id)
-    terminal = normalized["terminal"]
-    queued = normalized["queued"]
-    log = normalized["log"]
-    queued["job_id"] = stable_job_id
-    terminal["job_id"] = stable_job_id
-    terminal["log_file"] = stable_log_file
-    terminal["started_at"] = DEMO_FIXTURE_STARTED_AT
-    terminal["finished_at"] = DEMO_FIXTURE_FINISHED_AT
-    log["job_id"] = stable_job_id
-    log["log_file"] = stable_log_file
-    if "content" in log:
-        log["content"] = _normalize_fixture_text(log["content"], stable_log_file)
-    for index, event in enumerate(terminal.get("progress", [])):
-        event["job_id"] = stable_job_id
-        event["created_at"] = (
-            DEMO_FIXTURE_STARTED_AT if index == 0 else DEMO_FIXTURE_FINISHED_AT
-        )
-    run = normalized.get("run")
-    if run:
-        for key in ("summary", "detail"):
-            run[key]["started_at"] = DEMO_FIXTURE_STARTED_AT
-            run[key]["finished_at"] = DEMO_FIXTURE_FINISHED_AT
-            run[key]["log_file"] = stable_log_file
-            metadata = run[key].get("metadata", {})
-            if "plan_id" in metadata:
-                metadata["plan_id"] = f"{stable_job_id}-plan"
-            for event in run[key].get("events", []):
-                event["created_at"] = DEMO_FIXTURE_FINISHED_AT
-        run["log"]["log_file"] = stable_log_file
-        run["log"]["content"] = _normalize_fixture_text(
-            run["log"]["content"],
-            stable_log_file,
-        )
-        _normalize_run_record(run["summary"])
-        _normalize_run_record(run["detail"])
-    return normalized
-
-
 def _normalize_run_record(run: dict[str, Any]) -> dict[str, Any]:
     started_at = str(run.get("started_at") or DEMO_CREATED_AT)
     finished_at = str(run.get("finished_at") or started_at)
@@ -1645,18 +869,6 @@ def _normalize_run_record(run: dict[str, Any]) -> dict[str, Any]:
         pending["created_at"] = started_at
         pending["updated_at"] = finished_at
     return run
-
-
-def _normalize_fixture_text(value: str, stable_log_file: str) -> str:
-    value = DEMO_FIXTURE_TIMESTAMP_RE.sub(DEMO_FIXTURE_STARTED_AT, value)
-    value = DEMO_FIXTURE_LOG_TIMESTAMP_RE.sub("[2026-05-30T20:12:26]", value)
-    value = DEMO_TEMP_LOG_PATH_RE.sub(stable_log_file, value)
-    value = re.sub(
-        r"demo-[A-Za-z0-9._/-]*\.log",
-        Path(stable_log_file).name,
-        value,
-    )
-    return value
 
 
 def _demo_context(root: Path) -> SimpleNamespace:
@@ -2194,16 +1406,6 @@ def _normalize_sanitized_string(value: str) -> str:
         r"compose-config-demo-docker-\1-docker-compose-yml",
         value,
     )
-    return value
-
-
-def _replace_string(value: Any, old: str, new: str) -> Any:
-    if isinstance(value, str):
-        return value.replace(old, new)
-    if isinstance(value, list):
-        return [_replace_string(item, old, new) for item in value]
-    if isinstance(value, dict):
-        return {key: _replace_string(item, old, new) for key, item in value.items()}
     return value
 
 
