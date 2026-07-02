@@ -11,10 +11,10 @@ from wudup.command import CommandRunner
 from wudup.compose import (
     ComposeStack,
 )
+from wudup import updater_audit
 from wudup.file_ops import OwnerConfig
 from wudup.updater import (
     UpdateFromWudRunner,
-    _apply_sqlite_owner,
 )
 from wudup.updater_models import (
     AppliedDigestPinUpdate,
@@ -40,7 +40,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
 
         with (
             mock.patch(
-                "wudup.updater._apply_sqlite_owner",
+                "wudup.updater_audit.apply_sqlite_owner",
                 side_effect=OSError("chown failed"),
             ),
             redirect_stdout(stdout),
@@ -70,7 +70,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
 
         with (
             mock.patch(
-                "wudup.updater.insert_update_event",
+                "wudup.db.insert_update_event",
                 side_effect=sqlite3.OperationalError("database is locked"),
             ),
             redirect_stdout(stdout),
@@ -98,7 +98,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
 
         with (
             mock.patch(
-                "wudup.updater.remove_lines_before_run",
+                "wudup.wud_file.remove_lines_before_run",
                 side_effect=OSError("metadata verification failed"),
             ),
             redirect_stdout(stdout),
@@ -126,14 +126,19 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
         stderr = StringIO()
 
         with (
-            mock.patch("wudup.updater._apply_sqlite_owner") as apply_owner,
+            mock.patch("wudup.updater_audit.apply_sqlite_owner") as apply_owner,
             redirect_stdout(stdout),
             redirect_stderr(stderr),
         ):
             status = runner.run()
 
         self.assertEqual(status, 0, stderr.getvalue() + stdout.getvalue())
-        apply_owner.assert_any_call(self.db_path, runner.owner, chown_parent=True)
+        apply_owner.assert_any_call(
+            self.db_path,
+            runner.owner,
+            chown_parent=True,
+            apply_owner=mock.ANY,
+        )
     def test_apply_sqlite_owner_leaves_existing_db_directory_alone(self) -> None:
         db_path = self.root / "state" / "wudup.sqlite"
         sidecars = [
@@ -147,8 +152,8 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
             path.write_text("", encoding="utf-8")
         owner = OwnerConfig.from_values(str(os.getuid()), str(os.getgid()))
 
-        with mock.patch("wudup.updater.apply_configured_owner") as apply_owner:
-            _apply_sqlite_owner(db_path, owner)
+        apply_owner = mock.Mock()
+        updater_audit.apply_sqlite_owner(db_path, owner, apply_owner=apply_owner)
 
         called_paths = [Path(call.args[0]) for call in apply_owner.call_args_list]
         self.assertEqual(called_paths, sidecars)
@@ -165,8 +170,13 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
             path.write_text("", encoding="utf-8")
         owner = OwnerConfig.from_values(str(os.getuid()), str(os.getgid()))
 
-        with mock.patch("wudup.updater.apply_configured_owner") as apply_owner:
-            _apply_sqlite_owner(db_path, owner, chown_parent=True)
+        apply_owner = mock.Mock()
+        updater_audit.apply_sqlite_owner(
+            db_path,
+            owner,
+            chown_parent=True,
+            apply_owner=apply_owner,
+        )
 
         called_paths = [Path(call.args[0]) for call in apply_owner.call_args_list]
         self.assertEqual(called_paths, [db_path.parent, *sidecars])

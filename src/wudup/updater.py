@@ -5,153 +5,46 @@ from __future__ import annotations
 import os
 import sqlite3
 import sys
-from collections.abc import Callable, Iterable, Mapping, Sequence
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-from . import (
-    compose_rewrite as compose_rewrite,
-    updater_audit,
-    updater_logging,
-    updater_preflight as updater_preflight,
-    updater_tag_exclusions as updater_tag_exclusions,
-)
-from .command import CommandError, CommandResult as CommandResult, CommandRunner
-from .compose import (
-    ComposeBindMount as ComposeBindMount,
-    ComposeCli,
-    ComposeDiscoveryError,
-    ComposeRuntimePortIssue as ComposeRuntimePortIssue,
-    ComposeStack as ComposeStack,
-    ServiceImage as ServiceImage,
-)
-from .compose_rewrite import (
-    DIGEST_PIN_MARKER_PREFIX as DIGEST_PIN_MARKER_PREFIX,
-    WUD_TAG_INCLUDE_LABEL as WUD_TAG_INCLUDE_LABEL,
-    _backup_compose as _backup_compose,
-    _exact_tag_include_matches as _exact_tag_include_matches,
-    _is_simple_exact_tag_include as _is_simple_exact_tag_include,
-    apply_compose_digest_pins as apply_compose_digest_pins,
-    apply_compose_tag_exclusions as apply_compose_tag_exclusions,
-    apply_compose_tag_updates as apply_compose_tag_updates,
-    compose_escape_dollars as compose_escape_dollars,
-    compose_unescape_dollars as compose_unescape_dollars,
-    exact_tags_regex as exact_tags_regex,
-    js_regex_escape as js_regex_escape,
-    merge_wud_exclude_regex as merge_wud_exclude_regex,
-    render_compose_digest_pins as render_compose_digest_pins,
-    render_compose_tag_exclusions as render_compose_tag_exclusions,
-)
-from .db import (
-    DatabaseError,
-    insert_update_event,
-)
-from .digest_verifier import (
-    DigestCheckResult as DigestCheckResult,
-    DigestResolveResult as DigestResolveResult,
-    DigestVerifier,
-    DockerManifestResolver as DockerManifestResolver,
-)
+from . import db, file_ops, updater_audit, updater_logging, wud_file
+from .command import CommandError, CommandRunner
+from .compose import ComposeCli, ComposeDiscoveryError
+from .digest_verifier import DigestVerifier
 from .docker_cli import DockerCli
-from .file_ops import OwnerConfig, OwnerConfigError, apply_configured_owner
-from .images import (
-    image_has_tag as image_has_tag,
-    image_matches_resolved_target as image_matches_resolved_target,
-    image_with_tag as image_with_tag,
-    normalize_digest as normalize_digest,
-    repo_key as repo_key,
-)
+from .file_ops import OwnerConfig, OwnerConfigError
 from .line_specs import LineSpecError, parse_line_spec
 from .locks import DirectoryLock, WudLockError
-from .updater_cli import (
-    options_from_namespace as options_from_namespace,
-    parse_seconds as parse_seconds,
-    parse_tag_overrides as parse_tag_overrides,
-)
-from .updater_logging import (
-    Logger as Logger,
-    file_timestamp as file_timestamp,
-    prepare_log_file as prepare_log_file,
-    safe_component as safe_component,
-    sanitize_stream as sanitize_stream,
-    timestamp as timestamp,
-)
-from .updater_lifecycle import (
-    CONTAINER_SUMMARY_FORMAT as CONTAINER_SUMMARY_FORMAT,
-    HEALTH_LOG_FORMAT as HEALTH_LOG_FORMAT,
-    StackLifecycleExecutor,
-    _cid_is_ok as _cid_is_ok,
-    _split_summary as _split_summary,
-    _stack_level_scope_message as _stack_level_scope_message,
-    _tag_update_failure_progress_message as _tag_update_failure_progress_message,
-    _tag_update_failure_progress_phase as _tag_update_failure_progress_phase,
-    _updated_images as _updated_images,
-)
-from .updater_digest_pin import (
-    _digest_pin_candidates as _digest_pin_candidates,
-    _digest_pin_match_tag as _digest_pin_match_tag,
-    _digest_pin_resolve_error as _digest_pin_resolve_error,
-    _digest_pin_tag_materialization_updates as _digest_pin_tag_materialization_updates,
-    _resolve_digest_pin_candidate as _resolve_digest_pin_candidate,
-    digest_pin_update_from_values as digest_pin_update_from_values,
-)
+from .updater_lifecycle import StackLifecycleExecutor
 from .updater_matching import (
-    RECREATE_STACK_LABEL as RECREATE_STACK_LABEL,
-    RECREATE_STACK_LABEL_FORMAT as RECREATE_STACK_LABEL_FORMAT,
-    _expand_network_mode_services as _expand_network_mode_services,
     _failed_line_numbers,
-    _failure_target_lines as _failure_target_lines,
-    _first_match_by_line as _first_match_by_line,
-    _label_value_is_true as _label_value_is_true,
-    _network_mode_providers as _network_mode_providers,
-    _ordered_unique as _ordered_unique,
-    _plan_line as _plan_line,
-    _scope_plan_label as _scope_plan_label,
-    _services_for_image as _services_for_image,
-    _services_for_target_match as _services_for_target_match,
     _stacks_to_update,
     _tag_exclusion_preflight_matches,
-    _target_image_for_match as _target_image_for_match,
     _unique_matches,
-    _update_services as _update_services,
-)
-from .updater_planning import (
-    _digest_check_allow_repo as _digest_check_allow_repo,
-    _digest_check_image as _digest_check_image,
-    _tag_exclusion_updates_by_stack as _tag_exclusion_updates_by_stack,
-    _unique_tag_exclusion_updates as _unique_tag_exclusion_updates,
-)
-from .wud_file import (
-    ParsedWudFile,
-    WudTarget,
-    parse_wud_file as parse_wud_file,
-    remove_lines_before_run,
-    restore_failed_lines,
 )
 from .updater_models import (
-    AppliedDigestPinUpdate as AppliedDigestPinUpdate,
-    AppliedTagUpdate as AppliedTagUpdate,
-    ComposeTagRewriteError as ComposeTagRewriteError,
-    DigestPinCandidate,
-    DigestPinUpdate,
-    DigestUnpinUpdate,
-    FailureRecord,
-    ImageState as ImageState,
-    Match,
     StackStatus,
-    TagExclusionUpdate as TagExclusionUpdate,
-    TagUpdate as TagUpdate,
-    UpResult as UpResult,
-    UpdateScope as UpdateScope,
     UpdaterError,
-    UpdaterOptions,
-    UpdaterProgressEvent,
 )
 from .updater_runner_matching import _RunnerMatchingMixin
-from .updater_runner_operations import (
-    _RunnerOperationsMixin,
-    _SERVICES_UNSET as _SERVICES_UNSET,
-)
+from .updater_runner_operations import _RunnerOperationsMixin
 from .updater_runner_output import _RunnerOutputMixin
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Mapping, Sequence
+    from pathlib import Path
+
+    from .updater_models import (
+        DigestPinCandidate,
+        DigestPinUpdate,
+        DigestUnpinUpdate,
+        FailureRecord,
+        ImageState,
+        Match,
+        UpdaterOptions,
+        UpdaterProgressEvent,
+    )
+    from .wud_file import ParsedWudFile, WudTarget
 
 VALID_MODES = frozenset({"pause", "stop", "live"})
 
@@ -179,8 +72,8 @@ class UpdateFromWudRunner(
         self.docker = DockerCli(runner=self.command_runner)
         self.digest_verifier = digest_verifier or DigestVerifier(self.docker)
         self.compose = ComposeCli(runner=self.command_runner)
-        self.log_file = prepare_log_file(options.log_dir, self.owner)
-        self.log = Logger(
+        self.log_file = updater_logging.prepare_log_file(options.log_dir, self.owner)
+        self.log = updater_logging.Logger(
             self.log_file,
             no_color=options.no_color,
             environ=self.environ,
@@ -404,7 +297,7 @@ class UpdateFromWudRunner(
             self._mark_matched_pending(matches, status="in_progress")
             self._mark_tag_exclusions_pending(exclusion_updates)
             self._mark_tag_exclusion_failures(exclusion_failures)
-            remove_lines_before_run(
+            wud_file.remove_lines_before_run(
                 opts.wud_file,
                 audit_parsed,
                 in_flight_lines,
@@ -448,7 +341,7 @@ class UpdateFromWudRunner(
                     if line_no not in stale_failed_lines
                 ]
                 if restorable_failed_lines:
-                    restore_failed_lines(
+                    wud_file.restore_failed_lines(
                         opts.wud_file,
                         audit_parsed,
                         restorable_failed_lines,
@@ -532,7 +425,7 @@ class UpdateFromWudRunner(
         except OSError as exc:
             self._finish_audit_run("failure", best_effort=True)
             raise UpdaterError(f"Filesystem operation failed: {exc}") from exc
-        except (sqlite3.Error, DatabaseError) as exc:
+        except (sqlite3.Error, db.DatabaseError) as exc:
             self._finish_audit_run("failure", best_effort=True)
             raise UpdaterError(f"Could not update audit database: {exc}") from exc
         except UpdaterError:
@@ -556,7 +449,12 @@ class UpdateFromWudRunner(
         *,
         chown_parent: bool = False,
     ) -> None:
-        _apply_sqlite_owner(db_path, owner, chown_parent=chown_parent)
+        updater_audit.apply_sqlite_owner(
+            db_path,
+            owner,
+            chown_parent=chown_parent,
+            apply_owner=file_ops.apply_configured_owner,
+        )
 
     def _finish_audit_run(self, status: str, *, best_effort: bool = False) -> None:
         updater_audit.finish_audit_run(self, status, best_effort=best_effort)
@@ -615,7 +513,7 @@ class UpdateFromWudRunner(
             self,
             matches,
             stack_statuses,
-            insert_event=insert_update_event,
+            insert_event=db.insert_update_event,
         )
 
     def _record_known_images(
@@ -644,25 +542,3 @@ def run_update_from_wud(
 
 def _db_path(options: UpdaterOptions, environ: Mapping[str, str]) -> Path:
     return updater_audit.db_path(options, environ)
-
-
-def _sqlite_parent_missing(db_path: Path) -> bool:
-    return updater_audit.sqlite_parent_missing(db_path)
-
-
-def _apply_sqlite_owner(
-    db_path: Path,
-    owner: OwnerConfig,
-    *,
-    chown_parent: bool = False,
-) -> None:
-    updater_audit.apply_sqlite_owner(
-        db_path,
-        owner,
-        chown_parent=chown_parent,
-        apply_owner=apply_configured_owner,
-    )
-
-
-def _sqlite_state_paths(db_path: Path) -> tuple[Path, ...]:
-    return updater_audit.sqlite_state_paths(db_path)
