@@ -137,7 +137,6 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
             self.db_path,
             runner.owner,
             chown_parent=True,
-            apply_owner=mock.ANY,
         )
     def test_apply_sqlite_owner_leaves_existing_db_directory_alone(self) -> None:
         db_path = self.root / "state" / "wudup.sqlite"

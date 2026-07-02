@@ -177,15 +177,12 @@ def mark_tag_exclusion_failures(
 def start_audit(
     runner: Any,
     parsed: ParsedWudFile,
-    *,
-    db_path_fn: Callable[..., Path] | None = None,
 ) -> None:
     if runner.audit_run_id is not None:
         return
     conn: sqlite3.Connection | None = None
-    resolve_db_path = db_path if db_path_fn is None else db_path_fn
     try:
-        audit_db_path = resolve_db_path(runner.options, runner.environ)
+        audit_db_path = db_path(runner.options, runner.environ)
         chown_parent = sqlite_parent_missing(audit_db_path)
         conn = connect_db(audit_db_path)
         runner.audit_db_path = audit_db_path
@@ -210,26 +207,20 @@ def start_audit(
                 target_digest=target.digest,
                 desired_tag=target.desired_tag,
             )
-        runner._apply_audit_db_owner(chown_parent=chown_parent)
+        apply_sqlite_owner(
+            audit_db_path,
+            runner.owner,
+            chown_parent=chown_parent,
+        )
     except (OSError, sqlite3.Error, DatabaseError, OwnerConfigError) as exc:
         if runner.audit_conn is not None and runner.audit_run_id is not None:
-            runner._finish_audit_run("failure", best_effort=True)
+            finish_audit_run(runner, "failure", best_effort=True)
         if conn is not None:
             conn.close()
         runner.audit_conn = None
         runner.audit_run_id = None
         runner.audit_db_path = None
         raise UpdaterError(f"Could not initialize audit database: {exc}") from exc
-
-
-def apply_audit_db_owner(runner: Any, *, chown_parent: bool = False) -> None:
-    if runner.audit_db_path is None:
-        return
-    runner._apply_sqlite_owner(
-        runner.audit_db_path,
-        runner.owner,
-        chown_parent=chown_parent,
-    )
 
 
 def finish_audit_run(

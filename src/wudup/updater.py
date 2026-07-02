@@ -7,7 +7,7 @@ import sqlite3
 import sys
 from typing import TYPE_CHECKING
 
-from . import db, file_ops, updater_audit, updater_logging, wud_file
+from . import db, updater_audit, updater_logging, wud_file
 from .command import CommandError, CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError
 from .digest_verifier import DigestVerifier
@@ -31,7 +31,7 @@ from .updater_runner_operations import _RunnerOperationsMixin
 from .updater_runner_output import _RunnerOutputMixin
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Mapping, Sequence
+    from collections.abc import Callable, Mapping
     from pathlib import Path
 
     from .updater_models import (
@@ -40,15 +40,11 @@ if TYPE_CHECKING:
         DigestUnpinUpdate,
         FailureRecord,
         ImageState,
-        Match,
         UpdaterOptions,
         UpdaterProgressEvent,
     )
-    from .wud_file import ParsedWudFile, WudTarget
 
 VALID_MODES = frozenset({"pause", "stop", "live"})
-
-
 
 
 class UpdateFromWudRunner(
@@ -164,10 +160,16 @@ class UpdateFromWudRunner(
                         parsed,
                         [target.line_no for target in excluded_tags.targets],
                     )
-                    self._start_audit(audit_parsed)
-                    self._mark_unmatched_pending(audit_parsed, matches, skipped_tags)
+                    updater_audit.start_audit(self, audit_parsed)
+                    updater_audit.mark_unmatched_pending(
+                        self,
+                        audit_parsed,
+                        matches,
+                        skipped_tags,
+                    )
                     self._mark_tag_exclusion_failures(exclusion_failures)
-                    self._finish_audit_run(
+                    updater_audit.finish_audit_run(
+                        self,
                         "failure" if exclusion_failures else "success"
                     )
                 self.log.info("No stacks matched the list; nothing to do.")
@@ -291,10 +293,20 @@ class UpdateFromWudRunner(
                 | {target.line_no for target, _reason in exclusion_failures}
             )
             audit_parsed = self._audit_parsed_file(parsed, audit_lines)
-            self._start_audit(audit_parsed)
-            self._mark_unmatched_pending(audit_parsed, matches, skipped_tags)
-            self._mark_removed_pending(audit_parsed, remove_line_numbers, matches)
-            self._mark_matched_pending(matches, status="in_progress")
+            updater_audit.start_audit(self, audit_parsed)
+            updater_audit.mark_unmatched_pending(
+                self,
+                audit_parsed,
+                matches,
+                skipped_tags,
+            )
+            updater_audit.mark_removed_pending(
+                self,
+                audit_parsed,
+                remove_line_numbers,
+                matches,
+            )
+            updater_audit.mark_matched_pending(self, matches, status="in_progress")
             self._mark_tag_exclusions_pending(exclusion_updates)
             self._mark_tag_exclusion_failures(exclusion_failures)
             wud_file.remove_lines_before_run(
@@ -359,7 +371,12 @@ class UpdateFromWudRunner(
                         "Refresh or replace them before retrying."
                     )
                 self._mark_failed_lines_restored(restorable_failed_lines)
-                self._mark_failed_pending(matches, stack_statuses, failed_lines)
+                updater_audit.mark_failed_pending(
+                    self,
+                    matches,
+                    stack_statuses,
+                    failed_lines,
+                )
                 cleanup_message = (
                     "Failed entries were reconciled; stale digest entries were removed."
                     if stale_failed_lines
@@ -380,10 +397,15 @@ class UpdateFromWudRunner(
                     "Pending entries were reconciled.",
                     matches=matches,
                 )
-            self._mark_successful_pending(matches, stack_statuses)
+            updater_audit.mark_successful_pending(self, matches, stack_statuses)
             self._mark_successful_tag_exclusions(exclusion_updates, exclusion_statuses)
-            self._record_update_events(matches, stack_statuses)
-            self._record_known_images(matches, stack_statuses)
+            updater_audit.record_update_events(
+                self,
+                matches,
+                stack_statuses,
+                insert_event=db.insert_update_event,
+            )
+            updater_audit.record_known_images(self, matches, stack_statuses)
 
             fail_count = sum(
                 1 for status in stack_statuses.values() if status.status != "success"
@@ -393,7 +415,7 @@ class UpdateFromWudRunner(
                 if status.status != "success"
             ) + len(exclusion_failures)
             if fail_count:
-                self._finish_audit_run("failure")
+                updater_audit.finish_audit_run(self, "failure")
                 error_report = self._write_error_report()
                 if error_report is not None:
                     self.log.error(
@@ -410,7 +432,7 @@ class UpdateFromWudRunner(
                 )
                 return 1
 
-            self._finish_audit_run("success")
+            updater_audit.finish_audit_run(self, "success")
             self.log.info(f"Done. See log: {self.log_file}")
             self._progress(
                 "completion",
@@ -420,108 +442,21 @@ class UpdateFromWudRunner(
             )
             return 0
         except (CommandError, ComposeDiscoveryError, LineSpecError, OwnerConfigError, WudLockError) as exc:
-            self._finish_audit_run("failure", best_effort=True)
+            updater_audit.finish_audit_run(self, "failure", best_effort=True)
             raise UpdaterError(str(exc)) from exc
         except OSError as exc:
-            self._finish_audit_run("failure", best_effort=True)
+            updater_audit.finish_audit_run(self, "failure", best_effort=True)
             raise UpdaterError(f"Filesystem operation failed: {exc}") from exc
         except (sqlite3.Error, db.DatabaseError) as exc:
-            self._finish_audit_run("failure", best_effort=True)
+            updater_audit.finish_audit_run(self, "failure", best_effort=True)
             raise UpdaterError(f"Could not update audit database: {exc}") from exc
         except UpdaterError:
-            self._finish_audit_run("failure", best_effort=True)
+            updater_audit.finish_audit_run(self, "failure", best_effort=True)
             raise
         finally:
             if self.audit_conn is not None:
                 self.audit_conn.close()
             lock.close()
-
-    def _start_audit(self, parsed: ParsedWudFile) -> None:
-        updater_audit.start_audit(self, parsed, db_path_fn=_db_path)
-
-    def _apply_audit_db_owner(self, *, chown_parent: bool = False) -> None:
-        updater_audit.apply_audit_db_owner(self, chown_parent=chown_parent)
-
-    def _apply_sqlite_owner(
-        self,
-        db_path: Path,
-        owner: OwnerConfig,
-        *,
-        chown_parent: bool = False,
-    ) -> None:
-        updater_audit.apply_sqlite_owner(
-            db_path,
-            owner,
-            chown_parent=chown_parent,
-            apply_owner=file_ops.apply_configured_owner,
-        )
-
-    def _finish_audit_run(self, status: str, *, best_effort: bool = False) -> None:
-        updater_audit.finish_audit_run(self, status, best_effort=best_effort)
-
-    def _mark_unmatched_pending(
-        self,
-        parsed: ParsedWudFile,
-        matches: Sequence[Match],
-        skipped_tags: Sequence[WudTarget],
-    ) -> None:
-        updater_audit.mark_unmatched_pending(self, parsed, matches, skipped_tags)
-
-    def _mark_matched_pending(
-        self,
-        matches: Sequence[Match],
-        *,
-        status: str,
-        status_reason: str = "matched",
-    ) -> None:
-        updater_audit.mark_matched_pending(
-            self,
-            matches,
-            status=status,
-            status_reason=status_reason,
-        )
-
-    def _mark_removed_pending(
-        self,
-        parsed: ParsedWudFile,
-        remove_lines: Iterable[int],
-        matches: Sequence[Match],
-    ) -> None:
-        updater_audit.mark_removed_pending(self, parsed, remove_lines, matches)
-
-    def _mark_failed_pending(
-        self,
-        matches: Sequence[Match],
-        stack_statuses: Mapping[int, StackStatus],
-        failed_lines: Iterable[int],
-    ) -> None:
-        updater_audit.mark_failed_pending(self, matches, stack_statuses, failed_lines)
-
-    def _mark_successful_pending(
-        self,
-        matches: Sequence[Match],
-        stack_statuses: Mapping[int, StackStatus],
-    ) -> None:
-        updater_audit.mark_successful_pending(self, matches, stack_statuses)
-
-    def _record_update_events(
-        self,
-        matches: Sequence[Match],
-        stack_statuses: Mapping[int, StackStatus],
-    ) -> None:
-        updater_audit.record_update_events(
-            self,
-            matches,
-            stack_statuses,
-            insert_event=db.insert_update_event,
-        )
-
-    def _record_known_images(
-        self,
-        matches: Sequence[Match],
-        stack_statuses: Mapping[int, StackStatus],
-    ) -> None:
-        updater_audit.record_known_images(self, matches, stack_statuses)
 
 def run_update_from_wud(
     options: UpdaterOptions,
@@ -538,7 +473,3 @@ def run_update_from_wud(
             pass
         print(f"[{updater_logging.timestamp()}] {exc}", file=sys.stderr)
         return 1
-
-
-def _db_path(options: UpdaterOptions, environ: Mapping[str, str]) -> Path:
-    return updater_audit.db_path(options, environ)
