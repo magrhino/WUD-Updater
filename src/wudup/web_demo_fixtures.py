@@ -609,8 +609,9 @@ def _preserved_wud_api_snapshot_cache():
 def render_static_demo_fixtures_ts(data: dict[str, Any]) -> str:
     payload = json.dumps(
         _static_demo_fixture_render_payload(data),
-        indent=2,
         sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
     )
     return (
         'import type { DemoGeneratedFixtures } from "./types";\n\n'
