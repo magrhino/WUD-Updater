@@ -175,10 +175,10 @@ const retagTargetTagError = computed(() => {
 const unavailable = computed(() => updates.retagTargets?.status === "unavailable");
 const loaded = computed(() => updates.retagTargets !== null);
 const mutationsEnabled = computed(() => auth.session?.mutations_enabled === true);
-const retagMutationDisabled = computed(() => !mutationsEnabled.value);
+const retagMutationDisabled = computed(() => !isDemoMode && !mutationsEnabled.value);
 const retagMutationNotice = computed(() => {
   if (isDemoMode) {
-    return "Demo mode previews retag apply without changing local Compose files.";
+    return "Demo mode retag apply runs only in this browser session.";
   }
   if (!mutationsEnabled.value) {
     return "Read-only mode keeps retag switch/apply disabled.";
@@ -377,7 +377,7 @@ async function onGithubLatestFallbackUpdate(enabled: boolean): Promise<void> {
 }
 
 async function refreshGithubLatestFallback(): Promise<void> {
-  if (updates.loading || retagMutationDisabled.value) {
+  if (isDemoMode || updates.loading || retagMutationDisabled.value) {
     return;
   }
   await updates.refreshRetagGithubLatest().catch(() => undefined);

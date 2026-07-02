@@ -6,14 +6,9 @@ import type {
   DoctorResponse,
   OnboardingChecklistResponse,
   PendingGroupedItem,
-  PendingRemovalPlanResponse,
   PendingResponse,
-  PlanResponse,
   ReleaseNoteInfo,
   ReleaseNotesResponse,
-  RetagChoiceRequest,
-  RetagPreviewJobResponse,
-  RetagPlanResponse,
   RetagTargetsResponse,
   RunDetail,
   RunLogResponse,
@@ -26,7 +21,6 @@ import type {
   SnoozeRecord,
   StatusResponse,
   TagExclusionRuleRecord,
-  TagOverrideRequest,
   UpdateTargetsResponse,
 } from "../types";
 
@@ -57,47 +51,6 @@ export type DemoGeneratedJobFixture = {
   removeLineNumbers: number[];
 };
 
-export type DemoRetagPreviewFixture = {
-  queued: RetagPreviewJobResponse;
-  complete: RetagPreviewJobResponse;
-};
-
-export type DemoTagToken = {
-  line_no: number;
-  token: string;
-  default_tag: string;
-};
-
-export type DemoPlanCase = {
-  key: string;
-  request: {
-    line_numbers: number[];
-    allow_tag_updates: boolean;
-    tag_override_lines: number[];
-  };
-  tagTokens: DemoTagToken[];
-  response: PlanResponse;
-  jobTemplate?: DemoGeneratedJobFixture;
-};
-
-export type DemoRemovalCase = {
-  key: string;
-  request: {
-    line_numbers: number[];
-  };
-  response: PendingRemovalPlanResponse;
-};
-
-export type DemoRetagCase = {
-  key: string;
-  request: {
-    choices: RetagChoiceRequest[];
-  };
-  response: RetagPlanResponse;
-  preview: DemoRetagPreviewFixture;
-  jobTemplate?: DemoGeneratedJobFixture;
-};
-
 type ReleaseNoteNotificationFields =
   | "notification_key"
   | "notification_status"
@@ -124,10 +77,10 @@ export type DemoGeneratedFixtures = {
   onboarding: OnboardingChecklistResponse;
   pending: PendingResponse;
   updateTargets: UpdateTargetsResponse;
-  planCases: DemoPlanCase[];
-  removalCases: DemoRemovalCase[];
+  planCases: never[];
+  removalCases: never[];
   retagTargets: RetagTargetsResponse;
-  retagCases: DemoRetagCase[];
+  retagCases: never[];
   releaseNotes: DemoReleaseNotesResponse;
   selfUpdate: SelfUpdateResponse;
   selfUpdatePlan: SelfUpdatePlanResponse;
@@ -159,5 +112,3 @@ export type DemoJobRecord = {
   fixture: DemoGeneratedJobFixture;
   completed: boolean;
 };
-
-export type DemoTagOverrideRequest = TagOverrideRequest;

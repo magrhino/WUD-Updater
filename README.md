@@ -92,7 +92,7 @@ WebUI/API first.
 
 | Topic | Where |
 |---|---|
-| Public WebUI demo | [magrhino.github.io/wudup](https://magrhino.github.io/wudup/) |
+| Public WebUI demo | [magrhino.github.io/wudup](https://magrhino.github.io/wudup/) and [demo notes](docs/wiki/demo.md) |
 | Deployment start guide | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 | WebUI container guide | [docs/wiki/webui-container.md](docs/wiki/webui-container.md) |
 | Command runner and host install | [docs/COMMAND_RUNNER.md](docs/COMMAND_RUNNER.md) |

@@ -3,34 +3,23 @@ import type {
   ApplyJobResponse,
   AuthSessionResponse,
   CoreUpdateTourResponse,
-  CoreUpdateTourStatus,
-  CoreUpdateTourStep,
   DiagnosticsSupportBundleResponse,
   DigestPinLabelRewriteApprovalRequest,
   DoctorResponse,
-  ManagedSettingsUpdateResponse,
   OnboardingChecklistResponse,
-  OnboardingDismissResponse,
-  PendingCleanupLine,
-  PendingCleanupResponse,
-  PendingGroupedItem,
   PendingItem,
   PendingMetadataRefreshRequest,
   PendingMetadataRefreshResponse,
   PendingRescanLine,
-  PendingRemovalPlanResponse,
   PendingResponse,
   PendingRescanResponse,
   PendingRescanScope,
   PlanResponse,
-  ReleaseNotificationSource,
-  ReleaseNotificationDestination,
-  ReleaseNotificationResponse,
-  ReleaseNotificationTestResponse,
   ReleaseNotesResponse,
   RetagChoiceRequest,
   RetagPreviewJobResponse,
   RetagPlanResponse,
+  RetagTargetItem,
   RetagTargetsResponse,
   RunDetail,
   RunEventRecord,
@@ -47,52 +36,32 @@ import type {
   SetupStatusResponse,
   SnoozeRecord,
   SnoozeState,
-  StateOperation,
-  StateOperationResponse,
   StatusResponse,
   TagExclusionRuleRecord,
   TagExclusionStatusFilter,
   TagOverrideRequest,
   UpdateTargetsResponse,
 } from "../types";
-import discordWebhookPolicy from "../../../../src/wudup/discord_webhook_policy.json";
-import {
-  DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE,
-  RELEASE_NOTIFICATION_DELIVERY_MODE_ERROR,
-  RELEASE_NOTIFICATION_DELIVERY_MODE_VALUES,
-  type ReleaseNotificationDeliveryMode,
-  isReleaseNotificationDeliveryMode,
-} from "../../releaseNotifications";
 import { DEMO_VERSION } from "./constants";
 import { generatedFixtures } from "./generatedFixtures";
 import {
   cleanupLineKey,
   clone,
-  escapeRegex,
-  normalizeDemoComposeIgnorePaths,
-  nowIso,
-  repoKey,
-  upsertBy,
 } from "./helpers";
 import type {
   DemoGeneratedFixtures,
   DemoGeneratedJobFixture,
   DemoJobRecord,
-  DemoPlanCase,
-  DemoRemovalCase,
-  DemoRetagCase,
   DemoRunFixture,
-  DemoTagToken,
 } from "./types";
 import {
   normalizeSecurityDigest,
   pendingItemPlatform,
 } from "../../utils/securityScans";
 
-const STATIC_FIXTURE_ERROR =
-  "This selection is not part of the static demo fixture set.";
-const DEMO_NOW = "2026-05-31T00:00:00.000Z";
 const fixtures: DemoGeneratedFixtures = generatedFixtures;
+const DEMO_NOW = "2026-05-31T00:00:00.000Z";
+const TAG_VALUE_PATTERN = /^\w[\w.-]{0,127}$/;
 const EMPTY_SECURITY_COUNTS: SecurityScanSeverityCounts = {
   critical: 0,
   high: 0,
@@ -100,36 +69,11 @@ const EMPTY_SECURITY_COUNTS: SecurityScanSeverityCounts = {
   low: 0,
   unknown: 0,
 };
-const DISCORD_WEBHOOK_ALLOWED_HOSTS = new Set(
-  discordWebhookPolicy.allowed_hosts,
-);
-const DISCORD_WEBHOOK_PATH_PREFIX = discordWebhookPolicy.path_prefix;
-
-function normalizeReleaseNotificationDeliveryMode(
-  value: string | undefined,
-): ReleaseNotificationDeliveryMode {
-  return isReleaseNotificationDeliveryMode(value)
-    ? value
-    : DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE;
-}
 
 type DemoSecurityScanDecision = {
   hasFindings: boolean;
   state: SecurityScanInfo["state"];
   verdict: SecurityScanInfo["verdict"];
-};
-
-type PendingLineFixture = {
-  line_no: number;
-  raw: string;
-  image: string;
-  desired_tag: string;
-  digest: string;
-  repo: string;
-  target_image: string;
-  stack_name: string;
-  service_name: string;
-  digest_provenance?: PendingItem["digest_provenance"];
 };
 
 function activeLineNumbers(activeKeys: Set<string>): Set<number> {
@@ -144,93 +88,60 @@ function uniqueSortedNumbers(values: number[]): number[] {
   return [...new Set(values)].sort((left, right) => left - right);
 }
 
-function sameNumbers(left: number[], right: number[]): boolean {
-  const normalizedLeft = uniqueSortedNumbers(left);
-  const normalizedRight = uniqueSortedNumbers(right);
-  return (
-    normalizedLeft.length === normalizedRight.length &&
-    normalizedLeft.every((value, index) => value === normalizedRight[index])
-  );
-}
-
 function demoNotificationKey(lineNo: number): string {
   return `demo-release-notification-${lineNo}`;
 }
 
-function sameRetagChoices(
-  left: RetagChoiceRequest[],
-  right: RetagChoiceRequest[],
-): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-  return left.every(
-    (choice, index) =>
-      choice.service_key === right[index]?.service_key &&
-      choice.choice === right[index]?.choice &&
-      (choice.target_tag ?? "") === (right[index]?.target_tag ?? ""),
-  );
+function retagTargetKey(item: RetagTargetItem): string {
+  return item.target_id || item.service_key;
 }
 
-function replaceString(value: unknown, oldValue: string, newValue: string): unknown {
-  if (typeof value === "string") {
-    return value.replaceAll(oldValue, newValue);
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => replaceString(item, oldValue, newValue));
-  }
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [
-        key,
-        replaceString(item, oldValue, newValue),
-      ]),
-    );
-  }
-  return value;
+function retagChoiceKey(choice: RetagChoiceRequest): string {
+  return choice.target_id || choice.service_key;
 }
 
-function replaceMany<T>(
-  value: T,
-  replacements: Array<[oldValue: string, newValue: string]>,
-): T {
-  let result: unknown = clone(value);
-  const placeholders = replacements
-    .filter(([oldValue]) => oldValue.length > 0)
-    .map(([oldValue, newValue], index) => ({
-      oldValue,
-      newValue,
-      placeholder: `\0demo-replacement-${index}\0`,
-    }))
-    .sort((left, right) => right.oldValue.length - left.oldValue.length);
-  for (const { oldValue, placeholder } of placeholders) {
-    result = replaceString(result, oldValue, placeholder);
+function lookupRetagChoiceTarget(
+  choice: RetagChoiceRequest,
+  targetById: Map<string, RetagTargetItem>,
+  targetByUniqueService: Map<string, RetagTargetItem>,
+): RetagTargetItem | undefined {
+  if (choice.target_id) {
+    return targetById.get(choice.target_id);
   }
-  for (const { newValue, placeholder } of placeholders) {
-    result = replaceString(result, placeholder, newValue);
-  }
-  return result as T;
+  return targetByUniqueService.get(choice.service_key);
 }
 
-function overrideByLine(tagOverrides: TagOverrideRequest[]): Map<number, string> {
-  const values = new Map<number, string>();
-  for (const override of tagOverrides) {
-    if (!values.has(override.line_no)) {
-      values.set(override.line_no, override.tag);
+function demoIdPart(value: string): string {
+  let result = "";
+  let needsSeparator = false;
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0;
+    const isAllowed =
+      (code >= 48 && code <= 57)
+      || (code >= 65 && code <= 90)
+      || (code >= 97 && code <= 122)
+      || char === "_"
+      || char === "."
+      || char === "-";
+    if (isAllowed) {
+      if (needsSeparator && result !== "") {
+        result += "-";
+      }
+      result += char;
+      needsSeparator = false;
+    } else if (result !== "") {
+      needsSeparator = true;
     }
   }
-  return values;
-}
-
-function tokenReplacements(
-  tagTokens: DemoTagToken[],
-  tagOverrides: TagOverrideRequest[],
-): Array<[oldValue: string, newValue: string]> {
-  const overrides = overrideByLine(tagOverrides);
-  return tagTokens.map((token) => {
-    const value = overrides.get(token.line_no) ?? token.default_tag;
-    return [token.token, value] satisfies [string, string];
-  });
+  let start = 0;
+  let end = result.length;
+  while (start < end && result[start] === "-") {
+    start += 1;
+  }
+  while (end > start && result[end - 1] === "-") {
+    end -= 1;
+  }
+  return result.slice(start, end) || "item";
 }
 
 function replaceTagReference(value: string, defaultTag: string, tag: string): string {
@@ -239,181 +150,114 @@ function replaceTagReference(value: string, defaultTag: string, tag: string): st
     .replaceAll(`:${defaultTag}`, `:${tag}`);
 }
 
-function updateDesiredTagFields(
-  item: {
-    desired_tag: string;
-    raw: string;
-    target_image?: string;
-  },
-  defaultTag: string,
-  tag: string,
-): void {
-  item.desired_tag = tag;
-  item.raw = replaceTagReference(item.raw, defaultTag, tag);
-  item.target_image = item.target_image
-    ? replaceTagReference(item.target_image, defaultTag, tag)
-    : item.target_image;
-}
-
-function updatePlanLineTagFields(
-  item: {
-    desired_tag: string;
-    raw: string;
-    resolved_image: string;
-    target_image: string;
-  },
-  defaultTag: string,
-  tag: string,
-): void {
-  updateDesiredTagFields(item, defaultTag, tag);
-  item.resolved_image = item.resolved_image
-    ? replaceTagReference(item.resolved_image, defaultTag, tag)
-    : item.resolved_image;
-}
-
-function applyPlanTagOverride(
-  response: PlanResponse,
-  token: DemoTagToken,
-  tag: string,
-): void {
-  response.targets
-    .filter((target) => target.line_no === token.line_no)
-    .forEach((target) => updateDesiredTagFields(target, token.default_tag, tag));
-  response.skipped
-    .filter((skipped) => skipped.line_no === token.line_no)
-    .forEach((skipped) => updateDesiredTagFields(skipped, token.default_tag, tag));
-  response.cleanup.items
-    .filter((item) => item.line_no === token.line_no)
-    .forEach((item) => updateDesiredTagFields(item, token.default_tag, tag));
-  for (const stack of response.stacks) {
-    const line = stack.lines.find((item) => item.line_no === token.line_no);
-    if (!line) {
-      continue;
-    }
-    const service = line.service;
-    updatePlanLineTagFields(line, token.default_tag, tag);
-    for (const update of stack.tag_updates) {
-      if (!update.services.includes(service)) {
-        continue;
-      }
-      update.desired_tag = tag;
-      update.new_image = replaceTagReference(update.new_image, token.default_tag, tag);
-    }
-    for (const action of stack.actions) {
-      if (action.kind === "compose-tag-update" && action.description.includes(service)) {
-        action.description = replaceTagReference(
-          action.description,
-          token.default_tag,
-          tag,
-        );
-      }
-    }
+function materializeTagOverride<T extends PendingResponse["grouping"]["unmatched"][number]>(
+  item: T,
+  tagOverrides: Map<number, string>,
+): T {
+  const tag = tagOverrides.get(item.line_no);
+  if (!tag) {
+    return item;
   }
-}
-
-function materializePlanResponse(
-  response: PlanResponse,
-  tagTokens: DemoTagToken[],
-  tagOverrides: TagOverrideRequest[],
-): PlanResponse {
-  const materialized = replaceMany(
-    response,
-    tokenReplacements(tagTokens, tagOverrides),
-  );
-  const overrides = overrideByLine(tagOverrides);
-  if (overrides.size === 0) {
-    return materialized;
-  }
-  const tokensByLine = new Map(tagTokens.map((token) => [token.line_no, token]));
-  for (const [lineNo, tag] of overrides) {
-    const token = tokensByLine.get(lineNo);
-    if (token) {
-      applyPlanTagOverride(materialized, token, tag);
-    }
-  }
-  return materialized;
-}
-
-function tagOverridePlanSuffix(tagOverrides: TagOverrideRequest[]): string {
-  if (!tagOverrides.length) {
-    return "";
-  }
-  const parts = [...overrideByLine(tagOverrides).entries()]
-    .sort(([left], [right]) => left - right)
-    .map(([lineNo, tag]) => `${lineNo}-${tag}`);
-  return `__overrides-${parts.join("-")}`;
-}
-
-function materializePlanCase(
-  planCase: DemoPlanCase,
-  tagOverrides: TagOverrideRequest[],
-): DemoPlanCase {
-  const response = materializePlanResponse(
-    planCase.response,
-    planCase.tagTokens,
-    tagOverrides,
-  );
-  response.plan_id = `${response.plan_id}${tagOverridePlanSuffix(tagOverrides)}`;
   return {
-    ...planCase,
-    response,
-    jobTemplate: planCase.jobTemplate
-      ? materializeJobTemplate(planCase.jobTemplate, planCase.tagTokens, tagOverrides)
-      : undefined,
+    ...item,
+    raw: replaceTagReference(item.raw, item.desired_tag, tag),
+    desired_tag: tag,
+    target_image: replaceTagReference(item.target_image, item.desired_tag, tag),
   };
 }
 
-function materializeRetagCase(retagCase: DemoRetagCase): DemoRetagCase {
-  return clone(retagCase);
-}
-
-function materializeJobTemplate(
-  fixture: DemoGeneratedJobFixture,
-  tagTokens: DemoTagToken[],
+function tagOverridesByLine(
+  pending: PendingResponse,
+  selectedLineNumbers: number[],
+  allowTagUpdates: boolean,
   tagOverrides: TagOverrideRequest[],
-): DemoGeneratedJobFixture {
-  const materialized = replaceMany(
-    fixture,
-    tokenReplacements(tagTokens, tagOverrides),
-  );
-  const overrides = overrideByLine(tagOverrides);
-  const noopTokens = tagTokens.filter((token) => !overrides.has(token.line_no));
-  if (noopTokens.length === 0) {
-    return materialized;
+): Map<number, string> {
+  const overrides = new Map<number, string>();
+  for (const item of tagOverrides) {
+    if (overrides.has(item.line_no)) {
+      throw new Error(`tag_overrides line ${item.line_no} was provided more than once`);
+    }
+    if (!TAG_VALUE_PATTERN.test(item.tag)) {
+      throw new Error(`tag_overrides line ${item.line_no} has invalid tag: ${item.tag}`);
+    }
+    overrides.set(item.line_no, item.tag);
   }
-  materialized.log.content = removeNoopTagOverrideLogLines(
-    materialized.log.content,
-    noopTokens,
-  );
-  if (materialized.run) {
-    materialized.run.log.content = removeNoopTagOverrideLogLines(
-      materialized.run.log.content,
-      noopTokens,
+  if (overrides.size === 0) {
+    return overrides;
+  }
+  if (!allowTagUpdates) {
+    throw new Error("tag_overrides require allow_tag_updates=true");
+  }
+  const selected = new Set(selectedLineNumbers);
+  const pendingByLine = new Map(pending.items.map((item) => [item.line_no, item]));
+  const missing = [...overrides.keys()].filter((lineNo) => !selected.has(lineNo));
+  if (missing.length) {
+    throw new Error(
+      `tag_overrides must reference selected WUD tag update lines: ${missing.join(", ")}`,
     );
   }
-  return materialized;
-}
-
-function removeNoopTagOverrideLogLines(
-  content: string,
-  noopTokens: DemoTagToken[],
-): string {
-  if (!content) {
-    return content;
+  for (const lineNo of overrides.keys()) {
+    if (!pendingByLine.get(lineNo)?.desired_tag) {
+      throw new Error(`tag_overrides line ${lineNo} does not target a tag update`);
+    }
   }
-  return content
-    .split("\n")
-    .filter((line) =>
-      noopTokens.every(
-        (token) =>
-          !line.includes(`Tag override: line ${token.line_no} uses tag ${token.default_tag} instead of ${token.default_tag}`),
-      ),
-    )
-    .join("\n");
+  return overrides;
 }
 
-function remapJobId<T>(value: T, sourceJobId: string, jobId: string): T {
-  return replaceString(clone(value), sourceJobId, jobId) as T;
+function validateDigestPinLabelRewriteApprovals(
+  approvals: DigestPinLabelRewriteApprovalRequest[],
+): string {
+  const seen = new Set<string>();
+  const parts: string[] = [];
+  for (const item of approvals) {
+    const key = [
+      item.stack,
+      item.service,
+      item.label_key,
+      item.current_label_value,
+      item.planned_tag,
+      item.proposed_label_value,
+    ].join("\0");
+    if (seen.has(key)) {
+      throw new Error("digest_pin_label_rewrite_approvals contains a duplicate approval");
+    }
+    if (item.label_key !== "wud.tag.include") {
+      throw new Error("digest_pin_label_rewrite_approvals can only approve wud.tag.include");
+    }
+    if (!TAG_VALUE_PATTERN.test(item.planned_tag)) {
+      throw new Error("digest_pin_label_rewrite_approvals has an invalid planned tag");
+    }
+    seen.add(key);
+    parts.push(`${item.stack}-${item.service}-${item.planned_tag}`);
+  }
+  return parts.map(demoIdPart).join("-");
+}
+
+function planIdFor(
+  selectedLineNumbers: number[],
+  allowTagUpdates: boolean,
+  tagOverrides: Map<number, string>,
+  digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
+): string {
+  const parts = [
+    `demo-session-${selectedLineNumbers.join("-") || "empty"}`,
+    allowTagUpdates ? "allow-tags" : "block-tags",
+  ];
+  if (tagOverrides.size) {
+    parts.push(
+      [...tagOverrides.entries()]
+        .sort(([left], [right]) => left - right)
+        .map(([lineNo, tag]) => `${lineNo}-${demoIdPart(tag)}`)
+        .join("-"),
+    );
+  }
+  const approvalPart = validateDigestPinLabelRewriteApprovals(
+    digestPinLabelRewriteApprovals,
+  );
+  if (approvalPart) {
+    parts.push(approvalPart);
+  }
+  return parts.join("-");
 }
 
 function materializeRunFixture(fixture: DemoRunFixture, runId: number): DemoRunFixture {
@@ -460,41 +304,226 @@ function filterPendingResponse(activeKeys: Set<string>): PendingResponse {
   return response;
 }
 
-function findGroupedLine(line: PendingCleanupLine): PendingLineFixture | null {
-  for (const group of fixtures.pending.grouping.groups) {
-    const item = group.items.find((candidate) => cleanupLineKey(candidate) === cleanupLineKey(line));
-    if (item) {
-      return pendingLineFixture(item, group.name, item.services[0] ?? "");
-    }
-  }
-  const unmatched = fixtures.pending.grouping.unmatched.find(
-    (candidate) => cleanupLineKey(candidate) === cleanupLineKey(line),
+function readOnlyPlanFromPending(
+  pending: PendingResponse,
+  selectedLineNumbers: number[],
+  allowTagUpdates: boolean,
+  tagOverrides: TagOverrideRequest[],
+  digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
+): PlanResponse {
+  const selected = new Set(selectedLineNumbers);
+  const overrides = tagOverridesByLine(
+    pending,
+    selectedLineNumbers,
+    allowTagUpdates,
+    tagOverrides,
   );
-  if (unmatched) {
-    return pendingLineFixture(unmatched, "", unmatched.repo);
-  }
-  const item = fixtures.pending.items.find(
-    (candidate) => cleanupLineKey(candidate) === cleanupLineKey(line),
+  const selectedGroups = pending.grouping.groups
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .filter((item) => selected.has(item.line_no))
+        .map((item) => materializeTagOverride(item, overrides)),
+    }))
+    .filter((group) => group.items.length > 0);
+  const selectedUnmatchedItems = pending.grouping.unmatched
+    .filter((item) => selected.has(item.line_no))
+    .map((item) => materializeTagOverride(item, overrides));
+  const tagUpdatesDisabled = [
+    ...selectedGroups.flatMap((group) => group.items),
+    ...selectedUnmatchedItems,
+  ].filter((item) => item.desired_tag && !allowTagUpdates);
+  const matchedGroups = selectedGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(
+        (item) => allowTagUpdates || !item.desired_tag,
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
+  const selectedUnmatched = selectedUnmatchedItems.filter(
+    (item) => allowTagUpdates || !item.desired_tag,
   );
-  return item ? pendingLineFixture(item, "", item.repo) : null;
+  const stacks = matchedGroups.map((group) => readOnlyPlanStack(group));
+  const matchedTargets = stacks.flatMap((stack) =>
+    stack.lines.map((line) => ({
+      line_no: line.line_no,
+      raw: line.raw,
+      image: line.image,
+      resolved_image: line.resolved_image,
+      digest: line.digest,
+      desired_tag: line.desired_tag,
+      matched: true,
+      action: line.action,
+    })),
+  );
+  const skipped = [
+    ...tagUpdatesDisabled.map((item) => ({
+      line_no: item.line_no,
+      raw: item.raw,
+      image: item.image,
+      desired_tag: item.desired_tag,
+      reason: "tag-updates-disabled",
+    })),
+    ...selectedUnmatched.map((item) => ({
+      line_no: item.line_no,
+      raw: item.raw,
+      image: item.image,
+      desired_tag: item.desired_tag,
+      reason: item.diagnostic?.code ?? "unmatched",
+    })),
+  ];
+  const issues = selectedUnmatched.map((item) => ({
+    severity: "error",
+    code: item.diagnostic?.code ?? "unmatched",
+    message:
+      item.diagnostic?.message ??
+      "This pending update is not matched to a discovered Compose service.",
+    line_no: item.line_no,
+    stack: item.diagnostic?.stack ?? "",
+    service: item.diagnostic?.service ?? "",
+    hint: item.diagnostic?.hint ?? "",
+    details: item.diagnostic?.details ?? {},
+  }));
+  const serviceCount = new Set(
+    stacks.flatMap((stack) =>
+      stack.lines.map((line) => `${stack.name}/${line.service}`),
+    ),
+  ).size;
+
+  let status: PlanResponse["status"] = "empty";
+  if (issues.length > 0 || (stacks.length > 0 && skipped.length > 0)) {
+    status = "blocked";
+  } else if (stacks.length > 0) {
+    status = "ready";
+  }
+  const applyable = status === "ready";
+
+  return {
+    plan_id: planIdFor(
+      selectedLineNumbers,
+      allowTagUpdates,
+      overrides,
+      digestPinLabelRewriteApprovals,
+    ),
+    dry_run: true,
+    can_apply: applyable,
+    status,
+    source_file: pending.source_file,
+    source: clone(pending.source),
+    mode: "stop",
+    max_wait: 180,
+    digest_pin_updates: false,
+    selected_line_numbers: selectedLineNumbers,
+    summary: {
+      target_count: selectedLineNumbers.length,
+      matched_target_count: matchedTargets.length,
+      stack_count: stacks.length,
+      service_count: serviceCount,
+      skipped_count: skipped.length,
+      issue_count: issues.length,
+    },
+    targets: [
+      ...matchedTargets,
+      ...selectedUnmatched.map((item) => ({
+        line_no: item.line_no,
+        raw: item.raw,
+        image: item.image,
+        resolved_image: item.resolved_image,
+        digest: item.digest,
+        desired_tag: item.desired_tag,
+        matched: false,
+        action: item.action,
+      })),
+      ...tagUpdatesDisabled.map((item) => ({
+        line_no: item.line_no,
+        raw: item.raw,
+        image: item.image,
+        resolved_image: item.resolved_image,
+        digest: item.digest,
+        desired_tag: item.desired_tag,
+        matched: false,
+        action: "tag-updates-disabled",
+      })),
+    ],
+    stacks,
+    skipped,
+    issues,
+    cleanup: {
+      cleanup_id: "demo-session-cleanup",
+      can_remove_unmatched: false,
+      items: selectedUnmatched.map((item) => ({
+        line_no: item.line_no,
+        raw: item.raw,
+        image: item.image,
+        desired_tag: item.desired_tag,
+        digest: item.digest,
+        reason: item.diagnostic?.code ?? "unmatched",
+        diagnostic: item.diagnostic,
+      })),
+    },
+    apply_preflight: {
+      ok: applyable,
+      failures: applyable ? 0 : 1,
+      warnings: 0,
+      checks: [
+        {
+          status: applyable ? "PASS" : "FAIL",
+          code: "static-demo-session-job",
+          label: "Static demo session job",
+          detail: applyable
+            ? "Apply runs as a browser-only demo job and resets on reload."
+            : "Only matched demo pending updates can be applied in the static demo.",
+          source_check_codes: [],
+        },
+      ],
+    },
+  };
 }
 
-function pendingLineFixture(
-  item: PendingItem | PendingGroupedItem,
-  stackName: string,
-  serviceName: string,
-): PendingLineFixture {
+function readOnlyPlanStack(
+  group: PendingResponse["grouping"]["groups"][number],
+): PlanResponse["stacks"][number] {
+  const lines = group.items.map((item) => {
+    const composeImage = item.compose_images[0] ?? item.resolved_image;
+    return {
+      line_no: item.line_no,
+      raw: item.raw,
+      image: item.image,
+      resolved_image: item.resolved_image,
+      compose_image: composeImage,
+      target_image: item.target_image || item.resolved_image,
+      service: item.services[0] ?? item.repo,
+      digest: item.digest,
+      desired_tag: item.desired_tag,
+      action: item.action,
+      digest_provenance: item.digest_provenance ?? null,
+    };
+  });
+  const services = [...new Set(lines.map((line) => line.service))];
   return {
-    line_no: item.line_no,
-    raw: item.raw,
-    image: item.image,
-    desired_tag: item.desired_tag,
-    digest: item.digest,
-    repo: item.repo,
-    target_image: "target_image" in item ? item.target_image : "",
-    stack_name: stackName,
-    service_name: serviceName,
-    digest_provenance: item.digest_provenance,
+    name: group.name,
+    directory: group.directory,
+    compose_file: group.compose_file,
+    project_directory: group.project_directory,
+    services_label: group.services_label,
+    services,
+    pull_services: services,
+    stop_services: services,
+    force_recreate: lines.some((line) => line.action !== "tag-update"),
+    up_no_deps: true,
+    tag_updates: lines
+      .filter((line) => line.action === "tag-update")
+      .map((line) => ({
+        old_image: line.compose_image,
+        desired_tag: line.desired_tag,
+        new_image: line.target_image,
+        services: [line.service],
+      })),
+    digest_pin_updates: [],
+    digest_unpin_updates: [],
+    actions: [],
+    lines,
   };
 }
 
@@ -520,62 +549,6 @@ export class DemoApiState {
   );
   jobs = new Map<string, DemoJobRecord>();
   private readonly retagPreviewJobs = new Map<string, RetagPreviewJobResponse>();
-  themePreference = "system";
-  themePreferenceConfigured = false;
-  onboardingDismissedAt = "";
-  composeIgnorePaths =
-    fixtures.settings.managed.find(
-      (entry) => entry.key === "compose_ignore_paths",
-    )?.value ?? "old";
-  composeIgnorePathsConfigured = false;
-  digestPinUpdates =
-    fixtures.settings.managed.find(
-      (entry) => entry.key === "digest_pin_updates",
-    )?.value ?? "false";
-  digestPinUpdatesConfigured = false;
-  releaseNotesEnabled =
-    fixtures.settings.managed.find(
-      (entry) => entry.key === "release_notes_enabled",
-    )?.value ?? "false";
-  releaseNotesEnabledConfigured = false;
-  releaseNotificationDeliveryMode: ReleaseNotificationDeliveryMode =
-    normalizeReleaseNotificationDeliveryMode(
-      fixtures.settings.managed.find(
-        (entry) => entry.key === "release_notifications_delivery_mode",
-      )?.value,
-    );
-  releaseNotificationDeliveryModeConfigured = false;
-  releaseNotificationMode: ReleaseNotificationResponse["mode"] =
-    fixtures.settings.managed.find(
-      (entry) => entry.key === "release_notifications_mode",
-    )?.value === "per_container" ? "per_container" : "digest";
-  releaseNotificationModeConfigured = false;
-  releaseNotificationResendPolicy: ReleaseNotificationResponse["resend_policy"] =
-    fixtures.settings.managed.find(
-      (entry) => entry.key === "release_notifications_resend_policy",
-    )?.value === "cooldown" ? "cooldown" : "remote_change";
-  releaseNotificationResendPolicyConfigured = false;
-  releaseNotificationCooldownSeconds =
-    fixtures.settings.managed.find(
-      (entry) => entry.key === "release_notifications_cooldown_seconds",
-    )?.value ?? "86400";
-  releaseNotificationCooldownSecondsConfigured = false;
-  releaseNotificationDiscordWebhookConfigured =
-    fixtures.settings.managed.find(
-      (entry) => entry.key === "release_notifications_discord_webhook",
-    )?.configured === true;
-  releaseNotificationDiscordWebhookSetByWebUi =
-    this.releaseNotificationDiscordWebhookConfigured &&
-    fixtures.settings.secrets.find((entry) => entry.name === "DISCORD_WEBHOOK")
-      ?.configured !== true;
-  releaseNotificationVerbosity =
-    fixtures.settings.managed.find(
-      (entry) => entry.key === "release_notifications_verbosity",
-    )?.value === "full" ? "full" : "summary";
-  releaseNotificationVerbosityConfigured =
-    fixtures.settings.managed.find(
-      (entry) => entry.key === "release_notifications_verbosity",
-    )?.configured === true;
   coreUpdateTour: CoreUpdateTourResponse = {
     status: "not_started",
     step: "dashboard",
@@ -585,172 +558,68 @@ export class DemoApiState {
   private nextRetagPreview = 1;
   private nextRun =
     Math.max(0, ...fixtures.runs.summaries.map((run) => run.id)) + 1;
-  private nextAudit = 100;
-  private nextSnooze =
-    Math.max(0, ...fixtures.snoozes.all.map((snooze) => snooze.id)) + 1;
-  private nextTagExclusion =
-    Math.max(0, ...fixtures.tagExclusions.all.map((rule) => rule.id)) +
-    1;
-  private releaseNotificationHistory = new Map<
-    string,
-    { lastSentAt: string; sendCount: number }
-  >();
 
   session(): AuthSessionResponse {
-    return clone(fixtures.auth.session);
+    return {
+      ...clone(fixtures.auth.session),
+      dev_auth_bypass: false,
+      mutations_enabled: false,
+    };
   }
 
   setupStatus(): SetupStatusResponse {
-    return clone(fixtures.auth.setupStatus);
+    return {
+      ...clone(fixtures.auth.setupStatus),
+      dev_auth_bypass: false,
+      mutations_enabled: false,
+    };
   }
 
   status(): StatusResponse {
     return {
       ...clone(fixtures.status),
       version: DEMO_VERSION,
-      pending_count: this.activePendingLineKeys.size,
+      dev_auth_bypass: false,
+      mutations_enabled: false,
+      auto_update_scheduler_enabled: false,
+      pending_count: this.pendingResponse().count,
     };
   }
 
   settings(): SettingsResponse {
     const settings = clone(fixtures.settings);
-    this.ensureManagedEntry(
-      settings,
-      "release_notifications_delivery_mode",
-      DEFAULT_RELEASE_NOTIFICATION_DELIVERY_MODE,
-      Array.from(RELEASE_NOTIFICATION_DELIVERY_MODE_VALUES),
+    this.updateSettingsEntry(settings.webui, "WUD_WEB_DEV_NO_AUTH", "false", false, "default");
+    this.updateSettingsEntry(
+      settings.webui,
+      "WUD_WEB_MUTATIONS_ENABLED",
+      "false",
+      false,
+      "default",
     );
-    this.ensureManagedEntry(settings, "release_notifications_mode", "digest", [
-      "digest",
-      "per_container",
-    ]);
-    this.ensureManagedEntry(
-      settings,
-      "release_notifications_resend_policy",
-      "remote_change",
-      ["remote_change", "cooldown"],
-    );
-    this.ensureManagedEntry(
-      settings,
-      "release_notifications_cooldown_seconds",
-      "86400",
-      [],
-    );
-    this.ensureManagedEntry(
-      settings,
-      "release_notifications_discord_webhook",
-      "",
-      [],
-      { sensitive: true },
-    );
-    this.ensureManagedEntry(
-      settings,
-      "release_notifications_verbosity",
-      "summary",
-      ["summary", "full"],
-    );
-    this.updateManagedEntry(settings, "theme_preference", this.themePreference, this.themePreferenceConfigured);
-    this.updateManagedEntry(
-      settings,
-      "onboarding_checklist",
-      this.onboardingDismissedAt ? "dismissed" : "visible",
-      Boolean(this.onboardingDismissedAt),
-    );
-    this.updateManagedEntry(
-      settings,
-      "compose_ignore_paths",
-      this.composeIgnorePaths,
-      this.composeIgnorePathsConfigured,
-    );
-    this.updateManagedEntry(
-      settings,
-      "digest_pin_updates",
-      this.digestPinUpdates,
-      this.digestPinUpdatesConfigured,
-    );
-    this.updateManagedEntry(
-      settings,
-      "release_notes_enabled",
-      this.releaseNotesEnabled,
-      this.releaseNotesEnabledConfigured,
-    );
-    this.updateManagedEntry(
-      settings,
-      "release_notifications_delivery_mode",
-      this.releaseNotificationDeliveryMode,
-      this.releaseNotificationDeliveryModeConfigured,
-    );
-    this.updateManagedEntry(
-      settings,
-      "release_notifications_mode",
-      this.releaseNotificationMode,
-      this.releaseNotificationModeConfigured,
-    );
-    this.updateManagedEntry(
-      settings,
-      "release_notifications_resend_policy",
-      this.releaseNotificationResendPolicy,
-      this.releaseNotificationResendPolicyConfigured,
-    );
-    this.updateManagedEntry(
-      settings,
-      "release_notifications_cooldown_seconds",
-      this.releaseNotificationCooldownSeconds,
-      this.releaseNotificationCooldownSecondsConfigured,
-    );
-    this.updateManagedEntry(
-      settings,
-      "release_notifications_discord_webhook",
-      "",
-      this.releaseNotificationDiscordWebhookConfigured,
-    );
-    this.updateManagedEntry(
-      settings,
-      "release_notifications_verbosity",
-      this.releaseNotificationVerbosity,
-      this.releaseNotificationVerbosityConfigured,
+    this.updateSettingsEntry(
+      settings.webui,
+      "WUD_WEB_AUTO_UPDATE_SCHEDULER_ENABLED",
+      "false",
+      false,
+      "derived",
     );
     return settings;
   }
 
-  private ensureManagedEntry(
-    settings: SettingsResponse,
-    key: string,
-    defaultValue: string,
-    allowedValues: string[],
-    overrides: Partial<SettingsResponse["managed"][number]> = {},
-  ): void {
-    if (settings.managed.some((item) => item.key === key)) {
-      return;
-    }
-    settings.managed.push({
-      key,
-      value: defaultValue,
-      default_value: defaultValue,
-      source: "default",
-      editable: true,
-      allowed_values: allowedValues,
-      restart_required: false,
-      disabled_reason: "",
-      configured: false,
-      sensitive: false,
-      ...overrides,
-    });
-  }
-
-  private updateManagedEntry(
-    settings: SettingsResponse,
-    key: string,
+  private updateSettingsEntry(
+    entries: SettingsResponse["webui"],
+    name: string,
     value: string,
     configured: boolean,
+    source: SettingsResponse["webui"][number]["source"],
   ): void {
-    const entry = settings.managed.find((item) => item.key === key);
+    const entry = entries.find((item) => item.name === name);
     if (!entry) {
       return;
     }
     entry.value = value;
-    entry.source = configured ? "configured" : "default";
     entry.configured = configured;
+    entry.source = source;
   }
 
   doctor(): DoctorResponse {
@@ -769,150 +638,7 @@ export class DemoApiState {
   }
 
   onboardingChecklist(): OnboardingChecklistResponse {
-    if (!this.onboardingDismissedAt) {
-      return clone(fixtures.onboarding);
-    }
-    return {
-      dismissed: true,
-      dismissed_at: this.onboardingDismissedAt,
-      all_passed: false,
-      visible: false,
-      items: [],
-    };
-  }
-
-  dismissOnboarding(): OnboardingDismissResponse {
-    this.onboardingDismissedAt = DEMO_NOW;
-    return {
-      dismissed: true,
-      dismissed_at: this.onboardingDismissedAt,
-    };
-  }
-
-  updateCoreUpdateTour(
-    status: CoreUpdateTourStatus,
-    step: CoreUpdateTourStep,
-  ): CoreUpdateTourResponse {
-    this.coreUpdateTour = {
-      status,
-      step,
-      updated_at: DEMO_NOW,
-    };
-    return clone(this.coreUpdateTour);
-  }
-
-  updateManagedSettings(
-    values: Record<string, string>,
-  ): ManagedSettingsUpdateResponse {
-    for (const [key, value] of Object.entries(values)) {
-      this.updateManagedSetting(key, value);
-    }
-    return {
-      managed: this.settings().managed,
-      audit_run_id: this.nextAudit++,
-    };
-  }
-
-  private updateManagedSetting(key: string, value: string): void {
-    switch (key) {
-      case "theme_preference":
-        if (!["system", "light", "dark"].includes(value)) {
-          throw new Error("theme_preference must be system, light, or dark");
-        }
-        this.themePreference = value;
-        this.themePreferenceConfigured = true;
-        return;
-      case "onboarding_checklist":
-        if (!["visible", "dismissed"].includes(value)) {
-          throw new Error("onboarding_checklist must be visible or dismissed");
-        }
-        this.onboardingDismissedAt = value === "dismissed" ? this.onboardingDismissedAt || DEMO_NOW : "";
-        return;
-      case "compose_ignore_paths":
-        this.composeIgnorePaths = normalizeDemoComposeIgnorePaths(value);
-        this.composeIgnorePathsConfigured = true;
-        return;
-      case "digest_pin_updates":
-        if (!["false", "true"].includes(value)) {
-          throw new Error("digest_pin_updates must be false or true");
-        }
-        this.digestPinUpdates = value;
-        this.digestPinUpdatesConfigured = true;
-        return;
-      case "release_notes_enabled":
-        if (!["false", "true"].includes(value)) {
-          throw new Error("release_notes_enabled must be false or true");
-        }
-        this.releaseNotesEnabled = value;
-        this.releaseNotesEnabledConfigured = true;
-        return;
-      case "release_notifications_delivery_mode":
-        if (!isReleaseNotificationDeliveryMode(value)) {
-          throw new Error(RELEASE_NOTIFICATION_DELIVERY_MODE_ERROR);
-        }
-        this.releaseNotificationDeliveryMode = value;
-        this.releaseNotificationDeliveryModeConfigured = true;
-        return;
-      case "release_notifications_mode":
-        if (!["digest", "per_container"].includes(value)) {
-          throw new Error("release_notifications_mode must be digest or per_container");
-        }
-        this.releaseNotificationMode =
-          value === "per_container" ? "per_container" : "digest";
-        this.releaseNotificationModeConfigured = true;
-        return;
-      case "release_notifications_resend_policy":
-        if (!["remote_change", "cooldown"].includes(value)) {
-          throw new Error(
-            "release_notifications_resend_policy must be remote_change or cooldown",
-          );
-        }
-        this.releaseNotificationResendPolicy =
-          value === "cooldown" ? "cooldown" : "remote_change";
-        this.releaseNotificationResendPolicyConfigured = true;
-        return;
-      case "release_notifications_cooldown_seconds":
-        if (!Number.isInteger(Number(value)) || Number(value) <= 0) {
-          throw new Error(
-            "release_notifications_cooldown_seconds must be a positive integer",
-          );
-        }
-        this.releaseNotificationCooldownSeconds = value;
-        this.releaseNotificationCooldownSecondsConfigured = true;
-        return;
-      case "release_notifications_discord_webhook":
-        if (value) {
-          try {
-            const parsed = new URL(value);
-            if (
-              parsed.protocol !== "https:" ||
-              parsed.username ||
-              parsed.password ||
-              (parsed.port && parsed.port !== "443") ||
-              !DISCORD_WEBHOOK_ALLOWED_HOSTS.has(parsed.hostname.toLowerCase()) ||
-              !parsed.pathname.startsWith(DISCORD_WEBHOOK_PATH_PREFIX)
-            ) {
-              throw new Error();
-            }
-          } catch {
-            throw new Error(
-              "release_notifications_discord_webhook must be a Discord webhook URL",
-            );
-          }
-        }
-        this.releaseNotificationDiscordWebhookConfigured = Boolean(value);
-        this.releaseNotificationDiscordWebhookSetByWebUi = Boolean(value);
-        return;
-      case "release_notifications_verbosity":
-        if (!["summary", "full"].includes(value)) {
-          throw new Error("release_notifications_verbosity must be summary or full");
-        }
-        this.releaseNotificationVerbosity = value === "full" ? "full" : "summary";
-        this.releaseNotificationVerbosityConfigured = true;
-        return;
-      default:
-        throw new Error(`managed setting is not editable: ${key}`);
-    }
+    return clone(fixtures.onboarding);
   }
 
   pendingResponse(): PendingResponse {
@@ -970,16 +696,35 @@ export class DemoApiState {
   }
 
   createRetagPlan(choices: RetagChoiceRequest[]): RetagPlanResponse {
-    return clone(this.retagCase(choices).response);
+    return this.retagPlanFromChoices(choices);
   }
 
   createRetagPreviewJob(choices: RetagChoiceRequest[]): RetagPreviewJobResponse {
-    const fixture = this.retagCase(choices).preview;
     const previewJobId = `demo-retag-preview-${this.nextRetagPreview++}`;
-    const queued = this.materializeRetagPreviewJob(fixture.queued, previewJobId);
-    const complete = this.materializeRetagPreviewJob(fixture.complete, previewJobId);
+    const plan = this.createRetagPlan(choices);
+    const complete: RetagPreviewJobResponse = {
+      preview_job_id: previewJobId,
+      status: plan.issues.length ? "failure" : "success",
+      plan,
+      warnings: plan.warnings,
+      error: plan.issues[0]?.message ?? "",
+      progress: [
+        {
+          job_id: previewJobId,
+          phase: "compose-digest-pin",
+          status: plan.issues.length ? "failure" : "success",
+          message: plan.issues.length
+            ? "Demo retag preview found an invalid selection."
+            : "Demo retag preview generated from current fixture data.",
+          created_at: "2026-05-30T20:12:26+00:00",
+          stack: plan.stacks[0]?.stack ?? "",
+          services: plan.stacks.flatMap((stack) => stack.services),
+          line_numbers: [],
+        },
+      ],
+    };
     this.retagPreviewJobs.set(previewJobId, complete);
-    return queued;
+    return clone(complete);
   }
 
   retagPreviewJob(previewJobId: string): RetagPreviewJobResponse {
@@ -990,18 +735,151 @@ export class DemoApiState {
     return clone(job);
   }
 
-  private materializeRetagPreviewJob(
-    response: RetagPreviewJobResponse,
-    previewJobId: string,
-  ): RetagPreviewJobResponse {
-    const result = clone(response);
-    const sourceId = response.preview_job_id;
-    result.preview_job_id = previewJobId;
-    result.progress = result.progress.map((event) => ({
-      ...event,
-      job_id: event.job_id === sourceId ? previewJobId : event.job_id,
-    }));
-    return result;
+  private retagPlanFromChoices(choices: RetagChoiceRequest[]): RetagPlanResponse {
+    const normalized = this.normalizedRetagChoices(choices);
+    const selected = normalized
+      .map((choice) => ({
+        choice,
+        item: fixtures.retagTargets.items.find(
+          (item) => retagTargetKey(item) === retagChoiceKey(choice),
+        ),
+      }))
+      .filter(
+        (
+          entry,
+        ): entry is { choice: RetagChoiceRequest; item: RetagTargetItem } =>
+          Boolean(entry.item) && entry.choice.choice === "switch-to-concrete",
+      );
+    const issues = selected
+      .filter(({ item, choice }) => !this.retagTargetTag(item, choice))
+      .map(({ item }) => ({
+        severity: "error",
+        code: "missing-target-tag",
+        message: `${item.service_key} needs a concrete target tag.`,
+        service_key: item.service_key,
+        stack: item.stack,
+        service: item.service,
+        hint: "Choose a concrete tag before applying the retag plan.",
+        details: {},
+      }));
+    const updates = selected
+      .filter(({ item, choice }) => this.retagTargetTag(item, choice))
+      .map(({ item, choice }) => this.retagPlanUpdate(item, choice));
+    const stacks = fixtures.retagTargets.items
+      .map((item) => ({
+        stack: item.stack,
+        directory: item.directory,
+        compose_file: item.compose_file,
+        project_directory: item.project_directory,
+      }))
+      .filter(
+        (stack, index, stacks) =>
+          stacks.findIndex(
+            (candidate) =>
+              candidate.stack === stack.stack &&
+              candidate.directory === stack.directory &&
+              candidate.compose_file === stack.compose_file &&
+              candidate.project_directory === stack.project_directory,
+          ) === index,
+      )
+      .map((stack) => ({
+        ...stack,
+        services: updates
+          .filter((update) => update.stack === stack.stack)
+          .map((update) => update.service),
+        digest_pin_updates: updates.filter(
+          (update) =>
+            update.stack === stack.stack &&
+            fixtures.retagTargets.items.some(
+              (item) =>
+                item.service_key === update.service_key &&
+                item.directory === stack.directory &&
+                item.compose_file === stack.compose_file &&
+                item.project_directory === stack.project_directory,
+            ),
+        ),
+      }))
+      .filter((stack) => stack.digest_pin_updates.length > 0);
+    const selectedCount = updates.length;
+    let status: RetagPlanResponse["status"] = "empty";
+    if (selectedCount > 0) {
+      status = issues.length > 0 ? "blocked" : "ready";
+    }
+    return {
+      plan_id:
+        selectedCount === 0
+          ? "demo-retag-empty"
+          : `demo-retag-${updates
+              .map((update) => `${demoIdPart(update.service_key)}-${demoIdPart(update.resolved_tag)}`)
+              .join("-")}`,
+      status,
+      can_apply: selectedCount > 0 && issues.length === 0,
+      external_recreate_required: true,
+      selected_count: selectedCount,
+      keep_current_count: normalized.length - selectedCount,
+      stacks,
+      issues,
+      warnings: [
+        "Static demo retag apply is session-local and does not edit Compose files.",
+      ],
+    };
+  }
+
+  private retagPlanUpdate(
+    item: RetagTargetItem,
+    choice: RetagChoiceRequest,
+  ): RetagPlanResponse["stacks"][number]["digest_pin_updates"][number] {
+    const tag = this.retagTargetTag(item, choice);
+    const finalImage = this.retagFinalImage(item, tag);
+    return {
+      target_id: retagTargetKey(item),
+      service_key: item.service_key,
+      stack: item.stack,
+      service: item.service,
+      source_image: item.image,
+      resolved_tag: tag,
+      planned_digest: item.digest_provenance?.target_digest ?? "",
+      final_image: finalImage,
+      watch_tag: item.tracking_tag,
+      marker: item.target_id || item.service_key,
+      label_key: item.label_key,
+      label_value: item.label_value,
+      label_rewrites: item.label_key
+        ? [
+            {
+              service: item.service,
+              label_key: item.label_key,
+              current_label_value: item.label_value,
+              planned_tag: tag,
+              proposed_label_value: item.label_value
+                ? item.label_value.replace(item.tracking_tag, tag)
+                : tag,
+              proposed_label_regex: "",
+              approved: true,
+              reason: "demo",
+            },
+          ]
+        : [],
+      digest_provenance: item.digest_provenance ?? null,
+    };
+  }
+
+  private retagTargetTag(
+    item: RetagTargetItem,
+    choice: RetagChoiceRequest,
+  ): string {
+    const tag = choice.target_tag?.trim() || item.proposed_tag;
+    return tag && tag !== "latest" ? tag : "";
+  }
+
+  private retagFinalImage(item: RetagTargetItem, tag: string): string {
+    if (!tag) {
+      return item.final_image;
+    }
+    if (item.final_image.includes(`:${item.proposed_tag}`)) {
+      return item.final_image.replace(`:${item.proposed_tag}`, `:${tag}`);
+    }
+    return `${item.image_repo}:${tag}`;
   }
 
   releaseNotes(): ReleaseNotesResponse {
@@ -1016,144 +894,18 @@ export class DemoApiState {
       .map((item) => {
         const notificationKey =
           item.notification_key || demoNotificationKey(item.line_no);
-        const history = this.releaseNotificationHistory.get(notificationKey);
-        const skipped =
-          history && this.releaseNotificationResendPolicy === "cooldown"
-            ? {
-                status: "skipped_cooldown",
-                reason: "Notification cooldown has not elapsed.",
-              }
-            : history
-              ? {
-                  status: "skipped_duplicate",
-                  reason: "Already sent for this update.",
-                }
-              : { status: item.notification_status || "new", reason: "" };
         return {
           ...item,
           notification_key: notificationKey,
-          notification_status: skipped.status,
-          notification_last_sent_at:
-            history?.lastSentAt || item.notification_last_sent_at || "",
-          notification_send_count:
-            history?.sendCount || item.notification_send_count || 0,
+          notification_status: item.notification_status || "new",
+          notification_last_sent_at: item.notification_last_sent_at || "",
+          notification_send_count: item.notification_send_count || 0,
           notification_skipped_reason:
-            skipped.reason || item.notification_skipped_reason || "",
+            item.notification_skipped_reason || "",
         };
       });
     response.count = response.items.length;
     return response;
-  }
-
-  releaseNotifications(
-    source: ReleaseNotificationSource,
-    sent: boolean,
-  ): ReleaseNotificationResponse {
-    const releaseNotes = this.releaseNotes();
-    const selectedLines =
-      "line_numbers" in source
-        ? new Set(source.line_numbers)
-        : new Set(releaseNotes.items.map((item) => item.line_no));
-    const pendingByLine = new Map(
-      this.pendingResponse().items.map((item) => [item.line_no, item]),
-    );
-    const items = releaseNotes.items
-      .filter((item) => selectedLines.has(item.line_no))
-      .map((item) => {
-        const pending = pendingByLine.get(item.line_no);
-        const serviceKey = pending?.key ?? "";
-        const skippedReason =
-          source.resend === true ? "" : item.notification_skipped_reason || "";
-        const description =
-          this.releaseNotificationVerbosity === "full" && item.body
-            ? `${item.upstream_repo || item.image_repo}\n\n${item.body}`.slice(0, 4096)
-            : item.upstream_repo || item.image_repo;
-        return {
-          line_no: item.line_no,
-          image: pending?.image || item.image_repo,
-          service_key: serviceKey,
-          title: item.title || item.release_tag || item.image_repo,
-          description,
-          status: item.status,
-          release_tag: item.release_tag,
-          upstream_repo: item.upstream_repo,
-          links: item.links,
-          triggers: [
-            {
-              id: "discord.releases",
-              type: "discord",
-              name: "releases",
-            },
-          ],
-          notification_key: item.notification_key || demoNotificationKey(item.line_no),
-          notification_status: sent
-            ? "sent"
-            : source.resend === true
-              ? "manual_resend"
-              : item.notification_status || "new",
-          notification_last_sent_at: sent ? DEMO_NOW : item.notification_last_sent_at || "",
-          notification_send_count: sent
-            ? Math.max(item.notification_send_count || 0, 1)
-            : item.notification_send_count || 0,
-          skipped_reason: skippedReason,
-        };
-      });
-    const sendableCount = items.filter((item) => !item.skipped_reason).length;
-    if (sent) {
-      for (const item of items) {
-        if (!item.skipped_reason) {
-          this.releaseNotificationHistory.set(item.notification_key, {
-            lastSentAt: DEMO_NOW,
-            sendCount: Math.max(item.notification_send_count, 1),
-          });
-        }
-      }
-    }
-    return {
-      enabled: true,
-      mode: this.releaseNotificationMode,
-      resend_policy: this.releaseNotificationResendPolicy,
-      destination: this.releaseNotificationDestination(),
-      source: releaseNotes.source,
-      source_file: releaseNotes.source_file,
-      count: items.length,
-      sendable_count: sendableCount,
-      skipped_count: items.length - sendableCount,
-      batch_count:
-        this.releaseNotificationMode === "per_container"
-          ? sendableCount
-          : Math.ceil(sendableCount / 10),
-      items,
-      wud_api: releaseNotes.wud_api,
-      warnings: releaseNotes.warnings,
-      sent,
-      audit_run_id: sent ? 9004 : 0,
-      error: "",
-    };
-  }
-
-  testReleaseNotificationWebhook(): ReleaseNotificationTestResponse {
-    const destination = this.releaseNotificationDestination();
-    if (!destination.configured) {
-      throw new Error("Discord release-note webhook is not configured");
-    }
-    return {
-      sent: true,
-      destination,
-      audit_run_id: 9005,
-    };
-  }
-
-  private releaseNotificationDestination(): ReleaseNotificationDestination {
-    return {
-      type: "discord",
-      configured: this.releaseNotificationDiscordWebhookConfigured,
-      source: this.releaseNotificationDiscordWebhookConfigured
-        ? this.releaseNotificationDiscordWebhookSetByWebUi
-          ? "WebUI settings"
-          : "DISCORD_WEBHOOK"
-        : "",
-    };
   }
 
   securityScans(): SecurityScansResponse {
@@ -1296,59 +1048,17 @@ export class DemoApiState {
     lineNumbers: number[],
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[],
-    _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
+    digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
   ): PlanResponse {
-    const planCase = this.planCase(lineNumbers, allowTagUpdates, tagOverrides);
-    this.requireActiveLines(lineNumbers);
-    return clone(planCase.response);
-  }
-
-  cleanupPending(
-    _cleanupId: string,
-    lines: PendingCleanupLine[],
-  ): PendingCleanupResponse {
-    const unmatchedKeys = new Set(
-      fixtures.pending.grouping.unmatched.map((line) => cleanupLineKey(line)),
+    const selectedLineNumbers = uniqueSortedNumbers(lineNumbers);
+    this.requireActiveLines(selectedLineNumbers);
+    return readOnlyPlanFromPending(
+      this.pendingResponse(),
+      selectedLineNumbers,
+      allowTagUpdates,
+      tagOverrides,
+      digestPinLabelRewriteApprovals,
     );
-    return this.removePendingLines(lines, {
-      requiredKeys: unmatchedKeys,
-      reason: "unmatched",
-      mode: "web-pending-cleanup",
-      operation: "remove_unmatched_pending",
-      statusReason: "removed-unmatched",
-      staleError: "cleanup is stale",
-    });
-  }
-
-  createRemovalPlan(lineNumbers: number[]): PendingRemovalPlanResponse {
-    const removalCase = this.removalCase(lineNumbers);
-    this.requireActiveLines(lineNumbers);
-    return clone(removalCase.response);
-  }
-
-  removeSelectedPending(
-    removalId: string,
-    lines: PendingCleanupLine[],
-  ): PendingCleanupResponse {
-    const removal = fixtures.removalCases.find(
-      (item) => item.response.removal_id === removalId,
-    );
-    if (!removal) {
-      throw new Error("removal is stale");
-    }
-    const removalKeys = new Set(
-      removal.response.lines.map((line) =>
-        cleanupLineKey({ line_no: line.line_no, raw: line.raw }),
-      ),
-    );
-    return this.removePendingLines(lines, {
-      requiredKeys: removalKeys,
-      reason: "selected",
-      mode: "web-pending-removal",
-      operation: "remove_selected_pending",
-      statusReason: "removed-selected",
-      staleError: "removal is stale",
-    });
   }
 
   rescanPending(
@@ -1388,49 +1098,44 @@ export class DemoApiState {
     if (!plan.can_apply) {
       return this.createFailureJob("Demo plan is not applyable.");
     }
-    const planCase = this.planCase(lineNumbers, allowTagUpdates, tagOverrides);
     const jobId = `demo-job-${this.nextJob++}`;
-    return this.createJobFromFixture(
-      jobId,
-      planCase.jobTemplate ?? this.jobTemplateFromPlan(plan, jobId),
-    );
+    return this.createJobFromFixture(jobId, this.jobTemplateFromPlan(plan, jobId));
   }
 
   createRetagJob(
     planId: string,
     choices: RetagChoiceRequest[],
   ): ApplyJobResponse {
-    const retagCase = this.retagCase(choices);
-    const plan = clone(retagCase.response);
+    const plan = this.createRetagPlan(choices);
     if (plan.plan_id !== planId) {
       throw new Error("Demo retag plan is stale.");
     }
     if (!plan.can_apply) {
       return this.createFailureJob("Demo retag plan is not applicable.");
     }
-    if (!retagCase.jobTemplate) {
-      throw new Error(STATIC_FIXTURE_ERROR);
-    }
-    return this.createJobFromFixture(`demo-retag-job-${this.nextJob++}`, retagCase.jobTemplate);
+    const jobId = `demo-retag-job-${this.nextJob++}`;
+    return this.createJobFromFixture(
+      jobId,
+      this.jobTemplateFromRetagPlan(plan, jobId),
+    );
   }
 
   private createJobFromFixture(
     jobId: string,
     fixture: DemoGeneratedJobFixture,
   ): ApplyJobResponse {
-    const materialized = remapJobId(fixture, fixture.queued.job_id, jobId);
     const record: DemoJobRecord = {
-      job: clone(materialized.queued),
+      job: clone(fixture.queued),
       log: {
         job_id: jobId,
         log_file: "",
         exists: true,
         content: "",
         truncated: false,
-        max_bytes: materialized.log.max_bytes,
+        max_bytes: fixture.log.max_bytes,
         error: "",
       },
-      fixture: materialized,
+      fixture: clone(fixture),
       completed: false,
     };
     this.jobs.set(jobId, record);
@@ -1522,6 +1227,58 @@ export class DemoApiState {
     };
   }
 
+  private jobTemplateFromRetagPlan(
+    plan: RetagPlanResponse,
+    jobId: string,
+  ): DemoGeneratedJobFixture {
+    const startedAt = "2026-05-30T20:12:26+00:00";
+    const finishedAt = "2026-05-30T20:12:28+00:00";
+    const logFile = `demo/logs/demo-retag-${jobId}.log`;
+    const logContent = this.applyLogFromRetagPlan(plan, startedAt, finishedAt, logFile);
+    const progress = this.progressFromRetagPlan(plan, jobId, startedAt, finishedAt);
+    return {
+      queued: {
+        job_id: jobId,
+        status: "queued",
+        run_id: null,
+        log_file: "",
+        started_at: null,
+        finished_at: null,
+        error: "",
+        selected_line_numbers: [],
+        progress: [],
+      },
+      terminal: {
+        job_id: jobId,
+        status: "success",
+        run_id: 0,
+        log_file: logFile,
+        started_at: startedAt,
+        finished_at: finishedAt,
+        error: "",
+        selected_line_numbers: [],
+        progress,
+      },
+      log: {
+        job_id: jobId,
+        log_file: logFile,
+        exists: true,
+        content: logContent,
+        truncated: false,
+        max_bytes: 65_536,
+        error: "",
+      },
+      run: this.runFixtureFromRetagPlan(
+        plan,
+        startedAt,
+        finishedAt,
+        logFile,
+        logContent,
+      ),
+      removeLineNumbers: [],
+    };
+  }
+
   private progressFromPlan(
     plan: PlanResponse,
     jobId: string,
@@ -1555,6 +1312,40 @@ export class DemoApiState {
       event("health", "success", "Demo services reported healthy.", finishedAt),
       event("cleanup", "success", "Pending entries were reconciled.", finishedAt),
       event("completion", "success", "Updater completed successfully.", finishedAt),
+    ];
+  }
+
+  private progressFromRetagPlan(
+    plan: RetagPlanResponse,
+    jobId: string,
+    startedAt: string,
+    finishedAt: string,
+  ): ApplyJobProgressEvent[] {
+    const services = plan.stacks.flatMap((item) => item.services);
+    const stack = plan.stacks[0];
+    const event = (
+      phase: string,
+      status: ApplyJobProgressEvent["status"],
+      message: string,
+      createdAt: string,
+    ): ApplyJobProgressEvent => ({
+      job_id: jobId,
+      phase,
+      status,
+      message,
+      created_at: createdAt,
+      stack: stack?.stack ?? "",
+      services,
+      line_numbers: [],
+    });
+    return [
+      event("compose-digest-pin", "success", "Compose digest-pin metadata prepared.", startedAt),
+      event("pull", "running", "Pulling retagged demo images.", finishedAt),
+      event("pull", "success", "Retagged images pulled.", finishedAt),
+      event("recreate", "running", "Recreating retagged demo services.", finishedAt),
+      event("recreate", "success", "Retagged services were recreated.", finishedAt),
+      event("health", "success", "Retagged demo services reported healthy.", finishedAt),
+      event("completion", "success", "Retag apply completed successfully.", finishedAt),
     ];
   }
 
@@ -1601,6 +1392,39 @@ export class DemoApiState {
     lines.push(
       `[${finishedAt}] [INFO] Successful WUD entries were removed before update.`,
       `[${finishedAt}] [INFO] Done. See log: ${logFile}`,
+      "",
+    );
+    return lines.join("\n");
+  }
+
+  private applyLogFromRetagPlan(
+    plan: RetagPlanResponse,
+    startedAt: string,
+    finishedAt: string,
+    logFile: string,
+  ): string {
+    const lines = [
+      `[${startedAt}] [INFO] wudup static demo retag apply`,
+      `[${startedAt}] [INFO] Log file: ${logFile}`,
+      `[${startedAt}] [INFO] Dry-run : false`,
+      `[${startedAt}] [INFO] Static demo: no Compose files were changed.`,
+    ];
+    for (const stack of plan.stacks) {
+      lines.push(
+        `[${startedAt}] [INFO] [${stack.stack}] Preparing retagged service(s): ${stack.services.join(", ")}`,
+      );
+      for (const update of stack.digest_pin_updates) {
+        lines.push(
+          `[${startedAt}] [INFO] [${stack.stack}] ${update.service}: ${update.source_image} -> ${update.final_image}`,
+        );
+      }
+      lines.push(
+        `[${startedAt}] [INFO] [${stack.stack}] Recreating retagged service(s): ${stack.services.join(", ")}`,
+        `[${finishedAt}] [INFO] [${stack.stack}] Healthy`,
+      );
+    }
+    lines.push(
+      `[${finishedAt}] [INFO] Demo retag apply finished. No files were written.`,
       "",
     );
     return lines.join("\n");
@@ -1682,6 +1506,88 @@ export class DemoApiState {
     const detail: RunDetail = {
       ...summary,
       pending_updates,
+      events,
+      verification: {
+        status: "verified",
+        total_count: verificationItems.length,
+        verified_count: verificationItems.length,
+        needs_review_count: 0,
+        items: verificationItems,
+      },
+    };
+    return {
+      summary,
+      detail,
+      log: {
+        run_id: 0,
+        log_file: logFile,
+        exists: true,
+        content: logContent,
+        truncated: false,
+        max_bytes: 262_144,
+      },
+    };
+  }
+
+  private runFixtureFromRetagPlan(
+    plan: RetagPlanResponse,
+    startedAt: string,
+    finishedAt: string,
+    logFile: string,
+    logContent: string,
+  ): DemoRunFixture {
+    const updates = plan.stacks.flatMap((stack) =>
+      stack.digest_pin_updates.map((update) => ({ stack, update })),
+    );
+    const events = updates.map(({ stack, update }, index): RunEventRecord => ({
+      id: index,
+      run_id: 0,
+      created_at: finishedAt,
+      service_name: update.service,
+      stack_name: stack.stack,
+      image: update.source_image,
+      target_image: update.final_image,
+      old_image_id: "sha256:demo-old",
+      new_image_id: "sha256:demo-new",
+      old_digest: update.digest_provenance?.target_digest ?? "sha256:demo-old",
+      new_digest: update.planned_digest || "sha256:demo-new",
+      status: "success",
+      metadata: { source: "demo", operation: "retag_apply" },
+      digest_provenance: update.digest_provenance ?? null,
+    }));
+    const verificationItems = updates.map(({ stack, update }) => ({
+      line_no: 0,
+      service_key: update.service_key,
+      stack_name: stack.stack,
+      service_name: update.service,
+      image: update.source_image,
+      target_image: update.final_image,
+      image_status: "new_image_running" as const,
+      container_status: "recreated" as const,
+      health_status: "passed" as const,
+      wud_status: "unknown" as const,
+      follow_up_needed: false,
+      summary: "Demo retag verified.",
+    }));
+    const summary: RunSummary = {
+      id: 0,
+      started_at: startedAt,
+      finished_at: finishedAt,
+      status: "success",
+      dry_run: false,
+      mode: "web-retag",
+      wud_file: "",
+      log_file: logFile,
+      metadata: {
+        source: "demo",
+        operation: "retag_apply",
+        summary: `retagged ${updates.length} services`,
+      },
+      events,
+    };
+    const detail: RunDetail = {
+      ...summary,
+      pending_updates: [],
       events,
       verification: {
         status: "verified",
@@ -1815,164 +1721,6 @@ export class DemoApiState {
     );
   }
 
-  private upsertServicePolicy(
-    operation: Extract<StateOperation, { kind: "upsert_service_policy" }>,
-  ): StateOperationResponse {
-    const existing = this.policies.find(
-      (policy) => policy.service_key === operation.service_key,
-    );
-    const policy: ServicePolicyRecord = {
-      service_key: operation.service_key,
-      update_mode: operation.update_mode ?? existing?.update_mode ?? "",
-      auto_update: operation.auto_update ?? existing?.auto_update ?? false,
-      snooze_default_seconds:
-        "snooze_default_seconds" in operation
-          ? (operation.snooze_default_seconds ?? null)
-          : (existing?.snooze_default_seconds ?? null),
-      auto_update_time:
-        "auto_update_time" in operation
-          ? (operation.auto_update_time ?? null)
-          : (existing?.auto_update_time ?? null),
-      auto_update_days:
-        "auto_update_days" in operation
-          ? (operation.auto_update_days ?? [])
-          : (existing?.auto_update_days ?? []),
-      created_at: existing?.created_at ?? nowIso(),
-      updated_at: nowIso(),
-      metadata: { source: "demo" },
-    };
-    this.policies = upsertBy(
-      this.policies,
-      policy,
-      (item) => item.service_key === policy.service_key,
-    );
-    return this.operationResponse(
-      operation.kind,
-      "service_policy",
-      policy.service_key,
-      policy,
-    );
-  }
-
-  stateOperation(operation: StateOperation): StateOperationResponse {
-    if (operation.kind === "upsert_service_policy") {
-      return this.upsertServicePolicy(operation);
-    }
-    if (operation.kind === "delete_service_policy") {
-      this.policies = this.policies.filter(
-        (policy) => policy.service_key !== operation.service_key,
-      );
-      return this.operationResponse(
-        operation.kind,
-        "service_policy",
-        operation.service_key,
-        null,
-      );
-    }
-    if (operation.kind === "create_snooze") {
-      const snooze: SnoozeRecord = {
-        id: this.nextSnooze++,
-        service_key: operation.service_key,
-        snoozed_until: operation.snoozed_until,
-        reason: operation.reason ?? "",
-        created_at: nowIso(),
-        active: new Date(operation.snoozed_until).getTime() > Date.now(),
-        kind: "time",
-        wait_for_service_key: "",
-        metadata: { source: "demo" },
-      };
-      this.snoozes.unshift(snooze);
-      return this.operationResponse(operation.kind, "snooze", String(snooze.id), snooze);
-    }
-    if (operation.kind === "create_dependency_snooze") {
-      if (operation.service_key === operation.wait_for_service_key) {
-        throw new Error("wait_for_service_key must be different from service_key");
-      }
-      const snooze: SnoozeRecord = {
-        id: this.nextSnooze++,
-        service_key: operation.service_key,
-        snoozed_until: null,
-        reason: operation.reason ?? "",
-        created_at: nowIso(),
-        active: true,
-        kind: "dependency",
-        wait_for_service_key: operation.wait_for_service_key,
-        metadata: { source: "demo" },
-      };
-      this.snoozes.unshift(snooze);
-      return this.operationResponse(
-        operation.kind,
-        "dependency_snooze",
-        String(snooze.id),
-        snooze,
-      );
-    }
-    if (operation.kind === "delete_snooze") {
-      this.snoozes = this.snoozes.filter(
-        (snooze) =>
-          snooze.id !== operation.snooze_id || snooze.kind === "dependency",
-      );
-      return this.operationResponse(
-        operation.kind,
-        "snooze",
-        String(operation.snooze_id),
-        null,
-      );
-    }
-    if (operation.kind === "delete_dependency_snooze") {
-      this.snoozes = this.snoozes.filter(
-        (snooze) =>
-          snooze.id !== operation.snooze_id || snooze.kind !== "dependency",
-      );
-      return this.operationResponse(
-        operation.kind,
-        "dependency_snooze",
-        String(operation.snooze_id),
-        null,
-      );
-    }
-    if (operation.kind === "upsert_tag_exclusion") {
-      const imageRepo = repoKey(operation.image_repo);
-      const key = (rule: TagExclusionRuleRecord) =>
-        rule.scope === operation.scope &&
-        rule.image_repo === imageRepo &&
-        rule.service_key === (operation.service_key ?? "") &&
-        rule.tag === operation.tag;
-      const existing = this.tagExclusions.find(key);
-      const rule: TagExclusionRuleRecord = {
-        id: existing?.id ?? this.nextTagExclusion++,
-        scope: operation.scope,
-        image_repo: imageRepo,
-        service_key: operation.service_key ?? "",
-        match_type: operation.match_type ?? "exact",
-        tag: operation.tag,
-        regex_fragment: escapeRegex(operation.tag),
-        status: operation.status ?? existing?.status ?? "active",
-        created_at: existing?.created_at ?? nowIso(),
-        updated_at: nowIso(),
-        metadata: { source: "demo" },
-      };
-      this.tagExclusions = upsertBy(this.tagExclusions, rule, key);
-      return this.operationResponse(
-        operation.kind,
-        "tag_exclusion",
-        String(rule.id),
-        rule,
-      );
-    }
-    const rule = this.tagExclusions.find((item) => item.id === operation.rule_id);
-    if (rule) {
-      rule.status = operation.status;
-      rule.updated_at = nowIso();
-    }
-    return this.operationResponse(
-      operation.kind,
-      "tag_exclusion",
-      String(operation.rule_id),
-      rule ?? null,
-    );
-  }
-
   runSummaries(): RunSummary[] {
     return clone(this.runs);
   }
@@ -1993,85 +1741,58 @@ export class DemoApiState {
     return clone(log);
   }
 
-  private planCase(
-    lineNumbers: number[],
-    allowTagUpdates: boolean,
-    tagOverrides: TagOverrideRequest[],
-  ): DemoPlanCase {
-    const selected = uniqueSortedNumbers(lineNumbers);
-    const overrideLines = uniqueSortedNumbers(
-      tagOverrides.map((override) => override.line_no),
-    );
-    const planCase = fixtures.planCases.find((candidate) => {
-      if (
-        candidate.request.allow_tag_updates !== allowTagUpdates ||
-        !sameNumbers(candidate.request.line_numbers, selected)
-      ) {
-        return false;
-      }
-      if (overrideLines.length === 0) {
-        return candidate.request.tag_override_lines.length === 0;
-      }
-      return (
-        allowTagUpdates &&
-        overrideLines.every((lineNo) =>
-          candidate.tagTokens.some((token) => token.line_no === lineNo),
-        )
-      );
-    });
-    if (planCase) {
-      return materializePlanCase(planCase, tagOverrides);
-    }
-    throw new Error(STATIC_FIXTURE_ERROR);
-  }
-
-  private removalCase(lineNumbers: number[]): DemoRemovalCase {
-    const selected = uniqueSortedNumbers(lineNumbers);
-    const removalCase = fixtures.removalCases.find((candidate) =>
-      sameNumbers(candidate.request.line_numbers, selected),
-    );
-    if (removalCase) {
-      return removalCase;
-    }
-    throw new Error(STATIC_FIXTURE_ERROR);
-  }
-
-  private retagCase(choices: RetagChoiceRequest[]): DemoRetagCase {
-    const normalized = this.normalizedRetagChoices(choices);
-    const retagCase = fixtures.retagCases.find((candidate) =>
-      sameRetagChoices(candidate.request.choices, normalized),
-    );
-    if (retagCase) {
-      return materializeRetagCase(retagCase);
-    }
-    throw new Error(STATIC_FIXTURE_ERROR);
-  }
-
   private normalizedRetagChoices(
     choices: RetagChoiceRequest[],
   ): RetagChoiceRequest[] {
-    const firstByService = new Map<string, RetagChoiceRequest>();
-    for (const choice of choices) {
-      if (!firstByService.has(choice.service_key)) {
-        firstByService.set(choice.service_key, choice);
-      }
+    const serviceCounts = new Map<string, number>();
+    for (const item of fixtures.retagTargets.items) {
+      serviceCounts.set(item.service_key, (serviceCounts.get(item.service_key) ?? 0) + 1);
     }
-    const knownServices = new Set(
-      fixtures.retagTargets.items.map((item) => item.service_key),
+    const targetById = new Map(
+      fixtures.retagTargets.items.map((item) => [retagTargetKey(item), item]),
     );
-    for (const serviceKey of firstByService.keys()) {
-      if (!knownServices.has(serviceKey)) {
-        throw new Error(STATIC_FIXTURE_ERROR);
+    const targetByUniqueService = new Map(
+      fixtures.retagTargets.items
+        .filter((item) => serviceCounts.get(item.service_key) === 1)
+        .map((item) => [item.service_key, item]),
+    );
+    const byTarget = new Map<string, RetagChoiceRequest>();
+    for (const choice of choices) {
+      const targetId = choice.target_id ?? "";
+      if (!targetId && serviceCounts.get(choice.service_key) !== 1) {
+        throw new Error(
+          "retag choices for duplicate service(s) must include target_id: "
+            + choice.service_key,
+        );
       }
+      const target = lookupRetagChoiceTarget(choice, targetById, targetByUniqueService);
+      if (!target) {
+        throw new Error(
+          targetId
+            ? "Static demo retag target was not found."
+            : "Static demo retag service was not found.",
+        );
+      }
+      if (target.service_key !== choice.service_key) {
+        throw new Error("Static demo retag target does not match service_key.");
+      }
+      const key = retagTargetKey(target);
+      if (byTarget.has(key)) {
+        throw new Error("retag choices contain duplicate target(s): " + choice.service_key);
+      }
+      byTarget.set(key, choice);
     }
     return fixtures.retagTargets.items.map((item) => {
-      const requested = firstByService.get(item.service_key);
+      const requested = byTarget.get(retagTargetKey(item));
       const choice = requested?.choice ?? "keep-current";
       const targetTag = requested?.target_tag?.trim() ?? "";
       const normalized: RetagChoiceRequest = {
         service_key: item.service_key,
         choice,
       };
+      if (item.target_id) {
+        normalized.target_id = item.target_id;
+      }
       if (choice === "switch-to-concrete" && targetTag) {
         normalized.target_tag = targetTag;
       }
@@ -2086,175 +1807,9 @@ export class DemoApiState {
     }
   }
 
-  private removePendingLines(
-    lines: PendingCleanupLine[],
-    options: {
-      requiredKeys: Set<string>;
-      reason: string;
-      mode: string;
-      operation: string;
-      statusReason: string;
-      staleError: string;
-    },
-  ): PendingCleanupResponse {
-    const requested = new Set(lines.map((line) => cleanupLineKey(line)));
-    const removed = lines.map((line) => findGroupedLine(line));
-    if (
-      requested.size === 0 ||
-      requested.size !== lines.length ||
-      removed.includes(null) ||
-      [...requested].some(
-        (key) => !this.activePendingLineKeys.has(key) || !options.requiredKeys.has(key),
-      )
-    ) {
-      throw new Error(options.staleError);
-    }
-    for (const key of requested) {
-      this.activePendingLineKeys.delete(key);
-    }
-    const removedLines = removed.filter((line): line is PendingLineFixture =>
-      Boolean(line),
-    );
-    const runId = this.nextRun++;
-    this.prependRun(
-      this.pendingRemovalRun(
-        runId,
-        removedLines,
-        options.mode,
-        options.operation,
-        options.statusReason,
-      ),
-    );
-    return {
-      status: "success",
-      audit_run_id: runId,
-      removed_count: removedLines.length,
-      removed: removedLines.map((line) => ({
-        line_no: line.line_no,
-        raw: line.raw,
-        image: line.image,
-        reason: options.reason,
-      })),
-    };
-  }
-
-  private pendingRemovalRun(
-    runId: number,
-    removedLines: PendingLineFixture[],
-    mode: string,
-    operation: string,
-    statusReason: string,
-  ): DemoRunFixture {
-    const startedAt = "2026-05-30T20:12:26+00:00";
-    const events = removedLines.map((line, index): RunEventRecord => ({
-      id: runId * 1000 + index,
-      run_id: runId,
-      created_at: startedAt,
-      service_name: line.service_name,
-      stack_name: line.stack_name,
-      image: line.image,
-      target_image: line.target_image,
-      old_image_id: "",
-      new_image_id: "",
-      old_digest: "",
-      new_digest: "",
-      status: "success",
-      metadata: { source: "demo" },
-      digest_provenance: line.digest_provenance ?? null,
-    }));
-    const pending_updates = removedLines.map((line, index) => ({
-      id: runId * 100 + index,
-      run_id: runId,
-      line_no: line.line_no,
-      raw: line.raw,
-      image: line.image,
-      target_digest: line.digest,
-      desired_tag: line.desired_tag,
-      service_key: line.stack_name
-        ? `${line.stack_name}/${line.service_name}`
-        : line.repo,
-      stack_name: line.stack_name,
-      service_name: line.service_name,
-      status: "resolved",
-      status_reason: statusReason,
-      created_at: startedAt,
-      updated_at: startedAt,
-      metadata: { source: "demo" },
-      digest_provenance: line.digest_provenance ?? null,
-    }));
-    const summary: RunSummary = {
-      id: runId,
-      started_at: startedAt,
-      finished_at: startedAt,
-      status: "success",
-      dry_run: false,
-      mode,
-      wud_file: fixtures.pending.source_file,
-      log_file: "",
-      metadata: {
-        source: "demo",
-        operation,
-        line_numbers: removedLines.map((line) => line.line_no),
-      },
-      events,
-    };
-    const detail: RunDetail = {
-      ...summary,
-      pending_updates,
-      verification: {
-        status: "verified",
-        total_count: pending_updates.length,
-        verified_count: pending_updates.length,
-        needs_review_count: 0,
-        items: pending_updates.map((line) => ({
-          line_no: line.line_no,
-          service_key: line.service_key,
-          stack_name: line.stack_name,
-          service_name: line.service_name,
-          image: line.image,
-          target_image: "",
-          image_status: "already_current",
-          container_status: "skipped",
-          health_status: "skipped",
-          wud_status: "removed",
-          follow_up_needed: false,
-          summary: "Pending fixture line removed from the browser session.",
-        })),
-      },
-    };
-    return {
-      summary,
-      detail,
-      log: {
-        run_id: runId,
-        log_file: "",
-        exists: true,
-        content: "Removed pending demo fixture entries.\n",
-        truncated: false,
-        max_bytes: 262_144,
-      },
-    };
-  }
-
   private prependRun(run: DemoRunFixture): void {
     this.runs = [clone(run.summary), ...this.runs];
     this.runDetails.set(run.summary.id, clone(run.detail));
     this.runLogs.set(run.summary.id, clone(run.log));
-  }
-
-  private operationResponse(
-    operation: StateOperation["kind"],
-    resourceType: string,
-    resourceId: string,
-    resource: StateOperationResponse["resource"],
-  ): StateOperationResponse {
-    return {
-      operation,
-      status: "success",
-      audit_run_id: this.nextAudit++,
-      resource_type: resourceType,
-      resource_id: resourceId,
-      resource: clone(resource),
-    };
   }
 }
