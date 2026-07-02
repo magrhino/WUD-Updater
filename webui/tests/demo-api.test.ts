@@ -190,6 +190,26 @@ describe("demo web API", () => {
         "csrf",
       ),
     ).rejects.toThrow("wud.tag.include");
+    await expect(
+      api.createPlan(
+        [4],
+        true,
+        [],
+        [
+          {
+            stack: "--data!",
+            service: "postgres?",
+            label_key: "wud.tag.include",
+            current_label_value: "16",
+            planned_tag: "16",
+            proposed_label_value: "16",
+          },
+        ],
+        "csrf",
+      ),
+    ).resolves.toMatchObject({
+      plan_id: "demo-session-4-allow-tags-data--postgres--16",
+    });
   });
 
   it("previews and applies retag plans in memory", async () => {
