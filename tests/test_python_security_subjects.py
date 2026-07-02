@@ -8,7 +8,9 @@ from unittest import mock
 from wudup.digest_verifier import DigestResolveResult
 from wudup.platforms import ImagePlatform
 from wudup.security_subjects import (
+    PendingSecurityOptions,
     PendingSecurityRequest,
+    _resolve_missing_reported_digests,
     _request_for_target,
     pending_security_context,
 )
@@ -70,8 +72,10 @@ class SecuritySubjectTests(unittest.TestCase):
 
         self.assertEqual(no_digest.identity_status, "unsupported")
         self.assertEqual(no_digest.error, "reported digest is required")
+        self.assertTrue(no_digest.missing_reported_digest_resolvable)
         self.assertEqual(no_platform.identity_status, "unsupported")
         self.assertEqual(no_platform.error, "platform is required")
+        self.assertFalse(no_platform.missing_reported_digest_resolvable)
 
     def test_request_key_includes_platform(self) -> None:
         request = PendingSecurityRequest(
@@ -123,7 +127,7 @@ class SecuritySubjectTests(unittest.TestCase):
         ):
             context = pending_security_context(
                 _settings(),
-                include_compose=False,
+                options=PendingSecurityOptions(include_compose=False),
             )
 
         verifier.resolve_tag_digest.assert_called_once_with("repo/app:2.0")
@@ -158,7 +162,7 @@ class SecuritySubjectTests(unittest.TestCase):
         ):
             context = pending_security_context(
                 _settings(),
-                include_compose=False,
+                options=PendingSecurityOptions(include_compose=False),
             )
 
         request = context.requests[0]
@@ -173,6 +177,39 @@ class SecuritySubjectTests(unittest.TestCase):
                 "registry auth failed",
             ),
         )
+
+    def test_missing_digest_resolution_uses_request_flag_not_messages(self) -> None:
+        digest = f"sha256:{'b' * 64}"
+        verifier = mock.Mock()
+        verifier.resolve_tag_digest.return_value = DigestResolveResult(
+            ok=True,
+            status="resolved",
+            reason="tag-digest-resolved",
+            digest=digest,
+        )
+        request = PendingSecurityRequest(
+            line_no=1,
+            raw="repo/app:1.0 tag=2.0 platform=linux/amd64",
+            image="repo/app:1.0",
+            candidate_image="repo/app:2.0",
+            reported_digest="",
+            platform=ImagePlatform("linux", "amd64"),
+            platform_source="wud",
+            missing_reported_digest_resolvable=True,
+            identity_status="waiting",
+            error="digest missing",
+        )
+
+        with mock.patch(
+            "wudup.security_subjects.default_digest_verifier",
+            return_value=verifier,
+        ):
+            resolved = _resolve_missing_reported_digests(_settings(), (request,))
+
+        self.assertEqual(resolved[0].reported_digest, digest)
+        self.assertFalse(resolved[0].missing_reported_digest_resolvable)
+        self.assertEqual(resolved[0].identity_status, "pending")
+        self.assertEqual(resolved[0].error, "")
 
 
 def _settings():

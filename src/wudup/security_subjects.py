@@ -29,6 +29,7 @@ class PendingSecurityRequest:
     reported_digest: str
     platform: ImagePlatform | None
     platform_source: str
+    missing_reported_digest_resolvable: bool = False
     identity_status: str = "pending"
     warnings: tuple[str, ...] = ()
     error: str = ""
@@ -52,21 +53,34 @@ class PendingSecurityContext:
     warnings: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class PendingSecurityOptions:
+    include_compose: bool = True
+    include_wud_metadata: bool = True
+    resolve_missing_digests: bool = True
+
+
+PENDING_SECURITY_DEFAULT_OPTIONS = PendingSecurityOptions()
+PENDING_SECURITY_CACHE_OPTIONS = PendingSecurityOptions(
+    include_compose=False,
+    include_wud_metadata=False,
+    resolve_missing_digests=False,
+)
+
+
 def pending_security_context(
     settings: "WebSettings",
     *,
-    include_compose: bool = True,
-    include_wud_metadata: bool = True,
-    resolve_missing_digests: bool = True,
+    options: PendingSecurityOptions = PENDING_SECURITY_DEFAULT_OPTIONS,
 ) -> PendingSecurityContext:
     source = resolve_pending_source(
         settings,
-        include_wud_metadata=include_wud_metadata,
+        include_wud_metadata=options.include_wud_metadata,
     )
     platform_by_line: dict[int, ImagePlatform] = {}
     platform_conflicts: set[int] = set()
     warnings: tuple[str, ...] = ()
-    if include_compose:
+    if options.include_compose:
         platform_by_line, platform_conflicts, warnings = _compose_platforms_by_line(
             settings,
             source,
@@ -80,7 +94,7 @@ def pending_security_context(
         )
         for target in source.parsed.targets
     )
-    if resolve_missing_digests:
+    if options.resolve_missing_digests:
         requests = _resolve_missing_reported_digests(settings, requests)
     return PendingSecurityContext(source=source, requests=requests, warnings=warnings)
 
@@ -148,9 +162,11 @@ def _request_for_target(
         if compose_platform != wud_platform:
             identity_status = "mismatch"
             error = "Compose platform conflicts with WUD platform"
+    missing_reported_digest_resolvable = False
     if not target.digest:
         identity_status = "unsupported"
         error = "reported digest is required"
+        missing_reported_digest_resolvable = platform is not None
     if platform is None and identity_status == "pending":
         identity_status = "unsupported"
         error = "platform is required"
@@ -162,6 +178,7 @@ def _request_for_target(
         reported_digest=target.digest,
         platform=platform,
         platform_source=platform_source,
+        missing_reported_digest_resolvable=missing_reported_digest_resolvable,
         identity_status=identity_status,
         error=error,
     )
@@ -177,12 +194,7 @@ def _resolve_missing_reported_digests(
     resolved_by_image: dict[str, DigestResolveResult] = {}
     updated: list[PendingSecurityRequest] = []
     for request in requests:
-        if (
-            request.reported_digest
-            or request.platform is None
-            or request.identity_status != "unsupported"
-            or request.error != "reported digest is required"
-        ):
+        if not request.missing_reported_digest_resolvable:
             updated.append(request)
             continue
         if resolver is None:
@@ -196,6 +208,7 @@ def _resolve_missing_reported_digests(
                 replace(
                     request,
                     reported_digest=result.digest,
+                    missing_reported_digest_resolvable=False,
                     identity_status="pending",
                     error="",
                 )

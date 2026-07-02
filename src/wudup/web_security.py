@@ -25,6 +25,7 @@ from .security_store import (
     upsert_scan_result,
 )
 from .security_subjects import (
+    PENDING_SECURITY_CACHE_OPTIONS,
     PendingSecurityContext,
     PendingSecurityRequest,
     default_digest_verifier,
@@ -201,9 +202,7 @@ def api_security_scan_job(job_id: str, request: Request) -> SecurityScanJobRespo
 def security_scans_response(settings: WebSettings) -> SecurityScansResponse:
     context = pending_security_context(
         settings,
-        include_compose=False,
-        include_wud_metadata=False,
-        resolve_missing_digests=False,
+        options=PENDING_SECURITY_CACHE_OPTIONS,
     )
     if not settings.security_scan.enabled:
         return _response_from_items(
