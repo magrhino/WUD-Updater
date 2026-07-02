@@ -515,9 +515,9 @@ def _web_wud_api_diagnostic_check(
     endpoint: WudApiDiagnosticEndpointStatus,
     ready_detail: str,
 ) -> DoctorDataCheck:
-    detail = ready_detail if endpoint.state == web_wud_api.WUD_API_STATE_READY else ""
+    detail = ready_detail if endpoint.state == "ready" else ""
     return _web_doctor_check(
-        "PASS" if endpoint.state == web_wud_api.WUD_API_STATE_READY else "WARN",
+        "PASS" if endpoint.state == "ready" else "WARN",
         name,
         detail or endpoint.detail,
         code=code,

@@ -49,13 +49,6 @@ from .web_models import (
     WudApiWatcherDiagnostics as WudApiWatcherDiagnostics,
     WudContainerMetadata,
 )
-from .web_wud_states import (
-    WUD_API_DEGRADED_STATES,
-    WUD_API_STATE_AUTH_REQUIRED,
-    WUD_API_STATE_ERROR,
-    WUD_API_STATE_READY,
-    WUD_API_STATE_UNAVAILABLE,
-)
 from .wud_file import WudTarget
 
 DEFAULT_WUD_API_BASE_URL = "http://wud:3000"
@@ -333,7 +326,7 @@ def _client_config_fingerprint(header_items: Sequence[tuple[str, str]]) -> str:
 def startup_probe(settings: WebSettings) -> WudApiSnapshot:
     snapshot = _refresh_snapshot(settings, include_containers=False)
     wait_seconds = max(settings.wud_api_startup_wait_seconds, 0.0)
-    if snapshot.status.state != WUD_API_STATE_UNAVAILABLE or wait_seconds <= 0:
+    if snapshot.status.state != "unavailable" or wait_seconds <= 0:
         return snapshot
 
     deadline = time.monotonic() + wait_seconds
@@ -343,7 +336,7 @@ def startup_probe(settings: WebSettings) -> WudApiSnapshot:
             return snapshot
         time.sleep(min(WUD_API_STARTUP_RETRY_INTERVAL_SECONDS, remaining))
         snapshot = _refresh_snapshot(settings, include_containers=False)
-        if snapshot.status.state != WUD_API_STATE_UNAVAILABLE:
+        if snapshot.status.state != "unavailable":
             return snapshot
 
 
@@ -393,7 +386,7 @@ def get_configuration_diagnostics(
 
 
 def _snapshot_cache_ttl(snapshot: WudApiSnapshot) -> float:
-    if snapshot.status.state in WUD_API_DEGRADED_STATES:
+    if snapshot.status.state in {"unavailable", "error"}:
         return WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS
     return WUD_API_CACHE_TTL_SECONDS
 
@@ -530,7 +523,7 @@ def _refresh_snapshot(
         normalized_base_url = _normalize_base_url(base_url)
     except ValueError as exc:
         snapshot = _snapshot(
-            WUD_API_STATE_ERROR,
+            "error",
             available=False,
             metadata_available=False,
             checked_at=checked_at,
@@ -546,7 +539,7 @@ def _refresh_snapshot(
     except urllib.error.HTTPError as exc:
         if exc.code in {401, 403}:
             snapshot = _snapshot(
-                WUD_API_STATE_AUTH_REQUIRED,
+                "auth_required",
                 available=True,
                 metadata_available=False,
                 checked_at=checked_at,
@@ -559,7 +552,7 @@ def _refresh_snapshot(
             )
         else:
             snapshot = _snapshot(
-                WUD_API_STATE_UNAVAILABLE,
+                "unavailable",
                 available=False,
                 metadata_available=False,
                 checked_at=checked_at,
@@ -574,7 +567,7 @@ def _refresh_snapshot(
         return snapshot
     except (OSError, ValueError) as exc:
         snapshot = _snapshot(
-            WUD_API_STATE_UNAVAILABLE,
+            "unavailable",
             available=False,
             metadata_available=False,
             checked_at=checked_at,
@@ -587,7 +580,7 @@ def _refresh_snapshot(
 
     if not include_containers:
         snapshot = _snapshot(
-            WUD_API_STATE_READY,
+            "ready",
             available=True,
             metadata_available=False,
             checked_at=checked_at,
@@ -605,7 +598,7 @@ def _refresh_snapshot(
     except urllib.error.HTTPError as exc:
         if exc.code in {401, 403}:
             snapshot = _snapshot(
-                WUD_API_STATE_AUTH_REQUIRED,
+                "auth_required",
                 available=True,
                 metadata_available=False,
                 checked_at=checked_at,
@@ -618,7 +611,7 @@ def _refresh_snapshot(
             )
         else:
             snapshot = _snapshot(
-                WUD_API_STATE_ERROR,
+                "error",
                 available=True,
                 metadata_available=False,
                 checked_at=checked_at,
@@ -633,7 +626,7 @@ def _refresh_snapshot(
         return snapshot
     except (OSError, ValueError) as exc:
         snapshot = _snapshot(
-            WUD_API_STATE_ERROR,
+            "error",
             available=True,
             metadata_available=False,
             checked_at=checked_at,
@@ -649,7 +642,7 @@ def _refresh_snapshot(
 
     if not isinstance(payload, list):
         snapshot = _snapshot(
-            WUD_API_STATE_ERROR,
+            "error",
             available=True,
             metadata_available=False,
             checked_at=checked_at,
@@ -666,7 +659,7 @@ def _refresh_snapshot(
         if item is not None
     )
     snapshot = _snapshot(
-        WUD_API_STATE_READY,
+        "ready",
         available=True,
         metadata_available=True,
         checked_at=checked_at,
@@ -738,7 +731,7 @@ def _watch_paths(
         normalized_base_url = _normalize_base_url(base_url)
     except ValueError as exc:
         snapshot = _snapshot(
-            WUD_API_STATE_ERROR,
+            "error",
             available=False,
             metadata_available=False,
             checked_at=checked_at,
@@ -755,7 +748,7 @@ def _watch_paths(
         )
 
     preflight = get_snapshot(settings, include_containers=False, force=True)
-    if preflight.status.state != WUD_API_STATE_READY:
+    if preflight.status.state != "ready":
         return WudApiWatchResult(
             snapshot=preflight,
             watched=False,
@@ -788,7 +781,7 @@ def _watch_paths(
             )
         except (OSError, ValueError) as exc:
             snapshot = _snapshot(
-                WUD_API_STATE_ERROR,
+                "error",
                 available=True,
                 metadata_available=False,
                 checked_at=_utc_timestamp(),
@@ -825,7 +818,7 @@ def _watch_http_error_snapshot(
 ) -> WudApiSnapshot:
     if code in {401, 403}:
         snapshot = _snapshot(
-            WUD_API_STATE_AUTH_REQUIRED,
+            "auth_required",
             available=True,
             metadata_available=False,
             checked_at=checked_at,
@@ -838,7 +831,7 @@ def _watch_http_error_snapshot(
         )
     else:
         snapshot = _snapshot(
-            WUD_API_STATE_ERROR,
+            "error",
             available=True,
             metadata_available=False,
             checked_at=checked_at,
