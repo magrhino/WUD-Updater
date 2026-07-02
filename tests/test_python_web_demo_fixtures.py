@@ -204,6 +204,34 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
         )
         self.assertNotIn(str(Path.home()), rendered)
 
+    def test_typescript_fixture_render_is_compact_and_stably_ordered(self) -> None:
+        rendered = web_demo_fixtures.render_static_demo_fixtures_ts(
+            {
+                "z": 2,
+                "status": {"version": "removed", "beta": 2},
+                "a": {"d": 4, "b": 1},
+                "diagnostics": {
+                    "wudup_version": "removed",
+                    "wud_updater_version": "removed",
+                    "alpha": 1,
+                },
+            }
+        )
+        expected_export = (
+            'export const generatedFixtures = {"a":{"b":1,"d":4},'
+            '"diagnostics":{"alpha":1},"status":{"beta":2},"z":2} '
+            "satisfies DemoGeneratedFixtures;"
+        )
+
+        self.assertEqual(
+            rendered.splitlines(),
+            [
+                'import type { DemoGeneratedFixtures } from "./types";',
+                "",
+                expected_export,
+            ],
+        )
+
     def test_typescript_fixture_render_omits_release_versions(self) -> None:
         payload = web_demo_fixtures._static_demo_fixture_render_payload(self.fixtures)
 
