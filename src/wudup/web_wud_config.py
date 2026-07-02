@@ -19,13 +19,6 @@ from .web_models import (
     WudApiStoreDiagnostics,
     WudApiWatcherDiagnostics,
 )
-from .web_wud_states import (
-    WUD_API_DEGRADED_STATES,
-    WUD_API_STATE_AUTH_REQUIRED,
-    WUD_API_STATE_ERROR,
-    WUD_API_STATE_READY,
-    WUD_API_STATE_UNAVAILABLE,
-)
 
 APP_CONFIGURATION_LABEL = "app configuration"
 LOG_CONFIGURATION_LABEL = "log configuration"
@@ -68,7 +61,7 @@ def configuration_diagnostics_cache_ttl(
     degraded_retry_interval: float,
 ) -> float:
     if any(
-        status.state in WUD_API_DEGRADED_STATES
+        status.state in {"unavailable", "error"}
         for status in configuration_diagnostic_statuses(snapshot.diagnostics)
     ):
         return degraded_retry_interval
@@ -97,7 +90,7 @@ def configuration_diagnostics_for_base_url_error(
     sanitize_detail: SanitizeDetail,
 ) -> WudApiConfigurationSnapshot:
     health = _diagnostic_endpoint_status(
-        WUD_API_STATE_ERROR,
+        "error",
         available=False,
         checked_at=checked_at,
         detail=f"invalid WUD API base URL: {error}",
@@ -132,7 +125,7 @@ def refresh_configuration_diagnostics(
         sanitize_detail=sanitize_detail,
     )
     health = _wud_api_health_diagnostic(context)
-    if health.state != WUD_API_STATE_READY:
+    if health.state != "ready":
         return WudApiConfigurationSnapshot(
             diagnostics=_configuration_diagnostics_blocked_by_health(
                 health,
@@ -166,7 +159,7 @@ def _wud_api_health_diagnostic(
     except urllib.error.HTTPError as exc:
         if exc.code in {401, 403}:
             return _diagnostic_endpoint_status(
-                WUD_API_STATE_AUTH_REQUIRED,
+                "auth_required",
                 available=True,
                 checked_at=context.checked_at,
                 detail=_auth_required_detail(
@@ -177,7 +170,7 @@ def _wud_api_health_diagnostic(
                 sanitize_detail=context.sanitize_detail,
             )
         return _diagnostic_endpoint_status(
-            WUD_API_STATE_UNAVAILABLE,
+            "unavailable",
             available=False,
             checked_at=context.checked_at,
             detail=f"WUD API health check returned HTTP {exc.code}",
@@ -186,7 +179,7 @@ def _wud_api_health_diagnostic(
         )
     except (OSError, ValueError) as exc:
         return _diagnostic_endpoint_status(
-            WUD_API_STATE_UNAVAILABLE,
+            "unavailable",
             available=False,
             checked_at=context.checked_at,
             detail=f"WUD API is unavailable: {exc}",
@@ -194,7 +187,7 @@ def _wud_api_health_diagnostic(
             sanitize_detail=context.sanitize_detail,
         )
     return _diagnostic_endpoint_status(
-        WUD_API_STATE_READY,
+        "ready",
         available=True,
         checked_at=context.checked_at,
         detail="WUD API is reachable",
@@ -238,7 +231,7 @@ def _fetch_app_diagnostics(
         "/api/app",
         APP_CONFIGURATION_LABEL,
     )
-    if status.state != WUD_API_STATE_READY:
+    if status.state != "ready":
         return WudApiAppDiagnostics(status=status)
     if not isinstance(payload, dict):
         return WudApiAppDiagnostics(
@@ -267,7 +260,7 @@ def _fetch_log_diagnostics(
         "/api/log",
         LOG_CONFIGURATION_LABEL,
     )
-    if status.state != WUD_API_STATE_READY:
+    if status.state != "ready":
         return WudApiLogDiagnostics(status=status)
     if not isinstance(payload, dict):
         return WudApiLogDiagnostics(
@@ -291,7 +284,7 @@ def _fetch_store_diagnostics(
         "/api/store",
         STORE_CONFIGURATION_LABEL,
     )
-    if status.state != WUD_API_STATE_READY:
+    if status.state != "ready":
         return WudApiStoreDiagnostics(status=status)
     if not isinstance(payload, dict) or not isinstance(
         payload.get("configuration"),
@@ -324,7 +317,7 @@ def _fetch_watchers_diagnostics(
         "/api/watchers",
         WATCHER_CONFIGURATION_LABEL,
     )
-    if status.state != WUD_API_STATE_READY:
+    if status.state != "ready":
         return status, []
     if not isinstance(payload, list) or not all(
         isinstance(item, dict) for item in payload
@@ -348,7 +341,7 @@ def _fetch_registries_diagnostics(
         "/api/registries",
         REGISTRY_CONFIGURATION_LABEL,
     )
-    if status.state != WUD_API_STATE_READY:
+    if status.state != "ready":
         return status, []
     if not isinstance(payload, list) or not all(
         isinstance(item, dict) for item in payload
@@ -375,7 +368,7 @@ def _request_config_payload(
         if exc.code in {401, 403}:
             return (
                 _diagnostic_endpoint_status(
-                    WUD_API_STATE_AUTH_REQUIRED,
+                    "auth_required",
                     available=True,
                     checked_at=context.checked_at,
                     detail=_auth_required_detail(
@@ -389,7 +382,7 @@ def _request_config_payload(
             )
         return (
             _diagnostic_endpoint_status(
-                WUD_API_STATE_ERROR,
+                "error",
                 available=True,
                 checked_at=context.checked_at,
                 detail=f"WUD API {label} returned HTTP {exc.code}",
@@ -401,7 +394,7 @@ def _request_config_payload(
     except (OSError, ValueError) as exc:
         return (
             _diagnostic_endpoint_status(
-                WUD_API_STATE_ERROR,
+                "error",
                 available=True,
                 checked_at=context.checked_at,
                 detail=f"WUD API {label} is unavailable: {exc}",
@@ -412,7 +405,7 @@ def _request_config_payload(
         )
     return (
         _diagnostic_endpoint_status(
-            WUD_API_STATE_READY,
+            "ready",
             available=True,
             checked_at=context.checked_at,
             detail=f"WUD API {label} available",
@@ -465,7 +458,7 @@ def _malformed_config_status(
     expected: str,
 ) -> WudApiDiagnosticEndpointStatus:
     return _diagnostic_endpoint_status(
-        WUD_API_STATE_ERROR,
+        "error",
         available=True,
         checked_at=context.checked_at,
         detail=f"WUD API {label} payload was not a {expected}",
