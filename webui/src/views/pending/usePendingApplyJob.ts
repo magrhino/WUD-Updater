@@ -36,6 +36,7 @@ import {
 export type ApplyJobSnapshotLine = {
   key: string;
   lineNo: number | null;
+  stackName: string;
   scopeLabel?: string;
   serviceLabel: string;
   tagRewriteLabel: string;
@@ -252,19 +253,37 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
     }
     return displayEvents;
   });
+  const applyJobStackNames = computed(() =>
+    stackNamesFromSnapshot(applyJobSnapshot.value),
+  );
+  const applyJobStackProgressEvents = computed(() =>
+    applyJobProgressEvents(updates.applyJob).filter((event) => event.stack),
+  );
+  const applyJobProgressMode = computed<"phase" | "stack">(() =>
+    applyJobStackNames.value.length > 1 && applyJobStackProgressEvents.value.length
+      ? "stack"
+      : "phase",
+  );
   const applyJobProgressSteps = computed<ApplyJobProgressStep[]>(() =>
-    progressPhases.map((phase) => {
-      const event = displayApplyJobProgressByPhase.value.get(phase.key) ?? null;
-      const status = event?.status ?? "pending";
-      return {
-        ...phase,
-        status,
-        statusLabel: progressStatusLabel(status),
-        message: event?.message || phase.waitingMessage,
-        detail: progressEventDetail(event),
-        event,
-      };
-    }),
+    applyJobProgressMode.value === "stack"
+      ? stackProgressSteps(
+          applyJobStackNames.value,
+          applyJobStackProgressEvents.value,
+          updates.applyJob?.status ?? null,
+          progressPhases,
+        )
+      : progressPhases.map((phase) => {
+          const event = displayApplyJobProgressByPhase.value.get(phase.key) ?? null;
+          const status = event?.status ?? "pending";
+          return {
+            ...phase,
+            status,
+            statusLabel: progressStatusLabel(status),
+            message: event?.message || phase.waitingMessage,
+            detail: progressEventDetail(event),
+            event,
+          };
+        }),
   );
   const applyJobProgressSummary = computed(() => {
     const progress = applyJobProgressEvents(updates.applyJob);
@@ -282,6 +301,14 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
     );
     if (running) {
       return running.label;
+    }
+    if (applyJobProgressMode.value === "stack") {
+      const completeCount = applyJobProgressSteps.value.filter(
+        (step) => step.status === "success",
+      ).length;
+      if (completeCount) {
+        return `${completeCount}/${applyJobStackNames.value.length} stacks complete`;
+      }
     }
     const complete = displayApplyJobProgressByPhase.value.get("completion");
     if (complete?.status === "success") {
@@ -550,6 +577,7 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
       lines: planLines.value.map(({ stack, line }) => ({
         key: `${stack}-${line.line_no}-${line.service}`,
         lineNo: line.line_no,
+        stackName: stack,
         serviceLabel: planLineServiceLabel(plan.summary.stack_count, stack, line),
         tagRewriteLabel: planLineTagRewriteLabel(line),
         digestPinLabel: planLineDigestPinLabel(line),
@@ -632,7 +660,7 @@ function progressStatusLabel(status: ApplyJobProgressStep["status"]): string {
     return "Running";
   }
   if (status === "success") {
-    return "Done";
+    return "Complete";
   }
   if (status === "failure") {
     return "Failed";
@@ -654,6 +682,100 @@ function displayProgressEvent(
     return next;
   }
   return current;
+}
+
+function stackNamesFromSnapshot(snapshot: ApplyJobPlanSnapshot | null): string[] {
+  const names = new Set<string>();
+  for (const line of snapshot?.lines ?? []) {
+    const name = line.stackName.trim();
+    if (name) {
+      names.add(name);
+    }
+  }
+  return [...names];
+}
+
+function stackProgressSteps(
+  stackNames: string[],
+  progress: ApplyJobProgressEvent[],
+  jobStatus: ApplyJobResponse["status"] | null,
+  phases: ApplyJobProgressPhase[],
+): ApplyJobProgressStep[] {
+  const completePhase = stackCompletePhase(phases);
+  return stackNames.map((stackName) =>
+    stackProgressStep(
+      stackName,
+      progress.filter((event) => event.stack === stackName),
+      jobStatus,
+      completePhase,
+    ),
+  );
+}
+
+function stackProgressStep(
+  stackName: string,
+  events: ApplyJobProgressEvent[],
+  jobStatus: ApplyJobResponse["status"] | null,
+  completePhase: string,
+): ApplyJobProgressStep {
+  const failed = [...events].reverse().find((event) => event.status === "failure");
+  if (failed) {
+    return stackStep(stackName, "failure", "Failed", failed.message, failed);
+  }
+  const latest = events.at(-1) ?? null;
+  if (jobStatus === "success") {
+    return stackStep(
+      stackName,
+      "success",
+      "Complete",
+      latest?.message || "Stack update completed.",
+      latest,
+    );
+  }
+  const running = [...events].reverse().find((event) => event.status === "running");
+  if (running) {
+    return stackStep(stackName, "running", "Running", running.message, running);
+  }
+  if (
+    latest &&
+    latest.phase === completePhase &&
+    (latest.status === "success" || latest.status === "skipped")
+  ) {
+    return stackStep(stackName, "success", "Complete", latest.message, latest);
+  }
+  if (latest) {
+    return stackStep(stackName, "running", "In progress", latest.message, latest);
+  }
+  return stackStep(
+    stackName,
+    "pending",
+    "Queued",
+    `Waiting for ${stackName} to start.`,
+    null,
+  );
+}
+
+function stackStep(
+  stackName: string,
+  status: ApplyJobProgressStep["status"],
+  statusLabel: string,
+  message: string,
+  event: ApplyJobProgressEvent | null,
+): ApplyJobProgressStep {
+  return {
+    key: `stack:${stackName}`,
+    label: stackName,
+    waitingMessage: `Waiting for ${stackName} to start.`,
+    status,
+    statusLabel,
+    message,
+    detail: progressEventDetail(event),
+    event,
+  };
+}
+
+function stackCompletePhase(phases: ApplyJobProgressPhase[]): string {
+  return phases.find((phase) => phase.key === "health")?.key ?? "completion";
 }
 
 function progressEventDetail(event: ApplyJobProgressEvent | null): string {

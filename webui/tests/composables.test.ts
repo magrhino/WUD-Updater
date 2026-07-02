@@ -972,6 +972,114 @@ describe("usePendingApplyJob", () => {
     expect(state.applyJobNowMessage.value).toBe("updater exited with status 1");
   });
 
+  it("shows multi-stack apply progress without marking future stacks complete", () => {
+    const { state, updates } = setupPendingApplyJob();
+    const basePlan = planResponse();
+    const baseStack = basePlan.stacks[0];
+    const stackFor = (name: string, service: string, lineNo: number) => ({
+      ...baseStack,
+      name,
+      directory: `/docker/${name}`,
+      project_directory: `/docker/${name}`,
+      services_label: service,
+      services: [service],
+      pull_services: [service],
+      stop_services: [service],
+      actions: [],
+      lines: [
+        {
+          ...baseStack.lines[0],
+          line_no: lineNo,
+          raw: `repo/${service}:1.0`,
+          image: `repo/${service}:1.0`,
+          resolved_image: `repo/${service}:1.0`,
+          compose_image: `repo/${service}:1.0`,
+          target_image: `repo/${service}:1.1`,
+          service,
+        },
+      ],
+    });
+    updates.plan = planResponse({
+      selected_line_numbers: [1, 2, 3],
+      summary: {
+        ...basePlan.summary,
+        target_count: 3,
+        matched_target_count: 3,
+        stack_count: 3,
+        service_count: 3,
+      },
+      stacks: [
+        stackFor("media", "sonarr", 1),
+        stackFor("infra", "redis", 2),
+        stackFor("apps", "api", 3),
+      ],
+    });
+    state.applyJobSnapshot.value = state.createApplyJobSnapshot();
+
+    updates.setApplyJob(
+      applyJobResponse({
+        status: "running",
+        selected_line_numbers: [1, 2, 3],
+        progress: [
+          {
+            job_id: "job-test",
+            phase: "health",
+            status: "success",
+            message: "[media] Health checks passed.",
+            created_at: "2026-05-28T12:00:05+00:00",
+            stack: "media",
+            services: ["sonarr"],
+            line_numbers: [1],
+          },
+          {
+            job_id: "job-test",
+            phase: "pull",
+            status: "running",
+            message: "[infra] Pulling selected image updates.",
+            created_at: "2026-05-28T12:00:06+00:00",
+            stack: "infra",
+            services: ["redis"],
+            line_numbers: [2],
+          },
+        ],
+      }),
+    );
+
+    expect(
+      state.applyJobProgressSteps.value.map((step) => ({
+        label: step.label,
+        status: step.status,
+        statusLabel: step.statusLabel,
+      })),
+    ).toEqual([
+      { label: "media", status: "success", statusLabel: "Complete" },
+      { label: "infra", status: "running", statusLabel: "Running" },
+      { label: "apps", status: "pending", statusLabel: "Queued" },
+    ]);
+    expect(state.applyJobProgressSummary.value).toBe("infra");
+    expect(state.applyJobNowTitle.value).toBe("Running: infra");
+
+    updates.setApplyJob(
+      applyJobResponse({
+        status: "success",
+        selected_line_numbers: [1, 2, 3],
+        progress: updates.applyJob?.progress ?? [],
+      }),
+    );
+
+    expect(
+      state.applyJobProgressSteps.value.map((step) => ({
+        label: step.label,
+        status: step.status,
+        statusLabel: step.statusLabel,
+      })),
+    ).toEqual([
+      { label: "media", status: "success", statusLabel: "Complete" },
+      { label: "infra", status: "success", statusLabel: "Complete" },
+      { label: "apps", status: "success", statusLabel: "Complete" },
+    ]);
+  });
+
   it("keeps fallback verification stable when a job response omits progress events", () => {
     const { state, updates } = setupPendingApplyJob();
     updates.plan = planResponse();

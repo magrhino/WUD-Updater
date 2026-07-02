@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, Play, RefreshCw, Send, Trash2, X } from "@lucide/vue";
+import { Check, Play, RefreshCw, Trash2, X } from "@lucide/vue";
 import { NButton, NFlex } from "naive-ui";
 
 defineProps<{
@@ -14,8 +14,6 @@ defineProps<{
   removalButtonLabel: string;
   removeSelectedDisabled: boolean;
   removeSelectedDisabledMessage: string;
-  releaseNotificationsDisabled: boolean;
-  releaseNotificationsDisabledMessage: string;
   selectableCount: number;
   selectAllLabel: string;
   selectedCount: number;
@@ -33,7 +31,6 @@ const emit = defineEmits<{
   clearSelection: [];
   rescanAll: [];
   rescanSelected: [];
-  previewReleaseNotifications: [];
   selectAll: [];
   startRemoval: [];
   startUpdate: [];
@@ -108,9 +105,6 @@ const emit = defineEmits<{
         <template v-if="selectedRescanDisabledMessage">
           {{ selectedRescanDisabledMessage }}
         </template>
-        <template v-if="releaseNotificationsDisabledMessage">
-          {{ releaseNotificationsDisabledMessage }}
-        </template>
         <template v-if="selectedHiddenCount">
           {{ selectedHiddenCount === 1 ? "1 selected update remains selected outside the current search." : `${selectedHiddenCount} selected updates remain selected outside the current search.` }}
         </template>
@@ -141,19 +135,6 @@ const emit = defineEmits<{
           <RefreshCw :size="16" />
         </template>
         Rescan selected
-      </n-button>
-      <n-button
-        size="small"
-        secondary
-        :disabled="releaseNotificationsDisabled"
-        :loading="loading"
-        :title="releaseNotificationsDisabledMessage"
-        @click="emit('previewReleaseNotifications')"
-      >
-        <template #icon>
-          <Send :size="16" />
-        </template>
-        Preview release notes
       </n-button>
       <n-button
         type="warning"

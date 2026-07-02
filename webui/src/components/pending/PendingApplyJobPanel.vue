@@ -201,8 +201,9 @@ function snapshotLineScope(
     </section>
 
     <RunVerificationPanel
+      v-if="!active"
       :verification="verification"
-      title="Verification"
+      title="Post-update verification"
     />
 
     <section
@@ -627,9 +628,17 @@ function snapshotLineScope(
       var(--color-operational-teal) 8%);
 }
 
-.apply-progress-step-success,
 .apply-progress-step-skipped {
   background: var(--color-surface);
+}
+
+.apply-progress-step-success {
+  border-color: color-mix(in srgb,
+      var(--color-operational-teal) 42%,
+      var(--color-border) 58%);
+  background: color-mix(in srgb,
+      var(--color-surface) 94%,
+      var(--color-operational-teal) 6%);
 }
 
 .apply-progress-step-failure {
@@ -662,6 +671,10 @@ function snapshotLineScope(
       var(--color-operational-teal) 64%,
       var(--color-border) 36%);
   color: var(--color-operational-teal);
+  background: color-mix(in srgb,
+      var(--color-surface) 82%,
+      var(--color-operational-teal) 18%);
+  animation: apply-stack-complete 220ms var(--ease-out-quint);
 }
 
 .apply-progress-step-failure .apply-progress-icon {
@@ -777,6 +790,10 @@ function snapshotLineScope(
     width: 100%;
     transform: none !important;
   }
+
+  .apply-progress-step-success .apply-progress-icon {
+    animation: none;
+  }
 }
 
 @keyframes apply-job-progress {
@@ -796,6 +813,16 @@ function snapshotLineScope(
 @keyframes apply-complete-pop {
   0% {
     transform: scale(0.88);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes apply-stack-complete {
+  0% {
+    transform: scale(0.9);
   }
 
   100% {
