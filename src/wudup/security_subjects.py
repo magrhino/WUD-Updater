@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import time
 from dataclasses import dataclass, replace
+from threading import Lock
 from typing import TYPE_CHECKING, cast
 
 from .command import CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError, ServiceImage
-from .digest_verifier import DigestVerifier, ResolvedImageSubject
+from .digest_verifier import DigestResolveResult, DigestVerifier, ResolvedImageSubject
 from .docker_cli import DockerCli
 from .images import image_with_tag
 from .plan_matching import _match_targets
@@ -29,6 +31,7 @@ class PendingSecurityRequest:
     reported_digest: str
     platform: ImagePlatform | None
     platform_source: str
+    missing_reported_digest_resolvable: bool = False
     identity_status: str = "pending"
     warnings: tuple[str, ...] = ()
     error: str = ""
@@ -52,20 +55,37 @@ class PendingSecurityContext:
     warnings: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class PendingSecurityOptions:
+    include_compose: bool = True
+    include_wud_metadata: bool = True
+    resolve_missing_digests: bool = True
+
+
+PENDING_SECURITY_DEFAULT_OPTIONS = PendingSecurityOptions()
+PENDING_SECURITY_CACHE_OPTIONS = PendingSecurityOptions(
+    include_compose=False,
+    include_wud_metadata=False,
+    resolve_missing_digests=False,
+)
+_MISSING_DIGEST_FAILURE_CACHE_TTL_SECONDS = 30.0
+_missing_digest_failure_cache: dict[str, tuple[float, DigestResolveResult]] = {}
+_missing_digest_failure_cache_lock = Lock()
+
+
 def pending_security_context(
     settings: "WebSettings",
     *,
-    include_compose: bool = True,
-    include_wud_metadata: bool = True,
+    options: PendingSecurityOptions = PENDING_SECURITY_DEFAULT_OPTIONS,
 ) -> PendingSecurityContext:
     source = resolve_pending_source(
         settings,
-        include_wud_metadata=include_wud_metadata,
+        include_wud_metadata=options.include_wud_metadata,
     )
     platform_by_line: dict[int, ImagePlatform] = {}
     platform_conflicts: set[int] = set()
     warnings: tuple[str, ...] = ()
-    if include_compose:
+    if options.include_compose:
         platform_by_line, platform_conflicts, warnings = _compose_platforms_by_line(
             settings,
             source,
@@ -79,6 +99,8 @@ def pending_security_context(
         )
         for target in source.parsed.targets
     )
+    if options.resolve_missing_digests:
+        requests = _resolve_missing_reported_digests(settings, requests)
     return PendingSecurityContext(source=source, requests=requests, warnings=warnings)
 
 
@@ -145,9 +167,11 @@ def _request_for_target(
         if compose_platform != wud_platform:
             identity_status = "mismatch"
             error = "Compose platform conflicts with WUD platform"
-    if not target.digest:
+    missing_reported_digest_resolvable = False
+    if not target.digest and identity_status == "pending":
         identity_status = "unsupported"
         error = "reported digest is required"
+        missing_reported_digest_resolvable = platform is not None
     if platform is None and identity_status == "pending":
         identity_status = "unsupported"
         error = "platform is required"
@@ -159,9 +183,118 @@ def _request_for_target(
         reported_digest=target.digest,
         platform=platform,
         platform_source=platform_source,
+        missing_reported_digest_resolvable=missing_reported_digest_resolvable,
         identity_status=identity_status,
         error=error,
     )
+
+
+def _resolve_missing_reported_digests(
+    settings: "WebSettings",
+    requests: tuple[PendingSecurityRequest, ...],
+) -> tuple[PendingSecurityRequest, ...]:
+    if not settings.security_scan.enabled:
+        return requests
+    resolver: DigestVerifier | None = None
+    resolved_by_image: dict[str, DigestResolveResult] = {}
+    updated: list[PendingSecurityRequest] = []
+    now = time.monotonic()
+    for request in requests:
+        if not request.missing_reported_digest_resolvable:
+            updated.append(request)
+            continue
+        result = resolved_by_image.get(request.candidate_image)
+        if result is None:
+            result, resolver = _resolve_missing_reported_digest(
+                settings,
+                request.candidate_image,
+                now,
+                resolver,
+            )
+            resolved_by_image[request.candidate_image] = result
+        if result.ok and result.digest:
+            updated.append(
+                replace(
+                    request,
+                    reported_digest=result.digest,
+                    missing_reported_digest_resolvable=False,
+                    identity_status="pending",
+                    error="",
+                )
+            )
+            continue
+        updated.append(
+            replace(
+                request,
+                warnings=(
+                    *request.warnings,
+                    _reported_digest_lookup_warning(request, result),
+                ),
+            )
+        )
+    return tuple(updated)
+
+
+def _resolve_missing_reported_digest(
+    settings: "WebSettings",
+    image: str,
+    now: float,
+    resolver: DigestVerifier | None,
+) -> tuple[DigestResolveResult, DigestVerifier | None]:
+    result = _cached_missing_digest_failure(image, now)
+    if result is not None:
+        return result, resolver
+    if resolver is None:
+        resolver = default_digest_verifier(settings)
+    result = resolver.resolve_tag_digest(image)
+    _remember_missing_digest_result(image, result, now)
+    return result, resolver
+
+
+def _cached_missing_digest_failure(
+    image: str,
+    now: float,
+) -> DigestResolveResult | None:
+    with _missing_digest_failure_cache_lock:
+        cached = _missing_digest_failure_cache.get(image)
+        if cached is None:
+            return None
+        checked_at, result = cached
+        if now - checked_at < _MISSING_DIGEST_FAILURE_CACHE_TTL_SECONDS:
+            return result
+        _missing_digest_failure_cache.pop(image, None)
+    return None
+
+
+def _remember_missing_digest_result(
+    image: str,
+    result: DigestResolveResult,
+    now: float,
+) -> None:
+    with _missing_digest_failure_cache_lock:
+        expired = [
+            cached_image
+            for cached_image, (
+                checked_at,
+                _result,
+            ) in _missing_digest_failure_cache.items()
+            if now - checked_at >= _MISSING_DIGEST_FAILURE_CACHE_TTL_SECONDS
+        ]
+        for cached_image in expired:
+            _missing_digest_failure_cache.pop(cached_image, None)
+        if result.ok and result.digest:
+            _missing_digest_failure_cache.pop(image, None)
+        else:
+            _missing_digest_failure_cache[image] = (now, result)
+
+
+def _reported_digest_lookup_warning(
+    request: PendingSecurityRequest,
+    result: DigestResolveResult,
+) -> str:
+    detail = result.error or result.reason or result.status
+    suffix = f": {detail}" if detail else ""
+    return f"Could not resolve reported digest for {request.candidate_image}{suffix}"
 
 
 def _wud_platform(

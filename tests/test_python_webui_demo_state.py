@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 from wudup.platforms import ImagePlatform
-from wudup.security_subjects import pending_security_context
+from wudup.security_subjects import PendingSecurityOptions, pending_security_context
 from wudup.web import load_web_settings
 from wudup.web_security import security_scans_response
 
@@ -196,8 +196,10 @@ class WebuiDemoStateTests(unittest.TestCase):
             security_scans = security_scans_response(settings)
             scan_context = pending_security_context(
                 settings,
-                include_compose=False,
-                include_wud_metadata=False,
+                options=PendingSecurityOptions(
+                    include_compose=False,
+                    include_wud_metadata=False,
+                ),
             )
             finding_scan = next(
                 (
