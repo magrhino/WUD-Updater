@@ -59,6 +59,44 @@ class SecuritySubjectTests(unittest.TestCase):
         self.assertEqual(request.platform, ImagePlatform("linux", "amd64"))
         self.assertEqual(request.platform_source, "wud")
 
+    def test_missing_digest_keeps_platform_mismatch_unresolvable(self) -> None:
+        target = parse_wud_text("repo/app:1.0 platform=linux/amd64\n").targets[0]
+
+        requests = (
+            _request_for_target(
+                target,
+                compose_platform=ImagePlatform("linux", "arm64"),
+                wud_platform=target.platform,
+            ),
+            _request_for_target(
+                target,
+                compose_platform=None,
+                compose_platform_conflict=True,
+                wud_platform=target.platform,
+            ),
+        )
+
+        with mock.patch(
+            "wudup.security_subjects.default_digest_verifier",
+        ) as verifier_factory:
+            resolved = _resolve_missing_reported_digests(_settings(), requests)
+
+        verifier_factory.assert_not_called()
+        self.assertEqual(
+            [request.identity_status for request in resolved],
+            ["mismatch", "mismatch"],
+        )
+        self.assertEqual(
+            [request.error for request in resolved],
+            [
+                "Compose platform conflicts with WUD platform",
+                "Multiple Compose platforms matched WUD line",
+            ],
+        )
+        self.assertFalse(
+            any(request.missing_reported_digest_resolvable for request in resolved)
+        )
+
     def test_request_requires_reported_digest_and_platform(self) -> None:
         no_digest = _request_for_target(
             parse_wud_text("repo/app:1.0 platform=linux/amd64\n").targets[0],

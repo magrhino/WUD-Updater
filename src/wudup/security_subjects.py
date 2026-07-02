@@ -168,7 +168,7 @@ def _request_for_target(
             identity_status = "mismatch"
             error = "Compose platform conflicts with WUD platform"
     missing_reported_digest_resolvable = False
-    if not target.digest:
+    if not target.digest and identity_status == "pending":
         identity_status = "unsupported"
         error = "reported digest is required"
         missing_reported_digest_resolvable = platform is not None
