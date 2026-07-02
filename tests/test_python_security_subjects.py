@@ -100,7 +100,8 @@ class SecuritySubjectTests(unittest.TestCase):
 
     def test_context_resolves_missing_digest_once_per_candidate(self) -> None:
         digest = f"sha256:{'b' * 64}"
-        verifier = _FakeDigestVerifier(
+        verifier = mock.Mock()
+        verifier.resolve_tag_digest.return_value = (
             DigestResolveResult(
                 ok=True,
                 status="resolved",
@@ -116,14 +117,16 @@ class SecuritySubjectTests(unittest.TestCase):
         with mock.patch(
             "wudup.security_subjects.resolve_pending_source",
             return_value=source,
+        ), mock.patch(
+            "wudup.security_subjects.default_digest_verifier",
+            return_value=verifier,
         ):
             context = pending_security_context(
                 _settings(),
                 include_compose=False,
-                digest_verifier=verifier,
             )
 
-        self.assertEqual(verifier.calls, ["repo/app:2.0"])
+        verifier.resolve_tag_digest.assert_called_once_with("repo/app:2.0")
         self.assertEqual(
             [request.reported_digest for request in context.requests],
             [digest, digest],
@@ -135,7 +138,8 @@ class SecuritySubjectTests(unittest.TestCase):
         self.assertEqual([request.error for request in context.requests], ["", ""])
 
     def test_context_keeps_missing_digest_unsupported_when_lookup_fails(self) -> None:
-        verifier = _FakeDigestVerifier(
+        verifier = mock.Mock()
+        verifier.resolve_tag_digest.return_value = (
             DigestResolveResult(
                 ok=False,
                 status="failed",
@@ -148,15 +152,17 @@ class SecuritySubjectTests(unittest.TestCase):
         with mock.patch(
             "wudup.security_subjects.resolve_pending_source",
             return_value=source,
+        ), mock.patch(
+            "wudup.security_subjects.default_digest_verifier",
+            return_value=verifier,
         ):
             context = pending_security_context(
                 _settings(),
                 include_compose=False,
-                digest_verifier=verifier,
             )
 
         request = context.requests[0]
-        self.assertEqual(verifier.calls, ["repo/app:2.0"])
+        verifier.resolve_tag_digest.assert_called_once_with("repo/app:2.0")
         self.assertEqual(request.identity_status, "unsupported")
         self.assertEqual(request.error, "reported digest is required")
         self.assertEqual(request.reported_digest, "")
@@ -167,16 +173,6 @@ class SecuritySubjectTests(unittest.TestCase):
                 "registry auth failed",
             ),
         )
-
-
-class _FakeDigestVerifier:
-    def __init__(self, result: DigestResolveResult) -> None:
-        self.result = result
-        self.calls: list[str] = []
-
-    def resolve_tag_digest(self, image: str) -> DigestResolveResult:
-        self.calls.append(image)
-        return self.result
 
 
 def _settings():

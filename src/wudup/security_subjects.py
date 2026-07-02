@@ -57,7 +57,6 @@ def pending_security_context(
     *,
     include_compose: bool = True,
     include_wud_metadata: bool = True,
-    digest_verifier: DigestVerifier | None = None,
 ) -> PendingSecurityContext:
     source = resolve_pending_source(
         settings,
@@ -80,11 +79,7 @@ def pending_security_context(
         )
         for target in source.parsed.targets
     )
-    requests = _resolve_missing_reported_digests(
-        settings,
-        requests,
-        digest_verifier=digest_verifier,
-    )
+    requests = _resolve_missing_reported_digests(settings, requests)
     return PendingSecurityContext(source=source, requests=requests, warnings=warnings)
 
 
@@ -173,16 +168,19 @@ def _request_for_target(
 def _resolve_missing_reported_digests(
     settings: "WebSettings",
     requests: tuple[PendingSecurityRequest, ...],
-    *,
-    digest_verifier: DigestVerifier | None,
 ) -> tuple[PendingSecurityRequest, ...]:
     if not settings.security_scan.enabled:
         return requests
-    resolver = digest_verifier
+    resolver: DigestVerifier | None = None
     resolved_by_image: dict[str, DigestResolveResult] = {}
     updated: list[PendingSecurityRequest] = []
     for request in requests:
-        if not _needs_reported_digest_lookup(request):
+        if (
+            request.reported_digest
+            or request.platform is None
+            or request.identity_status != "unsupported"
+            or request.error != "reported digest is required"
+        ):
             updated.append(request)
             continue
         if resolver is None:
@@ -211,15 +209,6 @@ def _resolve_missing_reported_digests(
             )
         )
     return tuple(updated)
-
-
-def _needs_reported_digest_lookup(request: PendingSecurityRequest) -> bool:
-    return (
-        not request.reported_digest
-        and request.platform is not None
-        and request.identity_status == "unsupported"
-        and request.error == "reported digest is required"
-    )
 
 
 def _reported_digest_lookup_warning(
