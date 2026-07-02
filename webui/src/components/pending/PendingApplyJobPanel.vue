@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { Check, CheckCircle2, ChevronDown, ChevronUp, Play, Send, X } from "@lucide/vue";
 import { NAlert, NButton, NFlex, NTag } from "naive-ui";
 
@@ -64,6 +64,9 @@ const emit = defineEmits<{
 
 const applyJobPanelRef = ref<HTMLElement | null>(null);
 const applyJobPanelLogRef = ref<HTMLElement | null>(null);
+const currentProgressStepKey = computed(
+  () => props.progressSteps.find((step) => step.status === "running")?.key ?? "",
+);
 
 defineExpose({
   focusPanel,
@@ -88,12 +91,12 @@ function logElement(): HTMLElement | null {
 
 function progressTagType(
   status: ApplyJobProgressStep["status"],
-): "default" | "success" | "warning" | "error" {
+): "default" | "info" | "success" | "error" {
   if (status === "success") {
     return "success";
   }
   if (status === "running") {
-    return "warning";
+    return "info";
   }
   if (status === "failure") {
     return "error";
@@ -182,6 +185,7 @@ function snapshotLineScope(
           :key="step.key"
           class="apply-progress-step"
           :class="`apply-progress-step-${step.status}`"
+          :aria-current="step.key === currentProgressStepKey ? 'step' : undefined"
         >
           <span class="apply-progress-icon" aria-hidden="true">
             <Check v-if="step.status === 'success'" :size="14" />
@@ -380,6 +384,9 @@ function snapshotLineScope(
   display: grid;
   gap: 10px;
   scroll-margin-top: 88px;
+  transition:
+    border-color var(--motion-base) var(--ease-out-quart),
+    background-color var(--motion-base) var(--ease-out-quart);
 }
 
 .apply-job-panel-active {
@@ -470,6 +477,9 @@ function snapshotLineScope(
   background: color-mix(in srgb,
       var(--color-surface) 92%,
       var(--color-operational-teal) 8%);
+  transition:
+    border-color var(--motion-base) var(--ease-out-quart),
+    background-color var(--motion-base) var(--ease-out-quart);
 }
 
 .apply-job-now-success {
@@ -617,6 +627,9 @@ function snapshotLineScope(
   border: 1px solid var(--color-border-subtle);
   border-radius: 7px;
   background: var(--color-panel-tint);
+  transition:
+    border-color var(--motion-base) var(--ease-out-quart),
+    background-color var(--motion-base) var(--ease-out-quart);
 }
 
 .apply-progress-step-running {
@@ -651,6 +664,7 @@ function snapshotLineScope(
 }
 
 .apply-progress-icon {
+  position: relative;
   display: inline-grid;
   width: 22px;
   height: 22px;
@@ -675,6 +689,18 @@ function snapshotLineScope(
       var(--color-surface) 82%,
       var(--color-operational-teal) 18%);
   animation: apply-stack-complete 220ms var(--ease-out-quint);
+}
+
+.apply-progress-step-success .apply-progress-icon::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 1px solid color-mix(in srgb,
+      var(--color-operational-teal) 42%,
+      transparent);
+  border-radius: inherit;
+  opacity: 0;
+  animation: apply-stack-complete-ring 620ms var(--ease-out-quint) 1;
 }
 
 .apply-progress-step-failure .apply-progress-icon {
@@ -791,7 +817,9 @@ function snapshotLineScope(
     transform: none !important;
   }
 
-  .apply-progress-step-success .apply-progress-icon {
+  .apply-job-complete-mark,
+  .apply-progress-step-success .apply-progress-icon,
+  .apply-progress-step-success .apply-progress-icon::after {
     animation: none;
   }
 }
@@ -827,6 +855,18 @@ function snapshotLineScope(
 
   100% {
     transform: scale(1);
+  }
+}
+
+@keyframes apply-stack-complete-ring {
+  0% {
+    opacity: 0.5;
+    transform: scale(0.82);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.2);
   }
 }
 </style>

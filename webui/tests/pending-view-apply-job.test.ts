@@ -229,6 +229,9 @@ describe("pending view apply jobs", () => {
     expect(wrapper.find(".apply-job-panel").text()).toContain("media");
     expect(wrapper.find(".apply-job-panel").text()).toContain("Running: Pull images");
     expect(wrapper.find(".apply-job-panel").text()).toContain("media / calibre / lines 1");
+    expect(wrapper.find(".apply-progress-step-running").attributes("aria-current")).toBe(
+      "step",
+    );
 
     jobStream.emitLog(
       applyJobLogResponse({

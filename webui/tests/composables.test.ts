@@ -1078,6 +1078,16 @@ describe("usePendingApplyJob", () => {
       { label: "infra", status: "success", statusLabel: "Complete" },
       { label: "apps", status: "success", statusLabel: "Complete" },
     ]);
+    expect(
+      state.applyJobProgressSteps.value.map((step) => ({
+        message: step.message,
+        detail: step.detail,
+      })),
+    ).toEqual([
+      { message: "Stack update completed.", detail: "" },
+      { message: "Stack update completed.", detail: "" },
+      { message: "Stack update completed.", detail: "" },
+    ]);
   });
 
   it("keeps fallback verification stable when a job response omits progress events", () => {

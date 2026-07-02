@@ -728,8 +728,8 @@ function stackProgressStep(
       stackName,
       "success",
       "Complete",
-      latest?.message || "Stack update completed.",
-      latest,
+      "Stack update completed.",
+      null,
     );
   }
   const running = [...events].reverse().find((event) => event.status === "running");
