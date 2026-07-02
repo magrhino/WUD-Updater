@@ -42,6 +42,7 @@ from .web_models import (
     ApplyJobResponse,
     ApplyJobStatus,
     LogTail,
+    PendingSourceActive,
     TERMINAL_APPLY_JOB_STATUSES,
     WebApplyJob,
     WebApplyJobProgressEvent,
@@ -84,6 +85,7 @@ class ApplyJobRunContext:
     metadata_extra: Mapping[str, Any] | None = None
     auto_update_schedule_keys: tuple[str, ...] = ()
     start_event: Event | None = None
+    pending_source_active: PendingSourceActive = "file"
     pending_source_text: str | None = None
     pending_source_label: str = ""
 
@@ -470,7 +472,11 @@ def _run_apply_job(
         )
         status_code = runner.run()
         job_status: ApplyJobStatus = "success" if status_code == 0 else "failure"
-        if status_code == 0 and run_context.pending_source_text is not None:
+        if (
+            status_code == 0
+            and run_context.pending_source_active == "api"
+            and run_context.pending_source_text is not None
+        ):
             _refresh_api_pending_source_after_apply(
                 settings,
                 jobs,
@@ -546,15 +552,12 @@ def _refresh_api_pending_source_after_apply(
 ) -> None:
     status: ApplyJobProgressStatus = "success"
     message = "WUD API pending state refreshed."
-    try:
-        result = web_wud_api.watch_all(settings)
-    except Exception:
+    result = web_wud_api.watch_all(settings)
+    if result.snapshot.status.state != "ready" or not result.watched:
         status = "skipped"
         message = "WUD API pending refresh skipped."
-    else:
-        if result.snapshot.status.state != "ready" or not result.watched:
-            status = "skipped"
-            message = "WUD API pending refresh skipped."
+        if result.snapshot.status.detail:
+            message = f"{message} {result.snapshot.status.detail}"
     _append_apply_job_progress(
         jobs,
         apply_condition,

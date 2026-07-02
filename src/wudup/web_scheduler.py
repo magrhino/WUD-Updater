@@ -211,6 +211,7 @@ def _auto_update_tick(
                             if pending_source.active == "api"
                             else None
                         ),
+                        pending_source_active=pending_source.active,
                         pending_source_label=pending_source.label,
                     ),
                 )

@@ -327,6 +327,7 @@ def submit_apply_job(
             pending_source_text=(
                 pending_source.text if pending_source.active == "api" else None
             ),
+            pending_source_active=pending_source.active,
             pending_source_label=pending_source.label,
         ),
     )
