@@ -100,8 +100,19 @@ function retagChoiceKey(choice: RetagChoiceRequest): string {
   return choice.target_id || choice.service_key;
 }
 
+function lookupRetagChoiceTarget(
+  choice: RetagChoiceRequest,
+  targetById: Map<string, RetagTargetItem>,
+  targetByUniqueService: Map<string, RetagTargetItem>,
+): RetagTargetItem | undefined {
+  if (choice.target_id) {
+    return targetById.get(choice.target_id);
+  }
+  return targetByUniqueService.get(choice.service_key);
+}
+
 function demoIdPart(value: string): string {
-  return value.replace(/[^a-z0-9_.-]+/gi, "-").replace(/^-+|-+$/g, "") || "item";
+  return value.replace(/[^a-z0-9_.-]+/gi, "-").replace(/^-+/, "").replace(/-+$/, "") || "item";
 }
 
 function replaceTagReference(value: string, defaultTag: string, tag: string): string {
@@ -351,12 +362,12 @@ function readOnlyPlanFromPending(
     ),
   ).size;
 
-  const status =
-    issues.length > 0 || (stacks.length > 0 && skipped.length > 0)
-      ? "blocked"
-      : stacks.length > 0
-        ? "ready"
-        : "empty";
+  let status: PlanResponse["status"] = "empty";
+  if (issues.length > 0 || (stacks.length > 0 && skipped.length > 0)) {
+    status = "blocked";
+  } else if (stacks.length > 0) {
+    status = "ready";
+  }
   const applyable = status === "ready";
 
   return {
@@ -761,6 +772,10 @@ export class DemoApiState {
       }))
       .filter((stack) => stack.digest_pin_updates.length > 0);
     const selectedCount = updates.length;
+    let status: RetagPlanResponse["status"] = "empty";
+    if (selectedCount > 0) {
+      status = issues.length > 0 ? "blocked" : "ready";
+    }
     return {
       plan_id:
         selectedCount === 0
@@ -768,8 +783,7 @@ export class DemoApiState {
           : `demo-retag-${updates
               .map((update) => `${demoIdPart(update.service_key)}-${demoIdPart(update.resolved_tag)}`)
               .join("-")}`,
-      status:
-        selectedCount === 0 ? "empty" : issues.length > 0 ? "blocked" : "ready",
+      status,
       can_apply: selectedCount > 0 && issues.length === 0,
       external_recreate_required: true,
       selected_count: selectedCount,
@@ -1722,9 +1736,7 @@ export class DemoApiState {
             + choice.service_key,
         );
       }
-      const target = targetId
-        ? targetById.get(targetId)
-        : targetByUniqueService.get(choice.service_key);
+      const target = lookupRetagChoiceTarget(choice, targetById, targetByUniqueService);
       if (!target) {
         throw new Error(
           targetId
