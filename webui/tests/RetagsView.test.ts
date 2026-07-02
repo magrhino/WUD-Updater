@@ -122,6 +122,53 @@ describe("RetagsView", () => {
     expect(applyButton?.attributes("disabled")).toBeUndefined();
   });
 
+  it("keeps demo fallback toggles local and skips GitHub latest refresh", async () => {
+    vi.stubEnv("VITE_WUD_DEMO_MODE", "true");
+    vi.resetModules();
+    try {
+      const [
+        { default: DemoRetagsView },
+        { useAuthStore: useDemoAuthStore },
+        { useUpdatesStore: useDemoUpdatesStore },
+      ] = await Promise.all([
+        import("../src/views/RetagsView.vue"),
+        import("../src/stores/auth"),
+        import("../src/stores/updates"),
+      ]);
+      const pinia = createPinia();
+      setActivePinia(pinia);
+      const auth = useDemoAuthStore();
+      auth.session = authSession({ mutations_enabled: false });
+      const updates = useDemoUpdatesStore();
+      updates.retagTargets = retagTargetsResponse();
+      vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+      const setRetagGithubLatestFallback = vi
+        .spyOn(updates, "setRetagGithubLatestFallback")
+        .mockResolvedValue();
+      const refreshRetagGithubLatest = vi
+        .spyOn(updates, "refreshRetagGithubLatest")
+        .mockResolvedValue();
+
+      const wrapper = mountWithApp(DemoRetagsView, { pinia });
+      await flushPromises();
+
+      const githubLatestFallbackSwitch = wrapper.get(
+        'input[aria-label="Use cached GitHub latest fallback"]',
+      );
+      expect(githubLatestFallbackSwitch.attributes("disabled")).toBeUndefined();
+      await githubLatestFallbackSwitch.setValue(true);
+      expect(setRetagGithubLatestFallback).toHaveBeenCalledWith(true);
+
+      await wrapper
+        .get('button[aria-label="Refresh GitHub latest candidates"]')
+        .trigger("click");
+      expect(refreshRetagGithubLatest).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
+
   it("selects one service from the per-row retag action without previewing", async () => {
     const pinia = createPinia();
     setActivePinia(pinia);

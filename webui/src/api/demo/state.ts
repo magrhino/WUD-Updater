@@ -115,7 +115,7 @@ function demoIdPart(value: string): string {
   let result = "";
   let needsSeparator = false;
   for (const char of value) {
-    const code = char.charCodeAt(0);
+    const code = char.codePointAt(0) ?? 0;
     const isAllowed =
       (code >= 48 && code <= 57)
       || (code >= 65 && code <= 90)

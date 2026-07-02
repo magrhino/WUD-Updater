@@ -377,7 +377,7 @@ async function onGithubLatestFallbackUpdate(enabled: boolean): Promise<void> {
 }
 
 async function refreshGithubLatestFallback(): Promise<void> {
-  if (updates.loading || retagMutationDisabled.value) {
+  if (isDemoMode || updates.loading || retagMutationDisabled.value) {
     return;
   }
   await updates.refreshRetagGithubLatest().catch(() => undefined);
