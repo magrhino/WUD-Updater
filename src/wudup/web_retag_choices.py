@@ -26,37 +26,29 @@ def validated_retag_choice_map(
     duplicate_service_keys = {
         service_key for service_key, count in service_counts.items() if count > 1
     }
-    target_id_required: list[str] = []
-    unknown_services: list[str] = []
-    unknown_targets: list[str] = []
-    mismatches: list[str] = []
-    duplicates: list[str] = []
+    failures: dict[str, list[str]] = {
+        "target_id_required": [],
+        "unknown_services": [],
+        "unknown_targets": [],
+        "mismatches": [],
+        "duplicates": [],
+    }
     values: dict[str, RetagChoiceRequest] = {}
 
+    # Resolve all choices first; the ordered cases below preserve 422 precedence.
     for item in choices:
-        target_id = item.target_id or ""
-        if target_id:
-            service_key = service_key_by_target_id.get(target_id)
-            if service_key is None:
-                unknown_targets.append(target_id)
-                continue
-            if service_key != item.service_key:
-                mismatches.append(f"{item.service_key} ({target_id})")
-                continue
-            choice_key = target_id
-            duplicate_label = f"{service_key} ({target_id})"
-        elif item.service_key in duplicate_service_keys:
-            target_id_required.append(item.service_key)
+        identity = _resolve_choice_key(
+            item,
+            service_key_by_target_id=service_key_by_target_id,
+            unique_target_id_by_service=unique_target_id_by_service,
+            duplicate_service_keys=duplicate_service_keys,
+            failures=failures,
+        )
+        if identity is None:
             continue
-        else:
-            choice_key = unique_target_id_by_service.get(item.service_key)
-            if choice_key is None:
-                unknown_services.append(item.service_key)
-                continue
-            duplicate_label = item.service_key
-
+        choice_key, duplicate_label = identity
         if choice_key in values:
-            duplicates.append(duplicate_label)
+            failures["duplicates"].append(duplicate_label)
             continue
         values[choice_key] = item
 
@@ -64,27 +56,57 @@ def validated_retag_choice_map(
         (
             (
                 "retag choices for duplicate service(s) must include target_id",
-                target_id_required,
+                failures["target_id_required"],
             ),
             (
                 "retag choices reference unknown service(s)",
-                unknown_services,
+                failures["unknown_services"],
             ),
             (
                 "retag choices reference unknown target(s)",
-                unknown_targets,
+                failures["unknown_targets"],
             ),
             (
                 "retag choice target_id does not match service_key",
-                mismatches,
+                failures["mismatches"],
             ),
             (
                 "retag choices contain duplicate target(s)",
-                duplicates,
+                failures["duplicates"],
             ),
         ),
     )
     return values
+
+
+def _resolve_choice_key(
+    item: RetagChoiceRequest,
+    *,
+    service_key_by_target_id: Mapping[str, str],
+    unique_target_id_by_service: Mapping[str, str],
+    duplicate_service_keys: set[str],
+    failures: Mapping[str, list[str]],
+) -> tuple[str, str] | None:
+    target_id = item.target_id or ""
+    if target_id:
+        service_key = service_key_by_target_id.get(target_id)
+        if service_key is None:
+            failures["unknown_targets"].append(target_id)
+            return None
+        if service_key != item.service_key:
+            failures["mismatches"].append(f"{item.service_key} ({target_id})")
+            return None
+        return target_id, f"{service_key} ({target_id})"
+
+    if item.service_key in duplicate_service_keys:
+        failures["target_id_required"].append(item.service_key)
+        return None
+
+    choice_key = unique_target_id_by_service.get(item.service_key)
+    if choice_key is None:
+        failures["unknown_services"].append(item.service_key)
+        return None
+    return choice_key, item.service_key
 
 
 def _raise_retag_choice_validation_error(
