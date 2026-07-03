@@ -104,6 +104,20 @@ class SelfUpdateTests(unittest.TestCase):
             "ghcr.io/magrhino/wudup:v0.12.2 tag=v0.12.3",
         )
 
+    def test_release_self_update_target_rewrites_pinned_trivy_release_tag(
+        self,
+    ) -> None:
+        target = release_self_update_target(
+            "ghcr.io/magrhino/wudup:v0.12.2-trivy",
+            "v0.12.2",
+            "v0.12.3",
+        )
+
+        self.assertEqual(
+            target,
+            "ghcr.io/magrhino/wudup:v0.12.2-trivy tag=v0.12.3-trivy",
+        )
+
     def test_release_self_update_target_rewrites_legacy_pinned_image_repo(
         self,
     ) -> None:
@@ -172,6 +186,28 @@ class SelfUpdateTests(unittest.TestCase):
         )
 
         self.assertEqual(target, "ghcr.io/magrhino/wudup:v0.12.3")
+
+    def test_release_self_update_target_keeps_current_trivy_image_when_tag_matches_latest(
+        self,
+    ) -> None:
+        target = release_self_update_target(
+            "ghcr.io/magrhino/wudup:v0.12.3-trivy",
+            "v0.12.3",
+            "v0.12.3",
+        )
+
+        self.assertEqual(target, "ghcr.io/magrhino/wudup:v0.12.3-trivy")
+
+    def test_release_self_update_target_keeps_current_variant_with_plain_latest(
+        self,
+    ) -> None:
+        target = release_self_update_target(
+            "ghcr.io/magrhino/wudup:v0.12.3-fips",
+            "v0.12.3",
+            "0.12.3",
+        )
+
+        self.assertEqual(target, "ghcr.io/magrhino/wudup:v0.12.3-fips")
 
     def test_current_container_image_returns_empty_without_candidates(self) -> None:
         with mock.patch(
