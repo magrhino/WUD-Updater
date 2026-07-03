@@ -109,8 +109,10 @@ rules and manual sync commands.
 
 ## Candidate Security Scans
 
-Candidate security scans are opt-in advisory metadata. They do not gate
-updates, snooze updates, bypass snoozes, or mark an image safe.
+Candidate security scans are opt-in advisory metadata. When WUD provides
+`local_digest` metadata, refresh jobs also compare the installed digest with the
+candidate. Results do not gate updates, snooze updates, bypass snoozes, or mark
+an image safe.
 
 To refresh scan results from the WebUI container, use a Trivy image variant and
 enable both scan metadata and browser-triggered jobs:

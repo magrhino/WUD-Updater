@@ -98,6 +98,28 @@ function securityScanInfo(
     },
     unfixed_count: 0,
     findings: [],
+    subject: {
+      requested_ref: "repo/app:2.0",
+      reported_digest: "sha256:candidate",
+      manifest_digest: "sha256:candidate-child",
+      platform: "linux/amd64",
+    },
+    comparison: {
+      status: "unknown",
+      current_subject: {
+        requested_ref: "",
+        reported_digest: "",
+        manifest_digest: "",
+        platform: "",
+      },
+      fixed_count: 0,
+      remaining_count: 0,
+      introduced_count: 0,
+      fixed_findings: [],
+      remaining_findings: [],
+      introduced_findings: [],
+      message: "",
+    },
     warnings: [],
     error_code: "",
     error_message: "",
@@ -409,6 +431,34 @@ describe("pending helper modules", () => {
         unknown: 1,
       },
     });
+    const mixedComparisonScan = securityScanInfo({
+      line_no: item.line_no,
+      state: "complete",
+      verdict: "findings",
+      severity_counts: {
+        critical: 0,
+        high: 1,
+        medium: 0,
+        low: 0,
+        unknown: 0,
+      },
+      comparison: {
+        status: "mixed",
+        current_subject: {
+          requested_ref: "repo/app:1.0",
+          reported_digest: "sha256:installed",
+          manifest_digest: "sha256:installed-child",
+          platform: "linux/amd64",
+        },
+        fixed_count: 1,
+        remaining_count: 1,
+        introduced_count: 1,
+        fixed_findings: [securityFinding(1, "medium")],
+        remaining_findings: [securityFinding(2, "high")],
+        introduced_findings: [securityFinding(3, "high")],
+        message: "1 finding fixed, 1 remains, and 1 introduced.",
+      },
+    });
     const noneReportedScan = securityScanInfo({
       line_no: item.line_no,
       state: "complete",
@@ -449,6 +499,13 @@ describe("pending helper modules", () => {
         key: "security-findings",
         label: "Findings",
         type: "warning",
+      }),
+    );
+    expect(securityCuesFor(mixedComparisonScan)).toContainEqual(
+      expect.objectContaining({
+        key: "security-mixed",
+        label: "Findings changed",
+        type: "error",
       }),
     );
     expect(securityCuesFor(noneReportedScan)).toContainEqual(
@@ -545,6 +602,71 @@ describe("pending helper modules", () => {
     expect(wrapper.find("a").attributes("href")).toBe(
       "https://avd.aquasec.com/nvd/cve-2026-0001",
     );
+  });
+
+  it("renders security scan comparison deltas and report copy action", () => {
+    const fixed = securityFinding(1, "medium", {
+      package_name: "libssl",
+    });
+    const remaining = securityFinding(2, "high", {
+      package_name: "openssl",
+    });
+    const introduced = securityFinding(3, "critical", {
+      package_name: "curl",
+    });
+    const wrapper = mountPendingModal(PendingSecurityScanDetails, {
+      scan: securityScanInfo({
+        state: "complete",
+        verdict: "findings",
+        scanner_version: "0.71.2",
+        scanner_schema: "trivy-json",
+        db_revision: "trivy-db-2026-06-26",
+        subject: {
+          requested_ref: "repo/app:2.0",
+          reported_digest: "sha256:candidate",
+          manifest_digest: "sha256:candidate-child",
+          platform: "linux/amd64",
+        },
+        severity_counts: {
+          critical: 1,
+          high: 1,
+          medium: 0,
+          low: 0,
+          unknown: 0,
+        },
+        findings: [remaining, introduced],
+        comparison: {
+          status: "mixed",
+          current_subject: {
+            requested_ref: "repo/app:1.0",
+            reported_digest: "sha256:installed",
+            manifest_digest: "sha256:installed-child",
+            platform: "linux/amd64",
+          },
+          fixed_count: 1,
+          remaining_count: 1,
+          introduced_count: 1,
+          fixed_findings: [fixed],
+          remaining_findings: [remaining],
+          introduced_findings: [introduced],
+          message: "1 finding fixed, 1 remains, and 1 introduced.",
+        },
+      }),
+    });
+
+    const text = wrapper.text();
+    expect(text).toContain("Update comparison");
+    expect(text).toContain("Mixed");
+    expect(text).toContain("1 finding fixed, 1 remains, and 1 introduced.");
+    expect(text).toContain("1 fixed finding");
+    expect(text).toContain("1 remaining finding");
+    expect(text).toContain("1 introduced finding");
+    expect(text).toContain("Installed");
+    expect(text).toContain("Candidate");
+    expect(text).toContain("linux/amd64");
+    expect(text).toContain("Copy report");
+    expect(text).toContain("CVE-2026-0002");
+    expect(text).toContain("CVE-2026-0003");
   });
 
   it("filters candidate security scan findings by present severity categories", async () => {

@@ -11,6 +11,7 @@ from wudup.platforms import ImagePlatform
 from wudup.security_subjects import (
     PendingSecurityOptions,
     PendingSecurityRequest,
+    current_security_request,
     _resolve_missing_reported_digests,
     _request_for_target,
     pending_security_context,
@@ -143,6 +144,32 @@ class SecuritySubjectTests(unittest.TestCase):
             request.request_key,
             replace(request, platform=None, platform_source="").request_key,
         )
+
+    def test_request_records_wud_current_digest_for_comparison(self) -> None:
+        current_digest = f"sha256:{'c' * 64}"
+        target = parse_wud_text(
+            "repo/app:1.0 tag=2.0 platform=linux/amd64 "
+            "sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+        ).targets[0]
+
+        request = _request_for_target(
+            target,
+            compose_platform=None,
+            wud_platform=target.platform,
+            current_image="repo/app:1.0",
+            current_digest=current_digest,
+        )
+        current = current_security_request(request)
+
+        self.assertEqual(request.current_image, "repo/app:1.0")
+        self.assertEqual(request.current_digest, current_digest)
+        self.assertEqual(request.current_digest_source, "wud")
+        self.assertIsNotNone(current)
+        assert current is not None
+        self.assertEqual(current.candidate_image, "repo/app:1.0")
+        self.assertEqual(current.reported_digest, current_digest)
+        self.assertIn("current_sha256=", current.raw)
+        self.assertNotEqual(current.request_key, request.request_key)
 
     def test_context_resolves_missing_digest_once_per_candidate(self) -> None:
         digest = f"sha256:{'b' * 64}"

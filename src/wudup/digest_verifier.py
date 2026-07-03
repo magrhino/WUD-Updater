@@ -617,6 +617,86 @@ class DigestVerifier:
             error="manifest document was not an image manifest or index",
         )
 
+    def resolve_digest_subject(
+        self,
+        image: str,
+        reported_digest: str,
+        platform: ImagePlatform | None,
+        *,
+        platform_source: str = "",
+    ) -> ResolvedImageSubject:
+        reported_digest = normalize_digest(reported_digest)
+        registry_image = parse_registry_image(image)
+        if registry_image is None:
+            return ResolvedImageSubject(
+                requested_ref=image,
+                reported_digest=reported_digest,
+                platform_source=platform_source,
+                identity_status="unsupported",
+                error="unsupported image reference",
+            )
+        if not reported_digest:
+            return _resolved_subject(
+                registry_image,
+                reported_digest,
+                None,
+                platform_source,
+                identity_status="unsupported",
+                error="reported digest is required",
+            )
+        if platform is None:
+            return _resolved_subject(
+                registry_image,
+                reported_digest,
+                platform,
+                platform_source,
+                identity_status="unsupported",
+                error="platform is required",
+            )
+
+        try:
+            digest_document = self._fetch(registry_image, reported_digest)
+        except ManifestLookupError as exc:
+            return _resolved_subject(
+                registry_image,
+                reported_digest,
+                platform,
+                platform_source,
+                identity_status=_subject_error_status(str(exc)),
+                error=str(exc),
+            )
+
+        document_digest = _tag_document_digest(digest_document) or reported_digest
+        if digest_document.is_index():
+            return _resolve_reported_index_subject(
+                registry_image,
+                digest_document,
+                reported_digest,
+                platform,
+                platform_source,
+                document_digest,
+            )
+        if digest_document.is_image_manifest():
+            return _resolved_subject(
+                registry_image,
+                reported_digest,
+                platform,
+                platform_source,
+                identity_status="exact",
+                manifest_digest=reported_digest,
+                source=digest_document.source,
+                warnings=("single-manifest platform was supplied by metadata",),
+            )
+        return _resolved_subject(
+            registry_image,
+            reported_digest,
+            platform,
+            platform_source,
+            identity_status="unsupported",
+            source=digest_document.source,
+            error="manifest document was not an image manifest or index",
+        )
+
     def _resolve_index_subject(
         self,
         registry_image: RegistryImageRef,

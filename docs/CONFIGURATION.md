@@ -70,7 +70,7 @@ Boolean values use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `WUD_SECURITY_SCANNING_ENABLED` | `false` | Enables opt-in candidate vulnerability advisory metadata. Results are cache-backed WebUI metadata for pending candidates only; they do not gate updates, snooze updates, or mark an image safe. |
+| `WUD_SECURITY_SCANNING_ENABLED` | `false` | Enables opt-in vulnerability advisory metadata for pending candidates, with installed-digest comparison when WUD `local_digest` metadata is available. Results do not gate updates, snooze updates, or mark an image safe. |
 | `WUD_SECURITY_SCANNER_EXECUTABLE` | `trivy` | Advanced override for the scanner executable path. Not required when using a `-trivy` image tag because `trivy` is already on `PATH`. |
 | `WUD_SECURITY_SCAN_CACHE_DIR` | Container: `/logs/trivy-cache`; host override: `./logs/trivy-cache` | Optional Trivy cache directory passed to scan refresh jobs. |
 | `WUD_SECURITY_SCAN_TIMEOUT_SECONDS` | `300` | Per-candidate scanner timeout passed to Trivy. |

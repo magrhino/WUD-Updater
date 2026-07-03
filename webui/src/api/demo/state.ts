@@ -25,6 +25,7 @@ import type {
   RunEventRecord,
   RunLogResponse,
   RunSummary,
+  SecurityScanFinding,
   SecurityScanInfo,
   SecurityScanJobResponse,
   SecurityScanSeverityCounts,
@@ -954,6 +955,34 @@ export class DemoApiState {
     const decision = this.securityScanDecision(reportedDigest, platform, firstExact);
     const severityCounts = this.securityScanSeverityCounts(decision.hasFindings);
     const fixableCounts = this.securityScanFixableCounts(decision.hasFindings);
+    const findings = decision.hasFindings
+      ? [
+          {
+            vulnerability_id: "CVE-2026-0001",
+            package_name: "demo-package",
+            installed_version: "1.0.0",
+            fixed_version: "1.0.1",
+            severity: "high" as const,
+            title: "Demo vulnerability for candidate advisory review",
+            primary_url: "https://avd.aquasec.com/nvd/cve-2026-0001",
+          },
+        ]
+      : [];
+    const subject = {
+      requested_ref: item.image,
+      reported_digest: reportedDigest,
+      manifest_digest: reportedDigest,
+      platform,
+    };
+    const currentDigest = normalizeSecurityDigest(item.wud_metadata?.local_digest ?? "");
+    const currentSubject = {
+      requested_ref: item.image,
+      reported_digest: currentDigest,
+      manifest_digest: currentDigest,
+      platform,
+    };
+    const canCompare = Boolean(currentDigest && reportedDigest && platform);
+    const comparisonFindings: SecurityScanFinding[] = canCompare ? findings : [];
 
     return {
       line_no: item.line_no,
@@ -968,21 +997,27 @@ export class DemoApiState {
       severity_counts: severityCounts,
       fixable_counts: fixableCounts,
       unfixed_count: 0,
-      findings: decision.hasFindings
-        ? [
-            {
-              vulnerability_id: "CVE-2026-0001",
-              package_name: "demo-package",
-              installed_version: "1.0.0",
-              fixed_version: "1.0.1",
-              severity: "high",
-              title: "Demo vulnerability for candidate advisory review",
-              primary_url: "https://avd.aquasec.com/nvd/cve-2026-0001",
-            },
-          ]
-        : [],
+      findings,
+      subject,
+      comparison: {
+        status: canCompare ? "unchanged" : "unknown",
+        current_subject: canCompare
+          ? currentSubject
+          : { requested_ref: "", reported_digest: "", manifest_digest: "", platform: "" },
+        fixed_count: 0,
+        remaining_count: comparisonFindings.length,
+        introduced_count: 0,
+        fixed_findings: [],
+        remaining_findings: comparisonFindings,
+        introduced_findings: [],
+        message: canCompare
+          ? "Demo comparison: installed and candidate findings are unchanged."
+          : "Installed digest is unavailable in the demo fixture.",
+      },
       warnings:
-        decision.hasFindings ? ["Demo finding for candidate-only advisory display."] : [],
+        decision.hasFindings
+          ? ["Demo finding for candidate and installed-digest comparison display."]
+          : [],
       error_code: "",
       error_message: "",
     };

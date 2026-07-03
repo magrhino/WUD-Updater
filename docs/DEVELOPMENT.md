@@ -144,7 +144,7 @@ Useful WebUI development variables:
 | `WUD_WEB_SECURE_COOKIES` | Cookie Secure mode: `auto`, `true`, or `false`; keep `auto` outside local HTTP tests. |
 | `WUD_API_BASE_URL` | Internal WUD API URL for best-effort WebUI metadata discovery; defaults to `http://wud:3000`. Runtime discovery retries automatically on later WebUI requests after transient WUD API outages. |
 | `WUD_API_STARTUP_WAIT_SECONDS` | Seconds to retry the initial WUD API health probe during WebUI startup; defaults to `0`. This startup wait is separate from automatic runtime retries. |
-| `WUD_SECURITY_SCANNING_ENABLED` | Enables the opt-in Trivy candidate advisory prototype for local testing. Refresh jobs require a Trivy executable in the backend process. |
+| `WUD_SECURITY_SCANNING_ENABLED` | Enables the opt-in Trivy candidate advisory prototype for local testing, including installed-digest comparison when WUD metadata has `local_digest`. Refresh jobs require a Trivy executable in the backend process. |
 
 For manual backend-only testing with a built SPA:
 

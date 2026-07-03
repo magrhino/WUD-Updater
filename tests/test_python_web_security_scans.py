@@ -529,6 +529,71 @@ def test_security_scan_refresh_scans_caches_and_reads_back_result(
     assert cached_item["warnings"] == ["subject warning"]
 
 
+def test_security_scan_refresh_compares_installed_and_candidate_findings(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    current_digest = f"sha256:{'c' * 64}"
+    context = _single_security_context(tmp_path)
+    context = PendingSecurityContext(
+        source=context.source,
+        requests=(
+            _single_security_request(
+                current_image="ghcr.io/acme/app:1.0",
+                current_digest=current_digest,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "wudup.web_security.pending_security_context",
+        lambda _settings, **_kwargs: context,
+    )
+    monkeypatch.setattr(
+        "wudup.web_security.default_digest_verifier",
+        lambda _settings: ComparisonVerifier(current_digest),
+    )
+    monkeypatch.setattr("wudup.web_security.TrivyScanner", ComparisonScanner)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+
+    queued = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert queued.status_code == 200
+    result = _poll_until(
+        lambda: _completed_security_job(client, queued.json()["job_id"]),
+        timeout_message="security scan job did not complete",
+    )
+    item = result["result"]["items"][0]
+    comparison = item["comparison"]
+    assert comparison["status"] == "mixed"
+    assert comparison["fixed_count"] == 1
+    assert comparison["remaining_count"] == 1
+    assert comparison["introduced_count"] == 1
+    assert comparison["current_subject"]["manifest_digest"] == "sha256:old-child"
+    assert comparison["fixed_findings"][0]["vulnerability_id"] == "CVE-2026-0001"
+    assert comparison["remaining_findings"][0]["vulnerability_id"] == "CVE-2026-0002"
+    assert comparison["introduced_findings"][0]["vulnerability_id"] == "CVE-2026-0003"
+    assert item["subject"]["manifest_digest"] == "sha256:new-child"
+
+    cached = client.get("/api/v1/security-scans")
+
+    assert cached.status_code == 200
+    cached_comparison = cached.json()["items"][0]["comparison"]
+    assert cached_comparison["status"] == "mixed"
+    assert cached_comparison["fixed_count"] == 1
+    assert cached_comparison["remaining_count"] == 1
+    assert cached_comparison["introduced_count"] == 1
+
+
 def test_security_scan_refresh_preserves_seeded_demo_cache(
     tmp_path: Path,
     monkeypatch,
@@ -1088,6 +1153,8 @@ def _single_security_request(
     *,
     raw: str | None = None,
     platform: ImagePlatform | None = DEFAULT_SECURITY_PLATFORM,
+    current_image: str = "",
+    current_digest: str = "",
 ) -> PendingSecurityRequest:
     line = raw if raw is not None else _single_security_raw(platform)
     identity_status = "pending" if platform is not None else "unsupported"
@@ -1100,6 +1167,9 @@ def _single_security_request(
         reported_digest=f"sha256:{VALID_DIGEST}",
         platform=platform,
         platform_source="wud" if platform is not None else "",
+        current_image=current_image,
+        current_digest=current_digest,
+        current_digest_source="wud" if current_digest else "",
         identity_status=identity_status,
         error=error,
     )
@@ -1193,6 +1263,100 @@ class FakeScanner:
                 ),
             ),
         )
+
+
+class ComparisonVerifier:
+    def __init__(self, current_digest: str) -> None:
+        self.current_digest = current_digest
+
+    def resolve_subject(
+        self,
+        image: str,
+        reported_digest: str,
+        platform: ImagePlatform | None,
+        *,
+        platform_source: str = "",
+    ) -> ResolvedImageSubject:
+        assert image == "ghcr.io/acme/app:1.0"
+        assert reported_digest == f"sha256:{VALID_DIGEST}"
+        assert platform == ImagePlatform("linux", "amd64")
+        return ResolvedImageSubject(
+            canonical_registry="ghcr.io",
+            canonical_repository="acme/app",
+            requested_ref="ghcr.io/acme/app:1.0",
+            reported_digest=f"sha256:{VALID_DIGEST}",
+            index_digest=f"sha256:{VALID_DIGEST}",
+            manifest_digest="sha256:new-child",
+            os="linux",
+            architecture="amd64",
+            platform_source=platform_source,
+            identity_status="exact",
+        )
+
+    def resolve_digest_subject(
+        self,
+        image: str,
+        reported_digest: str,
+        platform: ImagePlatform | None,
+        *,
+        platform_source: str = "",
+    ) -> ResolvedImageSubject:
+        assert image == "ghcr.io/acme/app:1.0"
+        assert reported_digest == self.current_digest
+        assert platform == ImagePlatform("linux", "amd64")
+        return ResolvedImageSubject(
+            canonical_registry="ghcr.io",
+            canonical_repository="acme/app",
+            requested_ref="ghcr.io/acme/app:1.0",
+            reported_digest=self.current_digest,
+            index_digest=self.current_digest,
+            manifest_digest="sha256:old-child",
+            os="linux",
+            architecture="amd64",
+            platform_source=platform_source,
+            identity_status="exact",
+        )
+
+
+class ComparisonScanner:
+    def __init__(self, *_args, **_kwargs) -> None:
+        pass
+
+    def scan(self, subject: ResolvedImageSubject) -> SecurityScanResult:
+        findings = (
+            _scan_finding("CVE-2026-0001", "openssl", "1.0.0"),
+            _scan_finding("CVE-2026-0002", "zlib", "1.0.0"),
+        )
+        if subject.manifest_digest == "sha256:new-child":
+            findings = (
+                _scan_finding("CVE-2026-0002", "zlib", "2.0.0"),
+                _scan_finding("CVE-2026-0003", "curl", "1.0.0"),
+            )
+        return SecurityScanResult(
+            state="complete",
+            verdict="findings",
+            scanner_version="fake-trivy",
+            scanner_schema="2",
+            db_revision="test-db",
+            severity_counts={"high": len(findings)},
+            fixable_counts={"high": len(findings)},
+            findings=findings,
+        )
+
+
+def _scan_finding(
+    vulnerability_id: str,
+    package_name: str,
+    installed_version: str,
+) -> SecurityScanFinding:
+    return SecurityScanFinding(
+        vulnerability_id=vulnerability_id,
+        package_name=package_name,
+        installed_version=installed_version,
+        fixed_version="9.9.9",
+        severity="high",
+        title=f"{package_name} vulnerability",
+    )
 
 
 class FailingScanner:

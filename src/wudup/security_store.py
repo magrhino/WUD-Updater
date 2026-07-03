@@ -15,6 +15,7 @@ from .security_subjects import PendingSecurityRequest, subject_id
 from .web_models import (
     SecurityScanFinding,
     SecurityScanInfo,
+    SecurityScanSubject,
     SecurityScanSeverityCounts,
 )
 
@@ -204,6 +205,7 @@ def row_to_scan_info(
         fixable_counts=_counts(str(row["fixable_counts_json"])),
         unfixed_count=_safe_int(row["unfixed_count"]),
         findings=_findings(str(row["findings_json"])),
+        subject=_subject(row),
         warnings=_json_string_list(str(row["warnings_json"])),
         error_code=str(row["error_code"]),
         error_message=str(row["error_message"]),
@@ -256,6 +258,15 @@ def _findings(value: str) -> list[SecurityScanFinding]:
             )
         )
     return findings
+
+
+def _subject(row: sqlite3.Row) -> SecurityScanSubject:
+    return SecurityScanSubject(
+        requested_ref=str(row["requested_ref"]),
+        reported_digest=str(row["reported_digest"]),
+        manifest_digest=str(row["manifest_digest"]),
+        platform=str(row["platform"]),
+    )
 
 
 def _json_string_list(value: str) -> list[str]:
