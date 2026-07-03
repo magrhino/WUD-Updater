@@ -4,6 +4,19 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.52.5](https://github.com/magrhino/wudup/compare/v0.52.4...v0.52.5) (2026-07-03)
+
+
+### Bug Fixes
+
+* **security:** preserve registry identity for scan subjects ([#482](https://github.com/magrhino/wudup/issues/482)) ([7a7faa1](https://github.com/magrhino/wudup/commit/7a7faa1adddaf2c34e03d39c80285e0a5b5cda27))
+* **self-update:** preserve trivy self-update image variant ([#480](https://github.com/magrhino/wudup/issues/480)) ([fca066f](https://github.com/magrhino/wudup/commit/fca066fe48b09c847c02db6f98abb57476f20bf4))
+
+
+### Reverts
+
+* **db:** remove accidental database test commit ([3567874](https://github.com/magrhino/wudup/commit/356787401e90ca0620dc5c92339943090bc6ce68))
+
 ## [0.52.4](https://github.com/magrhino/wudup/compare/v0.52.3...v0.52.4) (2026-07-02)
 
 
