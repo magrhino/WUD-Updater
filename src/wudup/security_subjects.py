@@ -63,6 +63,7 @@ class PendingSecurityOptions:
 
 
 PENDING_SECURITY_DEFAULT_OPTIONS = PendingSecurityOptions()
+PENDING_SECURITY_READ_OPTIONS = PendingSecurityOptions(include_compose=False)
 PENDING_SECURITY_CACHE_OPTIONS = PendingSecurityOptions(
     include_compose=False,
     include_wud_metadata=False,

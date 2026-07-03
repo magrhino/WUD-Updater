@@ -96,12 +96,15 @@ def _wud_api_container(
     remote_digest: str = "",
     update_kind: str = "tag",
     platform: str = "",
+    registry_url: str = "",
 ) -> dict[str, object]:
     image_payload: dict[str, object] = {
         "name": image,
         "tag": {"value": tag},
         "digest": {"value": "sha256:old"},
     }
+    if registry_url:
+        image_payload["registry"] = {"url": registry_url}
     platform_parts = platform.split("/")
     if len(platform_parts) in {2, 3}:
         platform_payload = {

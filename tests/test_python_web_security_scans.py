@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from wudup.db import init_db, open_db, utc_timestamp
-from wudup.digest_verifier import ResolvedImageSubject
+from wudup.digest_verifier import DigestResolveResult, ResolvedImageSubject
 from wudup.platforms import ImagePlatform, platform_value
 from wudup.security_scanner import SecurityScanFinding, SecurityScanResult
 from wudup.security_store import (
@@ -20,6 +20,7 @@ from wudup.security_store import (
 from wudup.security_subjects import (
     PENDING_SECURITY_CACHE_OPTIONS,
     PENDING_SECURITY_DEFAULT_OPTIONS,
+    PENDING_SECURITY_READ_OPTIONS,
     PendingSecurityContext,
     PendingSecurityOptions,
     PendingSecurityRequest,
@@ -33,7 +34,9 @@ from tests.web_test_helpers import (
     WEB_DB_NAME,
     _client,
     _csrf_headers,
+    _install_wud_api,
     _poll_until,
+    _wud_api_container,
 )
 
 
@@ -73,7 +76,7 @@ def test_security_scans_get_is_disabled_and_cache_only_by_default(
     assert not (tmp_path / "state" / WEB_DB_NAME).exists()
 
 
-def test_security_scans_get_uses_cache_only_context(
+def test_security_scans_get_disabled_uses_cache_only_context(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -94,6 +97,35 @@ def test_security_scans_get_uses_cache_only_context(
 
     assert response.status_code == 200
     assert calls == [PENDING_SECURITY_CACHE_OPTIONS]
+
+
+def test_security_scans_get_enabled_uses_read_context(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls: list[PendingSecurityOptions] = []
+
+    def fake_context(
+        _settings,
+        *,
+        options: PendingSecurityOptions = PENDING_SECURITY_DEFAULT_OPTIONS,
+    ) -> PendingSecurityContext:
+        calls.append(options)
+        return _empty_security_context(tmp_path)
+
+    monkeypatch.setattr("wudup.web_security.pending_security_context", fake_context)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+
+    response = client.get("/api/v1/security-scans")
+
+    assert response.status_code == 200
+    assert calls == [PENDING_SECURITY_READ_OPTIONS]
 
 
 def test_security_scans_get_missing_cache_table_uses_placeholders(
@@ -693,6 +725,93 @@ def test_security_scan_cache_readback_does_not_cross_platform_request_keys(
 
     item = _refresh_and_read_cached_security_scan_item(client)
     assert item["state"] == "not_scanned"
+
+
+def test_security_scan_get_resolves_wud_api_tag_digest_for_cache_readback(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    digest = f"sha256:{VALID_DIGEST}"
+    raw = "ghcr.io/acme/app:1.0 tag=2.0 platform=linux/amd64"
+
+    class TagDigestVerifier:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def resolve_tag_digest(self, image: str) -> DigestResolveResult:
+            self.calls.append(image)
+            return DigestResolveResult(
+                ok=True,
+                status="resolved",
+                reason="tag-digest-resolved",
+                digest=digest,
+            )
+
+    verifier = TagDigestVerifier()
+    monkeypatch.setattr(
+        "wudup.security_subjects.default_digest_verifier",
+        lambda _settings: verifier,
+    )
+    _install_wud_api(
+        monkeypatch,
+        containers=[
+            _wud_api_container(
+                image="acme/app",
+                tag="1.0",
+                remote_tag="2.0",
+                platform="linux/amd64",
+                registry_url="https://ghcr.io",
+            )
+        ],
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.security-scan-api.test:3000",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+    request = PendingSecurityRequest(
+        line_no=1,
+        raw=raw,
+        image="ghcr.io/acme/app:1.0",
+        candidate_image="ghcr.io/acme/app:2.0",
+        reported_digest=digest,
+        platform=ImagePlatform("linux", "amd64"),
+        platform_source="wud",
+        identity_status="pending",
+    )
+    subject = ResolvedImageSubject(
+        canonical_registry="ghcr.io",
+        canonical_repository="acme/app",
+        requested_ref="ghcr.io/acme/app:2.0",
+        reported_digest=digest,
+        index_digest=digest,
+        manifest_digest="sha256:child",
+        os="linux",
+        architecture="amd64",
+        platform_source="wud",
+        identity_status="exact",
+    )
+    with open_db(tmp_path / "state" / WEB_DB_NAME) as conn:
+        init_db(conn)
+        upsert_scan_result(
+            conn,
+            request,
+            subject,
+            SecurityScanResult(state="complete", verdict="none_reported"),
+            timestamp=utc_timestamp(),
+        )
+
+    response = client.get("/api/v1/security-scans")
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["state"] == "complete"
+    assert item["verdict"] == "none_reported"
+    assert verifier.calls == ["ghcr.io/acme/app:2.0"]
 
 
 def test_security_scan_refresh_persists_non_exact_resolution(

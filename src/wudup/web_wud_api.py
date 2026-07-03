@@ -19,12 +19,15 @@ from threading import Lock
 from typing import cast
 
 from . import web_wud_config
+from .digest_verifier import DOCKER_HUB_REGISTRIES
 from .web_wud_config import _auth_required_detail
 from .images import (
+    drop_registry,
     image_has_tag,
     image_matches_resolved_target,
     image_tag,
     normalize_digest,
+    strip_digest,
     tag_value_valid,
 )
 from .release_notes import OCI_SOURCE_LABEL, github_repo_from_source
@@ -1055,9 +1058,25 @@ def _image_ref(image: Mapping[str, object]) -> str:
     tag = _path_string(image, "tag", "value")
     if not name:
         return ""
+    registry = _registry_host(_path_string(image, "registry", "url"))
+    if registry and not _image_has_registry(name):
+        name = f"{registry}/{name}"
     if tag and not image_has_tag(name):
         return f"{name}:{tag}"
     return name
+
+
+def _registry_host(value: str) -> str:
+    value = value.strip()
+    if not value:
+        return ""
+    parsed = urllib.parse.urlsplit(value if "://" in value else f"//{value}")
+    host = (parsed.netloc or parsed.path.split("/", 1)[0]).split("@")[-1].lower()
+    return "" if host in DOCKER_HUB_REGISTRIES else host
+
+
+def _image_has_registry(image: str) -> bool:
+    return drop_registry(image) != strip_digest(image)
 
 
 def _remote_tag(
