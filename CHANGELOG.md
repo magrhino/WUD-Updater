@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.52.4](https://github.com/magrhino/wudup/compare/v0.52.3...v0.52.4) (2026-07-02)
+
+
+### Bug Fixes
+
+* **demo:** simplify static demo fixtures ([#478](https://github.com/magrhino/wudup/issues/478)) ([2de0d11](https://github.com/magrhino/wudup/commit/2de0d11562e7160eae5c44ef4c72c48977d71efd))
+
 ## [0.52.3](https://github.com/magrhino/wudup/compare/v0.52.2...v0.52.3) (2026-07-02)
 
 
