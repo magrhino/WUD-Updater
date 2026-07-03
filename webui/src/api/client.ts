@@ -67,6 +67,9 @@ export type {
   RetagPlanResponse,
   RetagPreviewJobResponse,
   // Release notes
+  ReleaseNoteChangeType,
+  ReleaseNoteClassification,
+  ReleaseNoteClassificationTag,
   ReleaseNoteLink,
   ReleaseNoteInfo,
   ReleaseNotesResponse,

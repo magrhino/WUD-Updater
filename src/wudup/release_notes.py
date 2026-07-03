@@ -17,6 +17,11 @@ from typing import Any, Literal
 
 from .db import utc_timestamp
 from .images import image_repo_ref, image_tag
+from .lsio_updates import (
+    LSIOUpdateClassification,
+    classification_from_mapping,
+    classify_lsio_update,
+)
 from .wud_file import WudTarget
 
 
@@ -68,6 +73,9 @@ class ReleaseNoteInfo:
     refreshed_at: str = ""
     error: str = ""
     body: str = ""
+    classification: LSIOUpdateClassification = field(
+        default_factory=LSIOUpdateClassification
+    )
 
 
 @dataclass(frozen=True)
@@ -424,6 +432,7 @@ def _placeholder_info(context: ReleaseNoteContext) -> ReleaseNoteInfo:
             image_repo=context.image_repo,
             upstream_repo=context.upstream_repo,
             error=context.error,
+            classification=_classify_context(context),
         )
     return ReleaseNoteInfo(
         line_no=context.line_no,
@@ -431,10 +440,12 @@ def _placeholder_info(context: ReleaseNoteContext) -> ReleaseNoteInfo:
         provider=context.provider,
         image_repo=context.image_repo,
         upstream_repo=context.upstream_repo,
+        classification=_classify_context(context),
     )
 
 
 def _row_to_info(row: sqlite3.Row, *, line_no: int) -> ReleaseNoteInfo:
+    metadata = _json_object(str(row["metadata_json"]))
     return ReleaseNoteInfo(
         line_no=line_no,
         status=str(row["status"]),  # type: ignore[arg-type]
@@ -457,6 +468,7 @@ def _row_to_info(row: sqlite3.Row, *, line_no: int) -> ReleaseNoteInfo:
         refreshed_at=str(row["updated_at"]),
         error=str(row["error"]),
         body=str(row["body"]),
+        classification=classification_from_mapping(metadata.get("classification")),
     )
 
 
@@ -468,7 +480,13 @@ def _upsert_cache(
 ) -> None:
     links_json = json.dumps([asdict(link) for link in info.links], sort_keys=True)
     reasons_json = json.dumps(info.breaking_reasons, sort_keys=True)
-    metadata_json = json.dumps({"line_no": context.line_no}, sort_keys=True)
+    metadata_json = json.dumps(
+        {
+            "line_no": context.line_no,
+            "classification": asdict(info.classification),
+        },
+        sort_keys=True,
+    )
     with conn:
         conn.execute(
             """
@@ -620,10 +638,16 @@ def _fetch_lsio_release_note(
             upstream_repo=context.upstream_repo,
             refreshed_at=timestamp,
             error=f"LSIO release not found for {context.image_repo}",
+            classification=_classify_context(context),
         )
     lsio_body = str(lsio_release.get("body") or "")
     lsio_tag = str(lsio_release.get("tag_name") or "")
     upstream_version = context.target_tag or _lsio_upstream_version(lsio_body, lsio_tag)
+    classification = _classify_context(
+        context,
+        lsio_tag=lsio_tag,
+        upstream_version=upstream_version,
+    )
     upstream_release = _fetch_release(client, context.upstream_repo, upstream_version)
     links = [
         ReleaseNoteLink(
@@ -650,6 +674,7 @@ def _fetch_lsio_release_note(
             title=f"{context.image_repo} -> {context.upstream_repo}",
             links=links,
             refreshed_at=timestamp,
+            classification=classification,
         )
     body = str(upstream_release.get("body") or "")
     release_tag = str(upstream_release.get("tag_name") or "")
@@ -683,6 +708,22 @@ def _fetch_lsio_release_note(
         links=links,
         refreshed_at=timestamp,
         body="\n\n".join(part for part in (body, lsio_body) if part),
+        classification=classification,
+    )
+
+
+def _classify_context(
+    context: ReleaseNoteContext,
+    *,
+    lsio_tag: str = "",
+    upstream_version: str = "",
+) -> LSIOUpdateClassification:
+    return classify_lsio_update(
+        image_repo=context.image_repo,
+        current_tag=context.current_tag,
+        target_tag=context.target_tag,
+        lsio_tag=lsio_tag,
+        upstream_version=upstream_version,
     )
 
 
@@ -900,3 +941,11 @@ def _json_object_list(raw: str) -> list[dict[str, object]]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, dict)]
+
+
+def _json_object(raw: str) -> dict[str, object]:
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}

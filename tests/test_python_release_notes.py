@@ -16,6 +16,7 @@ from wudup.release_notes import (
     ReleaseNoteInfo,
     ReleaseNoteLink,
     _github_release_link_tag,
+    cached_release_notes,
     detect_breaking,
     github_latest_candidate_from_info,
     release_note_contexts,
@@ -269,6 +270,51 @@ class ReleaseNotesTests(unittest.TestCase):
             [(link.label, link.kind) for link in items[0].links],
             [("LSIO release", "lsio_release"), ("Upstream release", "github_release")],
         )
+
+    def test_lsio_classification_persists_in_release_note_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            upstream_map = Path(tmp) / "upstreams.txt"
+            upstream_map.write_text(
+                "linuxserver/docker-radarr: Radarr/Radarr\n",
+                encoding="utf-8",
+            )
+            parsed = parse_wud_text("linuxserver/radarr:5.1.0-ls1 tag=5.1.0-ls2\n")
+            responses = {
+                "https://api.github.com/repos/linuxserver/docker-radarr/releases/latest": {
+                    "tag_name": "5.1.0-ls2",
+                    "name": "5.1.0-ls2",
+                    "html_url": "https://github.com/linuxserver/docker-radarr/releases/tag/5.1.0-ls2",
+                    "body": "LinuxServer Changes:\n- Rebase to Alpine 3.20",
+                    "published_at": "2026-01-02T00:00:00Z",
+                },
+                "https://api.github.com/repos/Radarr/Radarr/releases/tags/v5.1.0-ls2": {
+                    "message": "Not Found",
+                },
+                "https://api.github.com/repos/Radarr/Radarr/releases/tags/5.1.0-ls2": {
+                    "message": "Not Found",
+                },
+                "https://api.github.com/repos/Radarr/Radarr": {
+                    "html_url": "https://github.com/Radarr/Radarr",
+                },
+            }
+            client = GitHubClient(fetch_json=lambda url: responses[url])
+            environ = {"UPSTREAM_MAP": str(upstream_map)}
+            with open_db(":memory:") as conn:
+                init_db(conn)
+                items = refresh_release_notes(
+                    conn,
+                    parsed.targets,
+                    environ,
+                    client=client,
+                )
+                cached = cached_release_notes(conn, parsed.targets, environ)
+
+        self.assertEqual(items[0].classification.change_type, "image_rebuild")
+        self.assertEqual(
+            items[0].classification.target.build_suffix,
+            "ls2",
+        )
+        self.assertEqual(cached[0].classification.change_type, "image_rebuild")
 
     def test_github_latest_candidate_from_lsio_info_requires_release_link(self) -> None:
         for status in ("ready", "not_found"):

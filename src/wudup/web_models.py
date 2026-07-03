@@ -111,6 +111,9 @@ __all__ = (
     "PlanTarget",
     "ReadyResponse",
     "ReleaseNoteInfo",
+    "ReleaseNoteChangeType",
+    "ReleaseNoteClassification",
+    "ReleaseNoteClassificationTag",
     "ReleaseNoteLink",
     "ReleaseNotificationDestination",
     "ReleaseNotificationItem",
@@ -238,6 +241,8 @@ ApplyJobProgressStatus = Literal["running", "success", "failure", "skipped"]
 SelfUpdateStatus = Literal["available", "up_to_date", "disabled", "unavailable"]
 
 SelfUpdateStrategy = Literal["pull_image", "prepare_tag_update"]
+
+ReleaseNoteChangeType = Literal["upstream_update", "image_rebuild", "unknown"]
 
 SelfUpdateAuditStatus = Literal["image_pulled", "tag_prepared", "failure"]
 
@@ -743,6 +748,24 @@ class ReleaseNoteLink(BaseModel):
     url: str
     kind: str
 
+class ReleaseNoteClassificationTag(BaseModel):
+    raw: str = ""
+    kind: str = "unknown"
+    arch: str = ""
+    branch: str = ""
+    upstream_version: str = ""
+    build_suffix: str = ""
+
+class ReleaseNoteClassification(BaseModel):
+    change_type: ReleaseNoteChangeType = "unknown"
+    reason: str = "ambiguous-tags"
+    current: ReleaseNoteClassificationTag = Field(
+        default_factory=ReleaseNoteClassificationTag
+    )
+    target: ReleaseNoteClassificationTag = Field(
+        default_factory=ReleaseNoteClassificationTag
+    )
+
 class ReleaseNoteInfo(BaseModel):
     line_no: int
     status: str
@@ -758,6 +781,9 @@ class ReleaseNoteInfo(BaseModel):
     refreshed_at: str = ""
     error: str = ""
     body: str = ""
+    classification: ReleaseNoteClassification = Field(
+        default_factory=ReleaseNoteClassification
+    )
     notification_key: str = ""
     notification_status: str = "new"
     notification_last_sent_at: str = ""
