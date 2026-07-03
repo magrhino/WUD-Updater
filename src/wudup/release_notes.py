@@ -722,18 +722,40 @@ def _fetch_lsio_release(
     client: GitHubClient,
     context: ReleaseNoteContext,
 ) -> dict[str, Any] | None:
-    branch = _lsio_tracking_branch(context)
+    branch, upstream_version, build_suffix = _lsio_branch_target(context)
     if not branch:
         return _fetch_latest(client, context.image_repo)
-    releases = _object_list(
-        client.get_json(
-            f"https://api.github.com/repos/{context.image_repo}/releases?per_page=30"
+    page = 1
+    while True:
+        releases = _object_list(
+            client.get_json(_lsio_releases_url(context.image_repo, page))
         )
-    )
-    for release in releases:
-        if parse_lsio_tag(str(release.get("tag_name") or "")).branch == branch:
-            return release
-    return None
+        for release in releases:
+            parts = parse_lsio_tag(str(release.get("tag_name") or ""))
+            if (
+                parts.branch == branch
+                and (not upstream_version or parts.upstream_version == upstream_version)
+                and (not build_suffix or parts.build_suffix == build_suffix)
+            ):
+                return release
+        if len(releases) < 30:
+            return None
+        page += 1
+
+
+def _lsio_releases_url(repo: str, page: int) -> str:
+    url = f"https://api.github.com/repos/{repo}/releases?per_page=30"
+    if page > 1:
+        url = f"{url}&page={page}"
+    return url
+
+
+def _lsio_branch_target(context: ReleaseNoteContext) -> tuple[str, str, str]:
+    target = parse_lsio_tag(context.target_tag)
+    if target.kind in {"build", "version"} and target.branch:
+        return target.branch, target.upstream_version, target.build_suffix
+    branch = _lsio_tracking_branch(context)
+    return branch, "", ""
 
 
 def _lsio_tracking_branch(context: ReleaseNoteContext) -> str:
