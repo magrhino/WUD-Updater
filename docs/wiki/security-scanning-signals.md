@@ -67,7 +67,10 @@ Secret scanning and insecure TLS modes stay disabled by default.
 
 The API is cache-first:
 
-- `GET /api/v1/security-scans` reads cached metadata only.
+- `GET /api/v1/security-scans` reads cached scan results for current pending
+  candidates. When scanning is enabled, it may use WUD metadata and resolve
+  missing reported digests so current candidates can join existing cache
+  entries, but it must not run Trivy or create refresh jobs.
 - `POST /api/v1/security-scans/refresh` validates current pending subjects and
   queues bounded scan jobs.
 - `GET /api/v1/security-scans/jobs/{id}` reports job progress and results.

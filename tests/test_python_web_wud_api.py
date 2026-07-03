@@ -28,6 +28,7 @@ from tests.web_test_helpers import (
     _csrf_headers,
     _install_wud_api,
     _web_env,
+    _wud_image_payload,
 )
 
 
@@ -56,14 +57,15 @@ def _container_payload(
     link: str = "https://github.com/acme/app/releases/tag/v1.1.0",
     update_available: bool = True,
     platform: dict[str, str] | None = None,
+    registry_url: str = "",
 ) -> dict[str, Any]:
-    image_payload: dict[str, Any] = {
-        "name": image,
-        "tag": {"value": tag},
-        "digest": {"value": "sha256:local"},
-    }
-    if platform is not None:
-        image_payload["platform"] = platform
+    image_payload = _wud_image_payload(
+        image=image,
+        tag=tag,
+        digest="sha256:local",
+        registry_url=registry_url,
+        platform=platform,
+    )
     return {
         "id": f"docker.local.{name}",
         "name": name,
@@ -139,6 +141,58 @@ def test_wud_api_snapshot_reads_update_metadata(tmp_path: Path, monkeypatch) -> 
     assert container.remote_digest == "sha256:remote"
     assert container.update_kind == "tag"
     assert container.semver_diff == "minor"
+
+
+def test_wud_api_snapshot_preserves_registry_url_for_unqualified_images(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(
+        monkeypatch,
+        containers=(
+            200,
+            [
+                _container_payload(
+                    name="dozzle",
+                    image="amir20/dozzle",
+                    tag="v10.6.6",
+                    remote_tag="v10.6.7",
+                    result_digest="",
+                    registry_url="https://ghcr.io",
+                ),
+                _container_payload(
+                    name="explicit",
+                    image="ghcr.io/acme/app",
+                    registry_url="https://ghcr.io",
+                ),
+                _container_payload(
+                    name="hub",
+                    image="library/nginx",
+                    registry_url="https://index.docker.io/v1/",
+                ),
+                _container_payload(
+                    name="digest",
+                    image="amir20/dozzle@sha256:local",
+                    tag="",
+                    remote_tag="",
+                    result_digest="",
+                    registry_url="https://ghcr.io",
+                ),
+            ],
+        ),
+    )
+
+    snapshot = web_wud_api.get_snapshot(
+        _settings(tmp_path, "https://wud.registry-url.test:3000"),
+        include_containers=True,
+        force=True,
+    )
+
+    images = {container.name: container.image for container in snapshot.containers}
+    assert images["dozzle"] == "ghcr.io/amir20/dozzle:v10.6.6"
+    assert images["explicit"] == "ghcr.io/acme/app:1.0.0"
+    assert images["hub"] == "library/nginx:1.0.0"
+    assert images["digest"] == "ghcr.io/amir20/dozzle@sha256:local"
 
 
 def test_wud_api_snapshot_reads_tag_digest_from_remote_value(

@@ -87,6 +87,26 @@ def _client(
     return TestClient(create_app(environ=values))
 
 
+def _wud_image_payload(
+    *,
+    image: str,
+    tag: str,
+    digest: str,
+    registry_url: str = "",
+    platform: Mapping[str, str] | None = None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "name": image,
+        "tag": {"value": tag},
+        "digest": {"value": digest},
+    }
+    if registry_url:
+        payload["registry"] = {"url": registry_url}
+    if platform is not None:
+        payload["platform"] = platform
+    return payload
+
+
 def _wud_api_container(
     *,
     name: str = "app",
@@ -96,12 +116,9 @@ def _wud_api_container(
     remote_digest: str = "",
     update_kind: str = "tag",
     platform: str = "",
+    registry_url: str = "",
 ) -> dict[str, object]:
-    image_payload: dict[str, object] = {
-        "name": image,
-        "tag": {"value": tag},
-        "digest": {"value": "sha256:old"},
-    }
+    platform_payload: dict[str, str] | None = None
     platform_parts = platform.split("/")
     if len(platform_parts) in {2, 3}:
         platform_payload = {
@@ -110,7 +127,13 @@ def _wud_api_container(
         }
         if len(platform_parts) == 3:
             platform_payload["variant"] = platform_parts[2]
-        image_payload["platform"] = platform_payload
+    image_payload = _wud_image_payload(
+        image=image,
+        tag=tag,
+        digest="sha256:old",
+        registry_url=registry_url,
+        platform=platform_payload,
+    )
 
     return {
         "id": f"docker.local.{name}",

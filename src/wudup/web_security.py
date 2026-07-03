@@ -26,6 +26,7 @@ from .security_store import (
 )
 from .security_subjects import (
     PENDING_SECURITY_CACHE_OPTIONS,
+    PENDING_SECURITY_READ_OPTIONS,
     PendingSecurityContext,
     PendingSecurityRequest,
     default_digest_verifier,
@@ -202,7 +203,11 @@ def api_security_scan_job(job_id: str, request: Request) -> SecurityScanJobRespo
 def security_scans_response(settings: WebSettings) -> SecurityScansResponse:
     context = pending_security_context(
         settings,
-        options=PENDING_SECURITY_CACHE_OPTIONS,
+        options=(
+            PENDING_SECURITY_READ_OPTIONS
+            if settings.security_scan.enabled
+            else PENDING_SECURITY_CACHE_OPTIONS
+        ),
     )
     if not settings.security_scan.enabled:
         return _response_from_items(
