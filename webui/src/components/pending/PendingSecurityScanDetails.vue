@@ -37,6 +37,12 @@ const comparisonDigestVisible = computed(
   () => Boolean(currentDigest.value || candidateDigest.value || props.scan.subject.platform),
 );
 const comparisonVisible = computed(() => Boolean(comparison.value.message));
+const fixedCount = computed(() => comparison.value.fixed_findings.length);
+const remainingCount = computed(() => comparison.value.remaining_findings.length);
+const introducedCount = computed(() => comparison.value.introduced_findings.length);
+const comparisonFindingCountsVisible = computed(
+  () => Boolean(fixedCount.value || remainingCount.value || introducedCount.value),
+);
 const visible = computed(
   () =>
     props.scan.verdict === "findings" ||
@@ -114,7 +120,7 @@ const comparisonTagType = computed<TagType>(() => {
     return "warning";
   }
   if (comparison.value.status === "unchanged") {
-    return comparison.value.remaining_count > 0 ? "warning" : "success";
+    return remainingCount.value > 0 ? "warning" : "success";
   }
   return "default";
 });
@@ -151,16 +157,6 @@ function titleCase(value: string): string {
 
 function findingTitle(finding: SecurityScanFinding): string {
   return finding.vulnerability_id || finding.package_name || "Unknown advisory";
-}
-
-function shortDigest(value: string): string {
-  if (!value) {
-    return "Unknown";
-  }
-  if (value.length <= 34) {
-    return value;
-  }
-  return `${value.slice(0, 18)}...${value.slice(-12)}`;
 }
 
 async function copyReport(): Promise<void> {
@@ -216,34 +212,30 @@ async function copyReport(): Promise<void> {
         {{ comparison.message }}
       </p>
       <div
-        v-if="
-          comparison.fixed_count ||
-          comparison.remaining_count ||
-          comparison.introduced_count
-        "
+        v-if="comparisonFindingCountsVisible"
         class="security-comparison-counts"
       >
-        <n-tag v-if="comparison.fixed_count" size="small" type="success">
-          {{ pluralize(comparison.fixed_count, "fixed finding") }}
+        <n-tag v-if="fixedCount" size="small" type="success">
+          {{ pluralize(fixedCount, "fixed finding") }}
         </n-tag>
-        <n-tag v-if="comparison.remaining_count" size="small" type="warning">
-          {{ pluralize(comparison.remaining_count, "remaining finding") }}
+        <n-tag v-if="remainingCount" size="small" type="warning">
+          {{ pluralize(remainingCount, "remaining finding") }}
         </n-tag>
-        <n-tag v-if="comparison.introduced_count" size="small" type="error">
-          {{ pluralize(comparison.introduced_count, "introduced finding") }}
+        <n-tag v-if="introducedCount" size="small" type="error">
+          {{ pluralize(introducedCount, "introduced finding") }}
         </n-tag>
       </div>
       <dl v-if="comparisonDigestVisible" class="security-comparison-digests">
         <div>
           <dt>Installed</dt>
           <dd class="wrap-anywhere" :title="currentDigest">
-            {{ shortDigest(currentDigest) }}
+            {{ currentDigest || "Unknown" }}
           </dd>
         </div>
         <div>
           <dt>Candidate</dt>
           <dd class="wrap-anywhere" :title="candidateDigest">
-            {{ shortDigest(candidateDigest) }}
+            {{ candidateDigest || "Unknown" }}
           </dd>
         </div>
         <div>

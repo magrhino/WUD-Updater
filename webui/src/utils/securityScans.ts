@@ -116,10 +116,11 @@ function comparisonCueDisplay(
   }
   const comparison = scan.comparison;
   if (comparison.status === "improved") {
+    const remainingCount = comparison.remaining_findings.length;
     return {
       key: "security-improved",
-      label: comparison.remaining_count > 0 ? "Findings reduced" : "Findings fixed",
-      type: comparison.remaining_count > 0 ? securityScanFindingsType(scan) : "success",
+      label: remainingCount > 0 ? "Findings reduced" : "Findings fixed",
+      type: remainingCount > 0 ? securityScanFindingsType(scan) : "success",
     };
   }
   if (comparison.status === "mixed") {
@@ -136,7 +137,7 @@ function comparisonCueDisplay(
       type: securityScanFindingsType(scan),
     };
   }
-  if (comparison.status === "unchanged" && comparison.remaining_count > 0) {
+  if (comparison.status === "unchanged" && comparison.remaining_findings.length > 0) {
     return {
       key: "security-remaining",
       label: "Findings remain",

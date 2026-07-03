@@ -575,9 +575,9 @@ def test_security_scan_refresh_compares_installed_and_candidate_findings(
     item = result["result"]["items"][0]
     comparison = item["comparison"]
     assert comparison["status"] == "mixed"
-    assert comparison["fixed_count"] == 1
-    assert comparison["remaining_count"] == 1
-    assert comparison["introduced_count"] == 1
+    assert len(comparison["fixed_findings"]) == 1
+    assert len(comparison["remaining_findings"]) == 1
+    assert len(comparison["introduced_findings"]) == 1
     assert comparison["current_subject"]["manifest_digest"] == "sha256:old-child"
     assert comparison["fixed_findings"][0]["vulnerability_id"] == "CVE-2026-0001"
     assert comparison["remaining_findings"][0]["vulnerability_id"] == "CVE-2026-0002"
@@ -589,9 +589,9 @@ def test_security_scan_refresh_compares_installed_and_candidate_findings(
     assert cached.status_code == 200
     cached_comparison = cached.json()["items"][0]["comparison"]
     assert cached_comparison["status"] == "mixed"
-    assert cached_comparison["fixed_count"] == 1
-    assert cached_comparison["remaining_count"] == 1
-    assert cached_comparison["introduced_count"] == 1
+    assert len(cached_comparison["fixed_findings"]) == 1
+    assert len(cached_comparison["remaining_findings"]) == 1
+    assert len(cached_comparison["introduced_findings"]) == 1
 
 
 def test_security_scan_refresh_preserves_seeded_demo_cache(

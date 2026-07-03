@@ -302,9 +302,6 @@ export type SecurityScanComparisonStatus =
 export interface SecurityScanComparison {
   status: SecurityScanComparisonStatus;
   current_subject: SecurityScanSubject;
-  fixed_count: number;
-  remaining_count: number;
-  introduced_count: number;
   fixed_findings: SecurityScanFinding[];
   remaining_findings: SecurityScanFinding[];
   introduced_findings: SecurityScanFinding[];

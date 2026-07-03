@@ -547,46 +547,17 @@ class DigestVerifier:
         *,
         platform_source: str = "",
     ) -> ResolvedImageSubject:
-        reported_digest = normalize_digest(reported_digest)
-        registry_image = parse_registry_image(image)
-        if registry_image is None:
-            return ResolvedImageSubject(
-                requested_ref=image,
-                reported_digest=reported_digest,
-                platform_source=platform_source,
-                identity_status="unsupported",
-                error="unsupported image reference",
-            )
-        if not reported_digest:
-            return _resolved_subject(
-                registry_image,
-                reported_digest,
-                None,
-                platform_source,
-                identity_status="unsupported",
-                error="reported digest is required",
-            )
-        if platform is None:
-            return _resolved_subject(
-                registry_image,
-                reported_digest,
-                platform,
-                platform_source,
-                identity_status="unsupported",
-                error="platform is required",
-            )
-
-        try:
-            tag_document = self._fetch(registry_image, registry_image.tag)
-        except ManifestLookupError as exc:
-            return _resolved_subject(
-                registry_image,
-                reported_digest,
-                platform,
-                platform_source,
-                identity_status=_subject_error_status(str(exc)),
-                error=str(exc),
-            )
+        lookup = self._fetch_subject_document(
+            image,
+            reported_digest,
+            platform,
+            platform_source=platform_source,
+            use_reported_digest=False,
+        )
+        if isinstance(lookup, ResolvedImageSubject):
+            return lookup
+        registry_image, reported_digest, tag_document = lookup
+        assert platform is not None
 
         tag_digest = _tag_document_digest(tag_document)
         if tag_document.is_index():
@@ -625,46 +596,17 @@ class DigestVerifier:
         *,
         platform_source: str = "",
     ) -> ResolvedImageSubject:
-        reported_digest = normalize_digest(reported_digest)
-        registry_image = parse_registry_image(image)
-        if registry_image is None:
-            return ResolvedImageSubject(
-                requested_ref=image,
-                reported_digest=reported_digest,
-                platform_source=platform_source,
-                identity_status="unsupported",
-                error="unsupported image reference",
-            )
-        if not reported_digest:
-            return _resolved_subject(
-                registry_image,
-                reported_digest,
-                None,
-                platform_source,
-                identity_status="unsupported",
-                error="reported digest is required",
-            )
-        if platform is None:
-            return _resolved_subject(
-                registry_image,
-                reported_digest,
-                platform,
-                platform_source,
-                identity_status="unsupported",
-                error="platform is required",
-            )
-
-        try:
-            digest_document = self._fetch(registry_image, reported_digest)
-        except ManifestLookupError as exc:
-            return _resolved_subject(
-                registry_image,
-                reported_digest,
-                platform,
-                platform_source,
-                identity_status=_subject_error_status(str(exc)),
-                error=str(exc),
-            )
+        lookup = self._fetch_subject_document(
+            image,
+            reported_digest,
+            platform,
+            platform_source=platform_source,
+            use_reported_digest=True,
+        )
+        if isinstance(lookup, ResolvedImageSubject):
+            return lookup
+        registry_image, reported_digest, digest_document = lookup
+        assert platform is not None
 
         document_digest = _tag_document_digest(digest_document) or reported_digest
         if digest_document.is_index():
@@ -696,6 +638,60 @@ class DigestVerifier:
             source=digest_document.source,
             error="manifest document was not an image manifest or index",
         )
+
+    def _fetch_subject_document(
+        self,
+        image: str,
+        reported_digest: str,
+        platform: ImagePlatform | None,
+        *,
+        platform_source: str,
+        use_reported_digest: bool,
+    ) -> tuple[RegistryImageRef, str, ManifestDocument] | ResolvedImageSubject:
+        reported_digest = normalize_digest(reported_digest)
+        registry_image = parse_registry_image(image)
+        if registry_image is None:
+            return ResolvedImageSubject(
+                requested_ref=image,
+                reported_digest=reported_digest,
+                platform_source=platform_source,
+                identity_status="unsupported",
+                error="unsupported image reference",
+            )
+        if not reported_digest:
+            return _resolved_subject(
+                registry_image,
+                reported_digest,
+                None,
+                platform_source,
+                identity_status="unsupported",
+                error="reported digest is required",
+            )
+        if platform is None:
+            return _resolved_subject(
+                registry_image,
+                reported_digest,
+                platform,
+                platform_source,
+                identity_status="unsupported",
+                error="platform is required",
+            )
+
+        try:
+            document = self._fetch(
+                registry_image,
+                reported_digest if use_reported_digest else registry_image.tag,
+            )
+        except ManifestLookupError as exc:
+            return _resolved_subject(
+                registry_image,
+                reported_digest,
+                platform,
+                platform_source,
+                identity_status=_subject_error_status(str(exc)),
+                error=str(exc),
+            )
+        return registry_image, reported_digest, document
 
     def _resolve_index_subject(
         self,

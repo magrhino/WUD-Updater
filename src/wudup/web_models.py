@@ -1147,9 +1147,6 @@ class SecurityScanSubject(BaseModel):
 class SecurityScanComparison(BaseModel):
     status: Literal["unknown", "improved", "unchanged", "mixed", "worse"] = "unknown"
     current_subject: SecurityScanSubject = Field(default_factory=SecurityScanSubject)
-    fixed_count: int = 0
-    remaining_count: int = 0
-    introduced_count: int = 0
     fixed_findings: list[SecurityScanFinding] = Field(default_factory=list)
     remaining_findings: list[SecurityScanFinding] = Field(default_factory=list)
     introduced_findings: list[SecurityScanFinding] = Field(default_factory=list)

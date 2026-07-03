@@ -510,7 +510,7 @@ def _attach_refreshed_comparison(
             candidate,
             _unknown_comparison("Installed digest is unavailable."),
         )
-    if _current_matches_subject(current_request, candidate_subject):
+    if _same_subject(_subject_model(candidate_subject), current_request):
         return _with_comparison(candidate, _comparison(candidate, candidate))
     current = _scan_current_request(settings, conn, scanner, verifier, request)
     if current is None:
@@ -583,9 +583,6 @@ def _comparison(
     return SecurityScanComparison(
         status=status,  # type: ignore[arg-type]
         current_subject=current.subject,
-        fixed_count=len(fixed),
-        remaining_count=len(remaining),
-        introduced_count=len(introduced),
         fixed_findings=fixed,
         remaining_findings=remaining,
         introduced_findings=introduced,
@@ -669,18 +666,6 @@ def _same_subject(
         return False
     digest = request.reported_digest
     return bool(digest and digest in {subject.reported_digest, subject.manifest_digest})
-
-
-def _current_matches_subject(
-    request: PendingSecurityRequest,
-    subject: ResolvedImageSubject,
-) -> bool:
-    digest = request.reported_digest
-    return bool(
-        digest
-        and subject.platform == platform_value(request.platform)
-        and digest in {subject.reported_digest, subject.manifest_digest}
-    )
 
 
 def _placeholder_state(request: PendingSecurityRequest) -> str:

@@ -25,7 +25,6 @@ import type {
   RunEventRecord,
   RunLogResponse,
   RunSummary,
-  SecurityScanFinding,
   SecurityScanInfo,
   SecurityScanJobResponse,
   SecurityScanSeverityCounts,
@@ -982,7 +981,6 @@ export class DemoApiState {
       platform,
     };
     const canCompare = Boolean(currentDigest && reportedDigest && platform);
-    const comparisonFindings: SecurityScanFinding[] = canCompare ? findings : [];
 
     return {
       line_no: item.line_no,
@@ -1004,11 +1002,8 @@ export class DemoApiState {
         current_subject: canCompare
           ? currentSubject
           : { requested_ref: "", reported_digest: "", manifest_digest: "", platform: "" },
-        fixed_count: 0,
-        remaining_count: comparisonFindings.length,
-        introduced_count: 0,
         fixed_findings: [],
-        remaining_findings: comparisonFindings,
+        remaining_findings: canCompare ? findings : [],
         introduced_findings: [],
         message: canCompare
           ? "Demo comparison: installed and candidate findings are unchanged."
