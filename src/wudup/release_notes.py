@@ -21,6 +21,7 @@ from .lsio_updates import (
     LSIOUpdateClassification,
     classification_from_mapping,
     classify_lsio_update,
+    normalize_lsio_version,
     parse_lsio_tag,
 )
 from .wud_file import WudTarget
@@ -734,7 +735,11 @@ def _fetch_lsio_release(
             parts = parse_lsio_tag(str(release.get("tag_name") or ""))
             if (
                 parts.branch == branch
-                and (not upstream_version or parts.upstream_version == upstream_version)
+                and (
+                    not upstream_version
+                    or normalize_lsio_version(parts.upstream_version)
+                    == normalize_lsio_version(upstream_version)
+                )
                 and (not build_suffix or parts.build_suffix == build_suffix)
             ):
                 return release

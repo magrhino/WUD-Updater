@@ -324,8 +324,8 @@ class ReleaseNotesTests(unittest.TestCase):
                 encoding="utf-8",
             )
             parsed = parse_wud_text(
-                "linuxserver/qbittorrent:libtorrentv1-version-5.2.1_v1.2.20 "
-                "tag=libtorrentv1-version-5.2.2_v1.2.20\n"
+                "linuxserver/qbittorrent:libtorrentv1-version-v5.2.1_v1.2.20 "
+                "tag=libtorrentv1-version-v5.2.2_v1.2.20\n"
             )
             releases_url = (
                 "https://api.github.com/repos/"

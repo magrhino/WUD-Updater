@@ -117,7 +117,9 @@ def classify_lsio_update(
         )
 
     current_upstream = _trusted_upstream(current)
-    target_upstream = _trusted_upstream(target) or _normalize_version(upstream_version)
+    target_upstream = _trusted_upstream(target) or normalize_lsio_version(
+        upstream_version
+    )
     if not current_upstream or not target_upstream:
         return LSIOUpdateClassification(current=current, target=target)
 
@@ -196,10 +198,10 @@ def _first_version_index(tokens: list[str]) -> int:
 def _trusted_upstream(parts: LSIOTagParts) -> str:
     if parts.kind not in {"build", "version", "pseudo_semver"}:
         return ""
-    return _normalize_version(parts.upstream_version)
+    return normalize_lsio_version(parts.upstream_version)
 
 
-def _normalize_version(value: str) -> str:
+def normalize_lsio_version(value: str) -> str:
     normalized = value.strip().lower()
     if normalized.startswith("v") and len(normalized) > 1 and normalized[1].isdigit():
         normalized = normalized[1:]
