@@ -484,7 +484,7 @@ def _attach_cached_comparison(
         )
     if _same_subject(candidate.subject, current_request):
         return _with_comparison(candidate, _comparison(candidate, candidate))
-    current = cached_scan_by_request(conn, current_request)
+    current = cached_scan_by_request_or_unambiguous_platform(conn, current_request)
     if current is None:
         return _with_comparison(
             candidate,

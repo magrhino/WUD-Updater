@@ -535,7 +535,7 @@ def test_security_scan_refresh_compares_installed_and_candidate_findings(
 ) -> None:
     current_digest = f"sha256:{'c' * 64}"
     context = _single_security_context(tmp_path)
-    context = PendingSecurityContext(
+    refresh_context = PendingSecurityContext(
         source=context.source,
         requests=(
             _single_security_request(
@@ -544,9 +544,27 @@ def test_security_scan_refresh_compares_installed_and_candidate_findings(
             ),
         ),
     )
+    read_context = PendingSecurityContext(
+        source=context.source,
+        requests=(
+            _single_security_request(
+                platform=None,
+                current_image="ghcr.io/acme/app:1.0",
+                current_digest=current_digest,
+            ),
+        ),
+    )
+
+    def security_context(
+        _settings,
+        *,
+        options: PendingSecurityOptions = PENDING_SECURITY_DEFAULT_OPTIONS,
+    ) -> PendingSecurityContext:
+        return refresh_context if options.include_compose else read_context
+
     monkeypatch.setattr(
         "wudup.web_security.pending_security_context",
-        lambda _settings, **_kwargs: context,
+        security_context,
     )
     monkeypatch.setattr(
         "wudup.web_security.default_digest_verifier",
