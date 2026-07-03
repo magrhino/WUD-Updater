@@ -1,4 +1,9 @@
-import type { PendingItem, SecurityScanInfo, SecurityScansResponse } from "../api/client";
+import type {
+  PendingItem,
+  SecurityScanFinding,
+  SecurityScanInfo,
+  SecurityScansResponse,
+} from "../api/client";
 
 export type SecurityScanDisplayType =
   | "default"
@@ -20,7 +25,7 @@ export type SecurityScanSummaryDisplay = {
 
 type SecurityScanDisplaySource = Pick<
   SecurityScanInfo,
-  "state" | "verdict" | "severity_counts"
+  "state" | "verdict" | "severity_counts" | "comparison"
 >;
 
 type SecurityScanSummaryContext = {
@@ -99,11 +104,58 @@ export function securityScanFindingsType(
     : "warning";
 }
 
+function titleCase(value: string): string {
+  return value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : "Unknown";
+}
+
+function comparisonCueDisplay(
+  scan: SecurityScanDisplaySource,
+): SecurityScanCueDisplay | null {
+  if (scan.state !== "complete") {
+    return null;
+  }
+  const comparison = scan.comparison;
+  if (comparison.status === "improved") {
+    const remainingCount = comparison.remaining_findings.length;
+    return {
+      key: "security-improved",
+      label: remainingCount > 0 ? "Findings reduced" : "Findings fixed",
+      type: remainingCount > 0 ? securityScanFindingsType(scan) : "success",
+    };
+  }
+  if (comparison.status === "mixed") {
+    return {
+      key: "security-mixed",
+      label: "Findings changed",
+      type: securityScanFindingsType(scan),
+    };
+  }
+  if (comparison.status === "worse") {
+    return {
+      key: "security-worse",
+      label: "Findings introduced",
+      type: securityScanFindingsType(scan),
+    };
+  }
+  if (comparison.status === "unchanged" && comparison.remaining_findings.length > 0) {
+    return {
+      key: "security-remaining",
+      label: "Findings remain",
+      type: securityScanFindingsType(scan),
+    };
+  }
+  return null;
+}
+
 export function securityScanCueDisplay(
   scan: SecurityScanDisplaySource,
 ): SecurityScanCueDisplay | null {
   if (scan.state === "disabled") {
     return null;
+  }
+  const comparisonDisplay = comparisonCueDisplay(scan);
+  if (comparisonDisplay) {
+    return comparisonDisplay;
   }
   if (scan.state === "complete" && scan.verdict === "findings") {
     return {
@@ -160,8 +212,8 @@ export function securityScanSummaryDisplay({
   if (itemDisplays.some((display) => display.key === "security-stale")) {
     return { label: "Security scans stale", type: "warning" };
   }
-  const findings = itemDisplays.filter(
-    (display) => display.key === "security-findings",
+  const findings = items.filter(
+    (scan) => scan.state === "complete" && scan.verdict === "findings",
   );
   if (findings.length > 0) {
     return {
@@ -169,7 +221,7 @@ export function securityScanSummaryDisplay({
         findings.length === 1
           ? "1 candidate with findings"
           : `${findings.length} candidates with findings`,
-      type: findings.some((display) => display.type === "error")
+      type: findings.some((scan) => securityScanFindingsType(scan) === "error")
         ? "error"
         : "warning",
     };
@@ -182,4 +234,78 @@ export function securityScanSummaryDisplay({
     };
   }
   return { label: "No candidate scans yet", type: "info" };
+}
+
+function digestForReport(value: string): string {
+  return value || "unknown";
+}
+
+function findingLine(finding: SecurityScanFinding): string {
+  const advisory = finding.vulnerability_id || "unknown advisory";
+  const pkg = finding.package_name || "unknown package";
+  const installed = finding.installed_version || "unknown";
+  const fixed = finding.fixed_version || "not published";
+  const details = [
+    `${advisory} in ${pkg}`,
+    `${titleCase(finding.severity)} severity`,
+    `installed ${installed}`,
+    `fixed ${fixed}`,
+  ];
+  if (finding.title) {
+    details.push(finding.title);
+  }
+  if (finding.primary_url) {
+    details.push(finding.primary_url);
+  }
+  return `- ${details.join("; ")}`;
+}
+
+export function securityScanMaintainerReport(scan: SecurityScanInfo): string {
+  const fixed = scan.comparison.fixed_findings;
+  const remaining = scan.comparison.remaining_findings;
+  const introduced = scan.comparison.introduced_findings;
+  if (!fixed.length && !remaining.length && !introduced.length) {
+    return "";
+  }
+
+  const currentDigest =
+    scan.comparison.current_subject.manifest_digest ||
+    scan.comparison.current_subject.reported_digest;
+  const candidateDigest = scan.subject.manifest_digest || scan.subject.reported_digest;
+  const scannerParts = [scan.scanner, scan.scanner_version].filter(Boolean);
+  const scanner = scannerParts.length ? scannerParts.join(" ") : "unknown scanner";
+  const database = scan.db_revision || scan.db_updated_at || "unknown database";
+  const subject = scan.subject.requested_ref || `line ${scan.line_no}`;
+  const lines = [
+    `Security scan update report for ${subject}`,
+    "",
+    `Comparison: ${scan.comparison.message || scan.comparison.status}`,
+    `Scanner: ${scanner}; schema ${scan.scanner_schema || "unknown"}; database ${database}`,
+    `Platform: ${scan.subject.platform || "unknown"}`,
+    `Installed digest: ${digestForReport(currentDigest)}`,
+    `Candidate digest: ${digestForReport(candidateDigest)}`,
+  ];
+
+  if (fixed.length) {
+    lines.push(
+      "",
+      `Fixed installed findings (${fixed.length}):`,
+      ...fixed.map(findingLine),
+    );
+  }
+  if (remaining.length) {
+    lines.push(
+      "",
+      `Remaining candidate findings (${remaining.length}):`,
+      ...remaining.map(findingLine),
+    );
+  }
+  if (introduced.length) {
+    lines.push(
+      "",
+      `Introduced candidate findings (${introduced.length}):`,
+      ...introduced.map(findingLine),
+    );
+  }
+  return lines.join("\n");
 }

@@ -560,6 +560,59 @@ class DigestVerifierTests(unittest.TestCase):
         self.assertEqual(subject.platform, "linux/amd64")
         self.assertEqual(subject.platform_source, "compose")
 
+    def test_resolve_digest_subject_scans_historical_index_digest(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("ghcr.io", "acme/app", "sha256:old-index"): index_doc(
+                    "sha256:old-index",
+                    ("sha256:old-child",),
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        subject = verifier.resolve_digest_subject(
+            "ghcr.io/acme/app:latest",
+            "sha256:old-index",
+            ImagePlatform("linux", "amd64"),
+            platform_source="wud",
+        )
+
+        self.assertEqual(subject.identity_status, "exact")
+        self.assertEqual(subject.index_digest, "sha256:old-index")
+        self.assertEqual(subject.manifest_digest, "sha256:old-child")
+        self.assertEqual(subject.immutable_ref, "ghcr.io/acme/app@sha256:old-child")
+        self.assertEqual(resolver.calls, [("ghcr.io", "acme/app", "sha256:old-index")])
+
+    def test_resolve_digest_subject_accepts_historical_manifest_digest(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("ghcr.io", "acme/app", "sha256:old-child"): manifest_doc(
+                    "sha256:old-child",
+                    "sha256:config",
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        subject = verifier.resolve_digest_subject(
+            "ghcr.io/acme/app:latest",
+            "sha256:old-child",
+            ImagePlatform("linux", "amd64"),
+        )
+
+        self.assertEqual(subject.identity_status, "exact")
+        self.assertEqual(subject.manifest_digest, "sha256:old-child")
+        self.assertEqual(subject.immutable_ref, "ghcr.io/acme/app@sha256:old-child")
+
     def test_resolve_subject_accepts_current_platform_child_digest(self) -> None:
         resolver = StaticResolver(
             {

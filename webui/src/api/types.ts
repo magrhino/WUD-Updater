@@ -285,6 +285,29 @@ export interface SecurityScanFinding {
   primary_url: string;
 }
 
+export interface SecurityScanSubject {
+  requested_ref: string;
+  reported_digest: string;
+  manifest_digest: string;
+  platform: string;
+}
+
+export type SecurityScanComparisonStatus =
+  | "unknown"
+  | "improved"
+  | "unchanged"
+  | "mixed"
+  | "worse";
+
+export interface SecurityScanComparison {
+  status: SecurityScanComparisonStatus;
+  current_subject: SecurityScanSubject;
+  fixed_findings: SecurityScanFinding[];
+  remaining_findings: SecurityScanFinding[];
+  introduced_findings: SecurityScanFinding[];
+  message: string;
+}
+
 export interface SecurityScanInfo {
   line_no: number;
   state: SecurityScanState;
@@ -299,6 +322,8 @@ export interface SecurityScanInfo {
   fixable_counts: SecurityScanSeverityCounts;
   unfixed_count: number;
   findings: SecurityScanFinding[];
+  subject: SecurityScanSubject;
+  comparison: SecurityScanComparison;
   warnings: string[];
   error_code: string;
   error_message: string;

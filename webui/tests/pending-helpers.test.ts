@@ -7,6 +7,7 @@ import type {
   SecurityScanFinding,
   SecurityScanInfo,
 } from "../src/api/client";
+import { DemoApiState } from "../src/api/demo/state";
 import PendingCleanupModal from "../src/components/pending/PendingCleanupModal.vue";
 import PendingPlanReviewModal from "../src/components/pending/PendingPlanReviewModal.vue";
 import PendingRemovalModal from "../src/components/pending/PendingRemovalModal.vue";
@@ -15,7 +16,10 @@ import {
   digestProvenanceDisplay,
   displayDigest,
 } from "../src/utils/digestProvenance";
-import { securityScanSummaryDisplay } from "../src/utils/securityScans";
+import {
+  securityScanMaintainerReport,
+  securityScanSummaryDisplay,
+} from "../src/utils/securityScans";
 import { safetyCues } from "../src/views/pending/safetyCues";
 import { createPendingColumns } from "../src/views/pending/tableColumns";
 import {
@@ -43,11 +47,14 @@ import {
 } from "../src/views/pending/utils";
 import {
   pendingGroupedItem,
+  pendingItem,
   pendingResponse,
   planResponse,
   releaseNoteInfo,
+  securityScanInfo,
   servicePolicy,
   snooze,
+  wudContainerMetadata,
 } from "./helpers/fixtures";
 import { mountWithApp, naiveStubs } from "./helpers/mount";
 
@@ -56,55 +63,36 @@ type RenderColumn = {
   render?: (row: PendingItem) => VNodeChild;
 };
 
-function mountPendingModal(component: Component, props: Record<string, unknown>): VueWrapper {
+type DemoSecurityScanBuilder = {
+  securityScanInfo: (item: PendingItem, firstExact: boolean) => SecurityScanInfo;
+};
+
+function mountPendingModal(
+  component: Component,
+  props: Record<string, unknown>,
+  stubs: Record<string, Component> = {},
+): VueWrapper {
   return mount(component, {
     props,
     global: {
       stubs: {
         ...naiveStubs,
+        ...stubs,
         CoreUpdateTourPanel: { template: "<div />" },
       },
     },
   });
 }
 
-function securityScanInfo(
-  overrides: Partial<SecurityScanInfo> = {},
-): SecurityScanInfo {
-  const severityCounts = {
-    critical: 0,
-    high: 0,
-    medium: 0,
-    low: 0,
-    unknown: 0,
-    ...overrides.severity_counts,
-  };
-  return {
-    line_no: 1,
-    state: "not_scanned",
-    verdict: "unknown",
-    scanner: "trivy",
-    scanner_version: "",
-    scanner_schema: "",
-    scanned_at: "",
-    db_revision: "",
-    db_updated_at: "",
-    fixable_counts: {
-      critical: 0,
-      high: 0,
-      medium: 0,
-      low: 0,
-      unknown: 0,
-    },
-    unfixed_count: 0,
-    findings: [],
-    warnings: [],
-    error_code: "",
-    error_message: "",
-    ...overrides,
-    severity_counts: severityCounts,
-  };
-}
+const tagTypeStub: Component = {
+  props: {
+    type: String,
+  },
+  setup(props, { slots }) {
+    return () =>
+      h("span", { "data-tag-type": props.type }, [slots.default?.()]);
+  },
+};
 
 function securityFinding(
   index: number,
@@ -409,6 +397,31 @@ describe("pending helper modules", () => {
         unknown: 1,
       },
     });
+    const mixedComparisonScan = securityScanInfo({
+      line_no: item.line_no,
+      state: "complete",
+      verdict: "findings",
+      severity_counts: {
+        critical: 0,
+        high: 1,
+        medium: 0,
+        low: 0,
+        unknown: 0,
+      },
+      comparison: {
+        status: "mixed",
+        current_subject: {
+          requested_ref: "repo/app:1.0",
+          reported_digest: "sha256:installed",
+          manifest_digest: "sha256:installed-child",
+          platform: "linux/amd64",
+        },
+        fixed_findings: [securityFinding(1, "medium")],
+        remaining_findings: [securityFinding(2, "high")],
+        introduced_findings: [securityFinding(3, "high")],
+        message: "1 finding fixed, 1 remains, and 1 introduced.",
+      },
+    });
     const noneReportedScan = securityScanInfo({
       line_no: item.line_no,
       state: "complete",
@@ -449,6 +462,13 @@ describe("pending helper modules", () => {
         key: "security-findings",
         label: "Findings",
         type: "warning",
+      }),
+    );
+    expect(securityCuesFor(mixedComparisonScan)).toContainEqual(
+      expect.objectContaining({
+        key: "security-mixed",
+        label: "Findings changed",
+        type: "error",
       }),
     );
     expect(securityCuesFor(noneReportedScan)).toContainEqual(
@@ -545,6 +565,161 @@ describe("pending helper modules", () => {
     expect(wrapper.find("a").attributes("href")).toBe(
       "https://avd.aquasec.com/nvd/cve-2026-0001",
     );
+  });
+
+  it("renders security scan comparison deltas and report copy action", () => {
+    const fixed = securityFinding(1, "medium", {
+      package_name: "libssl",
+    });
+    const remaining = securityFinding(2, "high", {
+      package_name: "openssl",
+    });
+    const introduced = securityFinding(3, "critical", {
+      package_name: "curl",
+    });
+    const wrapper = mountPendingModal(PendingSecurityScanDetails, {
+      scan: securityScanInfo({
+        state: "complete",
+        verdict: "findings",
+        scanner_version: "0.71.2",
+        scanner_schema: "trivy-json",
+        db_revision: "trivy-db-2026-06-26",
+        subject: {
+          requested_ref: "repo/app:2.0",
+          reported_digest: "sha256:candidate",
+          manifest_digest: "sha256:candidate-child",
+          platform: "linux/amd64",
+        },
+        severity_counts: {
+          critical: 1,
+          high: 1,
+          medium: 0,
+          low: 0,
+          unknown: 0,
+        },
+        findings: [remaining, introduced],
+        comparison: {
+          status: "mixed",
+          current_subject: {
+            requested_ref: "repo/app:1.0",
+            reported_digest: "sha256:installed",
+            manifest_digest: "sha256:installed-child",
+            platform: "linux/amd64",
+          },
+          fixed_findings: [fixed],
+          remaining_findings: [remaining],
+          introduced_findings: [introduced],
+          message: "1 finding fixed, 1 remains, and 1 introduced.",
+        },
+      }),
+    });
+
+    const text = wrapper.text();
+    expect(text).toContain("Update comparison");
+    expect(text).toContain("Mixed");
+    expect(text).toContain("1 finding fixed, 1 remains, and 1 introduced.");
+    expect(text).toContain("1 fixed finding");
+    expect(text).toContain("1 remaining finding");
+    expect(text).toContain("1 introduced finding");
+    expect(text).toContain("Installed");
+    expect(text).toContain("Candidate");
+    expect(text).toContain("linux/amd64");
+    expect(text).toContain("Copy report");
+    expect(text).toContain("CVE-2026-0002");
+    expect(text).toContain("CVE-2026-0003");
+  });
+
+  it("maps security scan comparison status to the comparison tag type", async () => {
+    const wrapper = mountPendingModal(
+      PendingSecurityScanDetails,
+      {
+        scan: securityScanInfo(),
+      },
+      {
+        NTag: tagTypeStub,
+        Tag: tagTypeStub,
+      },
+    );
+    const cases: Array<{
+      expected: string;
+      label: string;
+      remaining: SecurityScanFinding[];
+      status: SecurityScanInfo["comparison"]["status"];
+    }> = [
+      {
+        expected: "success",
+        label: "Improved",
+        remaining: [],
+        status: "improved",
+      },
+      { expected: "error", label: "Worse", remaining: [], status: "worse" },
+      { expected: "warning", label: "Mixed", remaining: [], status: "mixed" },
+      {
+        expected: "warning",
+        label: "Unchanged",
+        remaining: [securityFinding(1)],
+        status: "unchanged",
+      },
+      {
+        expected: "success",
+        label: "Unchanged",
+        remaining: [],
+        status: "unchanged",
+      },
+      { expected: "default", label: "Unknown", remaining: [], status: "unknown" },
+    ];
+
+    for (const item of cases) {
+      await wrapper.setProps({
+        scan: securityScanInfo({
+          state: "complete",
+          verdict: "none_reported",
+          comparison: {
+            status: item.status,
+            current_subject: {
+              requested_ref: "repo/app:1.0",
+              reported_digest: "sha256:installed",
+              manifest_digest: "sha256:installed-child",
+              platform: "linux/amd64",
+            },
+            fixed_findings: [],
+            remaining_findings: item.remaining,
+            introduced_findings: [],
+            message: "Comparison is available.",
+          },
+        }),
+      });
+
+      const tag = wrapper
+        .findAll("[data-tag-type]")
+        .find((candidate) => candidate.text() === item.label);
+      expect(tag?.attributes("data-tag-type")).toBe(item.expected);
+    }
+  });
+
+  it("keeps demo comparison empty for unscanned security rows", () => {
+    const scan = (new DemoApiState() as unknown as DemoSecurityScanBuilder).securityScanInfo(
+      pendingItem({
+        digest: "sha256:candidate",
+        platform: "linux/amd64",
+        platform_os: "linux",
+        platform_architecture: "amd64",
+        platform_variant: "",
+        wud_metadata: wudContainerMetadata({
+          local_digest: "sha256:installed",
+          platform: "linux/amd64",
+          platform_os: "linux",
+          platform_architecture: "amd64",
+          platform_variant: "",
+        }),
+      }),
+      false,
+    );
+
+    expect(scan.state).toBe("not_scanned");
+    expect(scan.comparison.status).toBe("unknown");
+    expect(scan.comparison.message).toBe("");
+    expect(scan.comparison.remaining_findings).toEqual([]);
   });
 
   it("filters candidate security scan findings by present severity categories", async () => {
@@ -735,6 +910,40 @@ describe("pending helper modules", () => {
         items: [],
       }),
     ).toEqual({ label: "No candidate scans yet", type: "info" });
+  });
+
+  it("includes fixed findings in the maintainer report", () => {
+    const report = securityScanMaintainerReport(
+      securityScanInfo({
+        state: "complete",
+        verdict: "none_reported",
+        scanner_version: "0.71.2",
+        scanner_schema: "trivy-json",
+        db_revision: "trivy-db-2026-06-26",
+        comparison: {
+          status: "improved",
+          current_subject: {
+            requested_ref: "repo/app:1.0",
+            reported_digest: "sha256:installed",
+            manifest_digest: "sha256:installed-child",
+            platform: "linux/amd64",
+          },
+          fixed_findings: [
+            securityFinding(1, "high", {
+              package_name: "openssl",
+            }),
+          ],
+          remaining_findings: [],
+          introduced_findings: [],
+          message: "Candidate removes 1 reported finding(s).",
+        },
+      }),
+    );
+
+    expect(report).toContain("Fixed installed findings (1):");
+    expect(report).toContain("CVE-2026-0001 in openssl");
+    expect(report).not.toContain("Remaining candidate findings");
+    expect(report).not.toContain("Introduced candidate findings");
   });
 
   it("formats pending queue display helpers without store dependencies", () => {

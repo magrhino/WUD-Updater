@@ -38,6 +38,7 @@ import {
   retagPreviewJobResponse,
   retagTarget,
   retagTargetsResponse,
+  securityScanInfo as baseSecurityScanInfo,
   planResponse,
   selfUpdateApplyResponse,
   selfUpdatePlanResponse,
@@ -105,28 +106,25 @@ function expectReleaseChangelogFetches(fetchMock: ReturnType<typeof vi.fn>): voi
   expect(fetchMock.mock.calls[1][0]).toBe(TEST_CHANGELOG_URL);
 }
 
-function securityScanInfo(
+function completeSecurityScanInfo(
   overrides: Partial<SecurityScanInfo> = {},
 ): SecurityScanInfo {
-  return {
-    line_no: 1,
+  return baseSecurityScanInfo({
     state: "complete",
     verdict: "findings",
-    scanner: "trivy",
     scanner_version: "test",
     scanner_schema: "2",
     scanned_at: "2026-06-26T00:00:00+00:00",
-    db_revision: "",
-    db_updated_at: "",
     severity_counts: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
     fixable_counts: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
-    unfixed_count: 0,
-    findings: [],
-    warnings: [],
-    error_code: "",
-    error_message: "",
+    subject: {
+      requested_ref: "repo/app:1.0",
+      reported_digest: "sha256:test",
+      manifest_digest: "sha256:test-child",
+      platform: "linux/amd64",
+    },
     ...overrides,
-  };
+  });
 }
 
 function securityScansResponse(
@@ -163,7 +161,7 @@ function securityScanJobResponse(
     status: "success",
     total_count: 1,
     completed_count: 1,
-    result: securityScansResponse([securityScanInfo()]),
+    result: securityScansResponse([completeSecurityScanInfo()]),
     error: "",
     ...overrides,
   };
@@ -350,7 +348,7 @@ describe("updates store", () => {
     const rescan = pendingRescanResponse();
     const notes = releaseNotesResponse();
     const notification = releaseNotificationResponse();
-    const scans = securityScansResponse([securityScanInfo()]);
+    const scans = securityScansResponse([completeSecurityScanInfo()]);
     const fetchMock = mockFetch({
       status: "ready",
       requires_pending_reload: false,
@@ -557,7 +555,7 @@ describe("updates store", () => {
       digest: "abc",
       platform: "linux/amd64",
     });
-    const scan = securityScanInfo();
+    const scan = completeSecurityScanInfo();
     updates.pending = pendingResponse([item]);
     updates.securityScans = securityScansResponse([scan]);
 
@@ -589,7 +587,7 @@ describe("updates store", () => {
 
   it("refreshes security scans through a bounded job poll", async () => {
     vi.useFakeTimers();
-    const scan = securityScanInfo();
+    const scan = completeSecurityScanInfo();
     const result = securityScansResponse([scan]);
     const queuedJob = securityScanJobResponse({
       status: "queued",
@@ -686,7 +684,7 @@ describe("updates store", () => {
 
   it("extends security scan refresh polling for multi-candidate jobs", async () => {
     vi.useFakeTimers();
-    const result = securityScansResponse([securityScanInfo()]);
+    const result = securityScansResponse([completeSecurityScanInfo()]);
     const runningJob = securityScanJobResponse({
       status: "running",
       total_count: 2,

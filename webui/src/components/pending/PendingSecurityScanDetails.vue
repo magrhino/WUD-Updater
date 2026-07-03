@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { NPagination, NSelect, NTag } from "naive-ui";
+import { useClipboard } from "@vueuse/core";
+import { Copy } from "@lucide/vue";
+import { NButton, NPagination, NSelect, NTag } from "naive-ui";
 
 import type { SecurityScanFinding, SecurityScanInfo } from "../../api/client";
+import { securityScanMaintainerReport } from "../../utils/securityScans";
 import { pluralize } from "../../views/pending/utils";
 
 type TagType = "default" | "error" | "info" | "success" | "warning";
@@ -17,12 +20,35 @@ const findingPageSize = 10;
 const severityOrder: Severity[] = ["critical", "high", "medium", "low", "unknown"];
 const selectedSeverity = ref<SeverityFilter>("all");
 const findingPage = ref(1);
+const { copy, copied, isSupported } = useClipboard({ legacy: true });
 
+const comparison = computed(() => props.scan.comparison);
+const reportText = computed(() => securityScanMaintainerReport(props.scan));
+const reportAvailable = computed(() => Boolean(reportText.value));
+const currentDigest = computed(
+  () =>
+    comparison.value.current_subject.manifest_digest ||
+    comparison.value.current_subject.reported_digest,
+);
+const candidateDigest = computed(
+  () => props.scan.subject.manifest_digest || props.scan.subject.reported_digest,
+);
+const comparisonDigestVisible = computed(
+  () => Boolean(currentDigest.value || candidateDigest.value || props.scan.subject.platform),
+);
+const comparisonVisible = computed(() => Boolean(comparison.value.message));
+const fixedCount = computed(() => comparison.value.fixed_findings.length);
+const remainingCount = computed(() => comparison.value.remaining_findings.length);
+const introducedCount = computed(() => comparison.value.introduced_findings.length);
+const comparisonFindingCountsVisible = computed(
+  () => Boolean(fixedCount.value || remainingCount.value || introducedCount.value),
+);
 const visible = computed(
   () =>
     props.scan.verdict === "findings" ||
     props.scan.warnings.length > 0 ||
-    Boolean(props.scan.error_message),
+    Boolean(props.scan.error_message) ||
+    comparisonVisible.value,
 );
 const fixableTotal = computed(() =>
   severityOrder.reduce((total, severity) => total + props.scan.fixable_counts[severity], 0),
@@ -83,6 +109,21 @@ const showFindingControls = computed(
     severityItems.value.length > 1 ||
     filteredFindings.value.length > findingPageSize,
 );
+const comparisonTagType = computed<TagType>(() => {
+  if (comparison.value.status === "improved") {
+    return "success";
+  }
+  if (comparison.value.status === "worse") {
+    return "error";
+  }
+  if (comparison.value.status === "mixed") {
+    return "warning";
+  }
+  if (comparison.value.status === "unchanged") {
+    return remainingCount.value > 0 ? "warning" : "success";
+  }
+  return "default";
+});
 
 watch(
   [selectedSeverity, () => props.scan],
@@ -117,6 +158,13 @@ function titleCase(value: string): string {
 function findingTitle(finding: SecurityScanFinding): string {
   return finding.vulnerability_id || finding.package_name || "Unknown advisory";
 }
+
+async function copyReport(): Promise<void> {
+  if (!reportText.value) {
+    return;
+  }
+  await copy(reportText.value);
+}
 </script>
 
 <template>
@@ -134,6 +182,67 @@ function findingTitle(finding: SecurityScanFinding): string {
       >
         {{ pluralize(findingCount, "finding") }}
       </n-tag>
+    </div>
+
+    <div
+      v-if="comparisonVisible"
+      class="security-comparison"
+      aria-label="Security scan update comparison"
+    >
+      <div class="security-comparison-header">
+        <strong>Update comparison</strong>
+        <n-tag size="small" :type="comparisonTagType">
+          {{ titleCase(comparison.status) }}
+        </n-tag>
+        <n-button
+          v-if="reportAvailable"
+          size="small"
+          tertiary
+          :disabled="!isSupported"
+          title="Copy security scan report"
+          @click="copyReport"
+        >
+          <template #icon>
+            <Copy :size="15" />
+          </template>
+          {{ copied ? "Copied" : "Copy report" }}
+        </n-button>
+      </div>
+      <p class="security-review-meta wrap-anywhere">
+        {{ comparison.message }}
+      </p>
+      <div
+        v-if="comparisonFindingCountsVisible"
+        class="security-comparison-counts"
+      >
+        <n-tag v-if="fixedCount" size="small" type="success">
+          {{ pluralize(fixedCount, "fixed finding") }}
+        </n-tag>
+        <n-tag v-if="remainingCount" size="small" type="warning">
+          {{ pluralize(remainingCount, "remaining finding") }}
+        </n-tag>
+        <n-tag v-if="introducedCount" size="small" type="error">
+          {{ pluralize(introducedCount, "introduced finding") }}
+        </n-tag>
+      </div>
+      <dl v-if="comparisonDigestVisible" class="security-comparison-digests">
+        <div>
+          <dt>Installed</dt>
+          <dd class="wrap-anywhere" :title="currentDigest">
+            {{ currentDigest || "Unknown" }}
+          </dd>
+        </div>
+        <div>
+          <dt>Candidate</dt>
+          <dd class="wrap-anywhere" :title="candidateDigest">
+            {{ candidateDigest || "Unknown" }}
+          </dd>
+        </div>
+        <div>
+          <dt>Platform</dt>
+          <dd class="wrap-anywhere">{{ scan.subject.platform || "Unknown" }}</dd>
+        </div>
+      </dl>
     </div>
 
     <div v-if="severityItems.length" class="security-counts" aria-label="Severity counts">
@@ -253,6 +362,8 @@ function findingTitle(finding: SecurityScanFinding): string {
 }
 
 .security-review-header,
+.security-comparison-header,
+.security-comparison-counts,
 .security-counts,
 .security-finding-controls,
 .security-finding-heading {
@@ -265,6 +376,42 @@ function findingTitle(finding: SecurityScanFinding): string {
 
 .security-finding-controls {
   justify-content: space-between;
+}
+
+.security-comparison {
+  display: grid;
+  gap: 6px;
+  padding: 8px 0;
+  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.security-comparison-header {
+  justify-content: space-between;
+}
+
+.security-comparison-digests {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+  color: var(--color-muted-text);
+  font-size: 0.78rem;
+}
+
+.security-comparison-digests div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.security-comparison-digests dt {
+  font-weight: 700;
+}
+
+.security-comparison-digests dd {
+  margin: 0;
+  color: var(--color-ink);
 }
 
 .security-finding-filter {

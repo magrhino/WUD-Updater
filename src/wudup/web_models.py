@@ -146,11 +146,13 @@ __all__ = (
     "RunVerificationSummary",
     "RunVerificationWudStatus",
     "SecurityScanConfig",
+    "SecurityScanComparison",
     "SecurityScanFinding",
     "SecurityScanInfo",
     "SecurityScanJobResponse",
     "SecurityScanSeverityCounts",
     "SecurityScanState",
+    "SecurityScanSubject",
     "SecurityScansResponse",
     "SecurityScanVerdict",
     "SELF_UPDATE_RELEASE_NOTES_CAP",
@@ -1135,6 +1137,22 @@ class SecurityScanFinding(BaseModel):
     primary_url: str = ""
 
 
+class SecurityScanSubject(BaseModel):
+    requested_ref: str = ""
+    reported_digest: str = ""
+    manifest_digest: str = ""
+    platform: str = ""
+
+
+class SecurityScanComparison(BaseModel):
+    status: Literal["unknown", "improved", "unchanged", "mixed", "worse"] = "unknown"
+    current_subject: SecurityScanSubject = Field(default_factory=SecurityScanSubject)
+    fixed_findings: list[SecurityScanFinding] = Field(default_factory=list)
+    remaining_findings: list[SecurityScanFinding] = Field(default_factory=list)
+    introduced_findings: list[SecurityScanFinding] = Field(default_factory=list)
+    message: str = ""
+
+
 class SecurityScanInfo(BaseModel):
     line_no: int
     state: SecurityScanState
@@ -1153,6 +1171,8 @@ class SecurityScanInfo(BaseModel):
     )
     unfixed_count: int = 0
     findings: list[SecurityScanFinding] = Field(default_factory=list)
+    subject: SecurityScanSubject = Field(default_factory=SecurityScanSubject)
+    comparison: SecurityScanComparison = Field(default_factory=SecurityScanComparison)
     warnings: list[str] = Field(default_factory=list)
     error_code: str = ""
     error_message: str = ""

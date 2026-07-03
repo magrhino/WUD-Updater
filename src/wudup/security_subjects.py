@@ -12,7 +12,7 @@ from .command import CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError, ServiceImage
 from .digest_verifier import DigestResolveResult, DigestVerifier, ResolvedImageSubject
 from .docker_cli import DockerCli
-from .images import image_with_tag
+from .images import image_with_tag, normalize_digest
 from .plan_matching import _match_targets
 from .platforms import ImagePlatform, platform_value
 from .web_pending_sources import PendingSourceResult, resolve_pending_source
@@ -31,6 +31,9 @@ class PendingSecurityRequest:
     reported_digest: str
     platform: ImagePlatform | None
     platform_source: str
+    current_image: str = ""
+    current_digest: str = ""
+    current_digest_source: str = ""
     missing_reported_digest_resolvable: bool = False
     identity_status: str = "pending"
     warnings: tuple[str, ...] = ()
@@ -97,6 +100,8 @@ def pending_security_context(
             compose_platform=platform_by_line.get(target.line_no),
             compose_platform_conflict=target.line_no in platform_conflicts,
             wud_platform=_wud_platform(source, target),
+            current_image=_current_image(source, target),
+            current_digest=_current_digest(source, target),
         )
         for target in source.parsed.targets
     )
@@ -116,6 +121,57 @@ def resolve_security_subject(
         request.reported_digest,
         request.platform,
         platform_source=request.platform_source,
+    )
+    return cast(
+        ResolvedImageSubject,
+        replace(
+            subject,
+            warnings=(*request.warnings, *subject.warnings),
+        ),
+    )
+
+
+def current_security_request(
+    request: PendingSecurityRequest,
+) -> PendingSecurityRequest | None:
+    if not request.current_digest:
+        return None
+    identity_status = "pending" if request.platform is not None else "unsupported"
+    error = "" if request.platform is not None else "platform is required"
+    return cast(
+        PendingSecurityRequest,
+        replace(
+            request,
+            raw=f"{request.raw} current_sha256={request.current_digest}",
+            candidate_image=request.current_image or request.image,
+            reported_digest=request.current_digest,
+            current_image="",
+            current_digest="",
+            current_digest_source="",
+            missing_reported_digest_resolvable=False,
+            identity_status=identity_status,
+            error=error,
+        ),
+    )
+
+
+def resolve_current_security_subject(
+    request: PendingSecurityRequest,
+    verifier: DigestVerifier,
+) -> ResolvedImageSubject:
+    current = current_security_request(request)
+    if current is None:
+        return ResolvedImageSubject(
+            requested_ref=request.current_image or request.image,
+            platform_source=request.platform_source,
+            identity_status="unsupported",
+            error="installed digest is unavailable",
+        )
+    subject = verifier.resolve_digest_subject(
+        current.candidate_image,
+        current.reported_digest,
+        current.platform,
+        platform_source=current.platform_source,
     )
     return cast(
         ResolvedImageSubject,
@@ -149,6 +205,8 @@ def _request_for_target(
     compose_platform: ImagePlatform | None,
     compose_platform_conflict: bool = False,
     wud_platform: ImagePlatform | None,
+    current_image: str = "",
+    current_digest: str = "",
 ) -> PendingSecurityRequest:
     candidate_image = (
         image_with_tag(target.first, target.desired_tag)
@@ -184,6 +242,9 @@ def _request_for_target(
         reported_digest=target.digest,
         platform=platform,
         platform_source=platform_source,
+        current_image=current_image,
+        current_digest=normalize_digest(current_digest),
+        current_digest_source="wud" if current_digest else "",
         missing_reported_digest_resolvable=missing_reported_digest_resolvable,
         identity_status=identity_status,
         error=error,
@@ -308,6 +369,20 @@ def _wud_platform(
     if metadata is not None:
         return metadata.platform
     return None
+
+
+def _current_image(source: PendingSourceResult, target: WudTarget) -> str:
+    metadata = (source.metadata_by_line or {}).get(target.line_no)
+    if metadata is not None and metadata.image:
+        return metadata.image
+    return target.first
+
+
+def _current_digest(source: PendingSourceResult, target: WudTarget) -> str:
+    metadata = (source.metadata_by_line or {}).get(target.line_no)
+    if metadata is not None:
+        return metadata.local_digest
+    return ""
 
 
 def _compose_platforms_by_line(

@@ -17,6 +17,7 @@ from .command import CommandRunner
 from .config import ConfigError, parse_bool_env
 from .db import DatabaseError, init_db, open_db, utc_timestamp
 from .digest_verifier import ResolvedImageSubject
+from .platforms import platform_value
 from .security_scanner import SecurityScanResult, TrivyScanner, _http_url
 from .security_severity import normalize_security_severity
 from .security_store import (
@@ -29,8 +30,10 @@ from .security_subjects import (
     PENDING_SECURITY_READ_OPTIONS,
     PendingSecurityContext,
     PendingSecurityRequest,
+    current_security_request,
     default_digest_verifier,
     pending_security_context,
+    resolve_current_security_subject,
     resolve_security_subject,
 )
 from .web_auth import (
@@ -45,11 +48,13 @@ from .web_database import (
 )
 from .web_models import (
     DEFAULT_SECURITY_SCAN_CACHE_DIR,
+    SecurityScanComparison,
     SecurityScanConfig,
     SecurityScanFinding,
     SecurityScanInfo,
     SecurityScanJobResponse,
     SecurityScanSeverityCounts,
+    SecurityScanSubject,
     SecurityScansResponse,
     WebSettings,
 )
@@ -61,6 +66,7 @@ WUD_SECURITY_SCANNER_EXECUTABLE_ENV = "WUD_SECURITY_SCANNER_EXECUTABLE"
 WUD_SECURITY_SCAN_CACHE_DIR_ENV = "WUD_SECURITY_SCAN_CACHE_DIR"
 WUD_SECURITY_SCAN_TIMEOUT_SECONDS_ENV = "WUD_SECURITY_SCAN_TIMEOUT_SECONDS"
 DEFAULT_SECURITY_SCAN_TIMEOUT_SECONDS = 300
+INSTALLED_DIGEST_UNAVAILABLE_MESSAGE = "Installed digest is unavailable."
 
 
 @dataclass
@@ -217,11 +223,7 @@ def security_scans_response(settings: WebSettings) -> SecurityScansResponse:
         )
     try:
         with closing(_connect_readonly_db(settings)) as conn:
-            items = [
-                cached_scan_by_request_or_unambiguous_platform(conn, request)
-                or _placeholder_info(request, state=_placeholder_state(request))
-                for request in context.requests
-            ]
+            items = [_cached_scan_info(conn, request) for request in context.requests]
     except ReadOnlyDatabaseMissing:
         items = _placeholder_items(context)
     except (OSError, sqlite3.Error, DatabaseError) as exc:
@@ -237,6 +239,16 @@ def security_scans_response(settings: WebSettings) -> SecurityScansResponse:
                 ),
             ) from exc
     return _response_from_items(settings, context, items)
+
+
+def _cached_scan_info(
+    conn: sqlite3.Connection,
+    request: PendingSecurityRequest,
+) -> SecurityScanInfo:
+    info = cached_scan_by_request_or_unambiguous_platform(conn, request)
+    if info is None:
+        return _placeholder_info(request, state=_placeholder_state(request))
+    return _attach_cached_comparison(conn, request, info)
 
 
 def _placeholder_items(context: PendingSecurityContext) -> list[SecurityScanInfo]:
@@ -261,6 +273,7 @@ def _run_security_scan_job(
 ) -> None:
     _update_job(state, job_id, status="running")
     items: list[SecurityScanInfo] = []
+    current_scans: dict[tuple[str, str, str], SecurityScanInfo] = {}
     try:
         context = pending_security_context(settings)
         _update_job(state, job_id, total_count=len(context.requests))
@@ -272,7 +285,14 @@ def _run_security_scan_job(
         with open_db(settings.config.db_path) as conn:
             init_db(conn)
             for request in context.requests:
-                info = _scan_request(settings, conn, scanner, verifier, request)
+                info = _scan_request(
+                    settings,
+                    conn,
+                    scanner,
+                    verifier,
+                    request,
+                    current_scans,
+                )
                 items.append(info)
                 _update_job(
                     state,
@@ -296,11 +316,12 @@ def _scan_request(
     scanner: TrivyScanner,
     verifier: Any,
     request: PendingSecurityRequest,
+    current_scans: dict[tuple[str, str, str], SecurityScanInfo],
 ) -> SecurityScanInfo:
     cached = cached_scan_by_request(conn, request)
     # ponytail: demo fixtures use synthetic digests; keep them stable on refresh.
     if cached is not None and cached.scanner_version == "demo":
-        return cached
+        return _attach_cached_comparison(conn, request, cached)
     if request.identity_status != "pending":
         subject = resolve_security_subject(request, verifier)
         return _cache_subject_resolution(settings, conn, request, subject)
@@ -318,8 +339,26 @@ def _scan_request(
     )
     cached = cached_scan_by_request(conn, request)
     if cached is not None:
-        return cached
-    return _result_info(request, subject, result)
+        return _attach_refreshed_comparison(
+            settings,
+            conn,
+            scanner,
+            verifier,
+            request,
+            cached,
+            subject,
+            current_scans,
+        )
+    return _attach_refreshed_comparison(
+        settings,
+        conn,
+        scanner,
+        verifier,
+        request,
+        _result_info(request, subject, result),
+        subject,
+        current_scans,
+    )
 
 
 def _cache_subject_resolution(
@@ -394,6 +433,7 @@ def _subject_info(
         verdict="unknown",
         error_code=subject.identity_status,
         error_message=subject.error,
+        subject=_subject_model(subject),
         warnings=list(subject.warnings),
     )
 
@@ -415,6 +455,7 @@ def _result_info(
         severity_counts=_counts_model(result.severity_counts),
         fixable_counts=_counts_model(result.fixable_counts),
         unfixed_count=result.unfixed_count,
+        subject=_subject_model(subject),
         findings=[
             SecurityScanFinding(
                 vulnerability_id=finding.vulnerability_id,
@@ -431,6 +472,250 @@ def _result_info(
         error_code=result.error_code,
         error_message=result.error_message,
     )
+
+
+def _subject_model(subject: ResolvedImageSubject) -> SecurityScanSubject:
+    return SecurityScanSubject(
+        requested_ref=subject.requested_ref,
+        reported_digest=subject.reported_digest,
+        manifest_digest=subject.manifest_digest,
+        platform=subject.platform,
+    )
+
+
+def _attach_cached_comparison(
+    conn: sqlite3.Connection,
+    request: PendingSecurityRequest,
+    candidate: SecurityScanInfo,
+) -> SecurityScanInfo:
+    return _attach_current_comparison(
+        request,
+        candidate,
+        candidate.subject,
+        lambda current_request: cached_scan_by_request_or_unambiguous_platform(
+            conn,
+            current_request,
+        ),
+        missing_current_message="Installed digest has not been scanned yet.",
+    )
+
+
+def _attach_refreshed_comparison(
+    settings: WebSettings,
+    conn: sqlite3.Connection,
+    scanner: TrivyScanner,
+    verifier: Any,
+    request: PendingSecurityRequest,
+    candidate: SecurityScanInfo,
+    candidate_subject: ResolvedImageSubject,
+    current_scans: dict[tuple[str, str, str], SecurityScanInfo],
+) -> SecurityScanInfo:
+    if candidate.state != "complete":
+        return candidate
+    return _attach_current_comparison(
+        request,
+        candidate,
+        _subject_model(candidate_subject),
+        lambda current_request: _scan_current_request(
+            settings,
+            conn,
+            scanner,
+            verifier,
+            request,
+            current_request,
+            current_scans,
+        ),
+        missing_current_message=INSTALLED_DIGEST_UNAVAILABLE_MESSAGE,
+    )
+
+
+def _attach_current_comparison(
+    request: PendingSecurityRequest,
+    candidate: SecurityScanInfo,
+    candidate_subject: SecurityScanSubject,
+    current_info: Callable[[PendingSecurityRequest], SecurityScanInfo | None],
+    *,
+    missing_current_message: str,
+) -> SecurityScanInfo:
+    current_request = current_security_request(request)
+    if current_request is None:
+        return _with_comparison(
+            candidate,
+            _unknown_comparison(INSTALLED_DIGEST_UNAVAILABLE_MESSAGE),
+        )
+    if _same_subject(candidate_subject, current_request):
+        return _with_comparison(candidate, _comparison(candidate, candidate))
+    current = current_info(current_request)
+    if current is None:
+        return _with_comparison(
+            candidate,
+            _unknown_comparison(missing_current_message),
+        )
+    return _with_comparison(candidate, _comparison(current, candidate))
+
+
+def _scan_current_request(
+    settings: WebSettings,
+    conn: sqlite3.Connection,
+    scanner: TrivyScanner,
+    verifier: Any,
+    request: PendingSecurityRequest,
+    current_request: PendingSecurityRequest,
+    current_scans: dict[tuple[str, str, str], SecurityScanInfo],
+) -> SecurityScanInfo | None:
+    cached = cached_scan_by_request(conn, current_request)
+    # ponytail: demo fixtures use synthetic digests; keep them stable on refresh.
+    if cached is not None and cached.scanner_version == "demo":
+        current_scans[_current_scan_cache_key(current_request)] = cached
+        return cached
+    cache_key = _current_scan_cache_key(current_request)
+    if cache_key in current_scans:
+        return current_scans[cache_key]
+    subject = resolve_current_security_subject(request, verifier)
+    if subject.identity_status != "exact":
+        current = _cache_subject_resolution(settings, conn, current_request, subject)
+        current_scans[cache_key] = current
+        return current
+    result = scanner.scan(subject)
+    result = _sanitize_scan_result(settings, result)
+    upsert_scan_result(
+        conn,
+        current_request,
+        subject,
+        result,
+        timestamp=utc_timestamp(),
+    )
+    current = cached_scan_by_request(conn, current_request) or _result_info(
+        current_request,
+        subject,
+        result,
+    )
+    current_scans[cache_key] = current
+    return current
+
+
+def _current_scan_cache_key(
+    current_request: PendingSecurityRequest,
+) -> tuple[str, str, str]:
+    return (
+        current_request.candidate_image,
+        current_request.reported_digest,
+        platform_value(current_request.platform),
+    )
+
+
+def _comparison(
+    current: SecurityScanInfo,
+    candidate: SecurityScanInfo,
+) -> SecurityScanComparison:
+    if current.state != "complete" or candidate.state != "complete":
+        return _unknown_comparison("Both installed and candidate scans must complete.")
+    mismatch_message = _comparison_mismatch_message(current, candidate)
+    if mismatch_message:
+        return _unknown_comparison(mismatch_message)
+    if (current.verdict == "findings" and not current.findings) or (
+        candidate.verdict == "findings" and not candidate.findings
+    ):
+        return _unknown_comparison("Refresh scans to collect vulnerability rows.")
+
+    current_by_key = {_finding_key(finding): finding for finding in current.findings}
+    candidate_by_key = {_finding_key(finding): finding for finding in candidate.findings}
+    current_keys = set(current_by_key)
+    candidate_keys = set(candidate_by_key)
+    fixed = [current_by_key[key] for key in sorted(current_keys - candidate_keys)]
+    remaining = [
+        candidate_by_key[key] for key in sorted(current_keys & candidate_keys)
+    ]
+    introduced = [
+        candidate_by_key[key] for key in sorted(candidate_keys - current_keys)
+    ]
+    status = _comparison_status(fixed, remaining, introduced)
+    return SecurityScanComparison(
+        status=status,  # type: ignore[arg-type]
+        current_subject=current.subject,
+        fixed_findings=fixed,
+        remaining_findings=remaining,
+        introduced_findings=introduced,
+        message=_comparison_message(status, fixed, remaining, introduced),
+    )
+
+
+def _unknown_comparison(message: str) -> SecurityScanComparison:
+    return SecurityScanComparison(status="unknown", message=message)
+
+
+def _comparison_mismatch_message(
+    current: SecurityScanInfo,
+    candidate: SecurityScanInfo,
+) -> str:
+    if current.scanner != candidate.scanner:
+        return "Installed and candidate scans used different scanners."
+    if current.scanner_schema != candidate.scanner_schema:
+        return "Installed and candidate scans used different scanner schemas."
+    if _database_identity(current) != _database_identity(candidate):
+        return "Installed and candidate scans used different vulnerability databases."
+    if current.subject.platform != candidate.subject.platform:
+        return "Installed and candidate scans used different platforms."
+    return ""
+
+
+def _database_identity(info: SecurityScanInfo) -> str:
+    return info.db_revision or info.db_updated_at
+
+
+def _comparison_status(
+    fixed: Sequence[SecurityScanFinding],
+    remaining: Sequence[SecurityScanFinding],
+    introduced: Sequence[SecurityScanFinding],
+) -> str:
+    if introduced and not fixed:
+        return "worse"
+    if fixed and (remaining or introduced):
+        return "mixed"
+    if fixed:
+        return "improved"
+    return "unchanged"
+
+
+def _comparison_message(
+    status: str,
+    fixed: Sequence[SecurityScanFinding],
+    remaining: Sequence[SecurityScanFinding],
+    introduced: Sequence[SecurityScanFinding],
+) -> str:
+    if status == "improved":
+        return f"Candidate removes {len(fixed)} reported finding(s)."
+    if status == "mixed":
+        return (
+            f"Candidate removes {len(fixed)} finding(s), leaves "
+            f"{len(remaining)}, and introduces {len(introduced)}."
+        )
+    if status == "worse":
+        return f"Candidate introduces {len(introduced)} reported finding(s)."
+    if remaining:
+        return f"Candidate keeps {len(remaining)} reported finding(s)."
+    return "No reported findings changed between installed and candidate images."
+
+
+def _finding_key(finding: SecurityScanFinding) -> tuple[str, str]:
+    return finding.vulnerability_id, finding.package_name
+
+
+def _with_comparison(
+    info: SecurityScanInfo,
+    comparison: SecurityScanComparison,
+) -> SecurityScanInfo:
+    return info.model_copy(update={"comparison": comparison})
+
+
+def _same_subject(
+    subject: SecurityScanSubject,
+    request: PendingSecurityRequest,
+) -> bool:
+    if subject.platform != platform_value(request.platform):
+        return False
+    digest = request.reported_digest
+    return bool(digest and digest in {subject.reported_digest, subject.manifest_digest})
 
 
 def _placeholder_state(request: PendingSecurityRequest) -> str:
@@ -481,9 +766,33 @@ def _sanitize_scan_info(
                 _sanitize_scan_finding(settings, finding)
                 for finding in info.findings
             ],
+            "comparison": _sanitize_scan_comparison(settings, info.comparison),
             "warnings": [_sanitize_text(settings, item) for item in info.warnings],
             "error_message": _sanitize_text(settings, info.error_message),
         },
+    )
+
+
+def _sanitize_scan_comparison(
+    settings: WebSettings,
+    comparison: SecurityScanComparison,
+) -> SecurityScanComparison:
+    return comparison.model_copy(
+        update={
+            "fixed_findings": [
+                _sanitize_scan_finding(settings, finding)
+                for finding in comparison.fixed_findings
+            ],
+            "remaining_findings": [
+                _sanitize_scan_finding(settings, finding)
+                for finding in comparison.remaining_findings
+            ],
+            "introduced_findings": [
+                _sanitize_scan_finding(settings, finding)
+                for finding in comparison.introduced_findings
+            ],
+            "message": _sanitize_text(settings, comparison.message),
+        }
     )
 
 

@@ -1,18 +1,20 @@
-# Candidate Security Scanning Signals
+# Candidate Security Scanning And Update Delta Signals
 
-WUDup exposes candidate-only security scan metadata for pending container
-updates. When enabled, the WebUI resolves each candidate to a platform-specific
+WUDup exposes advisory security scan metadata for pending container updates.
+When enabled, the WebUI resolves each candidate to a platform-specific
 immutable image subject, runs a local Trivy registry scan, and stores cached
-advisory results for display.
+advisory results for display. When WUD metadata includes the installed
+`local_digest`, refresh jobs also scan that digest and show whether the
+candidate fixes, keeps, or introduces reported findings.
 
 Scan results are advisory metadata only. They must not gate updates,
 automatically snooze updates, bypass snoozes, or imply that an image is safe.
-Policy decisions require comparing the current image and candidate with the
-same scanner, database revision, platform, and suppression policy.
+Delta comparisons are only shown when the current image and candidate were
+scanned with the same scanner, database revision, schema, and platform.
 
 ## Subject Identity
 
-Each scan subject must identify the exact candidate being evaluated:
+Each scan subject must identify the exact image being evaluated:
 
 - canonical registry and repository;
 - requested tag or reference for display and audit;
@@ -39,14 +41,18 @@ unsupported. WUDup must not silently scan Trivy's default platform.
 
 ## Runtime Contract
 
-Candidate scanning is disabled by default and separate from Docker update
+Security scanning is disabled by default and separate from Docker update
 permission. Read-only deployments may display cached results, but refreshing
 scans from the WebUI requires authentication, CSRF protection,
 `WUD_SECURITY_SCANNING_ENABLED=true`, and `WUD_WEB_MUTATIONS_ENABLED=true`.
 
-Pending-update reads do not start scanner jobs. Refresh jobs deduplicate
-identical immutable subjects, run with low concurrency, and avoid treating
-registry, auth, offline, stale, partial, or unsupported states as clean results.
+Pending-update reads do not start scanner jobs. Refresh jobs scan the candidate
+as usual, scan the installed digest when WUD provides `local_digest`, reuse the
+candidate scan when both subjects are identical, deduplicate immutable subjects,
+run with low concurrency, and avoid treating registry, auth, offline, stale,
+partial, or unsupported states as clean results. File-only legacy mode without
+WUD metadata keeps the candidate scan and reports an explicit unknown
+comparison.
 
 Offline mode cannot scan a remote candidate unless image content or a
 digest-bound SBOM is already local and the vulnerability database is available.
@@ -68,17 +74,21 @@ Secret scanning and insecure TLS modes stay disabled by default.
 The API is cache-first:
 
 - `GET /api/v1/security-scans` reads cached scan results for current pending
-  candidates. When scanning is enabled, it may use WUD metadata and resolve
-  missing reported digests so current candidates can join existing cache
-  entries, but it must not run Trivy or create refresh jobs.
+  candidates and cached installed-digest comparisons when available. When
+  scanning is enabled, it may use WUD metadata and resolve missing reported
+  digests so current candidates can join existing cache entries, but it must
+  not run Trivy or create refresh jobs.
 - `POST /api/v1/security-scans/refresh` validates current pending subjects and
-  queues bounded scan jobs.
+  queues bounded candidate scan jobs plus installed-digest scan jobs when WUD
+  metadata provides the installed digest.
 - `GET /api/v1/security-scans/jobs/{id}` reports job progress and results.
 
 Results are joined by immutable subject identity and current pending source, not
-line number alone. The UI must label results as candidate-only and
-scanner/database-specific. Clean wording should say "No vulnerabilities reported
-by Trivy using database as of ..." rather than "safe."
+line number alone. `SecurityScanInfo.subject` describes the candidate subject.
+`SecurityScanInfo.comparison` describes the installed subject, delta status, and
+fixed, remaining, and introduced findings. The UI must label results as
+scanner/database-specific advisory metadata. Clean wording should say "No
+vulnerabilities reported by Trivy using database as of ..." rather than "safe."
 
 Show scan age, database age, exact platform, exact digest, severity counts,
 fixable counts, unfixed count, and warnings. Treat stale, partial,
