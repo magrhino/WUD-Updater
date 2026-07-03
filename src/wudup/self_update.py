@@ -117,8 +117,9 @@ def release_self_update_target(
 
     current_image = _canonical_self_update_image(current_image)
     current_tag = _image_reference_tag(current_image)
-    if _is_release_image_tag(current_tag) and _normalize_tag(current_tag) != latest_tag:
-        return f"{current_image} tag={latest_tag}"
+    desired_tag = f"{latest_tag}-trivy" if current_tag.endswith("-trivy") else latest_tag
+    if _is_release_image_tag(current_tag) and _normalize_tag(current_tag) != desired_tag:
+        return f"{current_image} tag={desired_tag}"
     return current_image
 
 

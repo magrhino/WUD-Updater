@@ -221,6 +221,28 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
             "Please restart the wudup container before running updates again.",
             stdout.getvalue(),
         )
+    def test_github_release_self_update_rewrites_pinned_trivy_release_tag(
+        self,
+    ) -> None:
+        status, stdout, stderr = self._run_github_release_self_update(
+            "ghcr.io/magrhino/wudup:v0.12.2-trivy",
+            env_overrides={"FAKE_UPDATER_LOG_WUD_CONTENT": "1"},
+        )
+
+        self.assertEqual(status, 0, stderr.getvalue() + stdout.getvalue())
+        log = self.updater_log.read_text(encoding="utf-8")
+        self.assertIn(
+            "WUD_CONTENT=ghcr.io/magrhino/wudup:v0.12.2-trivy tag=v999.0.0-trivy|",
+            log,
+        )
+        arg_lines = _updater_arg_lines(log)
+        self.assertEqual(len(arg_lines), 1)
+        self.assertIn("--allow-tag-updates", arg_lines[0])
+        self.assertFalse(self.docker_log.exists())
+        self.assertNotIn(
+            "Please restart the wudup container before running updates again.",
+            stdout.getvalue(),
+        )
     def test_github_release_self_update_failed_pull_exits_without_restart_message(
         self,
     ) -> None:
