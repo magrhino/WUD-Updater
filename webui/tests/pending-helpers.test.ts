@@ -48,6 +48,7 @@ import {
   pendingResponse,
   planResponse,
   releaseNoteInfo,
+  securityScanInfo,
   servicePolicy,
   snooze,
   wudContainerMetadata,
@@ -73,63 +74,6 @@ function mountPendingModal(component: Component, props: Record<string, unknown>)
       },
     },
   });
-}
-
-function securityScanInfo(
-  overrides: Partial<SecurityScanInfo> = {},
-): SecurityScanInfo {
-  const severityCounts = {
-    critical: 0,
-    high: 0,
-    medium: 0,
-    low: 0,
-    unknown: 0,
-    ...overrides.severity_counts,
-  };
-  return {
-    line_no: 1,
-    state: "not_scanned",
-    verdict: "unknown",
-    scanner: "trivy",
-    scanner_version: "",
-    scanner_schema: "",
-    scanned_at: "",
-    db_revision: "",
-    db_updated_at: "",
-    fixable_counts: {
-      critical: 0,
-      high: 0,
-      medium: 0,
-      low: 0,
-      unknown: 0,
-    },
-    unfixed_count: 0,
-    findings: [],
-    subject: {
-      requested_ref: "repo/app:2.0",
-      reported_digest: "sha256:candidate",
-      manifest_digest: "sha256:candidate-child",
-      platform: "linux/amd64",
-    },
-    comparison: {
-      status: "unknown",
-      current_subject: {
-        requested_ref: "",
-        reported_digest: "",
-        manifest_digest: "",
-        platform: "",
-      },
-      fixed_findings: [],
-      remaining_findings: [],
-      introduced_findings: [],
-      message: "",
-    },
-    warnings: [],
-    error_code: "",
-    error_message: "",
-    ...overrides,
-    severity_counts: severityCounts,
-  };
 }
 
 function securityFinding(
