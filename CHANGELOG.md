@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.53.0](https://github.com/magrhino/wudup/compare/v0.52.5...v0.53.0) (2026-07-03)
+
+
+### Features
+
+* **security:** Compare installed and candidate security scans ([#484](https://github.com/magrhino/wudup/issues/484)) ([b170787](https://github.com/magrhino/wudup/commit/b170787eb9cd0a8d542f219a1d72d33650dcfda7))
+
 ## [0.52.5](https://github.com/magrhino/wudup/compare/v0.52.4...v0.52.5) (2026-07-03)
 
 
