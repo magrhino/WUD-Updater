@@ -1338,6 +1338,7 @@ class ComparisonVerifier:
 
 class ComparisonScanner:
     def __init__(self, *_args, **_kwargs) -> None:
+        # Matches TrivyScanner construction; the fake scanner has no setup.
         pass
 
     def scan(self, subject: ResolvedImageSubject) -> SecurityScanResult:

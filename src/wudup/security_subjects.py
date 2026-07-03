@@ -138,17 +138,20 @@ def current_security_request(
         return None
     identity_status = "pending" if request.platform is not None else "unsupported"
     error = "" if request.platform is not None else "platform is required"
-    return replace(
-        request,
-        raw=f"{request.raw} current_sha256={request.current_digest}",
-        candidate_image=request.current_image or request.image,
-        reported_digest=request.current_digest,
-        current_image="",
-        current_digest="",
-        current_digest_source="",
-        missing_reported_digest_resolvable=False,
-        identity_status=identity_status,
-        error=error,
+    return cast(
+        PendingSecurityRequest,
+        replace(
+            request,
+            raw=f"{request.raw} current_sha256={request.current_digest}",
+            candidate_image=request.current_image or request.image,
+            reported_digest=request.current_digest,
+            current_image="",
+            current_digest="",
+            current_digest_source="",
+            missing_reported_digest_resolvable=False,
+            identity_status=identity_status,
+            error=error,
+        ),
     )
 
 

@@ -66,6 +66,7 @@ WUD_SECURITY_SCANNER_EXECUTABLE_ENV = "WUD_SECURITY_SCANNER_EXECUTABLE"
 WUD_SECURITY_SCAN_CACHE_DIR_ENV = "WUD_SECURITY_SCAN_CACHE_DIR"
 WUD_SECURITY_SCAN_TIMEOUT_SECONDS_ENV = "WUD_SECURITY_SCAN_TIMEOUT_SECONDS"
 DEFAULT_SECURITY_SCAN_TIMEOUT_SECONDS = 300
+INSTALLED_DIGEST_UNAVAILABLE_MESSAGE = "Installed digest is unavailable."
 
 
 @dataclass
@@ -480,7 +481,7 @@ def _attach_cached_comparison(
     if current_request is None:
         return _with_comparison(
             candidate,
-            _unknown_comparison("Installed digest is unavailable."),
+            _unknown_comparison(INSTALLED_DIGEST_UNAVAILABLE_MESSAGE),
         )
     if _same_subject(candidate.subject, current_request):
         return _with_comparison(candidate, _comparison(candidate, candidate))
@@ -508,7 +509,7 @@ def _attach_refreshed_comparison(
     if current_request is None:
         return _with_comparison(
             candidate,
-            _unknown_comparison("Installed digest is unavailable."),
+            _unknown_comparison(INSTALLED_DIGEST_UNAVAILABLE_MESSAGE),
         )
     if _same_subject(_subject_model(candidate_subject), current_request):
         return _with_comparison(candidate, _comparison(candidate, candidate))
@@ -516,7 +517,7 @@ def _attach_refreshed_comparison(
     if current is None:
         return _with_comparison(
             candidate,
-            _unknown_comparison("Installed digest is unavailable."),
+            _unknown_comparison(INSTALLED_DIGEST_UNAVAILABLE_MESSAGE),
         )
     return _with_comparison(candidate, _comparison(current, candidate))
 

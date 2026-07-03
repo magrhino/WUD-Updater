@@ -274,8 +274,9 @@ export function securityScanMaintainerReport(scan: SecurityScanInfo): string {
   const scannerParts = [scan.scanner, scan.scanner_version].filter(Boolean);
   const scanner = scannerParts.length ? scannerParts.join(" ") : "unknown scanner";
   const database = scan.db_revision || scan.db_updated_at || "unknown database";
+  const subject = scan.subject.requested_ref || `line ${scan.line_no}`;
   const lines = [
-    `Security scan update report for ${scan.subject.requested_ref || `line ${scan.line_no}`}`,
+    `Security scan update report for ${subject}`,
     "",
     `Comparison: ${scan.comparison.message || scan.comparison.status}`,
     `Scanner: ${scanner}; schema ${scan.scanner_schema || "unknown"}; database ${database}`,
@@ -285,12 +286,18 @@ export function securityScanMaintainerReport(scan: SecurityScanInfo): string {
   ];
 
   if (remaining.length) {
-    lines.push("", `Remaining candidate findings (${remaining.length}):`);
-    lines.push(...remaining.map(findingLine));
+    lines.push(
+      "",
+      `Remaining candidate findings (${remaining.length}):`,
+      ...remaining.map(findingLine),
+    );
   }
   if (introduced.length) {
-    lines.push("", `Introduced candidate findings (${introduced.length}):`);
-    lines.push(...introduced.map(findingLine));
+    lines.push(
+      "",
+      `Introduced candidate findings (${introduced.length}):`,
+      ...introduced.map(findingLine),
+    );
   }
   return lines.join("\n");
 }

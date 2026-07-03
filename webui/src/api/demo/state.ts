@@ -982,6 +982,13 @@ export class DemoApiState {
     };
     const canCompare = Boolean(currentDigest && reportedDigest && platform);
     const comparisonReady = decision.state === "complete" && canCompare;
+    let comparisonMessage = "";
+    if (comparisonReady) {
+      comparisonMessage =
+        "Demo comparison: installed and candidate findings are unchanged.";
+    } else if (decision.state === "complete") {
+      comparisonMessage = "Installed digest is unavailable in the demo fixture.";
+    }
 
     return {
       line_no: item.line_no,
@@ -1006,11 +1013,7 @@ export class DemoApiState {
         fixed_findings: [],
         remaining_findings: comparisonReady ? findings : [],
         introduced_findings: [],
-        message: comparisonReady
-          ? "Demo comparison: installed and candidate findings are unchanged."
-          : decision.state === "complete"
-            ? "Installed digest is unavailable in the demo fixture."
-            : "",
+        message: comparisonMessage,
       },
       warnings:
         decision.hasFindings
