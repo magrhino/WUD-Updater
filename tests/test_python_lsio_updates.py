@@ -28,7 +28,7 @@ from wudup.lsio_updates import classify_lsio_update, parse_lsio_tag
             "",
         ),
         ("latest", "branch", "", "latest", "", ""),
-        ("2.6.0", "pseudo_semver", "", "", "", ""),
+        ("2.6.0", "pseudo_semver", "", "", "2.6.0", ""),
     ],
 )
 def test_parse_lsio_tag_extracts_known_shapes(
@@ -59,6 +59,11 @@ def test_parse_lsio_tag_extracts_known_shapes(
             "amd64-nightly-4.7.2.7675-ls482",
         ),
         ("version-2.6.0", "version-2.6.0"),
+        ("version-5.2.2_v2.0.13", "5.2.2_v2.0.13-ls464"),
+        (
+            "libtorrentv1-version-5.2.2_v1.2.20",
+            "libtorrentv1-5.2.2_v1.2.20-ls122",
+        ),
     ],
 )
 def test_classify_lsio_update_detects_image_rebuild(
@@ -80,6 +85,8 @@ def test_classify_lsio_update_detects_image_rebuild(
         ("2.6.0-ls224", "2.7.0-ls1"),
         ("nightly-4.7.2.7675-ls481", "nightly-4.8.0.1-ls1"),
         ("version-2.6.0", "version-2.7.0"),
+        ("5.21.1", "5.22.4"),
+        ("version-5.2.1_v2.0.13", "5.2.2_v2.0.13-ls464"),
     ],
 )
 def test_classify_lsio_update_detects_upstream_update(
@@ -99,9 +106,9 @@ def test_classify_lsio_update_detects_upstream_update(
     ("image_repo", "current_tag", "target_tag"),
     [
         ("acme/app", "2.6.0-ls224", "2.6.0-ls225"),
+        ("acme/app", "2.6.0", "2.7.0"),
         ("linuxserver/docker-swag", "latest", ""),
         ("linuxserver/docker-swag", "latest", "latest"),
-        ("linuxserver/docker-swag", "2.6.0", "2.7.0"),
         ("linuxserver/docker-swag", "nightly-2.6.0-ls224", "develop-2.6.0-ls225"),
         ("linuxserver/docker-swag", "amd64-2.6.0-ls224", "arm64v8-2.6.0-ls225"),
     ],

@@ -21,6 +21,7 @@ from .lsio_updates import (
     LSIOUpdateClassification,
     classification_from_mapping,
     classify_lsio_update,
+    parse_lsio_tag,
 )
 from .wud_file import WudTarget
 
@@ -34,6 +35,7 @@ SEMVER_RE = re.compile(
     r"(?<![0-9A-Za-z])v?([0-9]+)(?:\.[0-9]+){1,3}"
     r"(?:[._-][0-9A-Za-z]+)*(?![0-9A-Za-z])"
 )
+COMPOSITE_UPSTREAM_RE = re.compile(r"^([vV]?[0-9]+(?:\.[0-9]+){1,3})_v?[0-9]")
 BREAKING_RE = re.compile(
     r"breaking|migration|incompatible|manual step|major change|"
     r"requires [^ \n]+ [0-9]|deprecated[^.\n]*remov|remove[ds] feature",
@@ -628,7 +630,7 @@ def _fetch_lsio_release_note(
     client: GitHubClient,
     timestamp: str,
 ) -> ReleaseNoteInfo:
-    lsio_release = _fetch_latest(client, context.image_repo)
+    lsio_release = _fetch_lsio_release(client, context)
     if lsio_release is None:
         return ReleaseNoteInfo(
             line_no=context.line_no,
@@ -642,13 +644,17 @@ def _fetch_lsio_release_note(
         )
     lsio_body = str(lsio_release.get("body") or "")
     lsio_tag = str(lsio_release.get("tag_name") or "")
-    upstream_version = context.target_tag or _lsio_upstream_version(lsio_body, lsio_tag)
+    upstream_version = _lsio_context_upstream_version(context, lsio_body, lsio_tag)
     classification = _classify_context(
         context,
         lsio_tag=lsio_tag,
         upstream_version=upstream_version,
     )
-    upstream_release = _fetch_release(client, context.upstream_repo, upstream_version)
+    upstream_release = _fetch_lsio_upstream_release(
+        client,
+        context.upstream_repo,
+        upstream_version,
+    )
     links = [
         ReleaseNoteLink(
             "LSIO release",
@@ -712,6 +718,57 @@ def _fetch_lsio_release_note(
     )
 
 
+def _fetch_lsio_release(
+    client: GitHubClient,
+    context: ReleaseNoteContext,
+) -> dict[str, Any] | None:
+    branch = _lsio_tracking_branch(context)
+    if not branch:
+        return _fetch_latest(client, context.image_repo)
+    releases = _object_list(
+        client.get_json(
+            f"https://api.github.com/repos/{context.image_repo}/releases?per_page=30"
+        )
+    )
+    for release in releases:
+        if parse_lsio_tag(str(release.get("tag_name") or "")).branch == branch:
+            return release
+    return None
+
+
+def _lsio_tracking_branch(context: ReleaseNoteContext) -> str:
+    for tag in (context.target_tag, context.current_tag):
+        parts = parse_lsio_tag(tag)
+        if parts.kind in {"build", "version"} and parts.branch:
+            return parts.branch
+    return ""
+
+
+def _lsio_context_upstream_version(
+    context: ReleaseNoteContext,
+    lsio_body: str,
+    lsio_tag: str,
+) -> str:
+    target = parse_lsio_tag(context.target_tag)
+    if target.kind in {"build", "version", "pseudo_semver"}:
+        return target.upstream_version
+    return _lsio_upstream_version(lsio_body, lsio_tag)
+
+
+def _fetch_lsio_upstream_release(
+    client: GitHubClient,
+    repo: str,
+    tag: str,
+) -> dict[str, Any] | None:
+    release = _fetch_release(client, repo, tag)
+    if release is not None:
+        return release
+    fallback = _composite_upstream_base(tag)
+    if fallback and fallback != tag:
+        return _fetch_release(client, repo, fallback)
+    return None
+
+
 def _classify_context(
     context: ReleaseNoteContext,
     *,
@@ -765,6 +822,12 @@ def _object_or_none(value: object) -> dict[str, Any] | None:
     if str(value.get("message") or "") == "Not Found":
         return None
     return value
+
+
+def _object_list(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
 
 
 def _lsio_upstream_version(body: str, lsio_tag: str) -> str:
@@ -914,6 +977,11 @@ def _first_semver(value: str) -> str:
 
 def _strip_lsio_suffix(value: str) -> str:
     return re.sub(r"(?i)[._-]ls[0-9]+(?:[._-][0-9A-Za-z]+)*$", "", value)
+
+
+def _composite_upstream_base(value: str) -> str:
+    match = COMPOSITE_UPSTREAM_RE.match(value)
+    return match.group(1) if match else ""
 
 
 def _semver_major(value: str) -> int | None:

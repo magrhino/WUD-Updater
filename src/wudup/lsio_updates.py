@@ -89,7 +89,12 @@ def parse_lsio_tag(tag: str) -> LSIOTagParts:
         )
 
     if _first_version_index(tokens) == 0:
-        return LSIOTagParts(raw=raw, kind="pseudo_semver", arch=arch)
+        return LSIOTagParts(
+            raw=raw,
+            kind="pseudo_semver",
+            arch=arch,
+            upstream_version=raw,
+        )
 
     return LSIOTagParts(raw=raw, kind="branch", arch=arch, branch="-".join(tokens))
 
@@ -131,8 +136,8 @@ def classify_lsio_update(
             target=target,
         )
 
-    if current.kind in {"build", "version"} and (
-        target.kind in {"build", "version"} or upstream_version
+    if current.kind in {"build", "version", "pseudo_semver"} and (
+        target.kind in {"build", "version", "pseudo_semver"} or upstream_version
     ):
         return LSIOUpdateClassification(
             change_type="image_rebuild",
@@ -189,7 +194,7 @@ def _first_version_index(tokens: list[str]) -> int:
 
 
 def _trusted_upstream(parts: LSIOTagParts) -> str:
-    if parts.kind not in {"build", "version"}:
+    if parts.kind not in {"build", "version", "pseudo_semver"}:
         return ""
     return _normalize_version(parts.upstream_version)
 

@@ -287,10 +287,10 @@ class ReleaseNotesTests(unittest.TestCase):
                     "body": "LinuxServer Changes:\n- Rebase to Alpine 3.20",
                     "published_at": "2026-01-02T00:00:00Z",
                 },
-                "https://api.github.com/repos/Radarr/Radarr/releases/tags/v5.1.0-ls2": {
+                "https://api.github.com/repos/Radarr/Radarr/releases/tags/v5.1.0": {
                     "message": "Not Found",
                 },
-                "https://api.github.com/repos/Radarr/Radarr/releases/tags/5.1.0-ls2": {
+                "https://api.github.com/repos/Radarr/Radarr/releases/tags/5.1.0": {
                     "message": "Not Found",
                 },
                 "https://api.github.com/repos/Radarr/Radarr": {
@@ -315,6 +315,119 @@ class ReleaseNotesTests(unittest.TestCase):
             "ls2",
         )
         self.assertEqual(cached[0].classification.change_type, "image_rebuild")
+
+    def test_lsio_branch_tracking_fetches_matching_release(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            upstream_map = Path(tmp) / "upstreams.txt"
+            upstream_map.write_text(
+                "linuxserver/docker-qbittorrent: qbittorrent/qBittorrent\n",
+                encoding="utf-8",
+            )
+            parsed = parse_wud_text(
+                "linuxserver/qbittorrent:libtorrentv1-version-5.2.1_v1.2.20 "
+                "tag=libtorrentv1-version-5.2.2_v1.2.20\n"
+            )
+            releases_url = (
+                "https://api.github.com/repos/"
+                "linuxserver/docker-qbittorrent/releases?per_page=30"
+            )
+            responses = {
+                releases_url: [
+                    {
+                        "tag_name": "5.2.2_v2.0.13-ls464",
+                        "name": "5.2.2_v2.0.13-ls464",
+                        "html_url": "https://github.com/linuxserver/docker-qbittorrent/releases/tag/5.2.2_v2.0.13-ls464",
+                        "body": "Remote Changes:\n- Updating to 5.2.2_v2.0.13",
+                        "published_at": "2026-06-28T09:57:00Z",
+                    },
+                    {
+                        "tag_name": "libtorrentv1-5.2.2_v1.2.20-ls122",
+                        "name": "libtorrentv1-5.2.2_v1.2.20-ls122",
+                        "html_url": "https://github.com/linuxserver/docker-qbittorrent/releases/tag/libtorrentv1-5.2.2_v1.2.20-ls122",
+                        "body": "Remote Changes:\n- Updating to 5.2.2_v1.2.20",
+                        "published_at": "2026-06-28T09:57:00Z",
+                    },
+                ],
+                "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags/v5.2.2_v1.2.20": {
+                    "message": "Not Found",
+                },
+                "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags/5.2.2_v1.2.20": {
+                    "message": "Not Found",
+                },
+                "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags/v5.2.2": {
+                    "tag_name": "v5.2.2",
+                    "name": "qBittorrent v5.2.2",
+                    "html_url": "https://github.com/qbittorrent/qBittorrent/releases/tag/release-5.2.2",
+                    "body": "qBittorrent upstream release notes.",
+                    "published_at": "2026-06-16T04:33:00Z",
+                },
+            }
+            client = GitHubClient(fetch_json=lambda url: responses[url])
+            with open_db(":memory:") as conn:
+                init_db(conn)
+                items = refresh_release_notes(
+                    conn,
+                    parsed.targets,
+                    {"UPSTREAM_MAP": str(upstream_map)},
+                    client=client,
+                )
+
+        self.assertEqual(items[0].status, "ready")
+        self.assertEqual(items[0].release_tag, "v5.2.2")
+        self.assertTrue(
+            items[0].links[0].url.endswith(
+                "/libtorrentv1-5.2.2_v1.2.20-ls122"
+            )
+        )
+        self.assertEqual(items[0].classification.target.branch, "libtorrentv1")
+        self.assertEqual(items[0].classification.change_type, "upstream_update")
+
+    def test_lsio_composite_upstream_falls_back_to_semver_release(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            upstream_map = Path(tmp) / "upstreams.txt"
+            upstream_map.write_text(
+                "linuxserver/docker-qbittorrent: qbittorrent/qBittorrent\n",
+                encoding="utf-8",
+            )
+            parsed = parse_wud_text(
+                "linuxserver/qbittorrent:version-5.2.1_v2.0.13 "
+                "tag=version-5.2.2_v2.0.13\n"
+            )
+            responses = {
+                "https://api.github.com/repos/linuxserver/docker-qbittorrent/releases/latest": {
+                    "tag_name": "5.2.2_v2.0.13-ls464",
+                    "name": "5.2.2_v2.0.13-ls464",
+                    "html_url": "https://github.com/linuxserver/docker-qbittorrent/releases/tag/5.2.2_v2.0.13-ls464",
+                    "body": "Remote Changes:\n- Updating to 5.2.2_v2.0.13",
+                    "published_at": "2026-06-28T09:57:00Z",
+                },
+                "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags/v5.2.2_v2.0.13": {
+                    "message": "Not Found",
+                },
+                "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags/5.2.2_v2.0.13": {
+                    "message": "Not Found",
+                },
+                "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags/v5.2.2": {
+                    "tag_name": "v5.2.2",
+                    "name": "qBittorrent v5.2.2",
+                    "html_url": "https://github.com/qbittorrent/qBittorrent/releases/tag/release-5.2.2",
+                    "body": "qBittorrent upstream release notes.",
+                    "published_at": "2026-06-16T04:33:00Z",
+                },
+            }
+            client = GitHubClient(fetch_json=lambda url: responses[url])
+            with open_db(":memory:") as conn:
+                init_db(conn)
+                items = refresh_release_notes(
+                    conn,
+                    parsed.targets,
+                    {"UPSTREAM_MAP": str(upstream_map)},
+                    client=client,
+                )
+
+        self.assertEqual(items[0].status, "ready")
+        self.assertEqual(items[0].release_tag, "v5.2.2")
+        self.assertEqual(items[0].classification.change_type, "upstream_update")
 
     def test_github_latest_candidate_from_lsio_info_requires_release_link(self) -> None:
         for status in ("ready", "not_found"):
