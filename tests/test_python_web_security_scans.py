@@ -31,6 +31,7 @@ from wudup.web_models import WebApplyJob
 from wudup.web_pending_sources import PendingSourceResult
 from wudup.wud_file import parse_wud_text
 
+from tests.db_helpers import db_connection
 from tests.web_test_helpers import (
     WEB_DB_NAME,
     _client,
@@ -138,7 +139,7 @@ def test_security_scans_get_missing_cache_table_uses_placeholders(
         f"repo/app:1.0 platform=linux/amd64 sha256={VALID_DIGEST}\n",
         encoding="utf-8",
     )
-    with sqlite3.connect(state_dir / WEB_DB_NAME) as conn:
+    with db_connection(state_dir / WEB_DB_NAME) as conn:
         init_db(conn)
         conn.execute("DROP TABLE security_scan_cache")
     client = _client(
@@ -863,7 +864,7 @@ def test_security_scan_cache_corrupt_counts_degrade_to_zero() -> None:
         fixable_counts={"high": 1},
         warnings=("scan warning",),
     )
-    with sqlite3.connect(":memory:") as conn:
+    with db_connection(":memory:") as conn:
         conn.row_factory = sqlite3.Row
         init_db(conn)
         upsert_scan_result(
@@ -911,7 +912,7 @@ def test_security_scan_cache_round_trips_vulnerability_findings() -> None:
             ),
         ),
     )
-    with sqlite3.connect(":memory:") as conn:
+    with db_connection(":memory:") as conn:
         conn.row_factory = sqlite3.Row
         init_db(conn)
         upsert_scan_result(
@@ -952,7 +953,7 @@ def test_security_scan_cache_platform_fallback_rejects_ambiguous_platforms() -> 
         identity_status="exact",
     )
 
-    with sqlite3.connect(":memory:") as conn:
+    with db_connection(":memory:") as conn:
         conn.row_factory = sqlite3.Row
         init_db(conn)
         upsert_scan_result(
@@ -982,7 +983,7 @@ def test_security_scan_cache_uses_newest_same_second_row_and_prunes() -> None:
     request = _single_security_request()
     subject = _exact_subject()
     timestamp = "2026-06-26T00:00:00+00:00"
-    with sqlite3.connect(":memory:") as conn:
+    with db_connection(":memory:") as conn:
         conn.row_factory = sqlite3.Row
         init_db(conn)
         for index in range(7):

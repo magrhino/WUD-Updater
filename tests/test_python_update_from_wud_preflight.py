@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import re
-import sqlite3
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from unittest import mock
 
+from tests.db_helpers import db_connection
 from wudup.command import CommandRunner
 from wudup.compose import (
     ComposeBindMount,
@@ -30,7 +30,7 @@ class UpdateFromWudPreflightTests(UpdateFromWudRunnerTestCase):
         self.set_image_state("repo/app:latest", "old", "sha256:old")
         self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(self.db_path) as conn:
+        with db_connection(self.db_path) as conn:
             conn.execute("PRAGMA user_version = 99")
 
         result = self.run_python("--yes")

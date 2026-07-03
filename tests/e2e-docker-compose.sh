@@ -167,9 +167,10 @@ assert_volume_sqlite_scalar(){
     docker run --rm -v "$volume:/mnt" "$IMAGE" python -c '
 import sqlite3
 import sys
+from contextlib import closing
 
-conn = sqlite3.connect(sys.argv[1])
-row = conn.execute(sys.argv[2]).fetchone()
+with closing(sqlite3.connect(sys.argv[1])) as conn:
+    row = conn.execute(sys.argv[2]).fetchone()
 print("" if row is None else row[0])
 ' "/mnt/$path" "$query"
   )"

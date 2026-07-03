@@ -7,6 +7,7 @@ from collections.abc import Iterator, Mapping
 from pathlib import Path
 from unittest.mock import patch
 
+from tests.db_helpers import db_connection
 from wudup.db import (
     DatabaseError,
     SCHEMA_VERSION,
@@ -141,7 +142,7 @@ class DatabaseTests(unittest.TestCase):
             )
 
     def test_init_db_is_idempotent(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.row_factory = sqlite3.Row
             init_db(conn)
             run_id = insert_update_run(
@@ -160,7 +161,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(row["status"], "started")
 
     def test_init_db_sets_user_version_to_current_schema(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             init_db(conn)
 
             version = conn.execute("PRAGMA user_version").fetchone()[0]
@@ -168,7 +169,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(version, SCHEMA_VERSION)
 
     def test_init_db_records_schema_migrations(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             init_db(conn)
 
             rows = conn.execute(
@@ -197,7 +198,7 @@ class DatabaseTests(unittest.TestCase):
     def test_schema_validation_treats_table_name_as_pragma_value(self) -> None:
         table_name = 'safe"; DROP TABLE update_runs; --'
         quoted_table_name = '"' + table_name.replace('"', '""') + '"'
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.execute("CREATE TABLE update_runs (id INTEGER)")
             conn.execute(f"CREATE TABLE {quoted_table_name} (id TEXT NOT NULL)")
 
@@ -221,7 +222,7 @@ class DatabaseTests(unittest.TestCase):
             _quote_identifier('known_images"; DROP TABLE update_runs; --')
 
     def test_init_db_accepts_matching_version_zero_table(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.execute(
                 """
                 CREATE TABLE update_runs (
@@ -244,7 +245,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(version, SCHEMA_VERSION)
 
     def test_init_db_migrates_v1_schema_to_current(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.executescript(V1_SCHEMA_SQL)
             conn.execute("PRAGMA user_version = 1")
 
@@ -265,7 +266,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertGreaterEqual(tables, {"pending_updates", "tag_exclusion_rules"})
 
     def test_init_db_migrates_v2_schema_to_current(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.executescript(V2_SCHEMA_SQL)
             conn.execute("PRAGMA user_version = 2")
 
@@ -293,7 +294,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIsNotNone(web_users_table)
 
     def test_init_db_migrates_v3_schema_and_preserves_update_rows(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.executescript(V3_SCHEMA_SQL)
             conn.execute("PRAGMA user_version = 3")
             conn.execute(
@@ -322,7 +323,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(migration_versions, list(range(1, SCHEMA_VERSION + 1)))
 
     def test_init_db_migrates_v5_schema_and_preserves_policy_rows(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.row_factory = sqlite3.Row
             conn.executescript(V5_SCHEMA_SQL)
             conn.execute("PRAGMA user_version = 5")
@@ -386,7 +387,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(migration_versions, list(range(1, SCHEMA_VERSION + 1)))
 
     def test_init_db_migrates_v8_schema_and_adds_security_scan_cache(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             init_db(conn)
             _drop_release_note_cache_body(conn)
             conn.execute("DROP TABLE security_scan_cache")
@@ -428,7 +429,7 @@ class DatabaseTests(unittest.TestCase):
     def test_init_db_migrates_v8_with_existing_v9_security_cache(self) -> None:
         with (
             tempfile.TemporaryDirectory(prefix="wud-python-db.") as tmpdir,
-            sqlite3.connect(Path(tmpdir) / "wudup.sqlite") as conn,
+            db_connection(Path(tmpdir) / "wudup.sqlite") as conn,
         ):
             init_db(conn)
             _drop_release_note_cache_body(conn)
@@ -454,7 +455,7 @@ class DatabaseTests(unittest.TestCase):
     def test_init_db_migrates_v9_security_cache_and_preserves_rows(self) -> None:
         with (
             tempfile.TemporaryDirectory(prefix="wud-python-db.") as tmpdir,
-            sqlite3.connect(Path(tmpdir) / "wudup.sqlite") as conn,
+            db_connection(Path(tmpdir) / "wudup.sqlite") as conn,
         ):
             init_db(conn)
             _drop_release_note_cache_body(conn)
@@ -498,7 +499,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("findings_json", columns)
 
     def test_init_db_migrates_v10_and_adds_release_notification_history(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             init_db(conn)
             conn.execute("DROP TABLE release_notification_history")
             _drop_release_note_cache_body(conn)
@@ -536,7 +537,7 @@ class DatabaseTests(unittest.TestCase):
         )
 
     def test_init_db_migrates_v11_and_adds_release_note_body(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             init_db(conn)
             _drop_release_note_cache_body(conn)
             conn.execute("PRAGMA user_version = 11")
@@ -553,7 +554,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("body", columns)
 
     def test_init_db_rejects_v8_schema_with_conflicting_security_cache(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             init_db(conn)
             _drop_release_note_cache_body(conn)
             conn.execute("DROP TABLE security_scan_cache")
@@ -568,7 +569,7 @@ class DatabaseTests(unittest.TestCase):
                 init_db(conn)
 
     def test_init_db_migrates_v6_schema_and_preserves_digestless_rows(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.row_factory = sqlite3.Row
             conn.executescript(V6_SCHEMA_SQL)
             conn.execute("PRAGMA user_version = 6")
@@ -661,7 +662,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(migration_versions, list(range(1, SCHEMA_VERSION + 1)))
 
     def test_init_db_rejects_malformed_existing_pending_updates(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.execute(
                 """
                 CREATE TABLE pending_updates (
@@ -678,7 +679,7 @@ class DatabaseTests(unittest.TestCase):
                 init_db(conn)
 
     def test_init_db_rejects_existing_table_with_missing_columns(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.execute(
                 """
                 CREATE TABLE update_runs (
@@ -709,7 +710,7 @@ class DatabaseTests(unittest.TestCase):
     def test_init_db_rejects_existing_table_with_wrong_column_definition(
         self,
     ) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.execute(
                 """
                 CREATE TABLE snoozes (
@@ -733,7 +734,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(version, 0)
 
     def test_init_db_rejects_current_version_with_missing_schema(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.execute("PRAGMA user_version = 1")
 
             with self.assertRaisesRegex(
@@ -743,7 +744,7 @@ class DatabaseTests(unittest.TestCase):
                 init_db(conn)
 
     def test_insert_update_run(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.row_factory = sqlite3.Row
             init_db(conn)
 
@@ -767,7 +768,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(row["metadata_json"], "{}")
 
     def test_insert_update_event(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.row_factory = sqlite3.Row
             init_db(conn)
             run_id = insert_update_run(
@@ -811,7 +812,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(row["digest_provenance_confidence"], "verified")
 
     def test_active_snooze_lookup_returns_latest_unexpired_snooze(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.row_factory = sqlite3.Row
             init_db(conn)
             insert_snooze(
@@ -852,7 +853,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIsNone(missing)
 
     def test_dependency_snooze_helpers_return_only_unsatisfied_blockers(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.row_factory = sqlite3.Row
             init_db(conn)
             run_id = insert_update_run(
@@ -919,7 +920,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(satisfied_rows, ())
 
     def test_pending_update_helpers_insert_and_update_status(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.row_factory = sqlite3.Row
             init_db(conn)
             run_id = insert_update_run(conn)
@@ -969,7 +970,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(row["digest_provenance_source"], "apply")
 
     def test_known_image_upsert_replaces_service_state(self) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.row_factory = sqlite3.Row
             init_db(conn)
 
@@ -1013,7 +1014,7 @@ class DatabaseTests(unittest.TestCase):
     def test_tag_exclusion_upsert_is_idempotent_and_active_lookup_merges_scopes(
         self,
     ) -> None:
-        with sqlite3.connect(":memory:") as conn:
+        with db_connection(":memory:") as conn:
             conn.row_factory = sqlite3.Row
             init_db(conn)
 

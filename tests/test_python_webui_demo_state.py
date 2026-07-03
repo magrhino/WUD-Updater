@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
+from tests.db_helpers import db_connection
 from wudup.platforms import ImagePlatform
 from wudup.security_subjects import PendingSecurityOptions, pending_security_context
 from wudup.web import load_web_settings
@@ -126,7 +126,7 @@ class WebuiDemoStateTests(unittest.TestCase):
                 capture_output=True,
             )
             self.assertIn("ghcr.io/magrhino/wudup:latest", result.stdout)
-            with sqlite3.connect(db_path) as conn:
+            with db_connection(db_path) as conn:
                 run_count = conn.execute("SELECT COUNT(*) FROM update_runs").fetchone()
                 pending_count = conn.execute(
                     "SELECT COUNT(*) FROM pending_updates"

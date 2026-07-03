@@ -8,10 +8,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import closing, redirect_stderr, redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
+from tests.db_helpers import db_connection
 from wudup.command import CommandRunner
 from wudup.digest_verifier import (
     DigestVerifier,
@@ -331,7 +332,7 @@ class UpdateFromWudRunnerTestCase(FakeDockerTestCase):
         self.assertTrue(reports, "expected updater error report")
         return reports[-1]
     def db_rows(self, query: str, params: tuple[object, ...] = ()) -> list[sqlite3.Row]:
-        with closing(sqlite3.connect(self.db_path)) as conn:
+        with db_connection(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             return list(conn.execute(query, params))
     def prepare_digest_pin_latest_update(self) -> None:
