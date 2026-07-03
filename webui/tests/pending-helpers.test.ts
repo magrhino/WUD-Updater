@@ -16,7 +16,10 @@ import {
   digestProvenanceDisplay,
   displayDigest,
 } from "../src/utils/digestProvenance";
-import { securityScanSummaryDisplay } from "../src/utils/securityScans";
+import {
+  securityScanMaintainerReport,
+  securityScanSummaryDisplay,
+} from "../src/utils/securityScans";
 import { safetyCues } from "../src/views/pending/safetyCues";
 import { createPendingColumns } from "../src/views/pending/tableColumns";
 import {
@@ -824,6 +827,40 @@ describe("pending helper modules", () => {
         items: [],
       }),
     ).toEqual({ label: "No candidate scans yet", type: "info" });
+  });
+
+  it("includes fixed findings in the maintainer report", () => {
+    const report = securityScanMaintainerReport(
+      securityScanInfo({
+        state: "complete",
+        verdict: "none_reported",
+        scanner_version: "0.71.2",
+        scanner_schema: "trivy-json",
+        db_revision: "trivy-db-2026-06-26",
+        comparison: {
+          status: "improved",
+          current_subject: {
+            requested_ref: "repo/app:1.0",
+            reported_digest: "sha256:installed",
+            manifest_digest: "sha256:installed-child",
+            platform: "linux/amd64",
+          },
+          fixed_findings: [
+            securityFinding(1, "high", {
+              package_name: "openssl",
+            }),
+          ],
+          remaining_findings: [],
+          introduced_findings: [],
+          message: "Candidate removes 1 reported finding(s).",
+        },
+      }),
+    );
+
+    expect(report).toContain("Fixed installed findings (1):");
+    expect(report).toContain("CVE-2026-0001 in openssl");
+    expect(report).not.toContain("Remaining candidate findings");
+    expect(report).not.toContain("Introduced candidate findings");
   });
 
   it("formats pending queue display helpers without store dependencies", () => {

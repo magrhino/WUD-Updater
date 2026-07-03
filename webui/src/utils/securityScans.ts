@@ -261,9 +261,10 @@ function findingLine(finding: SecurityScanFinding): string {
 }
 
 export function securityScanMaintainerReport(scan: SecurityScanInfo): string {
+  const fixed = scan.comparison.fixed_findings;
   const remaining = scan.comparison.remaining_findings;
   const introduced = scan.comparison.introduced_findings;
-  if (!remaining.length && !introduced.length) {
+  if (!fixed.length && !remaining.length && !introduced.length) {
     return "";
   }
 
@@ -285,6 +286,13 @@ export function securityScanMaintainerReport(scan: SecurityScanInfo): string {
     `Candidate digest: ${digestForReport(candidateDigest)}`,
   ];
 
+  if (fixed.length) {
+    lines.push(
+      "",
+      `Fixed installed findings (${fixed.length}):`,
+      ...fixed.map(findingLine),
+    );
+  }
   if (remaining.length) {
     lines.push(
       "",

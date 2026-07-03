@@ -477,21 +477,16 @@ def _attach_cached_comparison(
     request: PendingSecurityRequest,
     candidate: SecurityScanInfo,
 ) -> SecurityScanInfo:
-    current_request = current_security_request(request)
-    if current_request is None:
-        return _with_comparison(
-            candidate,
-            _unknown_comparison(INSTALLED_DIGEST_UNAVAILABLE_MESSAGE),
-        )
-    if _same_subject(candidate.subject, current_request):
-        return _with_comparison(candidate, _comparison(candidate, candidate))
-    current = cached_scan_by_request_or_unambiguous_platform(conn, current_request)
-    if current is None:
-        return _with_comparison(
-            candidate,
-            _unknown_comparison("Installed digest has not been scanned yet."),
-        )
-    return _with_comparison(candidate, _comparison(current, candidate))
+    return _attach_current_comparison(
+        request,
+        candidate,
+        candidate.subject,
+        lambda current_request: cached_scan_by_request_or_unambiguous_platform(
+            conn,
+            current_request,
+        ),
+        missing_current_message="Installed digest has not been scanned yet.",
+    )
 
 
 def _attach_refreshed_comparison(
@@ -505,19 +500,43 @@ def _attach_refreshed_comparison(
 ) -> SecurityScanInfo:
     if candidate.state != "complete":
         return candidate
+    return _attach_current_comparison(
+        request,
+        candidate,
+        _subject_model(candidate_subject),
+        lambda current_request: _scan_current_request(
+            settings,
+            conn,
+            scanner,
+            verifier,
+            request,
+            current_request,
+        ),
+        missing_current_message=INSTALLED_DIGEST_UNAVAILABLE_MESSAGE,
+    )
+
+
+def _attach_current_comparison(
+    request: PendingSecurityRequest,
+    candidate: SecurityScanInfo,
+    candidate_subject: SecurityScanSubject,
+    current_info: Callable[[PendingSecurityRequest], SecurityScanInfo | None],
+    *,
+    missing_current_message: str,
+) -> SecurityScanInfo:
     current_request = current_security_request(request)
     if current_request is None:
         return _with_comparison(
             candidate,
             _unknown_comparison(INSTALLED_DIGEST_UNAVAILABLE_MESSAGE),
         )
-    if _same_subject(_subject_model(candidate_subject), current_request):
+    if _same_subject(candidate_subject, current_request):
         return _with_comparison(candidate, _comparison(candidate, candidate))
-    current = _scan_current_request(settings, conn, scanner, verifier, request)
+    current = current_info(current_request)
     if current is None:
         return _with_comparison(
             candidate,
-            _unknown_comparison(INSTALLED_DIGEST_UNAVAILABLE_MESSAGE),
+            _unknown_comparison(missing_current_message),
         )
     return _with_comparison(candidate, _comparison(current, candidate))
 
@@ -528,10 +547,8 @@ def _scan_current_request(
     scanner: TrivyScanner,
     verifier: Any,
     request: PendingSecurityRequest,
+    current_request: PendingSecurityRequest,
 ) -> SecurityScanInfo | None:
-    current_request = current_security_request(request)
-    if current_request is None:
-        return None
     cached = cached_scan_by_request(conn, current_request)
     # ponytail: demo fixtures use synthetic digests; keep them stable on refresh.
     if cached is not None and cached.scanner_version == "demo":
