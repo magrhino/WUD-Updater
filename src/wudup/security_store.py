@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from dataclasses import asdict
 
 from .digest_verifier import ResolvedImageSubject
+from .platforms import platform_value
 from .security_scanner import SecurityScanResult
 from .security_severity import normalize_security_severity
 from .security_subjects import PendingSecurityRequest, subject_id
@@ -46,7 +47,36 @@ def cached_scan_by_request_or_unambiguous_platform(
     cached = cached_scan_by_request(conn, request)
     if cached is not None:
         return cached
+    if request.platform is not None:
+        return _cached_scan_by_exact_platform(conn, request)
     return _cached_scan_by_unambiguous_platform(conn, request)
+
+
+def _cached_scan_by_exact_platform(
+    conn: sqlite3.Connection,
+    request: PendingSecurityRequest,
+) -> SecurityScanInfo | None:
+    if not request.candidate_image or not request.reported_digest:
+        return None
+    row = conn.execute(
+        """
+        SELECT *
+        FROM security_scan_cache
+        WHERE requested_ref = ?
+          AND reported_digest = ?
+          AND platform = ?
+        ORDER BY updated_at DESC, rowid DESC
+        LIMIT 1
+        """,
+        (
+            request.candidate_image,
+            request.reported_digest,
+            platform_value(request.platform),
+        ),
+    ).fetchone()
+    if row is None:
+        return None
+    return row_to_scan_info(row, request)
 
 
 def _cached_scan_by_unambiguous_platform(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 from threading import Event, Lock, Thread
 from types import SimpleNamespace
@@ -610,6 +611,101 @@ def test_security_scan_refresh_compares_installed_and_candidate_findings(
     assert len(cached_comparison["fixed_findings"]) == 1
     assert len(cached_comparison["remaining_findings"]) == 1
     assert len(cached_comparison["introduced_findings"]) == 1
+
+
+def test_security_scan_refresh_reuses_current_scan_within_job(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    current_digest = f"sha256:{'c' * 64}"
+    context = _single_security_context(tmp_path)
+    first = _single_security_request(
+        current_image="ghcr.io/acme/app:1.0",
+        current_digest=current_digest,
+    )
+    second = replace(
+        first,
+        line_no=2,
+        raw=f"{first.raw} duplicate",
+    )
+    refresh_context = PendingSecurityContext(
+        source=context.source,
+        requests=(first, second),
+    )
+
+    class CountingVerifier(ComparisonVerifier):
+        def __init__(self, digest: str) -> None:
+            super().__init__(digest)
+            self.current_resolves = 0
+
+        def resolve_digest_subject(
+            self,
+            image: str,
+            reported_digest: str,
+            platform: ImagePlatform | None,
+            *,
+            platform_source: str = "",
+        ) -> ResolvedImageSubject:
+            self.current_resolves += 1
+            return super().resolve_digest_subject(
+                image,
+                reported_digest,
+                platform,
+                platform_source=platform_source,
+            )
+
+    class CountingScanner(ComparisonScanner):
+        current_scans = 0
+
+        def scan(self, subject: ResolvedImageSubject) -> SecurityScanResult:
+            if subject.manifest_digest == "sha256:old-child":
+                type(self).current_scans += 1
+            return super().scan(subject)
+
+    verifier = CountingVerifier(current_digest)
+    monkeypatch.setattr(
+        "wudup.web_security.pending_security_context",
+        lambda _settings, **_kwargs: refresh_context,
+    )
+    monkeypatch.setattr(
+        "wudup.web_security.default_digest_verifier",
+        lambda _settings: verifier,
+    )
+    monkeypatch.setattr("wudup.web_security.TrivyScanner", CountingScanner)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_SECURITY_SCANNING_ENABLED": "true",
+        },
+    )
+
+    queued = client.post(
+        "/api/v1/security-scans/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert queued.status_code == 200
+    result = _poll_until(
+        lambda: _completed_security_job(client, queued.json()["job_id"]),
+        timeout_message="security scan job did not complete",
+    )
+    assert result["status"] == "success"
+    assert verifier.current_resolves == 1
+    assert CountingScanner.current_scans == 1
+    assert [item["comparison"]["status"] for item in result["result"]["items"]] == [
+        "mixed",
+        "mixed",
+    ]
+
+    cached = client.get("/api/v1/security-scans")
+
+    assert cached.status_code == 200
+    assert [item["comparison"]["status"] for item in cached.json()["items"]] == [
+        "mixed",
+        "mixed",
+    ]
 
 
 def test_security_scan_refresh_preserves_seeded_demo_cache(

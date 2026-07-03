@@ -67,17 +67,32 @@ type DemoSecurityScanBuilder = {
   securityScanInfo: (item: PendingItem, firstExact: boolean) => SecurityScanInfo;
 };
 
-function mountPendingModal(component: Component, props: Record<string, unknown>): VueWrapper {
+function mountPendingModal(
+  component: Component,
+  props: Record<string, unknown>,
+  stubs: Record<string, Component> = {},
+): VueWrapper {
   return mount(component, {
     props,
     global: {
       stubs: {
         ...naiveStubs,
+        ...stubs,
         CoreUpdateTourPanel: { template: "<div />" },
       },
     },
   });
 }
+
+const tagTypeStub: Component = {
+  props: {
+    type: String,
+  },
+  setup(props, { slots }) {
+    return () =>
+      h("span", { "data-tag-type": props.type }, [slots.default?.()]);
+  },
+};
 
 function securityFinding(
   index: number,
@@ -612,6 +627,74 @@ describe("pending helper modules", () => {
     expect(text).toContain("Copy report");
     expect(text).toContain("CVE-2026-0002");
     expect(text).toContain("CVE-2026-0003");
+  });
+
+  it("maps security scan comparison status to the comparison tag type", async () => {
+    const wrapper = mountPendingModal(
+      PendingSecurityScanDetails,
+      {
+        scan: securityScanInfo(),
+      },
+      {
+        NTag: tagTypeStub,
+        Tag: tagTypeStub,
+      },
+    );
+    const cases: Array<{
+      expected: string;
+      label: string;
+      remaining: SecurityScanFinding[];
+      status: SecurityScanInfo["comparison"]["status"];
+    }> = [
+      {
+        expected: "success",
+        label: "Improved",
+        remaining: [],
+        status: "improved",
+      },
+      { expected: "error", label: "Worse", remaining: [], status: "worse" },
+      { expected: "warning", label: "Mixed", remaining: [], status: "mixed" },
+      {
+        expected: "warning",
+        label: "Unchanged",
+        remaining: [securityFinding(1)],
+        status: "unchanged",
+      },
+      {
+        expected: "success",
+        label: "Unchanged",
+        remaining: [],
+        status: "unchanged",
+      },
+      { expected: "default", label: "Unknown", remaining: [], status: "unknown" },
+    ];
+
+    for (const item of cases) {
+      await wrapper.setProps({
+        scan: securityScanInfo({
+          state: "complete",
+          verdict: "none_reported",
+          comparison: {
+            status: item.status,
+            current_subject: {
+              requested_ref: "repo/app:1.0",
+              reported_digest: "sha256:installed",
+              manifest_digest: "sha256:installed-child",
+              platform: "linux/amd64",
+            },
+            fixed_findings: [],
+            remaining_findings: item.remaining,
+            introduced_findings: [],
+            message: "Comparison is available.",
+          },
+        }),
+      });
+
+      const tag = wrapper
+        .findAll("[data-tag-type]")
+        .find((candidate) => candidate.text() === item.label);
+      expect(tag?.attributes("data-tag-type")).toBe(item.expected);
+    }
   });
 
   it("keeps demo comparison empty for unscanned security rows", () => {

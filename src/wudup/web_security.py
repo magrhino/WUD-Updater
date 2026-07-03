@@ -273,6 +273,7 @@ def _run_security_scan_job(
 ) -> None:
     _update_job(state, job_id, status="running")
     items: list[SecurityScanInfo] = []
+    current_scans: dict[tuple[str, str, str], SecurityScanInfo] = {}
     try:
         context = pending_security_context(settings)
         _update_job(state, job_id, total_count=len(context.requests))
@@ -284,7 +285,14 @@ def _run_security_scan_job(
         with open_db(settings.config.db_path) as conn:
             init_db(conn)
             for request in context.requests:
-                info = _scan_request(settings, conn, scanner, verifier, request)
+                info = _scan_request(
+                    settings,
+                    conn,
+                    scanner,
+                    verifier,
+                    request,
+                    current_scans,
+                )
                 items.append(info)
                 _update_job(
                     state,
@@ -308,6 +316,7 @@ def _scan_request(
     scanner: TrivyScanner,
     verifier: Any,
     request: PendingSecurityRequest,
+    current_scans: dict[tuple[str, str, str], SecurityScanInfo],
 ) -> SecurityScanInfo:
     cached = cached_scan_by_request(conn, request)
     # ponytail: demo fixtures use synthetic digests; keep them stable on refresh.
@@ -338,6 +347,7 @@ def _scan_request(
             request,
             cached,
             subject,
+            current_scans,
         )
     return _attach_refreshed_comparison(
         settings,
@@ -347,6 +357,7 @@ def _scan_request(
         request,
         _result_info(request, subject, result),
         subject,
+        current_scans,
     )
 
 
@@ -497,6 +508,7 @@ def _attach_refreshed_comparison(
     request: PendingSecurityRequest,
     candidate: SecurityScanInfo,
     candidate_subject: ResolvedImageSubject,
+    current_scans: dict[tuple[str, str, str], SecurityScanInfo],
 ) -> SecurityScanInfo:
     if candidate.state != "complete":
         return candidate
@@ -511,6 +523,7 @@ def _attach_refreshed_comparison(
             verifier,
             request,
             current_request,
+            current_scans,
         ),
         missing_current_message=INSTALLED_DIGEST_UNAVAILABLE_MESSAGE,
     )
@@ -548,14 +561,21 @@ def _scan_current_request(
     verifier: Any,
     request: PendingSecurityRequest,
     current_request: PendingSecurityRequest,
+    current_scans: dict[tuple[str, str, str], SecurityScanInfo],
 ) -> SecurityScanInfo | None:
     cached = cached_scan_by_request(conn, current_request)
     # ponytail: demo fixtures use synthetic digests; keep them stable on refresh.
     if cached is not None and cached.scanner_version == "demo":
+        current_scans[_current_scan_cache_key(current_request)] = cached
         return cached
+    cache_key = _current_scan_cache_key(current_request)
+    if cache_key in current_scans:
+        return current_scans[cache_key]
     subject = resolve_current_security_subject(request, verifier)
     if subject.identity_status != "exact":
-        return _cache_subject_resolution(settings, conn, current_request, subject)
+        current = _cache_subject_resolution(settings, conn, current_request, subject)
+        current_scans[cache_key] = current
+        return current
     result = scanner.scan(subject)
     result = _sanitize_scan_result(settings, result)
     upsert_scan_result(
@@ -565,10 +585,22 @@ def _scan_current_request(
         result,
         timestamp=utc_timestamp(),
     )
-    return cached_scan_by_request(conn, current_request) or _result_info(
+    current = cached_scan_by_request(conn, current_request) or _result_info(
         current_request,
         subject,
         result,
+    )
+    current_scans[cache_key] = current
+    return current
+
+
+def _current_scan_cache_key(
+    current_request: PendingSecurityRequest,
+) -> tuple[str, str, str]:
+    return (
+        current_request.candidate_image,
+        current_request.reported_digest,
+        platform_value(current_request.platform),
     )
 
 
