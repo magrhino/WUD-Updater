@@ -316,6 +316,71 @@ class ReleaseNotesTests(unittest.TestCase):
         )
         self.assertEqual(cached[0].classification.change_type, "image_rebuild")
 
+    def test_lsio_legacy_cache_without_classification_is_reclassified_and_refreshed(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            upstream_map = Path(tmp) / "upstreams.txt"
+            upstream_map.write_text(
+                "linuxserver/docker-radarr: Radarr/Radarr\n",
+                encoding="utf-8",
+            )
+            parsed = parse_wud_text("linuxserver/radarr:5.1.0-ls1 tag=5.1.0-ls2\n")
+            responses = {
+                "https://api.github.com/repos/linuxserver/docker-radarr/releases/latest": {
+                    "tag_name": "5.1.0-ls2",
+                    "name": "5.1.0-ls2",
+                    "html_url": "https://github.com/linuxserver/docker-radarr/releases/tag/5.1.0-ls2",
+                    "body": "LinuxServer Changes:\n- Rebase to Alpine 3.20",
+                    "published_at": "2026-01-02T00:00:00Z",
+                },
+                "https://api.github.com/repos/Radarr/Radarr/releases/tags/v5.1.0": {
+                    "message": "Not Found",
+                },
+                "https://api.github.com/repos/Radarr/Radarr/releases/tags/5.1.0": {
+                    "message": "Not Found",
+                },
+                "https://api.github.com/repos/Radarr/Radarr": {
+                    "html_url": "https://github.com/Radarr/Radarr",
+                },
+            }
+            environ = {"UPSTREAM_MAP": str(upstream_map)}
+            calls: list[str] = []
+
+            def fetch_json(url: str) -> object:
+                calls.append(url)
+                return responses[url]
+
+            with open_db(":memory:") as conn:
+                init_db(conn)
+                refresh_release_notes(
+                    conn,
+                    parsed.targets,
+                    environ,
+                    client=GitHubClient(fetch_json=lambda url: responses[url]),
+                )
+                conn.execute(
+                    "UPDATE release_note_cache SET metadata_json = ?",
+                    (json.dumps({"line_no": 1}),),
+                )
+
+                cached = cached_release_notes(conn, parsed.targets, environ)
+                calls.clear()
+                refreshed = refresh_release_notes(
+                    conn,
+                    parsed.targets,
+                    environ,
+                    client=GitHubClient(fetch_json=fetch_json),
+                )
+                row = conn.execute(
+                    "SELECT metadata_json FROM release_note_cache"
+                ).fetchone()
+
+        self.assertEqual(cached[0].classification.change_type, "image_rebuild")
+        self.assertGreater(len(calls), 0)
+        self.assertEqual(refreshed[0].classification.change_type, "image_rebuild")
+        self.assertIn("classification", json.loads(str(row["metadata_json"])))
+
     def test_lsio_branch_tracking_fetches_matching_release(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             upstream_map = Path(tmp) / "upstreams.txt"

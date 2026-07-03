@@ -201,12 +201,17 @@ def refresh_release_notes(
         target_tag_resolver=target_tag_resolver,
     ):
         cached = _cached_info(conn, context)
+        legacy_classification_cache = (
+            cached.status != "missing"
+            and _cache_metadata_missing_classification(conn, context)
+        )
         if context.provider == "unsupported":
             infos.append(cached)
             continue
         if (
             not force
             and cached.status != "missing"
+            and not legacy_classification_cache
             and not _cache_stale(cached, timestamp)
         ):
             infos.append(cached)
@@ -449,6 +454,9 @@ def _placeholder_info(context: ReleaseNoteContext) -> ReleaseNoteInfo:
 
 def _row_to_info(row: sqlite3.Row, *, line_no: int) -> ReleaseNoteInfo:
     metadata = _json_object(str(row["metadata_json"]))
+    classification = classification_from_mapping(metadata.get("classification"))
+    if "classification" not in metadata:
+        classification = _classify_cache_row(row)
     return ReleaseNoteInfo(
         line_no=line_no,
         status=str(row["status"]),  # type: ignore[arg-type]
@@ -471,8 +479,40 @@ def _row_to_info(row: sqlite3.Row, *, line_no: int) -> ReleaseNoteInfo:
         refreshed_at=str(row["updated_at"]),
         error=str(row["error"]),
         body=str(row["body"]),
-        classification=classification_from_mapping(metadata.get("classification")),
+        classification=classification,
     )
+
+
+def _cache_metadata_missing_classification(
+    conn: sqlite3.Connection,
+    context: ReleaseNoteContext,
+) -> bool:
+    row = conn.execute(
+        "SELECT metadata_json FROM release_note_cache WHERE cache_key = ?",
+        (context.cache_key,),
+    ).fetchone()
+    if row is None:
+        return False
+    return "classification" not in _json_object(str(row["metadata_json"]))
+
+
+def _classify_cache_row(row: sqlite3.Row) -> LSIOUpdateClassification:
+    return classify_lsio_update(
+        image_repo=str(row["image_repo"]),
+        current_tag=str(row["current_tag"]),
+        target_tag=str(row["target_tag"]),
+        lsio_tag=_lsio_release_tag_from_links(str(row["links_json"])),
+        upstream_version=str(row["release_tag"]),
+    )
+
+
+def _lsio_release_tag_from_links(raw: str) -> str:
+    for item in _json_object_list(raw):
+        if str(item.get("kind") or "") == "lsio_release":
+            tag = _github_release_link_tag(str(item.get("url") or ""))
+            if tag:
+                return tag
+    return ""
 
 
 def _upsert_cache(
