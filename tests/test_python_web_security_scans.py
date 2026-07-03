@@ -4,11 +4,12 @@ import sqlite3
 from pathlib import Path
 from threading import Event, Lock, Thread
 from types import SimpleNamespace
+from unittest import mock
 
 import pytest
 
 from wudup.db import init_db, open_db, utc_timestamp
-from wudup.digest_verifier import DigestResolveResult, ResolvedImageSubject
+from wudup.digest_verifier import DigestResolveResult, DigestVerifier, ResolvedImageSubject
 from wudup.platforms import ImagePlatform, platform_value
 from wudup.security_scanner import SecurityScanFinding, SecurityScanResult
 from wudup.security_store import (
@@ -734,20 +735,13 @@ def test_security_scan_get_resolves_wud_api_tag_digest_for_cache_readback(
     digest = f"sha256:{VALID_DIGEST}"
     raw = "ghcr.io/acme/app:1.0 tag=2.0 platform=linux/amd64"
 
-    class TagDigestVerifier:
-        def __init__(self) -> None:
-            self.calls: list[str] = []
-
-        def resolve_tag_digest(self, image: str) -> DigestResolveResult:
-            self.calls.append(image)
-            return DigestResolveResult(
-                ok=True,
-                status="resolved",
-                reason="tag-digest-resolved",
-                digest=digest,
-            )
-
-    verifier = TagDigestVerifier()
+    verifier = mock.create_autospec(DigestVerifier, instance=True, spec_set=True)
+    verifier.resolve_tag_digest.return_value = DigestResolveResult(
+        ok=True,
+        status="resolved",
+        reason="tag-digest-resolved",
+        digest=digest,
+    )
     monkeypatch.setattr(
         "wudup.security_subjects.default_digest_verifier",
         lambda _settings: verifier,
@@ -811,7 +805,7 @@ def test_security_scan_get_resolves_wud_api_tag_digest_for_cache_readback(
     item = response.json()["items"][0]
     assert item["state"] == "complete"
     assert item["verdict"] == "none_reported"
-    assert verifier.calls == ["ghcr.io/acme/app:2.0"]
+    verifier.resolve_tag_digest.assert_called_once_with("ghcr.io/acme/app:2.0")
 
 
 def test_security_scan_refresh_persists_non_exact_resolution(
