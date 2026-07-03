@@ -22,7 +22,6 @@ from . import web_wud_config
 from .digest_verifier import DOCKER_HUB_REGISTRIES
 from .web_wud_config import _auth_required_detail
 from .images import (
-    drop_registry,
     image_has_tag,
     image_matches_resolved_target,
     image_tag,
@@ -1076,7 +1075,8 @@ def _registry_host(value: str) -> str:
 
 
 def _image_has_registry(image: str) -> bool:
-    return drop_registry(image) != strip_digest(image)
+    left, sep, _rest = strip_digest(image).partition("/")
+    return bool(sep and ("." in left or ":" in left or left == "localhost"))
 
 
 def _remote_tag(

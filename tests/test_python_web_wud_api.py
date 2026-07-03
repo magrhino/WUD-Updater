@@ -28,6 +28,7 @@ from tests.web_test_helpers import (
     _csrf_headers,
     _install_wud_api,
     _web_env,
+    _wud_image_payload,
 )
 
 
@@ -58,15 +59,13 @@ def _container_payload(
     platform: dict[str, str] | None = None,
     registry_url: str = "",
 ) -> dict[str, Any]:
-    image_payload: dict[str, Any] = {
-        "name": image,
-        "tag": {"value": tag},
-        "digest": {"value": "sha256:local"},
-    }
-    if registry_url:
-        image_payload["registry"] = {"url": registry_url}
-    if platform is not None:
-        image_payload["platform"] = platform
+    image_payload = _wud_image_payload(
+        image=image,
+        tag=tag,
+        digest="sha256:local",
+        registry_url=registry_url,
+        platform=platform,
+    )
     return {
         "id": f"docker.local.{name}",
         "name": name,
@@ -171,6 +170,14 @@ def test_wud_api_snapshot_preserves_registry_url_for_unqualified_images(
                     image="library/nginx",
                     registry_url="https://index.docker.io/v1/",
                 ),
+                _container_payload(
+                    name="digest",
+                    image="amir20/dozzle@sha256:local",
+                    tag="",
+                    remote_tag="",
+                    result_digest="",
+                    registry_url="https://ghcr.io",
+                ),
             ],
         ),
     )
@@ -185,6 +192,7 @@ def test_wud_api_snapshot_preserves_registry_url_for_unqualified_images(
     assert images["dozzle"] == "ghcr.io/amir20/dozzle:v10.6.6"
     assert images["explicit"] == "ghcr.io/acme/app:1.0.0"
     assert images["hub"] == "library/nginx:1.0.0"
+    assert images["digest"] == "ghcr.io/amir20/dozzle@sha256:local"
 
 
 def test_wud_api_snapshot_reads_tag_digest_from_remote_value(
