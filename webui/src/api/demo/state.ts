@@ -981,6 +981,7 @@ export class DemoApiState {
       platform,
     };
     const canCompare = Boolean(currentDigest && reportedDigest && platform);
+    const comparisonReady = decision.state === "complete" && canCompare;
 
     return {
       line_no: item.line_no,
@@ -998,16 +999,18 @@ export class DemoApiState {
       findings,
       subject,
       comparison: {
-        status: canCompare ? "unchanged" : "unknown",
-        current_subject: canCompare
+        status: comparisonReady ? "unchanged" : "unknown",
+        current_subject: comparisonReady
           ? currentSubject
           : { requested_ref: "", reported_digest: "", manifest_digest: "", platform: "" },
         fixed_findings: [],
-        remaining_findings: canCompare ? findings : [],
+        remaining_findings: comparisonReady ? findings : [],
         introduced_findings: [],
-        message: canCompare
+        message: comparisonReady
           ? "Demo comparison: installed and candidate findings are unchanged."
-          : "Installed digest is unavailable in the demo fixture.",
+          : decision.state === "complete"
+            ? "Installed digest is unavailable in the demo fixture."
+            : "",
       },
       warnings:
         decision.hasFindings

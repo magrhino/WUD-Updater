@@ -7,6 +7,7 @@ import type {
   SecurityScanFinding,
   SecurityScanInfo,
 } from "../src/api/client";
+import { DemoApiState } from "../src/api/demo/state";
 import PendingCleanupModal from "../src/components/pending/PendingCleanupModal.vue";
 import PendingPlanReviewModal from "../src/components/pending/PendingPlanReviewModal.vue";
 import PendingRemovalModal from "../src/components/pending/PendingRemovalModal.vue";
@@ -43,17 +44,23 @@ import {
 } from "../src/views/pending/utils";
 import {
   pendingGroupedItem,
+  pendingItem,
   pendingResponse,
   planResponse,
   releaseNoteInfo,
   servicePolicy,
   snooze,
+  wudContainerMetadata,
 } from "./helpers/fixtures";
 import { mountWithApp, naiveStubs } from "./helpers/mount";
 
 type RenderColumn = {
   key?: string;
   render?: (row: PendingItem) => VNodeChild;
+};
+
+type DemoSecurityScanBuilder = {
+  securityScanInfo: (item: PendingItem, firstExact: boolean) => SecurityScanInfo;
 };
 
 function mountPendingModal(component: Component, props: Record<string, unknown>): VueWrapper {
@@ -658,6 +665,31 @@ describe("pending helper modules", () => {
     expect(text).toContain("Copy report");
     expect(text).toContain("CVE-2026-0002");
     expect(text).toContain("CVE-2026-0003");
+  });
+
+  it("keeps demo comparison empty for unscanned security rows", () => {
+    const scan = (new DemoApiState() as unknown as DemoSecurityScanBuilder).securityScanInfo(
+      pendingItem({
+        digest: "sha256:candidate",
+        platform: "linux/amd64",
+        platform_os: "linux",
+        platform_architecture: "amd64",
+        platform_variant: "",
+        wud_metadata: wudContainerMetadata({
+          local_digest: "sha256:installed",
+          platform: "linux/amd64",
+          platform_os: "linux",
+          platform_architecture: "amd64",
+          platform_variant: "",
+        }),
+      }),
+      false,
+    );
+
+    expect(scan.state).toBe("not_scanned");
+    expect(scan.comparison.status).toBe("unknown");
+    expect(scan.comparison.message).toBe("");
+    expect(scan.comparison.remaining_findings).toEqual([]);
   });
 
   it("filters candidate security scan findings by present severity categories", async () => {
