@@ -198,6 +198,17 @@ class SelfUpdateTests(unittest.TestCase):
 
         self.assertEqual(target, "ghcr.io/magrhino/wudup:v0.12.3-trivy")
 
+    def test_release_self_update_target_keeps_current_variant_with_plain_latest(
+        self,
+    ) -> None:
+        target = release_self_update_target(
+            "ghcr.io/magrhino/wudup:v0.12.3-fips",
+            "v0.12.3",
+            "0.12.3",
+        )
+
+        self.assertEqual(target, "ghcr.io/magrhino/wudup:v0.12.3-fips")
+
     def test_current_container_image_returns_empty_without_candidates(self) -> None:
         with mock.patch(
             "wudup.self_update.container_identity_candidates",

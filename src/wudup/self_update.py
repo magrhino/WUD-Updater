@@ -117,7 +117,7 @@ def release_self_update_target(
 
     current_image = _canonical_self_update_image(current_image)
     current_tag = _image_reference_tag(current_image)
-    desired_tag = f"{latest_tag}-trivy" if current_tag.endswith("-trivy") else latest_tag
+    desired_tag = _desired_release_image_tag(current_tag, latest_tag)
     if _is_release_image_tag(current_tag) and _normalize_tag(current_tag) != desired_tag:
         return f"{current_image} tag={desired_tag}"
     return current_image
@@ -211,6 +211,18 @@ def _canonical_self_update_image(image: str) -> str:
 
 def _is_release_image_tag(tag: str) -> bool:
     return bool(_SEMVER_IMAGE_TAG_RE.fullmatch(tag))
+
+
+def _desired_release_image_tag(current_tag: str, latest_tag: str) -> str:
+    return f"{_normalize_tag(latest_tag)}{_release_variant_suffix(current_tag)}"
+
+
+def _release_variant_suffix(tag: str) -> str:
+    base = tag.split("+", 1)[0]
+    match = re.fullmatch(r"v?[0-9]+\.[0-9]+\.[0-9]+(?P<variant>-.*)?", base)
+    if match is None:
+        return ""
+    return match.group("variant") or ""
 
 
 def _normalize_tag(tag: str) -> str:
