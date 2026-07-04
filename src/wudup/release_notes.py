@@ -36,7 +36,7 @@ SEMVER_RE = re.compile(
     r"(?<![0-9A-Za-z])v?([0-9]+)(?:\.[0-9]+){1,3}"
     r"(?:[._-][0-9A-Za-z]+)*(?![0-9A-Za-z])"
 )
-COMPOSITE_UPSTREAM_RE = re.compile(r"^([vV]?[0-9]+(?:\.[0-9]+){1,3})_v?[0-9]")
+COMPOSITE_UPSTREAM_RE = re.compile(r"^([vV]?\d+(?:\.\d+){1,3})_v?\d", re.ASCII)
 BREAKING_RE = re.compile(
     r"breaking|migration|incompatible|manual step|major change|"
     r"requires [^ \n]+ [0-9]|deprecated[^.\n]*remov|remove[ds] feature",

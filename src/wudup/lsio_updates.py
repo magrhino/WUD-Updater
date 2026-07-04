@@ -22,11 +22,11 @@ ARCH_PREFIXES = frozenset(
         "s390x",
     }
 )
-LSIO_BUILD_RE = re.compile(
-    r"^(?P<body>.+)-(?P<build>ls[0-9]+(?:[._-][0-9A-Za-z]+)*)$",
-    re.IGNORECASE,
+LSIO_BUILD_SUFFIX_RE = re.compile(
+    r"-(?P<build>ls\d+(?:[._-][\da-z]+)*)$",
+    re.ASCII | re.IGNORECASE,
 )
-VERSION_START_RE = re.compile(r"^[vV]?[0-9]+(?:\.[0-9]+){1,3}")
+VERSION_START_RE = re.compile(r"^[vV]?\d+(?:\.\d+){1,3}", re.ASCII)
 
 
 @dataclass(frozen=True)
@@ -66,9 +66,9 @@ def parse_lsio_tag(tag: str) -> LSIOTagParts:
             )
         return LSIOTagParts(raw=raw, kind="unknown", arch=arch)
 
-    build_match = LSIO_BUILD_RE.match(raw)
-    if build_match:
-        body = build_match.group("body")
+    build_match = LSIO_BUILD_SUFFIX_RE.search(raw)
+    if build_match and build_match.start() > 0:
+        body = raw[: build_match.start()]
         build_suffix = build_match.group("build")
         arch, body_tokens = _split_arch(body.split("-"))
         version_index = _first_version_index(body_tokens)
