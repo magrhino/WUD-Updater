@@ -31,6 +31,24 @@ def parity_case(name: str) -> dict[str, object]:
     return json.loads(PARITY_SPEC.read_text(encoding="utf-8"))[name]
 
 
+def qbittorrent_upstream_responses(composite_tag: str) -> dict[str, dict[str, str]]:
+    base_url = "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags"
+    return {
+        f"{base_url}/v{composite_tag}": {"message": "Not Found"},
+        f"{base_url}/{composite_tag}": {"message": "Not Found"},
+        f"{base_url}/v5.2.2": {
+            "tag_name": "v5.2.2",
+            "name": "qBittorrent v5.2.2",
+            "html_url": (
+                "https://github.com/qbittorrent/qBittorrent/releases/tag/"
+                "release-5.2.2"
+            ),
+            "body": "qBittorrent upstream release notes.",
+            "published_at": "2026-06-16T04:33:00Z",
+        },
+    }
+
+
 class ReleaseNotesTests(unittest.TestCase):
     def test_shared_parity_spec_covers_repo_routing(self) -> None:
         ghcr = parity_case("ghcr_major")
@@ -413,19 +431,7 @@ class ReleaseNotesTests(unittest.TestCase):
                         "published_at": "2026-06-28T09:57:00Z",
                     },
                 ],
-                "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags/v5.2.2_v1.2.20": {
-                    "message": "Not Found",
-                },
-                "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags/5.2.2_v1.2.20": {
-                    "message": "Not Found",
-                },
-                "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags/v5.2.2": {
-                    "tag_name": "v5.2.2",
-                    "name": "qBittorrent v5.2.2",
-                    "html_url": "https://github.com/qbittorrent/qBittorrent/releases/tag/release-5.2.2",
-                    "body": "qBittorrent upstream release notes.",
-                    "published_at": "2026-06-16T04:33:00Z",
-                },
+                **qbittorrent_upstream_responses("5.2.2_v1.2.20"),
             }
             client = GitHubClient(fetch_json=lambda url: responses[url])
             with open_db(":memory:") as conn:
@@ -485,19 +491,7 @@ class ReleaseNotesTests(unittest.TestCase):
                 f"{releases_url}&page=2": [
                     lsio_release("libtorrentv1-5.2.2_v1.2.20-ls122")
                 ],
-                "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags/v5.2.2_v1.2.20": {
-                    "message": "Not Found",
-                },
-                "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags/5.2.2_v1.2.20": {
-                    "message": "Not Found",
-                },
-                "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags/v5.2.2": {
-                    "tag_name": "v5.2.2",
-                    "name": "qBittorrent v5.2.2",
-                    "html_url": "https://github.com/qbittorrent/qBittorrent/releases/tag/release-5.2.2",
-                    "body": "qBittorrent upstream release notes.",
-                    "published_at": "2026-06-16T04:33:00Z",
-                },
+                **qbittorrent_upstream_responses("5.2.2_v1.2.20"),
             }
             client = GitHubClient(fetch_json=lambda url: responses[url])
             with open_db(":memory:") as conn:
@@ -535,19 +529,7 @@ class ReleaseNotesTests(unittest.TestCase):
                     "body": "Remote Changes:\n- Updating to 5.2.2_v2.0.13",
                     "published_at": "2026-06-28T09:57:00Z",
                 },
-                "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags/v5.2.2_v2.0.13": {
-                    "message": "Not Found",
-                },
-                "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags/5.2.2_v2.0.13": {
-                    "message": "Not Found",
-                },
-                "https://api.github.com/repos/qbittorrent/qBittorrent/releases/tags/v5.2.2": {
-                    "tag_name": "v5.2.2",
-                    "name": "qBittorrent v5.2.2",
-                    "html_url": "https://github.com/qbittorrent/qBittorrent/releases/tag/release-5.2.2",
-                    "body": "qBittorrent upstream release notes.",
-                    "published_at": "2026-06-16T04:33:00Z",
-                },
+                **qbittorrent_upstream_responses("5.2.2_v2.0.13"),
             }
             client = GitHubClient(fetch_json=lambda url: responses[url])
             with open_db(":memory:") as conn:
