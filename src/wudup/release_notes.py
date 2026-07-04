@@ -30,6 +30,7 @@ from .wud_file import WudTarget
 SUCCESS_CACHE_TTL_SECONDS = 21_600
 ERROR_CACHE_TTL_SECONDS = 900
 DEFAULT_GITHUB_TIMEOUT_SECONDS = 6.0
+LSIO_RELEASE_SCAN_MAX_PAGES = 10
 GITHUB_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 OCI_SOURCE_LABEL = "org.opencontainers.image.source"
 SEMVER_RE = re.compile(
@@ -766,8 +767,7 @@ def _fetch_lsio_release(
     branch, upstream_version, build_suffix = _lsio_branch_target(context)
     if not branch:
         return _fetch_latest(client, context.image_repo)
-    page = 1
-    while True:
+    for page in range(1, LSIO_RELEASE_SCAN_MAX_PAGES + 1):
         releases = _object_list(
             client.get_json(_lsio_releases_url(context.image_repo, page))
         )
@@ -785,7 +785,7 @@ def _fetch_lsio_release(
                 return release
         if len(releases) < 30:
             return None
-        page += 1
+    return None
 
 
 def _lsio_releases_url(repo: str, page: int) -> str:

@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from wudup import release_notes as release_notes_module
+
 try:
     from tests.test_python_db import V4_SCHEMA_SQL
 except ModuleNotFoundError:
@@ -508,6 +510,55 @@ class ReleaseNotesTests(unittest.TestCase):
             items[0].links[0].url.endswith(
                 "/libtorrentv1-5.2.2_v1.2.20-ls122"
             )
+        )
+
+    def test_lsio_branch_tracking_stops_after_page_limit_without_match(self) -> None:
+        def lsio_release(index: int) -> dict[str, str]:
+            tag = f"5.2.{index}_v2.0.13-ls{index}"
+            return {
+                "tag_name": tag,
+                "name": tag,
+                "html_url": (
+                    "https://github.com/linuxserver/docker-qbittorrent/releases/tag/"
+                    f"{tag}"
+                ),
+                "body": f"Remote Changes:\n- Updating to {tag}",
+                "published_at": "2026-06-28T09:57:00Z",
+            }
+
+        releases_url = (
+            "https://api.github.com/repos/"
+            "linuxserver/docker-qbittorrent/releases?per_page=30"
+        )
+        calls: list[str] = []
+
+        def fetch_json(url: str) -> object:
+            calls.append(url)
+            if len(calls) > release_notes_module.LSIO_RELEASE_SCAN_MAX_PAGES:
+                self.fail("LSIO release scan exceeded the page cap")
+            return [lsio_release(index) for index in range(30)]
+
+        client = GitHubClient(fetch_json=fetch_json)
+        context = release_notes_module.ReleaseNoteContext(
+            line_no=1,
+            cache_key="linuxserver/qbittorrent",
+            provider="lsio",
+            image_repo="linuxserver/docker-qbittorrent",
+            upstream_repo="qbittorrent/qBittorrent",
+            current_tag="libtorrentv1-version-5.2.1_v1.2.20",
+            target_tag="libtorrentv1-version-5.2.2_v1.2.20",
+        )
+
+        release = release_notes_module._fetch_lsio_release(client, context)
+
+        self.assertIsNone(release)
+        self.assertEqual(
+            len(calls),
+            release_notes_module.LSIO_RELEASE_SCAN_MAX_PAGES,
+        )
+        self.assertEqual(
+            calls[-1],
+            f"{releases_url}&page={release_notes_module.LSIO_RELEASE_SCAN_MAX_PAGES}",
         )
 
     def test_lsio_composite_upstream_falls_back_to_semver_release(self) -> None:
