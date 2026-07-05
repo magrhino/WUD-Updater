@@ -12,7 +12,7 @@ from typing import Any, Protocol
 
 from fastapi import HTTPException, Request
 
-from . import web_database, web_jobs, web_pending_sources, web_wud_api
+from . import web_database, web_jobs, web_pending_sources, web_wud_api, web_wud_refresh
 from .command import CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError
 from .config import ConfigError, UpdaterConfig
@@ -304,10 +304,10 @@ def pending_response(
     include_wud_metadata: bool = True,
 ) -> PendingResponse:
     try:
-        source = web_pending_sources.resolve_pending_source(
+        source = web_wud_refresh.refresh_wud_pending_source(
             settings,
             include_wud_metadata=include_wud_metadata,
-        )
+        ).source
     except OSError as exc:
         raise HTTPException(
             status_code=500,
@@ -378,11 +378,11 @@ def pending_metadata_response(
     payload: PendingMetadataRefreshRequest,
 ) -> PendingMetadataRefreshResponse:
     try:
-        source = web_pending_sources.resolve_pending_source(
+        source = web_wud_refresh.refresh_wud_pending_source(
             settings,
             include_wud_metadata=True,
-            force_api=False,
-        )
+            force=False,
+        ).source
     except OSError as exc:
         raise HTTPException(
             status_code=500,

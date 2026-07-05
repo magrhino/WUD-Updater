@@ -14,6 +14,7 @@ from . import (
     web_jobs,
     web_pending_sources,
     web_scheduler,
+    web_wud_refresh,
 )
 from .config import ConfigError, UpdaterConfig
 from .images import tag_value_valid
@@ -150,10 +151,11 @@ def _resolve_pending_source_for_apply(
     settings: WebSettings,
 ) -> web_pending_sources.PendingSourceResult:
     try:
-        return web_pending_sources.resolve_pending_source(
+        return web_wud_refresh.refresh_wud_pending_source(
             settings,
-            force_api=True,
-        )
+            include_wud_metadata=False,
+            force=True,
+        ).source
     except OSError as exc:
         raise HTTPException(
             status_code=500,
@@ -179,10 +181,11 @@ def build_web_plan(
         if update_mode_override is None
         else replace(base_config, update_mode=update_mode_override)
     )
-    source = pending_source or web_pending_sources.resolve_pending_source(
+    source = pending_source or web_wud_refresh.refresh_wud_pending_source(
         settings,
-        force_api=force_api,
-    )
+        include_wud_metadata=False,
+        force=force_api,
+    ).source
     if source.active == "file" and not source.exists:
         raise PlanFileMissing(f"WUD file not found: {settings.config.wud_out_file}")
     return build_dry_run_plan_from_pending_source(

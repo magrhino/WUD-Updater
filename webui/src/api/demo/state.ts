@@ -590,6 +590,7 @@ export class DemoApiState {
       mutations_enabled: false,
       auto_update_scheduler_enabled: false,
       pending_count: this.pendingResponse().count,
+      source_hash: this.pendingResponse().source_hash ?? "",
     };
   }
 

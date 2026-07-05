@@ -13,6 +13,7 @@ from . import (
     web_pending_rescan_payload,
     web_pending_sources,
     web_wud_api,
+    web_wud_refresh,
 )
 from .db import DatabaseError
 from .web_auth import _safe_exception_detail, _settings
@@ -115,7 +116,15 @@ def api_pending_rescan(
 
 
 def _pending_rescan_all(settings: WebSettings) -> PendingRescanResponse:
-    result = web_wud_api.watch_all(settings)
+    refresh = web_wud_refresh.refresh_wud_pending_source(
+        settings,
+        include_wud_metadata=True,
+        watch_all=True,
+        api_source=True,
+    )
+    result = refresh.watch_result
+    if result is None:
+        raise RuntimeError("WUD rescan did not return a watch result")
     return PendingRescanResponse(
         status=_pending_rescan_status(result, skipped=()),
         audit_run_id=0,
@@ -132,11 +141,11 @@ def _pending_rescan_selected(
     selected: Sequence[PendingRescanLine],
 ) -> PendingRescanResponse:
     try:
-        source = web_pending_sources.resolve_pending_source(
+        source = web_wud_refresh.refresh_wud_pending_source(
             settings,
             include_wud_metadata=False,
-            force_api=True,
-        )
+            force=True,
+        ).source
     except OSError as exc:
         raise HTTPException(
             status_code=500,

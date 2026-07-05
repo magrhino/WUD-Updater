@@ -102,14 +102,18 @@ def test_refresh_api_pending_source_reports_degraded_detail(
         )
     )
 
+    watch_result = web_wud_api.WudApiWatchResult(
+        snapshot=snapshot,
+        watched=False,
+        requested_count=1,
+        watched_count=0,
+    )
     monkeypatch.setattr(
-        web_jobs.web_wud_api,
-        "watch_all",
-        lambda _settings: web_wud_api.WudApiWatchResult(
-            snapshot=snapshot,
-            watched=False,
-            requested_count=1,
-            watched_count=0,
+        web_jobs.web_wud_refresh,
+        "refresh_wud_pending_source",
+        lambda *_args, **_kwargs: web_jobs.web_wud_refresh.WudPendingRefresh(
+            source=None,
+            watch_result=watch_result,
         ),
     )
 
@@ -140,10 +144,14 @@ def test_refresh_api_pending_source_logs_unexpected_watch_error(
         )
     }
 
-    def fail_watch_all(_settings):
+    def fail_refresh(*_args, **_kwargs):
         raise RuntimeError("watch exploded")
 
-    monkeypatch.setattr(web_jobs.web_wud_api, "watch_all", fail_watch_all)
+    monkeypatch.setattr(
+        web_jobs.web_wud_refresh,
+        "refresh_wud_pending_source",
+        fail_refresh,
+    )
 
     with caplog.at_level(logging.ERROR, logger=web_jobs.LOGGER.name):
         web_jobs._refresh_api_pending_source_after_apply(
@@ -183,8 +191,8 @@ def test_apply_job_refreshes_only_api_pending_source(
         def run(self) -> int:
             return 0
 
-    def fail_watch_all(_settings):
-        raise AssertionError("watch_all called")
+    def fail_refresh(*_args, **_kwargs):
+        raise AssertionError("refresh_wud_pending_source called")
 
     def record_schedule_update(
         _settings,
@@ -197,7 +205,11 @@ def test_apply_job_refreshes_only_api_pending_source(
         schedule_updates.append((tuple(schedule_keys), status, run_id, error))
 
     monkeypatch.setattr(web_jobs, "UpdateFromWudRunner", FakeRunner)
-    monkeypatch.setattr(web_jobs.web_wud_api, "watch_all", fail_watch_all)
+    monkeypatch.setattr(
+        web_jobs.web_wud_refresh,
+        "refresh_wud_pending_source",
+        fail_refresh,
+    )
 
     web_jobs._run_apply_job(
         settings,

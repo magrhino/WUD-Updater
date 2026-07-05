@@ -417,6 +417,7 @@ async function fulfillApi(
       wud_file_exists: true,
       pending_count: 1,
       pending_source: pendingSourceInfo(),
+      source_hash: "pending-source-hash",
       db_path: "/out/wud.sqlite",
       db_ready: true,
       auth_required: true,

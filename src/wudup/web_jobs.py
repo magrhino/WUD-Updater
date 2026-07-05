@@ -18,7 +18,7 @@ from typing import Any, Protocol, cast
 from fastapi import HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 
-from . import web_wud_api
+from . import web_wud_refresh
 from .command import CommandRunner
 from .config import UpdaterConfig
 from .db import utc_timestamp
@@ -662,7 +662,13 @@ def _refresh_api_pending_source_after_apply(
     status: ApplyJobProgressStatus = "success"
     message = "WUD API pending state refreshed."
     try:
-        result = web_wud_api.watch_all(settings)
+        result = web_wud_refresh.refresh_wud_pending_source(
+            settings,
+            include_wud_metadata=True,
+            watch_all=True,
+        ).watch_result
+        if result is None:
+            raise RuntimeError("WUD API pending refresh did not return a watch result")
     except Exception:  # noqa: BLE001 - best-effort refresh must not fail apply.
         LOGGER.exception("WUD API pending refresh failed")
         status = "skipped"

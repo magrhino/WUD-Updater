@@ -173,14 +173,15 @@ describe("pending view selection actions", () => {
     expect(cleanupPending).not.toHaveBeenCalled();
   });
 
-  it("refreshes pending metadata from status timestamp changes while mounted", async () => {
+  it("reloads pending from status timestamp changes while mounted", async () => {
     vi.useFakeTimers();
     const { pinia, connection, settings, updates } = setupStores(true);
     updates.pending = pendingResponse();
     updates.pendingWudMetadataCheckedAt = "2026-01-02T00:00:00+00:00";
-    mockPendingLifecycle(settings, updates);
+    const lifecycle = mockPendingLifecycle(settings, updates);
     const loadStatus = vi.spyOn(connection, "loadStatus").mockImplementation(async () => {
       connection.status = statusResponse({
+        source_hash: updates.pending?.source_hash ?? "",
         wud_api: wudApiStatus({
           last_checked_at: "2026-01-02T00:00:30+00:00",
         }),
@@ -194,6 +195,10 @@ describe("pending view selection actions", () => {
       wrapper.find<HTMLInputElement>('input[aria-label="Select update repo/app:1.0"]');
 
     try {
+      await flushPromises();
+      lifecycle.loadPending.mockClear();
+      lifecycle.loadReleaseNotes.mockClear();
+      lifecycle.loadSecurityScans.mockClear();
       await selectedInput().setValue(true);
 
       await vi.advanceTimersByTimeAsync(30_000);
@@ -201,7 +206,10 @@ describe("pending view selection actions", () => {
 
       expect(loadStatus).toHaveBeenCalledTimes(1);
       expect(loadStatus).toHaveBeenCalledWith({ silent: true });
-      expect(refreshPendingMetadata).toHaveBeenCalledTimes(1);
+      expect(refreshPendingMetadata).not.toHaveBeenCalled();
+      expect(lifecycle.loadPending).toHaveBeenCalledWith({ preserveCleanup: true });
+      expect(lifecycle.loadReleaseNotes).toHaveBeenCalledTimes(1);
+      expect(lifecycle.loadSecurityScans).toHaveBeenCalledTimes(1);
       expect(selectedInput().element.checked).toBe(true);
 
       wrapper.unmount();
@@ -209,7 +217,40 @@ describe("pending view selection actions", () => {
       await flushPromises();
 
       expect(loadStatus).toHaveBeenCalledTimes(1);
-      expect(refreshPendingMetadata).toHaveBeenCalledTimes(1);
+      expect(lifecycle.loadPending).toHaveBeenCalledTimes(1);
+    } finally {
+      wrapper.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it("reloads pending from status source hash changes while mounted", async () => {
+    vi.useFakeTimers();
+    const { pinia, connection, settings, updates } = setupStores(true);
+    updates.pending = pendingResponse();
+    const lifecycle = mockPendingLifecycle(settings, updates);
+    vi.spyOn(connection, "loadStatus").mockImplementation(async () => {
+      connection.status = statusResponse({
+        source_hash: "changed-source-hash",
+        wud_api: wudApiStatus({
+          last_checked_at: updates.pendingWudMetadataCheckedAt,
+        }),
+      });
+    });
+    const refreshPendingMetadata = vi
+      .spyOn(updates, "refreshPendingMetadata")
+      .mockResolvedValue();
+    const wrapper = mountPendingView(pinia);
+
+    try {
+      await flushPromises();
+      lifecycle.loadPending.mockClear();
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      await flushPromises();
+
+      expect(refreshPendingMetadata).not.toHaveBeenCalled();
+      expect(lifecycle.loadPending).toHaveBeenCalledWith({ preserveCleanup: true });
     } finally {
       wrapper.unmount();
       vi.useRealTimers();
