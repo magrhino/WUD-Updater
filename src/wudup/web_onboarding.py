@@ -243,7 +243,7 @@ def onboarding_checklist_response(
                 )
             ],
         ),
-        _browser_access_onboarding_item(settings, request, checks),
+        _browser_access_onboarding_item(settings, checks),
         _mutation_onboarding_item(settings, checks),
     ]
     all_passed = all(
@@ -364,7 +364,6 @@ def _onboarding_admin_item(settings: WebSettings) -> OnboardingChecklistItem:
 
 def _browser_access_onboarding_item(
     settings: WebSettings,
-    request: Request,
     checks: Sequence[DoctorCheckResponse],
 ) -> OnboardingChecklistItem:
     relevant = _checks_by_code(
