@@ -77,6 +77,28 @@ def test_release_notes_get_returns_placeholders_without_creating_database(
     assert not db_path.exists()
 
 
+def test_release_notes_get_exposes_lsio_classification_placeholder(
+    tmp_path: Path,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    upstream_map = tmp_path / "upstreams.txt"
+    upstream_map.write_text(
+        "linuxserver/docker-radarr: Radarr/Radarr\n",
+        encoding="utf-8",
+    )
+    client = _release_client(tmp_path, {"WUD_WEB_UPSTREAM_MAP": str(upstream_map)})
+    wud_file.write_text("linuxserver/radarr:5.1.0-ls1 tag=5.1.0-ls2\n", encoding="utf-8")
+
+    response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["provider"] == "lsio"
+    assert item["classification"]["change_type"] == "image_rebuild"
+    assert item["classification"]["current"]["upstream_version"] == "5.1.0"
+    assert item["classification"]["target"]["build_suffix"] == "ls2"
+
+
 def test_release_notes_get_uses_api_pending_source_without_wud_file(
     tmp_path: Path,
     monkeypatch,

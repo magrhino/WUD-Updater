@@ -137,6 +137,10 @@ skipped.
 Explicit LSIO embeds include both the LinuxServer.io release link and the
 upstream release or project link.
 
+The WebUI also treats LinuxServer.io `version-*` tags, including branch-specific
+tags such as `libtorrentv1-version-*`, as upstream-tracking aliases that still
+receive LinuxServer.io image rebuilds.
+
 ## WebUI Release Links
 
 The WebUI uses a separate Python service for structured release-note metadata.

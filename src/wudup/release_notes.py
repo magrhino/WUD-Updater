@@ -17,18 +17,27 @@ from typing import Any, Literal
 
 from .db import utc_timestamp
 from .images import image_repo_ref, image_tag
+from .lsio_updates import (
+    LSIOUpdateClassification,
+    classification_from_mapping,
+    classify_lsio_update,
+    normalize_lsio_version,
+    parse_lsio_tag,
+)
 from .wud_file import WudTarget
 
 
 SUCCESS_CACHE_TTL_SECONDS = 21_600
 ERROR_CACHE_TTL_SECONDS = 900
 DEFAULT_GITHUB_TIMEOUT_SECONDS = 6.0
+LSIO_RELEASE_SCAN_MAX_PAGES = 10
 GITHUB_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 OCI_SOURCE_LABEL = "org.opencontainers.image.source"
 SEMVER_RE = re.compile(
     r"(?<![0-9A-Za-z])v?([0-9]+)(?:\.[0-9]+){1,3}"
     r"(?:[._-][0-9A-Za-z]+)*(?![0-9A-Za-z])"
 )
+COMPOSITE_UPSTREAM_RE = re.compile(r"^([vV]?\d+(?:\.\d+){1,3})_v?\d", re.ASCII)
 BREAKING_RE = re.compile(
     r"breaking|migration|incompatible|manual step|major change|"
     r"requires [^ \n]+ [0-9]|deprecated[^.\n]*remov|remove[ds] feature",
@@ -68,6 +77,9 @@ class ReleaseNoteInfo:
     refreshed_at: str = ""
     error: str = ""
     body: str = ""
+    classification: LSIOUpdateClassification = field(
+        default_factory=LSIOUpdateClassification
+    )
 
 
 @dataclass(frozen=True)
@@ -190,12 +202,17 @@ def refresh_release_notes(
         target_tag_resolver=target_tag_resolver,
     ):
         cached = _cached_info(conn, context)
+        legacy_classification_cache = (
+            cached.status != "missing"
+            and _cache_metadata_missing_classification(conn, context)
+        )
         if context.provider == "unsupported":
             infos.append(cached)
             continue
         if (
             not force
             and cached.status != "missing"
+            and not legacy_classification_cache
             and not _cache_stale(cached, timestamp)
         ):
             infos.append(cached)
@@ -424,6 +441,7 @@ def _placeholder_info(context: ReleaseNoteContext) -> ReleaseNoteInfo:
             image_repo=context.image_repo,
             upstream_repo=context.upstream_repo,
             error=context.error,
+            classification=_classify_context(context),
         )
     return ReleaseNoteInfo(
         line_no=context.line_no,
@@ -431,10 +449,15 @@ def _placeholder_info(context: ReleaseNoteContext) -> ReleaseNoteInfo:
         provider=context.provider,
         image_repo=context.image_repo,
         upstream_repo=context.upstream_repo,
+        classification=_classify_context(context),
     )
 
 
 def _row_to_info(row: sqlite3.Row, *, line_no: int) -> ReleaseNoteInfo:
+    metadata = _json_object(str(row["metadata_json"]))
+    classification = classification_from_mapping(metadata.get("classification"))
+    if "classification" not in metadata:
+        classification = _classify_cache_row(row)
     return ReleaseNoteInfo(
         line_no=line_no,
         status=str(row["status"]),  # type: ignore[arg-type]
@@ -457,7 +480,40 @@ def _row_to_info(row: sqlite3.Row, *, line_no: int) -> ReleaseNoteInfo:
         refreshed_at=str(row["updated_at"]),
         error=str(row["error"]),
         body=str(row["body"]),
+        classification=classification,
     )
+
+
+def _cache_metadata_missing_classification(
+    conn: sqlite3.Connection,
+    context: ReleaseNoteContext,
+) -> bool:
+    row = conn.execute(
+        "SELECT metadata_json FROM release_note_cache WHERE cache_key = ?",
+        (context.cache_key,),
+    ).fetchone()
+    if row is None:
+        return False
+    return "classification" not in _json_object(str(row["metadata_json"]))
+
+
+def _classify_cache_row(row: sqlite3.Row) -> LSIOUpdateClassification:
+    return classify_lsio_update(
+        image_repo=str(row["image_repo"]),
+        current_tag=str(row["current_tag"]),
+        target_tag=str(row["target_tag"]),
+        lsio_tag=_lsio_release_tag_from_links(str(row["links_json"])),
+        upstream_version=str(row["release_tag"]),
+    )
+
+
+def _lsio_release_tag_from_links(raw: str) -> str:
+    for item in _json_object_list(raw):
+        if str(item.get("kind") or "") == "lsio_release":
+            tag = _github_release_link_tag(str(item.get("url") or ""))
+            if tag:
+                return tag
+    return ""
 
 
 def _upsert_cache(
@@ -468,7 +524,13 @@ def _upsert_cache(
 ) -> None:
     links_json = json.dumps([asdict(link) for link in info.links], sort_keys=True)
     reasons_json = json.dumps(info.breaking_reasons, sort_keys=True)
-    metadata_json = json.dumps({"line_no": context.line_no}, sort_keys=True)
+    metadata_json = json.dumps(
+        {
+            "line_no": context.line_no,
+            "classification": asdict(info.classification),
+        },
+        sort_keys=True,
+    )
     with conn:
         conn.execute(
             """
@@ -610,7 +672,7 @@ def _fetch_lsio_release_note(
     client: GitHubClient,
     timestamp: str,
 ) -> ReleaseNoteInfo:
-    lsio_release = _fetch_latest(client, context.image_repo)
+    lsio_release = _fetch_lsio_release(client, context)
     if lsio_release is None:
         return ReleaseNoteInfo(
             line_no=context.line_no,
@@ -620,11 +682,21 @@ def _fetch_lsio_release_note(
             upstream_repo=context.upstream_repo,
             refreshed_at=timestamp,
             error=f"LSIO release not found for {context.image_repo}",
+            classification=_classify_context(context),
         )
     lsio_body = str(lsio_release.get("body") or "")
     lsio_tag = str(lsio_release.get("tag_name") or "")
-    upstream_version = context.target_tag or _lsio_upstream_version(lsio_body, lsio_tag)
-    upstream_release = _fetch_release(client, context.upstream_repo, upstream_version)
+    upstream_version = _lsio_context_upstream_version(context, lsio_body, lsio_tag)
+    classification = _classify_context(
+        context,
+        lsio_tag=lsio_tag,
+        upstream_version=upstream_version,
+    )
+    upstream_release = _fetch_lsio_upstream_release(
+        client,
+        context.upstream_repo,
+        upstream_version,
+    )
     links = [
         ReleaseNoteLink(
             "LSIO release",
@@ -650,6 +722,7 @@ def _fetch_lsio_release_note(
             title=f"{context.image_repo} -> {context.upstream_repo}",
             links=links,
             refreshed_at=timestamp,
+            classification=classification,
         )
     body = str(upstream_release.get("body") or "")
     release_tag = str(upstream_release.get("tag_name") or "")
@@ -683,6 +756,98 @@ def _fetch_lsio_release_note(
         links=links,
         refreshed_at=timestamp,
         body="\n\n".join(part for part in (body, lsio_body) if part),
+        classification=classification,
+    )
+
+
+def _fetch_lsio_release(
+    client: GitHubClient,
+    context: ReleaseNoteContext,
+) -> dict[str, Any] | None:
+    branch, upstream_version, build_suffix = _lsio_branch_target(context)
+    if not branch:
+        return _fetch_latest(client, context.image_repo)
+    for page in range(1, LSIO_RELEASE_SCAN_MAX_PAGES + 1):
+        releases = _object_list(
+            client.get_json(_lsio_releases_url(context.image_repo, page))
+        )
+        for release in releases:
+            parts = parse_lsio_tag(str(release.get("tag_name") or ""))
+            if (
+                parts.branch == branch
+                and (
+                    not upstream_version
+                    or normalize_lsio_version(parts.upstream_version)
+                    == normalize_lsio_version(upstream_version)
+                )
+                and (not build_suffix or parts.build_suffix == build_suffix)
+            ):
+                return release
+        if len(releases) < 30:
+            return None
+    return None
+
+
+def _lsio_releases_url(repo: str, page: int) -> str:
+    url = f"https://api.github.com/repos/{repo}/releases?per_page=30"
+    if page > 1:
+        url = f"{url}&page={page}"
+    return url
+
+
+def _lsio_branch_target(context: ReleaseNoteContext) -> tuple[str, str, str]:
+    target = parse_lsio_tag(context.target_tag)
+    if target.kind in {"build", "version"} and target.branch:
+        return target.branch, target.upstream_version, target.build_suffix
+    branch = _lsio_tracking_branch(context)
+    return branch, "", ""
+
+
+def _lsio_tracking_branch(context: ReleaseNoteContext) -> str:
+    for tag in (context.target_tag, context.current_tag):
+        parts = parse_lsio_tag(tag)
+        if parts.kind in {"build", "version"} and parts.branch:
+            return parts.branch
+    return ""
+
+
+def _lsio_context_upstream_version(
+    context: ReleaseNoteContext,
+    lsio_body: str,
+    lsio_tag: str,
+) -> str:
+    target = parse_lsio_tag(context.target_tag)
+    if target.kind in {"build", "version", "pseudo_semver"}:
+        return target.upstream_version
+    return _lsio_upstream_version(lsio_body, lsio_tag)
+
+
+def _fetch_lsio_upstream_release(
+    client: GitHubClient,
+    repo: str,
+    tag: str,
+) -> dict[str, Any] | None:
+    release = _fetch_release(client, repo, tag)
+    if release is not None:
+        return release
+    fallback = _composite_upstream_base(tag)
+    if fallback and fallback != tag:
+        return _fetch_release(client, repo, fallback)
+    return None
+
+
+def _classify_context(
+    context: ReleaseNoteContext,
+    *,
+    lsio_tag: str = "",
+    upstream_version: str = "",
+) -> LSIOUpdateClassification:
+    return classify_lsio_update(
+        image_repo=context.image_repo,
+        current_tag=context.current_tag,
+        target_tag=context.target_tag,
+        lsio_tag=lsio_tag,
+        upstream_version=upstream_version,
     )
 
 
@@ -724,6 +889,12 @@ def _object_or_none(value: object) -> dict[str, Any] | None:
     if str(value.get("message") or "") == "Not Found":
         return None
     return value
+
+
+def _object_list(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
 
 
 def _lsio_upstream_version(body: str, lsio_tag: str) -> str:
@@ -875,6 +1046,11 @@ def _strip_lsio_suffix(value: str) -> str:
     return re.sub(r"(?i)[._-]ls[0-9]+(?:[._-][0-9A-Za-z]+)*$", "", value)
 
 
+def _composite_upstream_base(value: str) -> str:
+    match = COMPOSITE_UPSTREAM_RE.match(value)
+    return match.group(1) if match else ""
+
+
 def _semver_major(value: str) -> int | None:
     match = SEMVER_RE.search(value)
     if not match:
@@ -900,3 +1076,11 @@ def _json_object_list(raw: str) -> list[dict[str, object]]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, dict)]
+
+
+def _json_object(raw: str) -> dict[str, object]:
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}

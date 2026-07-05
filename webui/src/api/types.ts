@@ -524,6 +524,24 @@ export interface ReleaseNoteLink {
   kind: string;
 }
 
+export type ReleaseNoteChangeType = "upstream_update" | "image_rebuild" | "unknown";
+
+export interface ReleaseNoteClassificationTag {
+  raw: string;
+  kind: string;
+  arch: string;
+  branch: string;
+  upstream_version: string;
+  build_suffix: string;
+}
+
+export interface ReleaseNoteClassification {
+  change_type: ReleaseNoteChangeType;
+  reason: string;
+  current: ReleaseNoteClassificationTag;
+  target: ReleaseNoteClassificationTag;
+}
+
 export interface ReleaseNoteInfo {
   line_no: number;
   status: string;
@@ -539,6 +557,7 @@ export interface ReleaseNoteInfo {
   refreshed_at: string;
   error: string;
   body?: string;
+  classification?: ReleaseNoteClassification;
   notification_key: string;
   notification_status: string;
   notification_last_sent_at: string;
