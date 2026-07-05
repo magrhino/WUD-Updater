@@ -324,7 +324,7 @@ def _build_auto_update_plan(
     known_digest_provenance_by_service: Mapping[str, DigestTagProvenance],
     pending_source: web_pending_sources.PendingSourceResult,
 ) -> DryRunPlan:
-    config = (
+    config: UpdaterConfig = (
         base_config
         if update_mode_override is None
         else replace(base_config, update_mode=update_mode_override)

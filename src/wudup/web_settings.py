@@ -1154,8 +1154,11 @@ def _webui_settings_entries(
         public_origin=settings.public_origin,
         bind_host=bind_host,
     )
-    default_static_settings = replace(settings, static_dir=_resolve_static_dir(None))
-    default_secure_settings = replace(settings, secure_cookies="auto")
+    default_static_settings: WebSettings = replace(
+        settings,
+        static_dir=_resolve_static_dir(None),
+    )
+    default_secure_settings: WebSettings = replace(settings, secure_cookies="auto")
     return [
         _settings_entry(
             "WUD_WEB_AUTH_REQUIRED",

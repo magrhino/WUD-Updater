@@ -525,7 +525,10 @@ def _build_self_update_plan_from_file(
     settings: WebSettings,
     wud_file: Path,
 ) -> DryRunPlan:
-    config = replace(_effective_config(settings), wud_out_file=wud_file)
+    config: UpdaterConfig = replace(
+        _effective_config(settings),
+        wud_out_file=wud_file,
+    )
     return build_dry_run_plan(
         config,
         line_numbers=(1,),
