@@ -368,9 +368,6 @@
 
   .mobile-card .n-checkbox {
     min-height: var(--size-touch-target);
-  }
-
-  .mobile-card .n-checkbox {
     display: inline-flex;
     align-items: center;
   }
