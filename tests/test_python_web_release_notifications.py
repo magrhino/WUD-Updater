@@ -1065,10 +1065,18 @@ def test_release_notification_preview_and_embed_distinguish_lsio_rebuild(
     embed = posted[0][1]["embeds"][0]
     assert preview_item["title"].startswith("LSIO image rebuild:")
     assert "5.1.0-ls2" in preview_item["title"]
+    assert preview_item["image_repo"] == "linuxserver/docker-radarr"
+    assert preview_item["upstream_repo"] == "Radarr/Radarr"
+    assert "Repository: `linuxserver/docker-radarr`" in preview_item["description"]
+    assert "Repository: `Radarr/Radarr`" not in preview_item["description"]
+    assert "Upstream: `Radarr/Radarr`" in preview_item["description"]
     assert "LinuxServer.io rebuild" in preview_item["description"]
     assert "LSIO build: `ls2`" in preview_item["description"]
     assert embed["title"] == preview_item["title"]
     assert "LinuxServer.io rebuild" in embed["description"]
+    fields = {field["name"]: field["value"] for field in embed["fields"]}
+    assert fields["Repository"] == "`linuxserver/docker-radarr`"
+    assert fields["Upstream"] == "`Radarr/Radarr`"
 
 
 def test_release_notification_send_posts_discord_payload_and_audits(

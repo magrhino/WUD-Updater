@@ -702,11 +702,15 @@ def _notification_items(
                     f"Line {target.target.line_no} WUD triggers unavailable: "
                     f"{trigger_warning}"
                 )
+        image_repo = note.image_repo or target.target.repo
+        upstream_repo = note.upstream_repo
         title, description = _notification_copy(
             settings,
             target,
             note,
             triggers,
+            image_repo=image_repo,
+            upstream_repo=upstream_repo,
             verbosity=config.verbosity,
         )
         candidates.append(
@@ -718,7 +722,8 @@ def _notification_items(
                 description=description,
                 status=note.status,
                 release_tag=note.release_tag,
-                upstream_repo=note.upstream_repo,
+                image_repo=image_repo,
+                upstream_repo=upstream_repo,
                 links=_release_note_links(note),
                 triggers=triggers,
                 notification_key=identity.notification_key,
@@ -796,6 +801,8 @@ def _notification_copy(
     note: ReleaseNoteInfo,
     triggers: Sequence[ReleaseNotificationTrigger],
     *,
+    image_repo: str,
+    upstream_repo: str,
     verbosity: str = "summary",
 ) -> tuple[str, str]:
     classification = getattr(note, "classification", None)
@@ -805,11 +812,8 @@ def _notification_copy(
     )
     image_rebuild = change_type == "image_rebuild"
     upstream_update = change_type == "upstream_update"
-    repo = (
-        note.image_repo
-        if image_rebuild
-        else note.upstream_repo or note.image_repo or target.target.repo
-    )
+    repo = image_repo
+    title_repo = upstream_repo if upstream_update and upstream_repo else repo
     tag = note.release_tag or target.target.desired_tag or target.target.tag_token
     title = note.title or (f"Release {tag} for {repo}" if tag and repo else "")
     if image_rebuild:
@@ -820,8 +824,8 @@ def _notification_copy(
             title = f"{title} {tag}"
         elif build_suffix:
             title = f"{title} {build_suffix}"
-    elif upstream_update and repo:
-        title = f"Upstream application update: {repo}"
+    elif upstream_update and title_repo:
+        title = f"Upstream application update: {title_repo}"
         if tag:
             title = f"{title} {tag}"
     if not title:
@@ -831,6 +835,8 @@ def _notification_copy(
         lines.append(f"Service: `{target.service_key}`")
     if repo:
         lines.append(f"Repository: `{repo}`")
+    if upstream_repo and upstream_repo != repo:
+        lines.append(f"Upstream: `{upstream_repo}`")
     if tag:
         lines.append(f"Release: `{tag}`")
     if image_rebuild:
@@ -908,9 +914,13 @@ def _discord_embed(item: ReleaseNotificationItem) -> dict[str, object]:
     ]
     if item.service_key:
         fields.append({"name": "Service", "value": f"`{item.service_key}`", "inline": True})
-    if item.upstream_repo:
+    if item.image_repo:
         fields.append(
-            {"name": "Repository", "value": f"`{item.upstream_repo}`", "inline": True}
+            {"name": "Repository", "value": f"`{item.image_repo}`", "inline": True}
+        )
+    if item.upstream_repo and item.upstream_repo != item.image_repo:
+        fields.append(
+            {"name": "Upstream", "value": f"`{item.upstream_repo}`", "inline": True}
         )
     if links:
         fields.append({"name": "Links", "value": " - ".join(links)[:1024], "inline": False})
@@ -1390,6 +1400,7 @@ def _release_notification_identity(
             "service_key": item.service_key,
             "status": item.status,
             "release_tag": item.release_tag,
+            "image_repo": item.image_repo,
             "upstream_repo": item.upstream_repo,
         },
     )
@@ -1475,6 +1486,7 @@ def _audit_items(items: Sequence[ReleaseNotificationItem]) -> list[dict[str, obj
             "service_key": item.service_key,
             "status": item.status,
             "release_tag": item.release_tag,
+            "image_repo": item.image_repo,
             "upstream_repo": item.upstream_repo,
             "trigger_count": len(item.triggers),
             "notification_key": item.notification_key,

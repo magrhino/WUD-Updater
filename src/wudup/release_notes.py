@@ -788,6 +788,13 @@ def _fetch_lsio_release(
 ) -> dict[str, Any] | None:
     branch, upstream_version, build_suffix = _lsio_branch_target(context)
     if not branch:
+        target = parse_lsio_tag(context.target_tag)
+        if target.kind == "build" and target.build_suffix:
+            url = (
+                f"https://api.github.com/repos/{context.image_repo}/"
+                f"releases/tags/{context.target_tag}"
+            )
+            return _object_or_none(client.get_json(url))
         return _fetch_latest(client, context.image_repo)
     for page in range(1, LSIO_RELEASE_SCAN_MAX_PAGES + 1):
         releases = _object_list(

@@ -308,8 +308,12 @@ class ReleaseNotesTests(unittest.TestCase):
                 encoding="utf-8",
             )
             parsed = parse_wud_text("linuxserver/radarr:5.1.0-ls1 tag=5.1.0-ls2\n")
+            lsio_url = (
+                "https://api.github.com/repos/linuxserver/docker-radarr/"
+                "releases/tags/5.1.0-ls2"
+            )
             responses = {
-                "https://api.github.com/repos/linuxserver/docker-radarr/releases/latest": {
+                lsio_url: {
                     "tag_name": "5.1.0-ls2",
                     "name": "5.1.0-ls2",
                     "html_url": "https://github.com/linuxserver/docker-radarr/releases/tag/5.1.0-ls2",
@@ -342,6 +346,8 @@ class ReleaseNotesTests(unittest.TestCase):
             [(link.label, link.kind) for link in items[0].links],
             [("LSIO release", "lsio_release")],
         )
+        self.assertIn(lsio_url, calls)
+        self.assertFalse(any(call.endswith("/releases/latest") for call in calls))
         self.assertFalse(any("/repos/Radarr/Radarr" in call for call in calls))
         self.assertEqual(
             items[0].classification.target.build_suffix,
@@ -359,22 +365,17 @@ class ReleaseNotesTests(unittest.TestCase):
                 encoding="utf-8",
             )
             parsed = parse_wud_text("linuxserver/radarr:5.1.0-ls1 tag=5.1.0-ls2\n")
+            lsio_url = (
+                "https://api.github.com/repos/linuxserver/docker-radarr/"
+                "releases/tags/5.1.0-ls2"
+            )
             responses = {
-                "https://api.github.com/repos/linuxserver/docker-radarr/releases/latest": {
+                lsio_url: {
                     "tag_name": "5.1.0-ls2",
                     "name": "5.1.0-ls2",
                     "html_url": "https://github.com/linuxserver/docker-radarr/releases/tag/5.1.0-ls2",
                     "body": "LinuxServer Changes:\n- Rebase to Alpine 3.20",
                     "published_at": "2026-01-02T00:00:00Z",
-                },
-                "https://api.github.com/repos/Radarr/Radarr/releases/tags/v5.1.0": {
-                    "message": "Not Found",
-                },
-                "https://api.github.com/repos/Radarr/Radarr/releases/tags/5.1.0": {
-                    "message": "Not Found",
-                },
-                "https://api.github.com/repos/Radarr/Radarr": {
-                    "html_url": "https://github.com/Radarr/Radarr",
                 },
             }
             environ = {"UPSTREAM_MAP": str(upstream_map)}

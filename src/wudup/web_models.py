@@ -851,6 +851,7 @@ class ReleaseNotificationItem(BaseModel):
     description: str
     status: str
     release_tag: str = ""
+    image_repo: str = ""
     upstream_repo: str = ""
     links: list[ReleaseNoteLink] = Field(default_factory=list)
     triggers: list[ReleaseNotificationTrigger] = Field(default_factory=list)
