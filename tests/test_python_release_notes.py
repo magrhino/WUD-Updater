@@ -469,6 +469,60 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertEqual(items[0].classification.target.branch, "libtorrentv1")
         self.assertEqual(items[0].classification.change_type, "upstream_update")
 
+    def test_lsio_branch_tracking_requires_matching_arch(self) -> None:
+        def lsio_release(tag: str) -> dict[str, str]:
+            return {
+                "tag_name": tag,
+                "name": tag,
+                "html_url": (
+                    "https://github.com/linuxserver/docker-qbittorrent/releases/tag/"
+                    f"{tag}"
+                ),
+                "body": f"Remote Changes:\n- Updating to {tag}",
+                "published_at": "2026-06-28T09:57:00Z",
+            }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            upstream_map = Path(tmp) / "upstreams.txt"
+            upstream_map.write_text(
+                "linuxserver/docker-qbittorrent: qbittorrent/qBittorrent\n",
+                encoding="utf-8",
+            )
+            parsed = parse_wud_text(
+                "linuxserver/qbittorrent:"
+                "amd64-libtorrentv1-version-v5.2.1_v1.2.20 "
+                "tag=amd64-libtorrentv1-version-v5.2.2_v1.2.20\n"
+            )
+            releases_url = (
+                "https://api.github.com/repos/"
+                "linuxserver/docker-qbittorrent/releases?per_page=30"
+            )
+            responses = {
+                releases_url: [
+                    lsio_release("arm64v8-libtorrentv1-5.2.2_v1.2.20-ls122"),
+                    lsio_release("libtorrentv1-5.2.2_v1.2.20-ls122"),
+                    lsio_release("amd64-libtorrentv1-5.2.2_v1.2.20-ls122"),
+                ],
+                **qbittorrent_upstream_responses("5.2.2_v1.2.20"),
+            }
+            client = GitHubClient(fetch_json=lambda url: responses[url])
+            with open_db(":memory:") as conn:
+                init_db(conn)
+                items = refresh_release_notes(
+                    conn,
+                    parsed.targets,
+                    {"UPSTREAM_MAP": str(upstream_map)},
+                    client=client,
+                )
+
+        self.assertEqual(items[0].status, "ready")
+        self.assertTrue(
+            items[0].links[0].url.endswith(
+                "/amd64-libtorrentv1-5.2.2_v1.2.20-ls122"
+            )
+        )
+        self.assertEqual(items[0].classification.target.arch, "amd64")
+
     def test_lsio_branch_tracking_matches_target_release_across_pages(self) -> None:
         def lsio_release(tag: str) -> dict[str, str]:
             return {

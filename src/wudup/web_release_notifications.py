@@ -854,22 +854,38 @@ def _notification_title(
     upstream_update: bool,
 ) -> str:
     if image_rebuild:
-        title = "LSIO image rebuild"
-        if repo:
-            title = f"{title}: {repo}"
-        if tag:
-            title = f"{title} {tag}"
-        elif build_suffix:
-            title = f"{title} {build_suffix}"
-        return title
-    title_repo = upstream_repo if upstream_update and upstream_repo else repo
-    if upstream_update and title_repo:
-        title = f"Upstream application update: {title_repo}"
-        if tag:
-            title = f"{title} {tag}"
-        return title
+        return _lsio_image_rebuild_title(repo, tag, build_suffix)
+    if upstream_update:
+        title = _upstream_application_update_title(repo, upstream_repo, tag)
+        if title:
+            return title
     title = note.title or (f"Release {tag} for {repo}" if tag and repo else "")
     return title or f"Update available: {target.target.first}"
+
+
+def _lsio_image_rebuild_title(repo: str, tag: str, build_suffix: str) -> str:
+    title = "LSIO image rebuild"
+    if repo:
+        title = f"{title}: {repo}"
+    if tag:
+        title = f"{title} {tag}"
+    elif build_suffix:
+        title = f"{title} {build_suffix}"
+    return title
+
+
+def _upstream_application_update_title(
+    repo: str,
+    upstream_repo: str,
+    tag: str,
+) -> str:
+    title_repo = upstream_repo or repo
+    if not title_repo:
+        return ""
+    title = f"Upstream application update: {title_repo}"
+    if tag:
+        title = f"{title} {tag}"
+    return title
 
 
 def _notification_description_lines(
