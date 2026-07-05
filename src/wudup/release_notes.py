@@ -800,20 +800,37 @@ def _fetch_lsio_release(
         releases = _object_list(
             client.get_json(_lsio_releases_url(context.image_repo, page))
         )
-        for release in releases:
-            parts = parse_lsio_tag(str(release.get("tag_name") or ""))
-            if (
-                parts.branch == branch
-                and (
-                    not upstream_version
-                    or normalize_lsio_version(parts.upstream_version)
-                    == normalize_lsio_version(upstream_version)
-                )
-                and (not build_suffix or parts.build_suffix == build_suffix)
-            ):
-                return release
+        release = _matching_lsio_release(
+            releases,
+            branch=branch,
+            upstream_version=upstream_version,
+            build_suffix=build_suffix,
+        )
+        if release is not None:
+            return release
         if len(releases) < 30:
             return None
+    return None
+
+
+def _matching_lsio_release(
+    releases: Iterable[dict[str, Any]],
+    *,
+    branch: str,
+    upstream_version: str,
+    build_suffix: str,
+) -> dict[str, Any] | None:
+    for release in releases:
+        parts = parse_lsio_tag(str(release.get("tag_name") or ""))
+        if parts.branch != branch:
+            continue
+        if upstream_version and normalize_lsio_version(
+            parts.upstream_version
+        ) != normalize_lsio_version(upstream_version):
+            continue
+        if build_suffix and parts.build_suffix != build_suffix:
+            continue
+        return release
     return None
 
 

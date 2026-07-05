@@ -813,9 +813,46 @@ def _notification_copy(
     image_rebuild = change_type == "image_rebuild"
     upstream_update = change_type == "upstream_update"
     repo = image_repo
-    title_repo = upstream_repo if upstream_update and upstream_repo else repo
     tag = note.release_tag or target.target.desired_tag or target.target.tag_token
-    title = note.title or (f"Release {tag} for {repo}" if tag and repo else "")
+    title = _notification_title(
+        target,
+        note,
+        repo=repo,
+        upstream_repo=upstream_repo,
+        tag=tag,
+        build_suffix=build_suffix,
+        image_rebuild=image_rebuild,
+        upstream_update=upstream_update,
+    )
+    lines = _notification_description_lines(
+        settings,
+        target,
+        note,
+        triggers,
+        repo=repo,
+        upstream_repo=upstream_repo,
+        tag=tag,
+        build_suffix=build_suffix,
+        image_rebuild=image_rebuild,
+        upstream_update=upstream_update,
+    )
+    body = str(getattr(note, "body", "") or "").strip()
+    if verbosity == "full" and body:
+        lines.extend(("", body))
+    return title, "\n".join(lines)[:DISCORD_EMBED_DESCRIPTION_LIMIT]
+
+
+def _notification_title(
+    target: _NotificationTarget,
+    note: ReleaseNoteInfo,
+    *,
+    repo: str,
+    upstream_repo: str,
+    tag: str,
+    build_suffix: str,
+    image_rebuild: bool,
+    upstream_update: bool,
+) -> str:
     if image_rebuild:
         title = "LSIO image rebuild"
         if repo:
@@ -824,12 +861,30 @@ def _notification_copy(
             title = f"{title} {tag}"
         elif build_suffix:
             title = f"{title} {build_suffix}"
-    elif upstream_update and title_repo:
+        return title
+    title_repo = upstream_repo if upstream_update and upstream_repo else repo
+    if upstream_update and title_repo:
         title = f"Upstream application update: {title_repo}"
         if tag:
             title = f"{title} {tag}"
-    if not title:
-        title = f"Update available: {target.target.first}"
+        return title
+    title = note.title or (f"Release {tag} for {repo}" if tag and repo else "")
+    return title or f"Update available: {target.target.first}"
+
+
+def _notification_description_lines(
+    settings: WebSettings,
+    target: _NotificationTarget,
+    note: ReleaseNoteInfo,
+    triggers: Sequence[ReleaseNotificationTrigger],
+    *,
+    repo: str,
+    upstream_repo: str,
+    tag: str,
+    build_suffix: str,
+    image_rebuild: bool,
+    upstream_update: bool,
+) -> list[str]:
     lines = [f"`{target.target.first}`"]
     if target.service_key:
         lines.append(f"Service: `{target.service_key}`")
@@ -852,10 +907,7 @@ def _notification_copy(
     if triggers:
         label = ", ".join(_trigger_label(trigger) for trigger in triggers[:5])
         lines.append(f"WUD triggers: {label}")
-    body = str(getattr(note, "body", "") or "").strip()
-    if verbosity == "full" and body:
-        lines.extend(("", body))
-    return title, "\n".join(lines)[:DISCORD_EMBED_DESCRIPTION_LIMIT]
+    return lines
 
 
 def _status_line(settings: WebSettings, note: ReleaseNoteInfo) -> str:
