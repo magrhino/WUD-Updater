@@ -702,11 +702,15 @@ def _notification_items(
                     f"Line {target.target.line_no} WUD triggers unavailable: "
                     f"{trigger_warning}"
                 )
+        image_repo = note.image_repo or target.target.repo
+        upstream_repo = note.upstream_repo
         title, description = _notification_copy(
             settings,
             target,
             note,
             triggers,
+            image_repo=image_repo,
+            upstream_repo=upstream_repo,
             verbosity=config.verbosity,
         )
         candidates.append(
@@ -718,7 +722,8 @@ def _notification_items(
                 description=description,
                 status=note.status,
                 release_tag=note.release_tag,
-                upstream_repo=note.upstream_repo,
+                image_repo=image_repo,
+                upstream_repo=upstream_repo,
                 links=_release_note_links(note),
                 triggers=triggers,
                 notification_key=identity.notification_key,
@@ -796,20 +801,121 @@ def _notification_copy(
     note: ReleaseNoteInfo,
     triggers: Sequence[ReleaseNotificationTrigger],
     *,
+    image_repo: str,
+    upstream_repo: str,
     verbosity: str = "summary",
 ) -> tuple[str, str]:
-    repo = note.upstream_repo or note.image_repo or target.target.repo
+    classification = getattr(note, "classification", None)
+    change_type = str(getattr(classification, "change_type", "") or "")
+    build_suffix = str(
+        getattr(getattr(classification, "target", None), "build_suffix", "") or ""
+    )
+    image_rebuild = change_type == "image_rebuild"
+    upstream_update = change_type == "upstream_update"
+    repo = image_repo
     tag = note.release_tag or target.target.desired_tag or target.target.tag_token
+    title = _notification_title(
+        target,
+        note,
+        repo=repo,
+        upstream_repo=upstream_repo,
+        tag=tag,
+        build_suffix=build_suffix,
+        image_rebuild=image_rebuild,
+        upstream_update=upstream_update,
+    )
+    lines = _notification_description_lines(
+        settings,
+        target,
+        note,
+        triggers,
+        repo=repo,
+        upstream_repo=upstream_repo,
+        tag=tag,
+        build_suffix=build_suffix,
+        image_rebuild=image_rebuild,
+        upstream_update=upstream_update,
+    )
+    body = str(getattr(note, "body", "") or "").strip()
+    if verbosity == "full" and body:
+        lines.extend(("", body))
+    return title, "\n".join(lines)[:DISCORD_EMBED_DESCRIPTION_LIMIT]
+
+
+def _notification_title(
+    target: _NotificationTarget,
+    note: ReleaseNoteInfo,
+    *,
+    repo: str,
+    upstream_repo: str,
+    tag: str,
+    build_suffix: str,
+    image_rebuild: bool,
+    upstream_update: bool,
+) -> str:
+    if image_rebuild:
+        return _lsio_image_rebuild_title(repo, tag, build_suffix)
+    if upstream_update:
+        title = _upstream_application_update_title(repo, upstream_repo, tag)
+        if title:
+            return title
     title = note.title or (f"Release {tag} for {repo}" if tag and repo else "")
-    if not title:
-        title = f"Update available: {target.target.first}"
+    return title or f"Update available: {target.target.first}"
+
+
+def _lsio_image_rebuild_title(repo: str, tag: str, build_suffix: str) -> str:
+    title = "LSIO image rebuild"
+    if repo:
+        title = f"{title}: {repo}"
+    if tag:
+        title = f"{title} {tag}"
+    elif build_suffix:
+        title = f"{title} {build_suffix}"
+    return title
+
+
+def _upstream_application_update_title(
+    repo: str,
+    upstream_repo: str,
+    tag: str,
+) -> str:
+    title_repo = upstream_repo or repo
+    if not title_repo:
+        return ""
+    title = f"Upstream application update: {title_repo}"
+    if tag:
+        title = f"{title} {tag}"
+    return title
+
+
+def _notification_description_lines(
+    settings: WebSettings,
+    target: _NotificationTarget,
+    note: ReleaseNoteInfo,
+    triggers: Sequence[ReleaseNotificationTrigger],
+    *,
+    repo: str,
+    upstream_repo: str,
+    tag: str,
+    build_suffix: str,
+    image_rebuild: bool,
+    upstream_update: bool,
+) -> list[str]:
     lines = [f"`{target.target.first}`"]
     if target.service_key:
         lines.append(f"Service: `{target.service_key}`")
     if repo:
         lines.append(f"Repository: `{repo}`")
+    if upstream_repo and upstream_repo != repo:
+        lines.append(f"Upstream: `{upstream_repo}`")
     if tag:
         lines.append(f"Release: `{tag}`")
+    if image_rebuild:
+        lines.append("Update type: LinuxServer.io rebuild")
+        if build_suffix:
+            lines.append(f"LSIO build: `{build_suffix}`")
+    elif upstream_update:
+        lines.append("Update type: upstream application update")
     lines.append(_status_line(settings, note))
     if note.breaking:
         lines.append("Breaking-risk indicators were detected.")
@@ -817,10 +923,7 @@ def _notification_copy(
     if triggers:
         label = ", ".join(_trigger_label(trigger) for trigger in triggers[:5])
         lines.append(f"WUD triggers: {label}")
-    body = str(getattr(note, "body", "") or "").strip()
-    if verbosity == "full" and body:
-        lines.extend(("", body))
-    return title, "\n".join(lines)[:DISCORD_EMBED_DESCRIPTION_LIMIT]
+    return lines
 
 
 def _status_line(settings: WebSettings, note: ReleaseNoteInfo) -> str:
@@ -879,9 +982,13 @@ def _discord_embed(item: ReleaseNotificationItem) -> dict[str, object]:
     ]
     if item.service_key:
         fields.append({"name": "Service", "value": f"`{item.service_key}`", "inline": True})
-    if item.upstream_repo:
+    if item.image_repo:
         fields.append(
-            {"name": "Repository", "value": f"`{item.upstream_repo}`", "inline": True}
+            {"name": "Repository", "value": f"`{item.image_repo}`", "inline": True}
+        )
+    if item.upstream_repo and item.upstream_repo != item.image_repo:
+        fields.append(
+            {"name": "Upstream", "value": f"`{item.upstream_repo}`", "inline": True}
         )
     if links:
         fields.append({"name": "Links", "value": " - ".join(links)[:1024], "inline": False})
@@ -1361,6 +1468,7 @@ def _release_notification_identity(
             "service_key": item.service_key,
             "status": item.status,
             "release_tag": item.release_tag,
+            "image_repo": item.image_repo,
             "upstream_repo": item.upstream_repo,
         },
     )
@@ -1446,6 +1554,7 @@ def _audit_items(items: Sequence[ReleaseNotificationItem]) -> list[dict[str, obj
             "service_key": item.service_key,
             "status": item.status,
             "release_tag": item.release_tag,
+            "image_repo": item.image_repo,
             "upstream_repo": item.upstream_repo,
             "trigger_count": len(item.triggers),
             "notification_key": item.notification_key,

@@ -999,6 +999,7 @@ export function releaseNotificationResponse(
         description: "acme/app",
         status: "ready",
         release_tag: "v2.0.0",
+        image_repo: "acme/app",
         upstream_repo: "acme/app",
         links: [],
         triggers: [

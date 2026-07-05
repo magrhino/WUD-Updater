@@ -7,7 +7,9 @@ from types import SimpleNamespace
 
 from wudup import web_release_notifications as notifications_module
 from wudup.db import init_db, insert_pending_update, insert_update_run, open_db
+from wudup.lsio_updates import LSIOUpdateClassification, LSIOTagParts
 from wudup.release_notes import ReleaseNoteInfo as ReleaseNoteData
+from wudup.release_notes import ReleaseNoteLink as ReleaseNoteLinkData
 
 from tests.web_test_helpers import (
     _capture_discord_posts,
@@ -984,6 +986,97 @@ def test_release_notification_preview_and_send_redact_cached_errors(
     assert "Release-note status:" in preview.json()["items"][0]["description"]
     assert "webhook-secret" not in preview.text
     assert "webhook-secret" not in json.dumps([payload for _url, payload in posted])
+
+
+def test_release_notification_preview_and_embed_distinguish_lsio_rebuild(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def fake_refresh_release_notes(
+        _conn,
+        targets,
+        _environ,
+        **_kwargs,
+    ):
+        return [
+            ReleaseNoteData(
+                line_no=target.line_no,
+                status="ready",
+                provider="lsio",
+                image_repo="linuxserver/docker-radarr",
+                upstream_repo="Radarr/Radarr",
+                release_tag="5.1.0-ls2",
+                title="5.1.0-ls2",
+                body="LinuxServer Changes:\n- Rebase to Alpine 3.20",
+                links=[
+                    ReleaseNoteLinkData(
+                        label="LSIO release",
+                        url=(
+                            "https://github.com/linuxserver/docker-radarr/"
+                            "releases/tag/5.1.0-ls2"
+                        ),
+                        kind="lsio_release",
+                    )
+                ],
+                classification=LSIOUpdateClassification(
+                    change_type="image_rebuild",
+                    reason="same-upstream-image-layer-changed",
+                    current=LSIOTagParts(
+                        raw="5.1.0-ls1",
+                        kind="build",
+                        upstream_version="5.1.0",
+                        build_suffix="ls1",
+                    ),
+                    target=LSIOTagParts(
+                        raw="5.1.0-ls2",
+                        kind="build",
+                        upstream_version="5.1.0",
+                        build_suffix="ls2",
+                    ),
+                ),
+            )
+            for target in targets
+        ]
+
+    monkeypatch.setattr(
+        notifications_module,
+        "refresh_release_notes",
+        fake_refresh_release_notes,
+    )
+    posted = _capture_discord_posts(monkeypatch)
+    client = _client(tmp_path, _RELEASE_NOTIFICATION_ENV)
+    _write_pending_lines(tmp_path, ["linuxserver/radarr:5.1.0-ls1 tag=5.1.0-ls2"])
+    headers = _csrf_headers(client)
+
+    preview = client.post(
+        "/api/v1/release-notifications/preview",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+    send = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "confirmation": "send-release-notes"},
+        headers=headers,
+    )
+
+    assert preview.status_code == 200
+    assert send.status_code == 200
+    preview_item = preview.json()["items"][0]
+    embed = posted[0][1]["embeds"][0]
+    assert preview_item["title"].startswith("LSIO image rebuild:")
+    assert "5.1.0-ls2" in preview_item["title"]
+    assert preview_item["image_repo"] == "linuxserver/docker-radarr"
+    assert preview_item["upstream_repo"] == "Radarr/Radarr"
+    assert "Repository: `linuxserver/docker-radarr`" in preview_item["description"]
+    assert "Repository: `Radarr/Radarr`" not in preview_item["description"]
+    assert "Upstream: `Radarr/Radarr`" in preview_item["description"]
+    assert "LinuxServer.io rebuild" in preview_item["description"]
+    assert "LSIO build: `ls2`" in preview_item["description"]
+    assert embed["title"] == preview_item["title"]
+    assert "LinuxServer.io rebuild" in embed["description"]
+    fields = {field["name"]: field["value"] for field in embed["fields"]}
+    assert fields["Repository"] == "`linuxserver/docker-radarr`"
+    assert fields["Upstream"] == "`Radarr/Radarr`"
 
 
 def test_release_notification_send_posts_discord_payload_and_audits(

@@ -598,6 +598,7 @@ export interface ReleaseNotificationItem {
   description: string;
   status: string;
   release_tag: string;
+  image_repo: string;
   upstream_repo: string;
   links: ReleaseNoteLink[];
   triggers: ReleaseNotificationTrigger[];
