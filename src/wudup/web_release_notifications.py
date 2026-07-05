@@ -798,9 +798,32 @@ def _notification_copy(
     *,
     verbosity: str = "summary",
 ) -> tuple[str, str]:
-    repo = note.upstream_repo or note.image_repo or target.target.repo
+    classification = getattr(note, "classification", None)
+    change_type = str(getattr(classification, "change_type", "") or "")
+    build_suffix = str(
+        getattr(getattr(classification, "target", None), "build_suffix", "") or ""
+    )
+    image_rebuild = change_type == "image_rebuild"
+    upstream_update = change_type == "upstream_update"
+    repo = (
+        note.image_repo
+        if image_rebuild
+        else note.upstream_repo or note.image_repo or target.target.repo
+    )
     tag = note.release_tag or target.target.desired_tag or target.target.tag_token
     title = note.title or (f"Release {tag} for {repo}" if tag and repo else "")
+    if image_rebuild:
+        title = "LSIO image rebuild"
+        if repo:
+            title = f"{title}: {repo}"
+        if tag:
+            title = f"{title} {tag}"
+        elif build_suffix:
+            title = f"{title} {build_suffix}"
+    elif upstream_update and repo:
+        title = f"Upstream application update: {repo}"
+        if tag:
+            title = f"{title} {tag}"
     if not title:
         title = f"Update available: {target.target.first}"
     lines = [f"`{target.target.first}`"]
@@ -810,6 +833,12 @@ def _notification_copy(
         lines.append(f"Repository: `{repo}`")
     if tag:
         lines.append(f"Release: `{tag}`")
+    if image_rebuild:
+        lines.append("Update type: LinuxServer.io rebuild")
+        if build_suffix:
+            lines.append(f"LSIO build: `{build_suffix}`")
+    elif upstream_update:
+        lines.append("Update type: upstream application update")
     lines.append(_status_line(settings, note))
     if note.breaking:
         lines.append("Breaking-risk indicators were detected.")

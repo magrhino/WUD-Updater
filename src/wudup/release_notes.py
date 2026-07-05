@@ -692,11 +692,6 @@ def _fetch_lsio_release_note(
         lsio_tag=lsio_tag,
         upstream_version=upstream_version,
     )
-    upstream_release = _fetch_lsio_upstream_release(
-        client,
-        context.upstream_repo,
-        upstream_version,
-    )
     links = [
         ReleaseNoteLink(
             "LSIO release",
@@ -704,6 +699,33 @@ def _fetch_lsio_release_note(
             "lsio_release",
         )
     ]
+    if classification.change_type == "image_rebuild":
+        breaking, reasons = detect_breaking(lsio_body, context.current_tag, lsio_tag)
+        return ReleaseNoteInfo(
+            line_no=context.line_no,
+            status="ready",
+            provider=context.provider,
+            image_repo=context.image_repo,
+            upstream_repo=context.upstream_repo,
+            release_tag=lsio_tag,
+            title=str(lsio_release.get("name") or lsio_tag),
+            published_at=str(
+                lsio_release.get("published_at")
+                or lsio_release.get("created_at")
+                or ""
+            ),
+            breaking=breaking,
+            breaking_reasons=reasons,
+            links=links,
+            refreshed_at=timestamp,
+            body=lsio_body,
+            classification=classification,
+        )
+    upstream_release = _fetch_lsio_upstream_release(
+        client,
+        context.upstream_repo,
+        upstream_version,
+    )
     if upstream_release is None:
         links.append(
             ReleaseNoteLink(

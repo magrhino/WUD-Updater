@@ -274,7 +274,13 @@ class ReleaseNotesTests(unittest.TestCase):
                     "published_at": "2026-01-02T00:00:00Z",
                 },
             }
-            client = GitHubClient(fetch_json=lambda url: responses[url])
+            calls: list[str] = []
+
+            def fetch_json(url: str) -> object:
+                calls.append(url)
+                return responses[url]
+
+            client = GitHubClient(fetch_json=fetch_json)
             with open_db(":memory:") as conn:
                 init_db(conn)
                 items = refresh_release_notes(
@@ -286,6 +292,9 @@ class ReleaseNotesTests(unittest.TestCase):
 
         self.assertEqual(items[0].status, "ready")
         self.assertEqual(items[0].provider, "lsio")
+        self.assertTrue(
+            any("/repos/Radarr/Radarr/releases/tags/v5.1.0" in call for call in calls)
+        )
         self.assertEqual(
             [(link.label, link.kind) for link in items[0].links],
             [("LSIO release", "lsio_release"), ("Upstream release", "github_release")],
@@ -307,17 +316,14 @@ class ReleaseNotesTests(unittest.TestCase):
                     "body": "LinuxServer Changes:\n- Rebase to Alpine 3.20",
                     "published_at": "2026-01-02T00:00:00Z",
                 },
-                "https://api.github.com/repos/Radarr/Radarr/releases/tags/v5.1.0": {
-                    "message": "Not Found",
-                },
-                "https://api.github.com/repos/Radarr/Radarr/releases/tags/5.1.0": {
-                    "message": "Not Found",
-                },
-                "https://api.github.com/repos/Radarr/Radarr": {
-                    "html_url": "https://github.com/Radarr/Radarr",
-                },
             }
-            client = GitHubClient(fetch_json=lambda url: responses[url])
+            calls: list[str] = []
+
+            def fetch_json(url: str) -> object:
+                calls.append(url)
+                return responses[url]
+
+            client = GitHubClient(fetch_json=fetch_json)
             environ = {"UPSTREAM_MAP": str(upstream_map)}
             with open_db(":memory:") as conn:
                 init_db(conn)
@@ -330,6 +336,13 @@ class ReleaseNotesTests(unittest.TestCase):
                 cached = cached_release_notes(conn, parsed.targets, environ)
 
         self.assertEqual(items[0].classification.change_type, "image_rebuild")
+        self.assertEqual(items[0].status, "ready")
+        self.assertEqual(items[0].release_tag, "5.1.0-ls2")
+        self.assertEqual(
+            [(link.label, link.kind) for link in items[0].links],
+            [("LSIO release", "lsio_release")],
+        )
+        self.assertFalse(any("/repos/Radarr/Radarr" in call for call in calls))
         self.assertEqual(
             items[0].classification.target.build_suffix,
             "ls2",
