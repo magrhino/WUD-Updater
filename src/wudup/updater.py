@@ -31,7 +31,7 @@ from .updater_runner_operations import _RunnerOperationsMixin
 from .updater_runner_output import _RunnerOutputMixin
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Mapping, Sequence
     from pathlib import Path
 
     from .updater_models import (
@@ -40,9 +40,12 @@ if TYPE_CHECKING:
         DigestUnpinUpdate,
         FailureRecord,
         ImageState,
+        Match,
+        TagExclusionUpdate,
         UpdaterOptions,
         UpdaterProgressEvent,
     )
+    from .wud_file import ParsedWudFile, WudTarget
 
 VALID_MODES = frozenset({"pause", "stop", "live"})
 
@@ -95,7 +98,7 @@ class UpdateFromWudRunner(
         self.progress_callback = progress_callback
         self.lifecycle = StackLifecycleExecutor(self)
 
-    def run(self) -> int:
+    def _validate_options(self) -> None:
         opts = self.options
         if opts.mode not in VALID_MODES:
             raise UpdaterError("--mode must be pause|stop|live")
@@ -103,6 +106,10 @@ class UpdateFromWudRunner(
             raise UpdaterError("--max-wait must be an integer number of seconds")
         if opts.tag_overrides and not opts.allow_tag_updates:
             raise UpdaterError("--tag-override requires --allow-tag-updates")
+
+    def run(self) -> int:
+        opts = self.options
+        self._validate_options()
 
         lock = DirectoryLock(
             opts.wud_file,
@@ -155,114 +162,26 @@ class UpdateFromWudRunner(
             self._print_skipped_tag_updates(skipped_tags)
 
             if not matches and not exclusion_updates:
-                if not opts.dry_run:
-                    audit_parsed = self._audit_parsed_file(
-                        parsed,
-                        [target.line_no for target in excluded_tags.targets],
-                    )
-                    updater_audit.start_audit(self, audit_parsed)
-                    updater_audit.mark_unmatched_pending(
-                        self,
-                        audit_parsed,
-                        matches,
-                        skipped_tags,
-                    )
-                    self._mark_tag_exclusion_failures(exclusion_failures)
-                    updater_audit.finish_audit_run(
-                        self,
-                        "failure" if exclusion_failures else "success"
-                    )
-                self.log.info("No stacks matched the list; nothing to do.")
-                self._progress(
-                    "preflight",
-                    "failure" if exclusion_failures else "success",
-                    "No Compose stacks matched the selected pending entries.",
+                return self._handle_no_matches(
+                    parsed,
+                    excluded_tags,
+                    matches,
+                    skipped_tags,
+                    exclusion_failures,
                 )
-                self._progress(
-                    "completion",
-                    "failure" if exclusion_failures else "success",
-                    "Updater finished without matching a stack.",
-                )
-                return 1 if exclusion_failures else 0
 
             if matches:
                 self._print_plan(matches)
 
-            if not self._validate_tag_update_plan(matches):
-                self._progress(
-                    "preflight",
-                    "failure",
-                    "Tag update plan validation failed.",
-                    matches=matches,
-                )
-                return 1
-            if not self._validate_digest_pin_plan(matches):
-                self._progress(
-                    "preflight",
-                    "failure",
-                    "Digest-pin plan validation failed.",
-                    matches=matches,
-                )
-                return 1
-            if not self._validate_digest_unpin_plan(matches):
-                self._progress(
-                    "preflight",
-                    "failure",
-                    "Digest-unpin plan validation failed.",
-                    matches=matches,
-                )
-                return 1
-            preflight_matches = _unique_matches(
-                (
-                    *matches,
-                    *_tag_exclusion_preflight_matches(
-                        exclusion_matches,
-                        exclusion_updates,
-                    ),
-                )
+            preflight_status = self._run_preflight_checks(
+                parsed,
+                matches,
+                skipped_tags,
+                exclusion_matches,
+                exclusion_updates,
             )
-            if not self._validate_compose_runtime_ports(preflight_matches):
-                if opts.dry_run:
-                    self.log.warn(
-                        "Dry-run only; reported Compose runtime port issue without mutating."
-                    )
-                else:
-                    audit_parsed = self._audit_parsed_file(
-                        parsed,
-                        [match.target.line_no for match in preflight_matches],
-                    )
-                    self._progress(
-                        "preflight",
-                        "failure",
-                        "Compose runtime port preflight failed.",
-                        matches=preflight_matches,
-                    )
-                    return self._finish_preflight_failure(
-                        audit_parsed,
-                        preflight_matches,
-                        skipped_tags,
-                    )
-            if not self._validate_compose_bind_mount_paths(matches):
-                if opts.dry_run:
-                    self.log.warn(
-                        "Dry-run only; reported container bind-mount path issue without mutating."
-                    )
-                else:
-                    self._progress(
-                        "preflight",
-                        "failure",
-                        "Compose bind-mount preflight failed.",
-                        matches=matches,
-                    )
-                    return self._finish_preflight_failure(parsed, matches, skipped_tags)
-            if not self._validate_tag_manifests(matches):
-                self._progress(
-                    "preflight",
-                    "failure",
-                    "Target image manifest validation failed.",
-                    matches=matches,
-                )
-                return 1
+            if preflight_status is not None:
+                return preflight_status
 
             self._progress(
                 "preflight",
@@ -278,169 +197,33 @@ class UpdateFromWudRunner(
                 return 0
 
             self._confirm_before_mutation()
-            remove_line_numbers = parse_line_spec(
-                opts.remove_lines_before_run,
-                len(parsed.lines),
-                "--remove-lines-before-run",
-            )
-            in_flight_lines = sorted(
-                {match.target.line_no for match in matches}
-                | set(remove_line_numbers)
-                | {update.source_line for update in exclusion_updates}
-            )
-            audit_lines = sorted(
-                set(in_flight_lines)
-                | {target.line_no for target, _reason in exclusion_failures}
-            )
-            audit_parsed = self._audit_parsed_file(parsed, audit_lines)
-            updater_audit.start_audit(self, audit_parsed)
-            updater_audit.mark_unmatched_pending(
-                self,
-                audit_parsed,
+            audit_parsed = self._prepare_mutation(
+                parsed,
                 matches,
                 skipped_tags,
+                exclusion_updates,
+                exclusion_failures,
+                lock,
             )
-            updater_audit.mark_removed_pending(
-                self,
-                audit_parsed,
-                remove_line_numbers,
-                matches,
-            )
-            updater_audit.mark_matched_pending(self, matches, status="in_progress")
-            self._mark_tag_exclusions_pending(exclusion_updates)
-            self._mark_tag_exclusion_failures(exclusion_failures)
-            wud_file.remove_lines_before_run(
-                opts.wud_file,
-                audit_parsed,
-                in_flight_lines,
-                lock=lock,
-                owner=self.owner,
-            )
-            self.log.info("Removed in-flight WUD entries before update.")
-            lock.release_parent()
 
             exclusion_statuses = self._apply_tag_exclusions(exclusion_updates)
-            stack_statuses: dict[int, StackStatus] = {}
-            for stack in _stacks_to_update(matches):
-                stack_matches = [match for match in matches if match.stack.index == stack.index]
-                stack_statuses[stack.index] = self._update_stack(stack, stack_matches)
+            stack_statuses = self._update_matching_stacks(matches)
 
-            self._progress(
-                "cleanup",
-                "running",
-                "Reconciling pending entries after the update attempt.",
-                matches=matches,
-            )
-            failed_lines = _failed_line_numbers(matches, stack_statuses)
-            failed_lines.extend(
-                sorted(
-                    {
-                        update.source_line
-                        for update in exclusion_updates
-                        if exclusion_statuses.get(update.source_line, StackStatus("failure", "missing")).status
-                        != "success"
-                    }
-                )
-            )
-            if failed_lines:
-                stale_failed_lines = self._stale_pending_digest_line_numbers(
-                    matches,
-                    failed_lines,
-                )
-                restorable_failed_lines = [
-                    line_no
-                    for line_no in failed_lines
-                    if line_no not in stale_failed_lines
-                ]
-                if restorable_failed_lines:
-                    wud_file.restore_failed_lines(
-                        opts.wud_file,
-                        audit_parsed,
-                        restorable_failed_lines,
-                        lock=lock,
-                        owner=self.owner,
-                    )
-                    self.log.warn(f"Restored failed WUD entries in {opts.wud_file}")
-                if stale_failed_lines:
-                    stale_lines = ", ".join(
-                        str(line) for line in sorted(stale_failed_lines)
-                    )
-                    self.log.warn(
-                        "Removed stale digest WUD entries from "
-                        f"{opts.wud_file}: lines {stale_lines}. "
-                        "Refresh or replace them before retrying."
-                    )
-                self._mark_failed_lines_restored(restorable_failed_lines)
-                updater_audit.mark_failed_pending(
-                    self,
-                    matches,
-                    stack_statuses,
-                    failed_lines,
-                )
-                cleanup_message = (
-                    "Failed entries were reconciled; stale digest entries were removed."
-                    if stale_failed_lines
-                    else "Restored failed entries to the pending file."
-                )
-                self._progress(
-                    "cleanup",
-                    "failure",
-                    cleanup_message,
-                    matches=matches,
-                )
-            else:
-                self._mark_failed_lines_restored(())
-                self.log.info("Successful WUD entries were removed before update.")
-                self._progress(
-                    "cleanup",
-                    "success",
-                    "Pending entries were reconciled.",
-                    matches=matches,
-                )
-            updater_audit.mark_successful_pending(self, matches, stack_statuses)
-            self._mark_successful_tag_exclusions(exclusion_updates, exclusion_statuses)
-            updater_audit.record_update_events(
-                self,
+            self._reconcile_pending_entries(
+                audit_parsed,
                 matches,
                 stack_statuses,
-                insert_event=db.insert_update_event,
+                exclusion_updates,
+                exclusion_statuses,
+                lock,
             )
-            updater_audit.record_known_images(self, matches, stack_statuses)
-
-            fail_count = sum(
-                1 for status in stack_statuses.values() if status.status != "success"
-            ) + sum(
-                1
-                for status in exclusion_statuses.values()
-                if status.status != "success"
-            ) + len(exclusion_failures)
-            if fail_count:
-                updater_audit.finish_audit_run(self, "failure")
-                error_report = self._write_error_report()
-                if error_report is not None:
-                    self.log.error(
-                        f"Completed with {fail_count} failure(s). See log: {self.log_file}; "
-                        f"error report: {error_report}"
-                    )
-                else:
-                    self.log.error(f"Completed with {fail_count} failure(s). See log: {self.log_file}")
-                self._progress(
-                    "completion",
-                    "failure",
-                    f"Updater completed with {fail_count} failure(s).",
-                    matches=matches,
-                )
-                return 1
-
-            updater_audit.finish_audit_run(self, "success")
-            self.log.info(f"Done. See log: {self.log_file}")
-            self._progress(
-                "completion",
-                "success",
-                "Updater completed successfully.",
-                matches=matches,
+            return self._finish_run(
+                matches,
+                stack_statuses,
+                exclusion_updates,
+                exclusion_statuses,
+                exclusion_failures,
             )
-            return 0
         except (CommandError, ComposeDiscoveryError, LineSpecError, OwnerConfigError, WudLockError) as exc:
             updater_audit.finish_audit_run(self, "failure", best_effort=True)
             raise UpdaterError(str(exc)) from exc
@@ -457,6 +240,329 @@ class UpdateFromWudRunner(
             if self.audit_conn is not None:
                 self.audit_conn.close()
             lock.close()
+
+    def _handle_no_matches(
+        self,
+        parsed: ParsedWudFile,
+        excluded_tags: ParsedWudFile,
+        matches: Sequence[Match],
+        skipped_tags: Sequence[WudTarget],
+        exclusion_failures: Sequence[tuple[WudTarget, str]],
+    ) -> int:
+        status = "failure" if exclusion_failures else "success"
+        if not self.options.dry_run:
+            audit_parsed = self._audit_parsed_file(
+                parsed,
+                [target.line_no for target in excluded_tags.targets],
+            )
+            updater_audit.start_audit(self, audit_parsed)
+            updater_audit.mark_unmatched_pending(
+                self,
+                audit_parsed,
+                matches,
+                skipped_tags,
+            )
+            self._mark_tag_exclusion_failures(exclusion_failures)
+            updater_audit.finish_audit_run(self, status)
+        self.log.info("No stacks matched the list; nothing to do.")
+        self._progress(
+            "preflight",
+            status,
+            "No Compose stacks matched the selected pending entries.",
+        )
+        self._progress(
+            "completion",
+            status,
+            "Updater finished without matching a stack.",
+        )
+        return 1 if exclusion_failures else 0
+
+    def _run_preflight_checks(
+        self,
+        parsed: ParsedWudFile,
+        matches: Sequence[Match],
+        skipped_tags: Sequence[WudTarget],
+        exclusion_matches: Sequence[Match],
+        exclusion_updates: Sequence[TagExclusionUpdate],
+    ) -> int | None:
+        opts = self.options
+        if not self._validate_tag_update_plan(matches):
+            self._progress(
+                "preflight",
+                "failure",
+                "Tag update plan validation failed.",
+                matches=matches,
+            )
+            return 1
+        if not self._validate_digest_pin_plan(matches):
+            self._progress(
+                "preflight",
+                "failure",
+                "Digest-pin plan validation failed.",
+                matches=matches,
+            )
+            return 1
+        if not self._validate_digest_unpin_plan(matches):
+            self._progress(
+                "preflight",
+                "failure",
+                "Digest-unpin plan validation failed.",
+                matches=matches,
+            )
+            return 1
+
+        preflight_matches = _unique_matches(
+            (
+                *matches,
+                *_tag_exclusion_preflight_matches(
+                    exclusion_matches,
+                    exclusion_updates,
+                ),
+            )
+        )
+        if not self._validate_compose_runtime_ports(preflight_matches):
+            if opts.dry_run:
+                self.log.warn(
+                    "Dry-run only; reported Compose runtime port issue without mutating."
+                )
+            else:
+                audit_parsed = self._audit_parsed_file(
+                    parsed,
+                    [match.target.line_no for match in preflight_matches],
+                )
+                self._progress(
+                    "preflight",
+                    "failure",
+                    "Compose runtime port preflight failed.",
+                    matches=preflight_matches,
+                )
+                return self._finish_preflight_failure(
+                    audit_parsed,
+                    preflight_matches,
+                    skipped_tags,
+                )
+        if not self._validate_compose_bind_mount_paths(matches):
+            if opts.dry_run:
+                self.log.warn(
+                    "Dry-run only; reported container bind-mount path issue without mutating."
+                )
+            else:
+                self._progress(
+                    "preflight",
+                    "failure",
+                    "Compose bind-mount preflight failed.",
+                    matches=matches,
+                )
+                return self._finish_preflight_failure(parsed, matches, skipped_tags)
+        if not self._validate_tag_manifests(matches):
+            self._progress(
+                "preflight",
+                "failure",
+                "Target image manifest validation failed.",
+                matches=matches,
+            )
+            return 1
+        return None
+
+    def _prepare_mutation(
+        self,
+        parsed: ParsedWudFile,
+        matches: Sequence[Match],
+        skipped_tags: Sequence[WudTarget],
+        exclusion_updates: Sequence[TagExclusionUpdate],
+        exclusion_failures: Sequence[tuple[WudTarget, str]],
+        lock: DirectoryLock,
+    ) -> ParsedWudFile:
+        opts = self.options
+        remove_line_numbers = parse_line_spec(
+            opts.remove_lines_before_run,
+            len(parsed.lines),
+            "--remove-lines-before-run",
+        )
+        in_flight_lines = sorted(
+            {match.target.line_no for match in matches}
+            | set(remove_line_numbers)
+            | {update.source_line for update in exclusion_updates}
+        )
+        audit_lines = sorted(
+            set(in_flight_lines)
+            | {target.line_no for target, _reason in exclusion_failures}
+        )
+        audit_parsed = self._audit_parsed_file(parsed, audit_lines)
+        updater_audit.start_audit(self, audit_parsed)
+        updater_audit.mark_unmatched_pending(
+            self,
+            audit_parsed,
+            matches,
+            skipped_tags,
+        )
+        updater_audit.mark_removed_pending(
+            self,
+            audit_parsed,
+            remove_line_numbers,
+            matches,
+        )
+        updater_audit.mark_matched_pending(self, matches, status="in_progress")
+        self._mark_tag_exclusions_pending(exclusion_updates)
+        self._mark_tag_exclusion_failures(exclusion_failures)
+        wud_file.remove_lines_before_run(
+            opts.wud_file,
+            audit_parsed,
+            in_flight_lines,
+            lock=lock,
+            owner=self.owner,
+        )
+        self.log.info("Removed in-flight WUD entries before update.")
+        lock.release_parent()
+        return audit_parsed
+
+    def _update_matching_stacks(
+        self,
+        matches: Sequence[Match],
+    ) -> dict[int, StackStatus]:
+        stack_statuses: dict[int, StackStatus] = {}
+        for stack in _stacks_to_update(matches):
+            stack_matches = [
+                match for match in matches if match.stack.index == stack.index
+            ]
+            stack_statuses[stack.index] = self._update_stack(stack, stack_matches)
+        return stack_statuses
+
+    def _reconcile_pending_entries(
+        self,
+        audit_parsed: ParsedWudFile,
+        matches: Sequence[Match],
+        stack_statuses: Mapping[int, StackStatus],
+        exclusion_updates: Sequence[TagExclusionUpdate],
+        exclusion_statuses: Mapping[int, StackStatus],
+        lock: DirectoryLock,
+    ) -> None:
+        opts = self.options
+        self._progress(
+            "cleanup",
+            "running",
+            "Reconciling pending entries after the update attempt.",
+            matches=matches,
+        )
+        failed_lines = _failed_line_numbers(matches, stack_statuses)
+        failed_exclusion_lines = {
+            update.source_line
+            for update in exclusion_updates
+            if exclusion_statuses.get(
+                update.source_line,
+                StackStatus("failure", "missing"),
+            ).status
+            != "success"
+        }
+        failed_lines.extend(sorted(failed_exclusion_lines))
+        if failed_lines:
+            stale_failed_lines = self._stale_pending_digest_line_numbers(
+                matches,
+                failed_lines,
+            )
+            restorable_failed_lines = [
+                line_no
+                for line_no in failed_lines
+                if line_no not in stale_failed_lines
+            ]
+            if restorable_failed_lines:
+                wud_file.restore_failed_lines(
+                    opts.wud_file,
+                    audit_parsed,
+                    restorable_failed_lines,
+                    lock=lock,
+                    owner=self.owner,
+                )
+                self.log.warn(f"Restored failed WUD entries in {opts.wud_file}")
+            if stale_failed_lines:
+                stale_lines = ", ".join(str(line) for line in sorted(stale_failed_lines))
+                self.log.warn(
+                    "Removed stale digest WUD entries from "
+                    f"{opts.wud_file}: lines {stale_lines}. "
+                    "Refresh or replace them before retrying."
+                )
+            self._mark_failed_lines_restored(restorable_failed_lines)
+            updater_audit.mark_failed_pending(
+                self,
+                matches,
+                stack_statuses,
+                failed_lines,
+            )
+            cleanup_message = (
+                "Failed entries were reconciled; stale digest entries were removed."
+                if stale_failed_lines
+                else "Restored failed entries to the pending file."
+            )
+            self._progress(
+                "cleanup",
+                "failure",
+                cleanup_message,
+                matches=matches,
+            )
+        else:
+            self._mark_failed_lines_restored(())
+            self.log.info("Successful WUD entries were removed before update.")
+            self._progress(
+                "cleanup",
+                "success",
+                "Pending entries were reconciled.",
+                matches=matches,
+            )
+
+    def _finish_run(
+        self,
+        matches: Sequence[Match],
+        stack_statuses: Mapping[int, StackStatus],
+        exclusion_updates: Sequence[TagExclusionUpdate],
+        exclusion_statuses: Mapping[int, StackStatus],
+        exclusion_failures: Sequence[tuple[WudTarget, str]],
+    ) -> int:
+        updater_audit.mark_successful_pending(self, matches, stack_statuses)
+        self._mark_successful_tag_exclusions(exclusion_updates, exclusion_statuses)
+        updater_audit.record_update_events(
+            self,
+            matches,
+            stack_statuses,
+            insert_event=db.insert_update_event,
+        )
+        updater_audit.record_known_images(self, matches, stack_statuses)
+
+        fail_count = sum(
+            1 for status in stack_statuses.values() if status.status != "success"
+        ) + sum(
+            1
+            for status in exclusion_statuses.values()
+            if status.status != "success"
+        ) + len(exclusion_failures)
+        if fail_count:
+            updater_audit.finish_audit_run(self, "failure")
+            error_report = self._write_error_report()
+            if error_report is not None:
+                self.log.error(
+                    f"Completed with {fail_count} failure(s). "
+                    f"See log: {self.log_file}; error report: {error_report}"
+                )
+            else:
+                self.log.error(
+                    f"Completed with {fail_count} failure(s). See log: {self.log_file}"
+                )
+            self._progress(
+                "completion",
+                "failure",
+                f"Updater completed with {fail_count} failure(s).",
+                matches=matches,
+            )
+            return 1
+
+        updater_audit.finish_audit_run(self, "success")
+        self.log.info(f"Done. See log: {self.log_file}")
+        self._progress(
+            "completion",
+            "success",
+            "Updater completed successfully.",
+            matches=matches,
+        )
+        return 0
 
 def run_update_from_wud(
     options: UpdaterOptions,
