@@ -960,6 +960,11 @@ def _apply_managed_setting_update(
         _apply_discord_webhook_update(conn, value)
     elif db_key := _MANAGED_SETTING_DB_KEYS.get(key):
         _set_web_setting(conn, db_key, value)
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail=f"managed setting has no storage mapping: {key}",
+        )
 
 
 def _apply_onboarding_checklist_update(conn: sqlite3.Connection, value: str) -> None:
