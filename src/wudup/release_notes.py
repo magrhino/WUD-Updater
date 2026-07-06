@@ -873,7 +873,7 @@ def _lsio_context_upstream_version(
     lsio_tag: str,
 ) -> str:
     target = parse_lsio_tag(context.target_tag)
-    if target.kind in {"build", "version", "pseudo_semver"}:
+    if target.kind in {"build", "version"}:
         return target.upstream_version
     return _lsio_upstream_version(lsio_body, lsio_tag)
 
