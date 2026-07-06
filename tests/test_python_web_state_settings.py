@@ -589,6 +589,35 @@ def test_managed_settings_update_wraps_invalid_existing_config_error(
     assert "true or false" in detail
 
 
+def test_managed_settings_update_fails_on_unmapped_editable_key(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    monkeypatch.setitem(
+        settings_module._MANAGED_SETTING_ALLOWED_VALUES,
+        "future_setting",
+        ("enabled",),
+    )
+
+    response = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"future_setting": "enabled"}},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == (
+        "managed setting has no storage mapping: future_setting"
+    )
+
+
 def test_effective_config_wraps_invalid_stored_compose_ignore_paths_error(
     tmp_path: Path,
 ) -> None:

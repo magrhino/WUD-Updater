@@ -124,6 +124,41 @@ DEFAULT_RELEASE_NOTIFICATIONS_MODE = "digest"
 DEFAULT_RELEASE_NOTIFICATIONS_RESEND_POLICY = "remote_change"
 DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS = 86_400
 DEFAULT_RELEASE_NOTIFICATIONS_VERBOSITY = "summary"
+_MANAGED_SETTING_ALLOWED_VALUES = {
+    MANAGED_THEME_PREFERENCE_KEY: THEME_PREFERENCE_VALUES,
+    MANAGED_ONBOARDING_CHECKLIST_KEY: ONBOARDING_CHECKLIST_VALUES,
+    MANAGED_DIGEST_PIN_UPDATES_KEY: DIGEST_PIN_UPDATES_VALUES,
+    MANAGED_RELEASE_NOTES_ENABLED_KEY: RELEASE_NOTES_ENABLED_VALUES,
+    MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_KEY: (
+        RELEASE_NOTIFICATIONS_DELIVERY_MODE_VALUES
+    ),
+    MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY: RELEASE_NOTIFICATIONS_MODE_VALUES,
+    MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_KEY: (
+        RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES
+    ),
+    MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_KEY: (
+        RELEASE_NOTIFICATIONS_VERBOSITY_VALUES
+    ),
+}
+_MANAGED_SETTING_DB_KEYS = {
+    MANAGED_THEME_PREFERENCE_KEY: MANAGED_THEME_PREFERENCE_DB_KEY,
+    MANAGED_COMPOSE_IGNORE_PATHS_KEY: MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY,
+    MANAGED_DIGEST_PIN_UPDATES_KEY: MANAGED_DIGEST_PIN_UPDATES_DB_KEY,
+    MANAGED_RELEASE_NOTES_ENABLED_KEY: MANAGED_RELEASE_NOTES_ENABLED_DB_KEY,
+    MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_KEY: (
+        MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_DB_KEY
+    ),
+    MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY: MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY,
+    MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_KEY: (
+        MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_DB_KEY
+    ),
+    MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_KEY: (
+        MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY
+    ),
+    MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_KEY: (
+        MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_DB_KEY
+    ),
+}
 _DEFAULT_DISCORD_WEBHOOK_ALLOWED_HOSTS = (
     "discord.com",
     "discordapp.com",
@@ -571,12 +606,48 @@ def _managed_settings_entries_from_values(
     values: Mapping[str, str],
     settings: WebSettings,
 ) -> list[ManagedSettingEntry]:
+    return [
+        _theme_preference_entry(values),
+        _onboarding_checklist_entry(values),
+        _compose_ignore_paths_entry(values, settings),
+        _digest_pin_updates_entry(values, settings),
+        _release_notes_enabled_entry(values, settings),
+        *_release_notification_entries(values, settings),
+    ]
+
+
+def _theme_preference_entry(values: Mapping[str, str]) -> ManagedSettingEntry:
     theme_value = values.get(MANAGED_THEME_PREFERENCE_DB_KEY, "")
     theme_configured = theme_value in THEME_PREFERENCE_VALUES
+    return ManagedSettingEntry(
+        key=MANAGED_THEME_PREFERENCE_KEY,
+        value=theme_value if theme_configured else "system",
+        default_value="system",
+        source="configured" if theme_configured else "default",
+        editable=True,
+        allowed_values=list(THEME_PREFERENCE_VALUES),
+        restart_required=False,
+    )
+
+
+def _onboarding_checklist_entry(values: Mapping[str, str]) -> ManagedSettingEntry:
     onboarding_dismissed_at = values.get(ONBOARDING_DISMISSED_AT_KEY, "")
+    return ManagedSettingEntry(
+        key=MANAGED_ONBOARDING_CHECKLIST_KEY,
+        value="dismissed" if onboarding_dismissed_at else "visible",
+        default_value="visible",
+        source="configured" if onboarding_dismissed_at else "default",
+        editable=True,
+        allowed_values=list(ONBOARDING_CHECKLIST_VALUES),
+        restart_required=False,
+    )
+
+
+def _compose_ignore_paths_entry(
+    values: Mapping[str, str],
+    settings: WebSettings,
+) -> ManagedSettingEntry:
     compose_disabled_reason = _compose_ignore_paths_disabled_reason(settings)
-    digest_disabled_reason = _digest_pin_disabled_reason(settings)
-    release_notes_disabled_reason = _release_notes_enabled_disabled_reason(settings)
     if _compose_ignore_env_configured(settings):
         compose_ignore_paths = settings.config.compose_ignore_paths
         compose_configured = True
@@ -591,6 +662,23 @@ def _managed_settings_entries_from_values(
             compose_value,
             name=MANAGED_COMPOSE_IGNORE_PATHS_KEY,
         )
+    return ManagedSettingEntry(
+        key=MANAGED_COMPOSE_IGNORE_PATHS_KEY,
+        value=format_compose_ignore_paths(compose_ignore_paths),
+        default_value=format_compose_ignore_paths(DEFAULT_COMPOSE_IGNORE_PATHS),
+        source="configured" if compose_configured else "default",
+        editable=not compose_disabled_reason,
+        allowed_values=[],
+        restart_required=False,
+        disabled_reason=compose_disabled_reason,
+    )
+
+
+def _digest_pin_updates_entry(
+    values: Mapping[str, str],
+    settings: WebSettings,
+) -> ManagedSettingEntry:
+    digest_disabled_reason = _digest_pin_disabled_reason(settings)
     if _digest_pin_env_configured(settings):
         digest_pin_updates = settings.config.digest_pin_updates
         digest_configured = True
@@ -601,6 +689,23 @@ def _managed_settings_entries_from_values(
             values.get(MANAGED_DIGEST_PIN_UPDATES_DB_KEY, ""),
             default=DEFAULT_DIGEST_PIN_UPDATES,
         )
+    return ManagedSettingEntry(
+        key=MANAGED_DIGEST_PIN_UPDATES_KEY,
+        value=_format_bool(digest_pin_updates),
+        default_value=_format_bool(DEFAULT_DIGEST_PIN_UPDATES),
+        source="configured" if digest_configured else "default",
+        editable=not digest_disabled_reason,
+        allowed_values=list(DIGEST_PIN_UPDATES_VALUES),
+        restart_required=False,
+        disabled_reason=digest_disabled_reason,
+    )
+
+
+def _release_notes_enabled_entry(
+    values: Mapping[str, str],
+    settings: WebSettings,
+) -> ManagedSettingEntry:
+    release_notes_disabled_reason = _release_notes_enabled_disabled_reason(settings)
     if _release_notes_enabled_env_configured(settings):
         release_notes_enabled = bool(settings.release_notes_enabled_env)
         release_notes_configured = True
@@ -611,84 +716,31 @@ def _managed_settings_entries_from_values(
             values.get(MANAGED_RELEASE_NOTES_ENABLED_DB_KEY, ""),
             default=DEFAULT_RELEASE_NOTES_ENABLED,
         )
+    return ManagedSettingEntry(
+        key=MANAGED_RELEASE_NOTES_ENABLED_KEY,
+        value=_format_bool(release_notes_enabled),
+        default_value=_format_bool(DEFAULT_RELEASE_NOTES_ENABLED),
+        source="configured" if release_notes_configured else "default",
+        editable=not release_notes_disabled_reason,
+        allowed_values=list(RELEASE_NOTES_ENABLED_VALUES),
+        restart_required=False,
+        disabled_reason=release_notes_disabled_reason,
+    )
+
+
+def _release_notification_entries(
+    values: Mapping[str, str],
+    settings: WebSettings,
+) -> list[ManagedSettingEntry]:
     release_notification_config = _release_notification_config_from_values(values)
-    release_notifications_delivery_mode_configured = (
-        MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_DB_KEY in values
-    )
-    release_notifications_mode_configured = (
-        MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY in values
-    )
-    release_notifications_resend_policy_configured = (
-        MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_DB_KEY in values
-    )
-    release_notifications_cooldown_configured = (
-        MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY in values
-    )
-    webhook_disabled_reason = _discord_webhook_disabled_reason(settings)
-    env_webhook, _env_webhook_source = _discord_webhook_env(settings)
-    stored_webhook = values.get(MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_DB_KEY, "")
-    webhook_configured = bool(env_webhook or stored_webhook)
-    if stored_webhook and not env_webhook:
-        _validated_discord_webhook(stored_webhook)
-    release_notifications_verbosity_configured = (
-        MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_DB_KEY in values
-    )
     return [
-        ManagedSettingEntry(
-            key=MANAGED_THEME_PREFERENCE_KEY,
-            value=theme_value if theme_configured else "system",
-            default_value="system",
-            source="configured" if theme_configured else "default",
-            editable=True,
-            allowed_values=list(THEME_PREFERENCE_VALUES),
-            restart_required=False,
-        ),
-        ManagedSettingEntry(
-            key=MANAGED_ONBOARDING_CHECKLIST_KEY,
-            value="dismissed" if onboarding_dismissed_at else "visible",
-            default_value="visible",
-            source="configured" if onboarding_dismissed_at else "default",
-            editable=True,
-            allowed_values=list(ONBOARDING_CHECKLIST_VALUES),
-            restart_required=False,
-        ),
-        ManagedSettingEntry(
-            key=MANAGED_COMPOSE_IGNORE_PATHS_KEY,
-            value=format_compose_ignore_paths(compose_ignore_paths),
-            default_value=format_compose_ignore_paths(DEFAULT_COMPOSE_IGNORE_PATHS),
-            source="configured" if compose_configured else "default",
-            editable=not compose_disabled_reason,
-            allowed_values=[],
-            restart_required=False,
-            disabled_reason=compose_disabled_reason,
-        ),
-        ManagedSettingEntry(
-            key=MANAGED_DIGEST_PIN_UPDATES_KEY,
-            value=_format_bool(digest_pin_updates),
-            default_value=_format_bool(DEFAULT_DIGEST_PIN_UPDATES),
-            source="configured" if digest_configured else "default",
-            editable=not digest_disabled_reason,
-            allowed_values=list(DIGEST_PIN_UPDATES_VALUES),
-            restart_required=False,
-            disabled_reason=digest_disabled_reason,
-        ),
-        ManagedSettingEntry(
-            key=MANAGED_RELEASE_NOTES_ENABLED_KEY,
-            value=_format_bool(release_notes_enabled),
-            default_value=_format_bool(DEFAULT_RELEASE_NOTES_ENABLED),
-            source="configured" if release_notes_configured else "default",
-            editable=not release_notes_disabled_reason,
-            allowed_values=list(RELEASE_NOTES_ENABLED_VALUES),
-            restart_required=False,
-            disabled_reason=release_notes_disabled_reason,
-        ),
         ManagedSettingEntry(
             key=MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_KEY,
             value=release_notification_config.delivery_mode,
             default_value=DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE,
             source=(
                 "configured"
-                if release_notifications_delivery_mode_configured
+                if MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_DB_KEY in values
                 else "default"
             ),
             editable=True,
@@ -701,7 +753,7 @@ def _managed_settings_entries_from_values(
             default_value=DEFAULT_RELEASE_NOTIFICATIONS_MODE,
             source=(
                 "configured"
-                if release_notifications_mode_configured
+                if MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY in values
                 else "default"
             ),
             editable=True,
@@ -714,7 +766,7 @@ def _managed_settings_entries_from_values(
             default_value=DEFAULT_RELEASE_NOTIFICATIONS_RESEND_POLICY,
             source=(
                 "configured"
-                if release_notifications_resend_policy_configured
+                if MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_DB_KEY in values
                 else "default"
             ),
             editable=True,
@@ -727,32 +779,21 @@ def _managed_settings_entries_from_values(
             default_value=str(DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS),
             source=(
                 "configured"
-                if release_notifications_cooldown_configured
+                if MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY in values
                 else "default"
             ),
             editable=True,
             allowed_values=[],
             restart_required=False,
         ),
-        ManagedSettingEntry(
-            key=MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_KEY,
-            value="",
-            default_value="",
-            source="configured" if webhook_configured else "default",
-            editable=not webhook_disabled_reason,
-            allowed_values=[],
-            restart_required=False,
-            disabled_reason=webhook_disabled_reason,
-            configured=webhook_configured,
-            sensitive=True,
-        ),
+        _discord_webhook_entry(values, settings),
         ManagedSettingEntry(
             key=MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_KEY,
             value=release_notification_config.verbosity,
             default_value=DEFAULT_RELEASE_NOTIFICATIONS_VERBOSITY,
             source=(
                 "configured"
-                if release_notifications_verbosity_configured
+                if MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_DB_KEY in values
                 else "default"
             ),
             editable=True,
@@ -760,6 +801,33 @@ def _managed_settings_entries_from_values(
             restart_required=False,
         ),
     ]
+
+
+def _discord_webhook_entry(
+    values: Mapping[str, str],
+    settings: WebSettings,
+) -> ManagedSettingEntry:
+    webhook_disabled_reason = _discord_webhook_disabled_reason(settings)
+    env_webhook, _env_webhook_source = _discord_webhook_env(settings)
+    stored_webhook = values.get(
+        MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_DB_KEY,
+        "",
+    )
+    webhook_configured = bool(env_webhook or stored_webhook)
+    if stored_webhook and not env_webhook:
+        _validated_discord_webhook(stored_webhook)
+    return ManagedSettingEntry(
+        key=MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_KEY,
+        value="",
+        default_value="",
+        source="configured" if webhook_configured else "default",
+        editable=not webhook_disabled_reason,
+        allowed_values=[],
+        restart_required=False,
+        disabled_reason=webhook_disabled_reason,
+        configured=webhook_configured,
+        sensitive=True,
+    )
 
 
 def _validated_managed_setting_updates(
@@ -772,89 +840,105 @@ def _validated_managed_setting_updates(
             detail="at least one managed setting is required",
         )
 
-    allowed_values = {
-        MANAGED_THEME_PREFERENCE_KEY: THEME_PREFERENCE_VALUES,
-        MANAGED_ONBOARDING_CHECKLIST_KEY: ONBOARDING_CHECKLIST_VALUES,
-        MANAGED_DIGEST_PIN_UPDATES_KEY: DIGEST_PIN_UPDATES_VALUES,
-        MANAGED_RELEASE_NOTES_ENABLED_KEY: RELEASE_NOTES_ENABLED_VALUES,
-        MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_KEY: (
-            RELEASE_NOTIFICATIONS_DELIVERY_MODE_VALUES
-        ),
-        MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY: RELEASE_NOTIFICATIONS_MODE_VALUES,
-        MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_KEY: (
-            RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES
-        ),
-        MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_KEY: (
-            RELEASE_NOTIFICATIONS_VERBOSITY_VALUES
-        ),
-    }
     updates: dict[str, str] = {}
     for key, raw_value in payload.values.items():
-        if key == MANAGED_COMPOSE_IGNORE_PATHS_KEY:
-            if _compose_ignore_env_configured(settings):
-                raise HTTPException(
-                    status_code=422,
-                    detail=_compose_ignore_paths_disabled_reason(settings),
-                )
-            try:
-                updates[key] = format_compose_ignore_paths(
-                    parse_compose_ignore_paths(
-                        raw_value.strip(),
-                        name=MANAGED_COMPOSE_IGNORE_PATHS_KEY,
-                    )
-                )
-            except ConfigError as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
-            continue
-        if key == MANAGED_DIGEST_PIN_UPDATES_KEY and _digest_pin_env_configured(settings):
-            raise HTTPException(
-                status_code=422,
-                detail=_digest_pin_disabled_reason(settings),
-            )
-        if (
-            key == MANAGED_RELEASE_NOTES_ENABLED_KEY
-            and _release_notes_enabled_env_configured(settings)
-        ):
-            raise HTTPException(
-                status_code=422,
-                detail=_release_notes_enabled_disabled_reason(settings),
-            )
-        if key == MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_KEY:
-            try:
-                updates[key] = str(
-                    _parse_positive_int_setting(
-                        key,
-                        raw_value,
-                        DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS,
-                    )
-                )
-            except ConfigError as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
-            continue
-        if key == MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_KEY:
-            disabled_reason = _discord_webhook_disabled_reason(settings)
-            if disabled_reason:
-                raise HTTPException(status_code=422, detail=disabled_reason)
-            value = raw_value.strip()
-            try:
-                updates[key] = "" if not value else _validated_discord_webhook(value)
-            except ConfigError as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
-            continue
-        if key not in allowed_values:
-            raise HTTPException(
-                status_code=422,
-                detail=f"managed setting is not editable: {key}",
-            )
-        value = raw_value.strip()
-        if value not in allowed_values[key]:
-            options = ", ".join(allowed_values[key])
-            raise HTTPException(
-                status_code=422,
-                detail=f"{key} must be one of: {options}",
-            )
-        updates[key] = value
+        updates[key] = _validated_managed_setting_update(key, raw_value, settings)
     return updates
+
+
+def _validated_managed_setting_update(
+    key: str,
+    raw_value: str,
+    settings: WebSettings,
+) -> str:
+    if key == MANAGED_COMPOSE_IGNORE_PATHS_KEY:
+        return _validated_compose_ignore_paths_update(raw_value, settings)
+    _raise_if_setting_locked_by_env(key, settings)
+    if key == MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_KEY:
+        return _validated_cooldown_seconds_update(key, raw_value)
+    if key == MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_KEY:
+        return _validated_discord_webhook_update(raw_value, settings)
+    return _validated_choice_setting_update(key, raw_value)
+
+
+def _validated_compose_ignore_paths_update(
+    raw_value: str,
+    settings: WebSettings,
+) -> str:
+    if _compose_ignore_env_configured(settings):
+        raise HTTPException(
+            status_code=422,
+            detail=_compose_ignore_paths_disabled_reason(settings),
+        )
+    try:
+        return format_compose_ignore_paths(
+            parse_compose_ignore_paths(
+                raw_value.strip(),
+                name=MANAGED_COMPOSE_IGNORE_PATHS_KEY,
+            )
+        )
+    except ConfigError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _raise_if_setting_locked_by_env(key: str, settings: WebSettings) -> None:
+    if key == MANAGED_DIGEST_PIN_UPDATES_KEY and _digest_pin_env_configured(settings):
+        raise HTTPException(
+            status_code=422,
+            detail=_digest_pin_disabled_reason(settings),
+        )
+    if (
+        key == MANAGED_RELEASE_NOTES_ENABLED_KEY
+        and _release_notes_enabled_env_configured(settings)
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=_release_notes_enabled_disabled_reason(settings),
+        )
+
+
+def _validated_cooldown_seconds_update(key: str, raw_value: str) -> str:
+    try:
+        return str(
+            _parse_positive_int_setting(
+                key,
+                raw_value,
+                DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS,
+            )
+        )
+    except ConfigError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _validated_discord_webhook_update(
+    raw_value: str,
+    settings: WebSettings,
+) -> str:
+    disabled_reason = _discord_webhook_disabled_reason(settings)
+    if disabled_reason:
+        raise HTTPException(status_code=422, detail=disabled_reason)
+    value = raw_value.strip()
+    try:
+        return "" if not value else _validated_discord_webhook(value)
+    except ConfigError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _validated_choice_setting_update(key: str, raw_value: str) -> str:
+    allowed_values = _MANAGED_SETTING_ALLOWED_VALUES.get(key)
+    if allowed_values is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"managed setting is not editable: {key}",
+        )
+    value = raw_value.strip()
+    if value not in allowed_values:
+        options = ", ".join(allowed_values)
+        raise HTTPException(
+            status_code=422,
+            detail=f"{key} must be one of: {options}",
+        )
+    return value
 
 
 def _apply_managed_setting_updates(
@@ -862,62 +946,51 @@ def _apply_managed_setting_updates(
     updates: Mapping[str, str],
 ) -> None:
     for key, value in updates.items():
-        if key == MANAGED_THEME_PREFERENCE_KEY:
-            _set_web_setting(conn, MANAGED_THEME_PREFERENCE_DB_KEY, value)
-        elif key == MANAGED_ONBOARDING_CHECKLIST_KEY:
-            if value == "dismissed":
-                current = _web_setting(conn, ONBOARDING_DISMISSED_AT_KEY)
-                _set_web_setting(
-                    conn,
-                    ONBOARDING_DISMISSED_AT_KEY,
-                    current or utc_timestamp(),
-                )
-            else:
-                _delete_web_setting(conn, ONBOARDING_DISMISSED_AT_KEY)
-        elif key == MANAGED_COMPOSE_IGNORE_PATHS_KEY:
-            _set_web_setting(conn, MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY, value)
-        elif key == MANAGED_DIGEST_PIN_UPDATES_KEY:
-            _set_web_setting(conn, MANAGED_DIGEST_PIN_UPDATES_DB_KEY, value)
-        elif key == MANAGED_RELEASE_NOTES_ENABLED_KEY:
-            _set_web_setting(conn, MANAGED_RELEASE_NOTES_ENABLED_DB_KEY, value)
-        elif key == MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_KEY:
-            _set_web_setting(
-                conn,
-                MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_DB_KEY,
-                value,
-            )
-        elif key == MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY:
-            _set_web_setting(conn, MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY, value)
-        elif key == MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_KEY:
-            _set_web_setting(
-                conn,
-                MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_DB_KEY,
-                value,
-            )
-        elif key == MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_KEY:
-            _set_web_setting(
-                conn,
-                MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY,
-                value,
-            )
-        elif key == MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_KEY:
-            if value:
-                _set_web_setting(
-                    conn,
-                    MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_DB_KEY,
-                    value,
-                )
-            else:
-                _delete_web_setting(
-                    conn,
-                    MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_DB_KEY,
-                )
-        elif key == MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_KEY:
-            _set_web_setting(
-                conn,
-                MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_DB_KEY,
-                value,
-            )
+        _apply_managed_setting_update(conn, key, value)
+
+
+def _apply_managed_setting_update(
+    conn: sqlite3.Connection,
+    key: str,
+    value: str,
+) -> None:
+    if key == MANAGED_ONBOARDING_CHECKLIST_KEY:
+        _apply_onboarding_checklist_update(conn, value)
+    elif key == MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_KEY:
+        _apply_discord_webhook_update(conn, value)
+    elif db_key := _MANAGED_SETTING_DB_KEYS.get(key):
+        _set_web_setting(conn, db_key, value)
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail=f"managed setting has no storage mapping: {key}",
+        )
+
+
+def _apply_onboarding_checklist_update(conn: sqlite3.Connection, value: str) -> None:
+    if value == "dismissed":
+        current = _web_setting(conn, ONBOARDING_DISMISSED_AT_KEY)
+        _set_web_setting(
+            conn,
+            ONBOARDING_DISMISSED_AT_KEY,
+            current or utc_timestamp(),
+        )
+    else:
+        _delete_web_setting(conn, ONBOARDING_DISMISSED_AT_KEY)
+
+
+def _apply_discord_webhook_update(conn: sqlite3.Connection, value: str) -> None:
+    if value:
+        _set_web_setting(
+            conn,
+            MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_DB_KEY,
+            value,
+        )
+    else:
+        _delete_web_setting(
+            conn,
+            MANAGED_RELEASE_NOTIFICATIONS_DISCORD_WEBHOOK_DB_KEY,
+        )
 
 
 def _managed_settings_audit_values(
@@ -934,45 +1007,39 @@ def _managed_settings_audit_values(
 def _release_notification_config_from_values(
     values: Mapping[str, str],
 ) -> ReleaseNotificationConfig:
-    delivery_mode = values.get(
+    delivery_mode = _managed_choice_setting_value(
+        values,
         MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_DB_KEY,
         DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE,
+        MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_KEY,
+        RELEASE_NOTIFICATIONS_DELIVERY_MODE_VALUES,
     )
-    if delivery_mode not in RELEASE_NOTIFICATIONS_DELIVERY_MODE_VALUES:
-        options = ", ".join(RELEASE_NOTIFICATIONS_DELIVERY_MODE_VALUES)
-        raise ConfigError(
-            f"{MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_KEY} must be one of: {options}"
-        )
-    mode = values.get(
+    mode = _managed_choice_setting_value(
+        values,
         MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY,
         DEFAULT_RELEASE_NOTIFICATIONS_MODE,
+        MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY,
+        RELEASE_NOTIFICATIONS_MODE_VALUES,
     )
-    if mode not in RELEASE_NOTIFICATIONS_MODE_VALUES:
-        options = ", ".join(RELEASE_NOTIFICATIONS_MODE_VALUES)
-        raise ConfigError(f"{MANAGED_RELEASE_NOTIFICATIONS_MODE_KEY} must be one of: {options}")
-    resend_policy = values.get(
+    resend_policy = _managed_choice_setting_value(
+        values,
         MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_DB_KEY,
         DEFAULT_RELEASE_NOTIFICATIONS_RESEND_POLICY,
+        MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_KEY,
+        RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES,
     )
-    if resend_policy not in RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES:
-        options = ", ".join(RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES)
-        raise ConfigError(
-            f"{MANAGED_RELEASE_NOTIFICATIONS_RESEND_POLICY_KEY} must be one of: {options}"
-        )
     cooldown_seconds = _parse_positive_int_setting(
         MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_KEY,
         values.get(MANAGED_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS_DB_KEY, ""),
         DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS,
     )
-    verbosity = values.get(
+    verbosity = _managed_choice_setting_value(
+        values,
         MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_DB_KEY,
         DEFAULT_RELEASE_NOTIFICATIONS_VERBOSITY,
+        MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_KEY,
+        RELEASE_NOTIFICATIONS_VERBOSITY_VALUES,
     )
-    if verbosity not in RELEASE_NOTIFICATIONS_VERBOSITY_VALUES:
-        options = ", ".join(RELEASE_NOTIFICATIONS_VERBOSITY_VALUES)
-        raise ConfigError(
-            f"{MANAGED_RELEASE_NOTIFICATIONS_VERBOSITY_KEY} must be one of: {options}"
-        )
     return ReleaseNotificationConfig(
         delivery_mode=delivery_mode,
         mode=mode,
@@ -980,6 +1047,20 @@ def _release_notification_config_from_values(
         cooldown_seconds=cooldown_seconds,
         verbosity=verbosity,
     )
+
+
+def _managed_choice_setting_value(
+    values: Mapping[str, str],
+    db_key: str,
+    default: str,
+    setting_key: str,
+    allowed_values: Sequence[str],
+) -> str:
+    value = values.get(db_key, default)
+    if value not in allowed_values:
+        options = ", ".join(allowed_values)
+        raise ConfigError(f"{setting_key} must be one of: {options}")
+    return value
 
 
 def _parse_positive_int_setting(name: str, value: str, default: int) -> int:
