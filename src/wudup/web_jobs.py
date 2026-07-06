@@ -92,6 +92,16 @@ class ApplyJobRunContext:
     pending_source_label: str = ""
 
 
+@dataclass(frozen=True)
+class _ApplyJobStreamSnapshot:
+    job: ApplyJobResponse
+    response: ApplyJobResponse | None
+    progress_events: tuple[ApplyJobProgressEvent, ...]
+    terminal: bool
+    last_version: int
+    last_progress_count: int
+
+
 def initialize_apply_job_state(state: Any) -> None:
     state.web_apply_executor = ThreadPoolExecutor(
         max_workers=WEB_APPLY_EXECUTOR_MAX_WORKERS
@@ -315,80 +325,134 @@ def _apply_job_stream(
     last_progress_count = 0
 
     while True:
-        job_snapshot: ApplyJobResponse
-        response: ApplyJobResponse | None = None
-        progress_events: list[ApplyJobProgressEvent] = []
-        terminal = False
-        with apply_condition:
-            job = jobs.get(job_id)
-            if job is None:
-                return
-            if (
-                job.version == last_version
-                and len(job.progress) == last_progress_count
-            ):
-                apply_condition.wait(timeout=JOB_STREAM_LOG_POLL_SECONDS)
-                job = jobs.get(job_id)
-                if job is None:
-                    return
-            job_snapshot = _apply_job_response(job)
-            if job.version != last_version:
-                response = job_snapshot
-                last_version = job.version
-            if len(job.progress) > last_progress_count:
-                progress_events = job_snapshot.progress[last_progress_count:]
-                last_progress_count = len(job.progress)
-            terminal = job.status in TERMINAL_APPLY_JOB_STATUSES
-
-        log_event = ""
-        log_response = _apply_job_log_response(
-            settings,
-            job_snapshot,
-            max_bytes=log_tail_bytes,
-            safe_log_path=safe_log_path,
-            read_log_tail=read_log_tail,
+        snapshot = _apply_job_stream_snapshot(
+            jobs,
+            apply_condition,
+            job_id,
+            last_version=last_version,
+            last_progress_count=last_progress_count,
         )
-        if log_response is not None:
-            log_signature = _apply_job_log_signature(log_response)
-            should_emit_log = (
-                bool(log_response.content)
-                or bool(log_response.error)
-                or terminal
-            ) and (
-                log_signature != last_log_signature
-                or (terminal and not terminal_log_emitted)
-            )
-            if should_emit_log:
-                log_event = _sse_job_log_event(log_response)
-                last_log_signature = log_signature
-                last_heartbeat = time.monotonic()
-                if terminal:
-                    terminal_log_emitted = True
+        if snapshot is None:
+            return
+        last_version = snapshot.last_version
+        last_progress_count = snapshot.last_progress_count
 
-        if terminal and log_event:
+        log_event, last_log_signature, terminal_log_emitted = (
+            _apply_job_stream_log_event(
+                settings,
+                snapshot,
+                log_tail_bytes=log_tail_bytes,
+                safe_log_path=safe_log_path,
+                read_log_tail=read_log_tail,
+                last_log_signature=last_log_signature,
+                terminal_log_emitted=terminal_log_emitted,
+            )
+        )
+
+        if snapshot.terminal and log_event:
             yield log_event
 
-        for progress_event in progress_events:
+        for progress_event in snapshot.progress_events:
             yield _sse_job_progress_event(progress_event)
-        if progress_events:
+        if snapshot.progress_events:
             last_heartbeat = time.monotonic()
 
-        if response is not None:
-            yield _sse_job_event(response)
+        if snapshot.response is not None:
+            yield _sse_job_event(snapshot.response)
 
-        if not terminal and log_event:
+        if not snapshot.terminal and log_event:
             yield log_event
 
-        if response is not None:
+        if log_event or snapshot.response is not None:
             last_heartbeat = time.monotonic()
 
         now = time.monotonic()
-        if response is None and now - last_heartbeat >= JOB_STREAM_HEARTBEAT_SECONDS:
+        if (
+            snapshot.response is None
+            and now - last_heartbeat >= JOB_STREAM_HEARTBEAT_SECONDS
+        ):
             yield ": heartbeat\n\n"
             last_heartbeat = now
 
-        if terminal:
+        if snapshot.terminal:
             return
+
+
+def _apply_job_stream_snapshot(
+    jobs: dict[str, WebApplyJob],
+    apply_condition: Condition,
+    job_id: str,
+    *,
+    last_version: int,
+    last_progress_count: int,
+) -> _ApplyJobStreamSnapshot | None:
+    with apply_condition:
+        job = jobs.get(job_id)
+        if job is None:
+            return None
+        if job.version == last_version and len(job.progress) == last_progress_count:
+            apply_condition.wait(timeout=JOB_STREAM_LOG_POLL_SECONDS)
+            job = jobs.get(job_id)
+            if job is None:
+                return None
+        job_snapshot = _apply_job_response(job)
+        response = job_snapshot if job.version != last_version else None
+        progress_count = len(job.progress)
+        progress_events = (
+            tuple(job_snapshot.progress[last_progress_count:])
+            if progress_count > last_progress_count
+            else ()
+        )
+        return _ApplyJobStreamSnapshot(
+            job=job_snapshot,
+            response=response,
+            progress_events=progress_events,
+            terminal=job.status in TERMINAL_APPLY_JOB_STATUSES,
+            last_version=job.version if response is not None else last_version,
+            last_progress_count=(
+                progress_count
+                if progress_count > last_progress_count
+                else last_progress_count
+            ),
+        )
+
+
+def _apply_job_stream_log_event(
+    settings: WebSettings,
+    snapshot: _ApplyJobStreamSnapshot,
+    *,
+    log_tail_bytes: int,
+    safe_log_path: LogPathResolver,
+    read_log_tail: LogTailReader,
+    last_log_signature: tuple[object, ...] | None,
+    terminal_log_emitted: bool,
+) -> tuple[str, tuple[object, ...] | None, bool]:
+    log_response = _apply_job_log_response(
+        settings,
+        snapshot.job,
+        max_bytes=log_tail_bytes,
+        safe_log_path=safe_log_path,
+        read_log_tail=read_log_tail,
+    )
+    if log_response is None:
+        return "", last_log_signature, terminal_log_emitted
+
+    log_signature = _apply_job_log_signature(log_response)
+    should_emit_log = (
+        bool(log_response.content)
+        or bool(log_response.error)
+        or snapshot.terminal
+    ) and (
+        log_signature != last_log_signature
+        or (snapshot.terminal and not terminal_log_emitted)
+    )
+    if not should_emit_log:
+        return "", last_log_signature, terminal_log_emitted
+    return (
+        _sse_job_log_event(log_response),
+        log_signature,
+        terminal_log_emitted or snapshot.terminal,
+    )
 
 
 def _run_apply_job(
@@ -473,31 +537,16 @@ def _run_apply_job(
             log_file=str(runner.log_file),
         )
         status_code = runner.run()
-        job_status: ApplyJobStatus = "success" if status_code == 0 else "failure"
-        if (
-            status_code == 0
-            and run_context.pending_source_active == "api"
-            and run_context.pending_source_text is not None
-        ):
-            _refresh_api_pending_source_after_apply(
-                settings,
-                jobs,
-                apply_condition,
-                job_id,
-            )
-        auto_update_schedule_run_updater(
+        terminal_job_fields = _handle_apply_job_run_result(
             settings,
-            run_context.auto_update_schedule_keys,
-            status=job_status,
-            run_id=runner.audit_run_id,
-            error="" if status_code == 0 else f"updater exited with status {status_code}",
+            jobs,
+            apply_condition,
+            job_id,
+            runner,
+            status_code,
+            run_context,
+            auto_update_schedule_run_updater,
         )
-        terminal_job_fields = {
-            "status": job_status,
-            "run_id": runner.audit_run_id,
-            "log_file": str(runner.log_file),
-            "error": "" if status_code == 0 else f"updater exited with status {status_code}",
-        }
     except Exception as exc:
         run_id = None if runner is None else runner.audit_run_id
         _append_apply_job_progress(
@@ -524,17 +573,7 @@ def _run_apply_job(
             "error": str(exc),
         }
     finally:
-        if wud_lock is not None:
-            try:
-                wud_lock.close()
-            except Exception as exc:
-                cleanup_error = exc
-        if temp_dir is not None:
-            try:
-                temp_dir.cleanup()
-            except Exception as exc:
-                if cleanup_error is None:
-                    cleanup_error = exc
+        cleanup_error = _cleanup_apply_job_resources(wud_lock, temp_dir)
         _update_apply_job(
             jobs,
             apply_condition,
@@ -544,6 +583,74 @@ def _run_apply_job(
         )
     if cleanup_error is not None:
         raise cleanup_error
+
+
+def _handle_apply_job_run_result(
+    settings: WebSettings,
+    jobs: dict[str, WebApplyJob],
+    apply_condition: Condition,
+    job_id: str,
+    runner: UpdateFromWudRunner,
+    status_code: int,
+    run_context: ApplyJobRunContext,
+    auto_update_schedule_run_updater: AutoUpdateScheduleRunUpdater,
+) -> dict[str, object]:
+    if _should_refresh_api_pending_source(status_code, run_context):
+        _refresh_api_pending_source_after_apply(
+            settings,
+            jobs,
+            apply_condition,
+            job_id,
+        )
+    job_status: ApplyJobStatus = "success" if status_code == 0 else "failure"
+    error = _apply_job_exit_error(status_code)
+    auto_update_schedule_run_updater(
+        settings,
+        run_context.auto_update_schedule_keys,
+        status=job_status,
+        run_id=runner.audit_run_id,
+        error=error,
+    )
+    return {
+        "status": job_status,
+        "run_id": runner.audit_run_id,
+        "log_file": str(runner.log_file),
+        "error": error,
+    }
+
+
+def _should_refresh_api_pending_source(
+    status_code: int,
+    run_context: ApplyJobRunContext,
+) -> bool:
+    return (
+        status_code == 0
+        and run_context.pending_source_active == "api"
+        and run_context.pending_source_text is not None
+    )
+
+
+def _apply_job_exit_error(status_code: int) -> str:
+    return "" if status_code == 0 else f"updater exited with status {status_code}"
+
+
+def _cleanup_apply_job_resources(
+    wud_lock: DirectoryLock | None,
+    temp_dir: tempfile.TemporaryDirectory[str] | None,
+) -> Exception | None:
+    cleanup_error: Exception | None = None
+    if wud_lock is not None:
+        try:
+            wud_lock.close()
+        except Exception as exc:
+            cleanup_error = exc
+    if temp_dir is not None:
+        try:
+            temp_dir.cleanup()
+        except Exception as exc:
+            if cleanup_error is None:
+                cleanup_error = exc
+    return cleanup_error
 
 
 def _refresh_api_pending_source_after_apply(
