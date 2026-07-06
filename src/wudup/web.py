@@ -705,6 +705,7 @@ def api_status(request: Request) -> web_models.StatusResponse:
         wud_file_exists=settings.config.wud_out_file.is_file(),
         pending_count=pending.count,
         pending_source=pending.source,
+        source_hash=pending.source_hash,
         db_path=str(settings.config.db_path),
         db_ready=db_ready,
         auth_required=settings.auth_required,

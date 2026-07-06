@@ -886,6 +886,7 @@ export interface StatusResponse {
   wud_file_exists: boolean;
   pending_count: number;
   pending_source: PendingSourceInfo;
+  source_hash: string;
   db_path: string;
   db_ready: boolean;
   auth_required: boolean;

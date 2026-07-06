@@ -109,6 +109,45 @@ def test_poll_sends_wud_api_notifications_without_trigger_token(
     assert metadata["actor_type"] == notifications_module.SCHEDULER_ACTOR_TYPE
 
 
+def test_poll_refreshes_cached_wud_api_source_before_sending(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    containers: list[dict[str, object]] = []
+    _install_wud_api(
+        monkeypatch,
+        containers=containers,
+        triggers={"docker.local.app": (200, [])},
+    )
+    _fake_release_refresh(monkeypatch)
+    posted = _capture_discord_posts(monkeypatch)
+    client = _client(
+        tmp_path,
+        {
+            **_ENV,
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.notification-refresh.test:3000",
+        },
+    )
+    try:
+        assert client.get("/api/v1/status").json()["pending_count"] == 0
+        containers.append(_wud_api_container(name="app"))
+
+        response = notifications_module.poll_wud_api_release_notifications(
+            client.app.state.web_settings,
+        )
+        pending = client.get("/api/v1/pending").json()
+    finally:
+        _shutdown(client)
+
+    assert response is not None
+    assert response.sent is True
+    assert response.source.active == "api"
+    assert len(posted) == 1
+    assert pending["source"]["active"] == "api"
+    assert pending["count"] == 1
+
+
 def test_poll_skips_duplicate_notifications(
     tmp_path: Path,
     monkeypatch,

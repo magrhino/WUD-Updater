@@ -109,7 +109,9 @@ const {
 });
 
 let clearPreflightHandler: () => void = () => undefined;
-let loadPendingAndReleaseNotesHandler: () => Promise<void> = async () => undefined;
+let loadPendingAndReleaseNotesHandler: (
+  options?: { preserveCleanup?: boolean },
+) => Promise<void> = async () => undefined;
 let pendingLoadRetry: Promise<void> | null = null;
 const showReleaseNotificationModal = ref(false);
 const releaseNotificationSource = ref<ReleaseNotificationSource | null>(null);
@@ -518,7 +520,8 @@ const {
 });
 
 clearPreflightHandler = clearPreflight;
-loadPendingAndReleaseNotesHandler = () => loadPendingAndReleaseNotes();
+loadPendingAndReleaseNotesHandler = (options = {}) =>
+  loadPendingAndReleaseNotes(options);
 useRouteRefresh(() => updates.loadPending());
 
 function retryPendingLoadTracked(): Promise<void> {
@@ -632,11 +635,15 @@ async function refreshPendingMetadataFromStatus(): Promise<void> {
   pendingMetadataRefreshInFlight.value = true;
   try {
     await connection.loadStatus({ silent: true });
-    const checkedAt = connection.status?.wud_api.last_checked_at ?? "";
-    if (!checkedAt || checkedAt === updates.pendingWudMetadataCheckedAt) {
+    const sourceHash = connection.status?.source_hash ?? "";
+    if (sourceHash && sourceHash !== (updates.pending?.source_hash ?? "")) {
+      await loadPendingAndReleaseNotesHandler({ preserveCleanup: true });
       return;
     }
-    await updates.refreshPendingMetadata();
+    const checkedAt = connection.status?.wud_api.last_checked_at ?? "";
+    if (checkedAt && checkedAt !== updates.pendingWudMetadataCheckedAt) {
+      await updates.refreshPendingMetadata();
+    }
   } finally {
     pendingMetadataRefreshInFlight.value = false;
   }

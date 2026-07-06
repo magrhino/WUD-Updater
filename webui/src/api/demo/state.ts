@@ -590,6 +590,7 @@ export class DemoApiState {
       mutations_enabled: false,
       auto_update_scheduler_enabled: false,
       pending_count: this.pendingResponse().count,
+      source_hash: this.pendingResponse().source_hash ?? "",
     };
   }
 
@@ -959,8 +960,8 @@ export class DemoApiState {
     const reportedDigest = normalizeSecurityDigest(item.digest);
     const platform = pendingItemPlatform(item);
     const decision = this.securityScanDecision(reportedDigest, platform, firstExact);
-    const severityCounts = this.securityScanCounts(decision.hasFindings);
-    const fixableCounts = this.securityScanCounts(decision.hasFindings);
+    const severityCounts = this.securityScanSeverityCounts(decision.hasFindings);
+    const fixableCounts = this.securityScanSeverityCounts(decision.hasFindings);
     const findings = decision.hasFindings
       ? [
           {
@@ -1061,7 +1062,7 @@ export class DemoApiState {
     };
   }
 
-  private securityScanCounts(
+  private securityScanSeverityCounts(
     hasFindings: boolean,
   ): SecurityScanSeverityCounts {
     if (hasFindings) {

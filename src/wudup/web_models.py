@@ -899,6 +899,7 @@ class StatusResponse(BaseModel):
     wud_file_exists: bool
     pending_count: int
     pending_source: PendingSourceInfo = Field(default_factory=PendingSourceInfo)
+    source_hash: str = ""
     db_path: str
     db_ready: bool
     auth_required: bool

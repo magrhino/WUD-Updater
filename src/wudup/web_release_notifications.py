@@ -15,7 +15,12 @@ from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException, Request
 
-from . import web_pending_sources, web_release_notification_state, web_wud_api
+from . import (
+    web_pending_sources,
+    web_release_notification_state,
+    web_wud_api,
+    web_wud_refresh,
+)
 from .config import VALID_UPDATE_MODES
 from .db import DatabaseError, init_db, open_db, utc_timestamp
 from .release_notes import refresh_release_notes
@@ -178,11 +183,12 @@ def poll_wud_api_release_notifications(
             return None
         raise
 
-    source = web_pending_sources.resolve_pending_source(
-        api_settings,
+    source = web_wud_refresh.refresh_wud_pending_source(
+        settings,
         include_wud_metadata=True,
-        force_api=True,
-    )
+        force=True,
+        api_source=True,
+    ).source
     if (
         source.degraded
         or source.wud_snapshot is None
@@ -204,6 +210,7 @@ def poll_wud_api_release_notifications(
             payload,
             request=None,
             actor_type=SCHEDULER_ACTOR_TYPE,
+            pending_source=source,
         )
     except HTTPException as exc:
         if exc.status_code == 422 and exc.detail == NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL:
@@ -243,10 +250,16 @@ def send_release_notifications(
     *,
     request: Request | None,
     actor_type: str | None = None,
+    pending_source: web_pending_sources.PendingSourceResult | None = None,
 ) -> ReleaseNotificationResponse:
     webhook = require_release_notification_sendable(settings)
 
-    response = _notification_response(settings, payload, sent=False)
+    response = _notification_response(
+        settings,
+        payload,
+        sent=False,
+        pending_source=pending_source,
+    )
     if response.sendable_count <= 0:
         raise HTTPException(
             status_code=422,
@@ -419,6 +432,7 @@ def _notification_response(
     payload: ReleaseNotificationPreviewRequest,
     *,
     sent: bool,
+    pending_source: web_pending_sources.PendingSourceResult | None = None,
 ) -> ReleaseNotificationResponse:
     enabled = effective_release_notes_enabled(settings)
     notification_config = effective_release_notification_config(settings)
@@ -437,7 +451,7 @@ def _notification_response(
             sent=sent,
         )
 
-    source = _notification_source(settings, payload)
+    source = _notification_source(settings, payload, pending_source=pending_source)
     if not source.targets:
         return ReleaseNotificationResponse(
             enabled=True,
@@ -481,22 +495,30 @@ def _notification_response(
 def _notification_source(
     settings: WebSettings,
     payload: ReleaseNotificationPreviewRequest,
+    *,
+    pending_source: web_pending_sources.PendingSourceResult | None = None,
 ) -> _NotificationSource:
     if payload.run_id is not None:
         return _run_notification_source(settings, payload.run_id)
-    return _pending_notification_source(settings, payload.line_numbers)
+    return _pending_notification_source(
+        settings,
+        payload.line_numbers,
+        pending_source=pending_source,
+    )
 
 
 def _pending_notification_source(
     settings: WebSettings,
     line_numbers: Sequence[int],
+    *,
+    pending_source: web_pending_sources.PendingSourceResult | None = None,
 ) -> _NotificationSource:
     selected_line_numbers = _unique_line_numbers(line_numbers)
     try:
-        source = web_pending_sources.resolve_pending_source(
+        source = pending_source or web_wud_refresh.refresh_wud_pending_source(
             settings,
             include_wud_metadata=True,
-        )
+        ).source
     except OSError as exc:
         raise HTTPException(
             status_code=500,
