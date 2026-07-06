@@ -57,7 +57,7 @@ oneline() {
 }
 
 normalize_repo() {
-  local value="$1" owner repo rest
+  local value="${1:-}" owner repo rest
   value="${value#https://github.com/}"
   value="${value#http://github.com/}"
   value="${value#git@github.com:}"
@@ -71,6 +71,8 @@ normalize_repo() {
   case "$owner/$repo" in
     *[!A-Za-z0-9_.-]*/*|*/*[!A-Za-z0-9_.-]*)
       return 1
+      ;;
+    *)
       ;;
   esac
   printf '%s/%s\n' "$owner" "$repo"
@@ -169,7 +171,7 @@ if [[ "$#" -gt 0 ]]; then
 fi
 
 norm_color() {
-  local color="$1"
+  local color="${1:-}"
   if [[ "$color" =~ ^0x[0-9A-Fa-f]+$ ]]; then
     printf '%d' "$((color))"
   else
@@ -180,7 +182,7 @@ norm_color() {
 DISCORD_COLOR="$(norm_color "$COLOR_HEX")"
 
 api_get() {
-  local url="$1" tmp
+  local url="${1:-}" tmp
   local -a headers
   headers=(-H "Accept: application/vnd.github+json" -H "User-Agent: wudup-release-notes/1.0")
   [[ -n "${GITHUB_TOKEN:-}" ]] && headers+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
@@ -195,7 +197,7 @@ api_get() {
 }
 
 lookup_upstream() {
-  local key="$1"
+  local key="${1:-}"
   [[ -r "$UPSTREAM_MAP" ]] || return 1
   awk -v k="$key" -F: '
     $0 ~ /^[[:space:]]*#/ { next }
@@ -211,7 +213,7 @@ lookup_upstream() {
 }
 
 extract_github_source_repo() {
-  local source="$1"
+  local source="${1:-}"
   local owner repo
   [[ "$source" == *github.com* ]] || return 1
   owner="$(sed -E 's#.*github\.com[:/]+([^/]+)/.*#\1#' <<<"$source")"
@@ -221,7 +223,7 @@ extract_github_source_repo() {
 }
 
 extract_ghcr_repo() {
-  local image="$1" without_digest path owner repo rest
+  local image="${1:-}" without_digest path owner repo rest
   without_digest="${image%%@sha256:*}"
   without_digest="${without_digest%%:*}"
   case "$without_digest" in
@@ -234,7 +236,7 @@ extract_ghcr_repo() {
 }
 
 extract_lsio_repo_from_image() {
-  local value="$1" repo base
+  local value="${1:-}" repo base
   value="${value%%@sha256:*}"
   value="${value%%:*}"
   case "$value" in
@@ -251,12 +253,13 @@ extract_lsio_repo_from_image() {
 }
 
 release_json_value() {
-  local json="$1" key="$2"
+  local json="${1:-}" key="${2:-}"
   jq -r --arg key "$key" '.[$key] // ""' <<<"$json" | oneline
 }
 
 fetch_github_release() {
-  local owner="$1" repo="$2" tag="${3:-}" rel="" list="" list_type="" repo_json="" candidate real
+  local owner="${1:-}" repo="${2:-}" tag="${3:-}"
+  local rel list list_type repo_json candidate real
   local -a candidates
 
   if [[ -n "$tag" ]]; then
@@ -271,6 +274,8 @@ fetch_github_release() {
           dbg "Could not resolve latest via redirect; using API latest endpoint"
           tag=""
         fi
+        ;;
+      *)
         ;;
     esac
   fi
@@ -326,7 +331,7 @@ fetch_github_release() {
 
 
 build_context_line_generic() {
-  local image="$1" repo="$2" tag="$3" left
+  local image="${1:-}" repo="${2:-}" tag="${3:-}" left
 
   left="\`$repo\`"
   [[ -n "$image" ]] && left="\`$image\`"
@@ -338,7 +343,7 @@ build_context_line_generic() {
 }
 
 build_context_line_lsio() {
-  local image="$1" lsio_tag="$2" alpine="$3" tag_suffix
+  local image="${1:-}" lsio_tag="${2:-}" alpine="${3:-}" tag_suffix
 
   tag_suffix="$(awk -F- '{print $NF}' <<<"$lsio_tag")"
   if [[ -n "$alpine" ]]; then
@@ -349,7 +354,7 @@ build_context_line_lsio() {
 }
 
 build_description() {
-  local context="$1" body="$2" owner="$3" repo="$4"
+  local context="${1:-}" body="${2:-}" owner="${3:-}" repo="${4:-}"
   local key_bullets intro_text rep_changes line
   local -a lines
 
@@ -384,7 +389,7 @@ build_description() {
 }
 
 send_or_print_payload() {
-  local payload="$1"
+  local payload="${1:-}"
   if [[ -z "$WEBHOOK" ]]; then
     printf '%s\n' "$payload"
     return 0
@@ -634,5 +639,7 @@ case "$PROVIDER" in
       exit 2
     }
     run_lsio
+    ;;
+  *)
     ;;
 esac

@@ -69,6 +69,13 @@ const EMPTY_SECURITY_COUNTS: SecurityScanSeverityCounts = {
   low: 0,
   unknown: 0,
 };
+const DEMO_FINDING_SECURITY_COUNTS: SecurityScanSeverityCounts = {
+  critical: 0,
+  high: 1,
+  medium: 0,
+  low: 0,
+  unknown: 0,
+};
 
 type DemoSecurityScanDecision = {
   hasFindings: boolean;
@@ -952,8 +959,8 @@ export class DemoApiState {
     const reportedDigest = normalizeSecurityDigest(item.digest);
     const platform = pendingItemPlatform(item);
     const decision = this.securityScanDecision(reportedDigest, platform, firstExact);
-    const severityCounts = this.securityScanSeverityCounts(decision.hasFindings);
-    const fixableCounts = this.securityScanFixableCounts(decision.hasFindings);
+    const severityCounts = this.securityScanCounts(decision.hasFindings);
+    const fixableCounts = this.securityScanCounts(decision.hasFindings);
     const findings = decision.hasFindings
       ? [
           {
@@ -1054,20 +1061,11 @@ export class DemoApiState {
     };
   }
 
-  private securityScanSeverityCounts(
+  private securityScanCounts(
     hasFindings: boolean,
   ): SecurityScanSeverityCounts {
     if (hasFindings) {
-      return { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 };
-    }
-    return { ...EMPTY_SECURITY_COUNTS };
-  }
-
-  private securityScanFixableCounts(
-    hasFindings: boolean,
-  ): SecurityScanSeverityCounts {
-    if (hasFindings) {
-      return { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 };
+      return { ...DEMO_FINDING_SECURITY_COUNTS };
     }
     return { ...EMPTY_SECURITY_COUNTS };
   }
