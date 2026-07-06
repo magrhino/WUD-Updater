@@ -482,25 +482,17 @@ def _run_apply_job(
         started_at=utc_timestamp(),
     )
     runner: UpdateFromWudRunner | None = None
-    temp_dir: tempfile.TemporaryDirectory[str] | None = None
     terminal_job_fields: dict[str, object] = {
         "status": "failure",
         "run_id": None,
         "log_file": "",
         "error": "apply job did not complete",
     }
-    cleanup_error: Exception | None = None
+    temp_dir: tempfile.TemporaryDirectory[str] | None = None
     try:
-        wud_file_override: Path | None = None
-        wud_file_label_override: str | None = None
-        if run_context.pending_source_text is not None:
-            temp_dir = tempfile.TemporaryDirectory(prefix="wudup-api-pending-")
-            wud_file_override = Path(temp_dir.name) / "images.todo"
-            wud_file_override.write_text(
-                run_context.pending_source_text,
-                encoding="utf-8",
-            )
-            wud_file_label_override = run_context.pending_source_label or "WUD API"
+        temp_dir, wud_file_override, wud_file_label_override = (
+            _pending_source_wud_file(run_context)
+        )
         options = _apply_options(
             settings,
             line_numbers=line_numbers,
@@ -585,6 +577,22 @@ def _run_apply_job(
         raise cleanup_error
 
 
+def _pending_source_wud_file(
+    run_context: ApplyJobRunContext,
+) -> tuple[tempfile.TemporaryDirectory[str] | None, Path | None, str | None]:
+    if run_context.pending_source_text is None:
+        return None, None, None
+
+    temp_dir = tempfile.TemporaryDirectory(prefix="wudup-api-pending-")
+    wud_file = Path(temp_dir.name) / "images.todo"
+    try:
+        wud_file.write_text(run_context.pending_source_text, encoding="utf-8")
+    except Exception:
+        temp_dir.cleanup()
+        raise
+    return temp_dir, wud_file, run_context.pending_source_label or "WUD API"
+
+
 def _handle_apply_job_run_result(
     settings: WebSettings,
     jobs: dict[str, WebApplyJob],
@@ -595,7 +603,7 @@ def _handle_apply_job_run_result(
     run_context: ApplyJobRunContext,
     auto_update_schedule_run_updater: AutoUpdateScheduleRunUpdater,
 ) -> dict[str, object]:
-    if _should_refresh_api_pending_source(status_code, run_context):
+    if _should_refresh_api_pending_source_after_apply(status_code, run_context):
         _refresh_api_pending_source_after_apply(
             settings,
             jobs,
@@ -619,7 +627,7 @@ def _handle_apply_job_run_result(
     }
 
 
-def _should_refresh_api_pending_source(
+def _should_refresh_api_pending_source_after_apply(
     status_code: int,
     run_context: ApplyJobRunContext,
 ) -> bool:
