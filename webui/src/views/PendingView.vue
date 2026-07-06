@@ -539,13 +539,23 @@ function retryPendingLoadTracked(): Promise<void> {
 
 async function refreshAfterTerminalApplyJob(): Promise<void> {
   const job = updates.applyJob;
-  if (job?.status === "success" && !updates.pending) {
-    if (pendingLoadRetry) {
-      await pendingLoadRetry;
-    } else if (updates.loading) {
-      return;
-    } else {
-      await updates.loadPending();
+  if (job?.status === "success") {
+    if (!updates.pending) {
+      if (pendingLoadRetry) {
+        await pendingLoadRetry;
+      } else if (updates.loading) {
+        return;
+      } else {
+        await updates.loadPending();
+      }
+    }
+    if (updates.pending?.source.active === "api") {
+      try {
+        await updates.rescanPending("selected", job.selected_line_numbers);
+        return;
+      } catch {
+        // Fall back to the standard refresh below.
+      }
     }
   }
   await loadPendingAndReleaseNotesHandler();
