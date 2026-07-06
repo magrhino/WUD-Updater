@@ -11,6 +11,7 @@ from contextlib import closing
 from dataclasses import replace
 from importlib.resources import files
 from pathlib import Path
+from typing import cast
 
 from fastapi import HTTPException, Request
 
@@ -1154,11 +1155,17 @@ def _webui_settings_entries(
         public_origin=settings.public_origin,
         bind_host=bind_host,
     )
-    default_static_settings: WebSettings = replace(
-        settings,
-        static_dir=_resolve_static_dir(None),
+    default_static_settings = cast(
+        WebSettings,
+        replace(
+            settings,
+            static_dir=_resolve_static_dir(None),
+        ),
     )
-    default_secure_settings: WebSettings = replace(settings, secure_cookies="auto")
+    default_secure_settings = cast(
+        WebSettings,
+        replace(settings, secure_cookies="auto"),
+    )
     return [
         _settings_entry(
             "WUD_WEB_AUTH_REQUIRED",
