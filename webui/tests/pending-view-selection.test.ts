@@ -173,7 +173,7 @@ describe("pending view selection actions", () => {
     expect(cleanupPending).not.toHaveBeenCalled();
   });
 
-  it("reloads pending from status timestamp changes while mounted", async () => {
+  it("refreshes pending metadata from status timestamp changes while mounted", async () => {
     vi.useFakeTimers();
     const { pinia, connection, settings, updates } = setupStores(true);
     updates.pending = pendingResponse();
@@ -206,10 +206,10 @@ describe("pending view selection actions", () => {
 
       expect(loadStatus).toHaveBeenCalledTimes(1);
       expect(loadStatus).toHaveBeenCalledWith({ silent: true });
-      expect(refreshPendingMetadata).not.toHaveBeenCalled();
-      expect(lifecycle.loadPending).toHaveBeenCalledWith({ preserveCleanup: true });
-      expect(lifecycle.loadReleaseNotes).toHaveBeenCalledTimes(1);
-      expect(lifecycle.loadSecurityScans).toHaveBeenCalledTimes(1);
+      expect(refreshPendingMetadata).toHaveBeenCalledTimes(1);
+      expect(lifecycle.loadPending).not.toHaveBeenCalled();
+      expect(lifecycle.loadReleaseNotes).not.toHaveBeenCalled();
+      expect(lifecycle.loadSecurityScans).not.toHaveBeenCalled();
       expect(selectedInput().element.checked).toBe(true);
 
       wrapper.unmount();
@@ -217,7 +217,8 @@ describe("pending view selection actions", () => {
       await flushPromises();
 
       expect(loadStatus).toHaveBeenCalledTimes(1);
-      expect(lifecycle.loadPending).toHaveBeenCalledTimes(1);
+      expect(refreshPendingMetadata).toHaveBeenCalledTimes(1);
+      expect(lifecycle.loadPending).not.toHaveBeenCalled();
     } finally {
       wrapper.unmount();
       vi.useRealTimers();

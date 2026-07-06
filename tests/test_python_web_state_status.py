@@ -70,6 +70,32 @@ def test_status_counts_pending_without_resolving_groups(tmp_path: Path) -> None:
     assert _fake_docker_calls(fake_root) == ""
 
 
+def test_status_reports_wud_api_metadata_for_file_pending_source(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(monkeypatch, containers=[_wud_api_container(name="app")])
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_PENDING_SOURCE": "file",
+            "WUD_API_BASE_URL": "https://wud.status-file-metadata.test:3000",
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:1.0\n", encoding="utf-8")
+
+    response = client.get("/api/v1/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["pending_source"]["active"] == "file"
+    assert body["pending_count"] == 1
+    assert body["wud_api"]["state"] == "ready"
+    assert body["wud_api"]["metadata_available"] is True
+
+
 def test_status_reports_current_pending_source_hash_and_wud_snapshot(
     tmp_path: Path,
     monkeypatch,

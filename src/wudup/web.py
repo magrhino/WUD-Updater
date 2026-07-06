@@ -694,6 +694,7 @@ def api_status(request: Request) -> web_models.StatusResponse:
         include_wud_metadata=False,
     )
     db_ready, db_warning = web_database.database_ready(settings)
+    wud_api = web_wud_api.get_snapshot(settings, include_containers=True)
     warnings = list(pending.warnings)
     if db_warning:
         warnings.append(db_warning)
@@ -714,7 +715,7 @@ def api_status(request: Request) -> web_models.StatusResponse:
         timezone=settings.config.timezone_name,
         auto_update_scheduler_enabled=settings.mutations_enabled,
         static_spa_available=web_static.static_spa_available(settings),
-        wud_api=pending.wud_api,
+        wud_api=wud_api.status,
         warnings=warnings,
     )
 
