@@ -664,6 +664,41 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertEqual(items[0].release_tag, "v5.2.2")
         self.assertEqual(items[0].classification.change_type, "upstream_update")
 
+    def test_lsio_release_body_overrides_plain_wud_remote_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            upstream_map = Path(tmp) / "upstreams.txt"
+            upstream_map.write_text(
+                "linuxserver/docker-qbittorrent: qbittorrent/qBittorrent\n",
+                encoding="utf-8",
+            )
+            parsed = parse_wud_text(
+                "ghcr.io/linuxserver/qbittorrent:5.1.4 tag=14.3.9\n"
+            )
+            responses = {
+                "https://api.github.com/repos/linuxserver/docker-qbittorrent/releases/latest": {
+                    "tag_name": "5.2.2_v2.0.13-ls465",
+                    "name": "5.2.2_v2.0.13-ls465",
+                    "html_url": "https://github.com/linuxserver/docker-qbittorrent/releases/tag/5.2.2_v2.0.13-ls465",
+                    "body": "Remote Changes:\n- Updating to 5.2.2_v2.0.13",
+                    "published_at": "2026-07-05T09:42:00Z",
+                },
+                **qbittorrent_upstream_responses("5.2.2_v2.0.13"),
+            }
+            client = GitHubClient(fetch_json=lambda url: responses[url])
+            with open_db(":memory:") as conn:
+                init_db(conn)
+                items = refresh_release_notes(
+                    conn,
+                    parsed.targets,
+                    {"UPSTREAM_MAP": str(upstream_map)},
+                    client=client,
+                )
+
+        self.assertEqual(items[0].status, "ready")
+        self.assertEqual(items[0].release_tag, "v5.2.2")
+        self.assertTrue(items[0].links[0].url.endswith("/5.2.2_v2.0.13-ls465"))
+        self.assertEqual(items[0].classification.change_type, "upstream_update")
+
     def test_github_latest_candidate_from_lsio_info_requires_release_link(self) -> None:
         for status in ("ready", "not_found"):
             with self.subTest(status=status):
