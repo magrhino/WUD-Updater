@@ -58,16 +58,16 @@ class _CommentTokenList:
         self._replace(tokens)
 
 
-def apply_compose_tag_updates(
+def _load_compose_yaml(
     compose_path: Path,
-    updates: Sequence[TagUpdate],
-) -> tuple[AppliedTagUpdate, ...]:
-    if not updates:
-        return ()
-
+    *,
+    width: int | None = None,
+) -> tuple[str, YAML, CommentedMap, CommentedMap]:
     source = compose_path.read_text(encoding="utf-8")
     yaml = YAML(typ="rt")
     yaml.preserve_quotes = True
+    if width is not None:
+        yaml.width = width
     try:
         parsed = yaml.load(source)
     except YAMLError as exc:
@@ -79,46 +79,218 @@ def apply_compose_tag_updates(
     services = parsed.get("services")
     if not isinstance(services, CommentedMap):
         raise ComposeTagRewriteError("Compose file has no services mapping.")
+    return source, yaml, parsed, services
 
+
+def _dump_compose_yaml(yaml: YAML, parsed: CommentedMap) -> str:
+    output = StringIO()
+    yaml.dump(parsed, output)
+    return output.getvalue()
+
+
+def _require_update_services(old_image: str, services: Sequence[str]) -> None:
+    if not services:
+        raise ComposeTagRewriteError(
+            f"No compose service was mapped for {old_image}."
+        )
+
+
+def _rewrite_service_config(
+    services: CommentedMap,
+    service: str,
+    *,
+    direct_image_required: bool,
+) -> CommentedMap:
+    service_config = _direct_service_config(services, service)
+    _reject_yaml_anchor_or_alias_service_config(
+        services,
+        service,
+        service_config,
+    )
+    has_direct_image = _commented_map_has_direct_key(service_config, "image")
+    if not has_direct_image and (
+        direct_image_required or service_config.get("image") is not None
+    ):
+        raise ComposeTagRewriteError(
+            f"Service {service} image is inherited and needs manual review."
+        )
+    _reject_yaml_anchor_or_alias_image_value(services, service, service_config)
+    return service_config
+
+
+def _unique_image_rewrite(
+    services: CommentedMap,
+    service: str,
+    old_image: str,
+    source: str,
+    line_offsets: Sequence[int],
+    seen_spans: set[tuple[int, int]],
+) -> tuple[int, int, str]:
+    start, end, replacement_prefix = _service_image_scalar_rewrite(
+        services,
+        service,
+        old_image,
+        source,
+        line_offsets,
+    )
+    _reject_duplicate_image_span(seen_spans, (start, end), service, old_image)
+    return start, end, replacement_prefix
+
+
+def _unique_image_span(
+    services: CommentedMap,
+    service: str,
+    expected_image: str,
+    source: str,
+    line_offsets: Sequence[int],
+    seen_spans: set[tuple[int, int]],
+    *,
+    selected_image: str,
+) -> tuple[int, int]:
+    span = _service_image_scalar_span(
+        services,
+        service,
+        expected_image,
+        source,
+        line_offsets,
+    )
+    _reject_duplicate_image_span(seen_spans, span, service, selected_image)
+    return span
+
+
+def _reject_duplicate_image_span(
+    seen_spans: set[tuple[int, int]],
+    span: tuple[int, int],
+    service: str,
+    image: str,
+) -> None:
+    if span in seen_spans:
+        raise ComposeTagRewriteError(
+            f"Service {service} image for {image} was selected more than once."
+        )
+    seen_spans.add(span)
+
+
+def _prepare_service_labels(
+    services: CommentedMap,
+    service: str,
+    service_config: CommentedMap,
+) -> None:
+    _materialize_inherited_service_labels(service_config, service)
+    labels = service_config.get("labels")
+    if labels is not None:
+        _reject_yaml_anchor_or_alias_labels(services, service, labels)
+
+
+def _digest_pin_expected_image(
+    service: str,
+    current_image: object,
+    update: DigestPinUpdate,
+) -> str:
+    if current_image == update.resolved_image:
+        return update.resolved_image
+    if current_image == update.old_image:
+        return update.old_image
+    raise ComposeTagRewriteError(
+        f"Service {service} image is {current_image}, expected "
+        f"{update.old_image} or {update.resolved_image}."
+    )
+
+
+def _digest_pin_label_rewrite_or_raise(
+    *,
+    stack_name: str,
+    service: str,
+    current_image: str,
+    current_label_value: str,
+    update: DigestPinUpdate,
+    approvals: Sequence[DigestPinLabelRewriteApproval],
+) -> DigestPinLabelRewrite | None:
+    label_rewrite = _digest_pin_label_rewrite(
+        stack_name=stack_name,
+        service=service,
+        current_image=current_image,
+        current_label_value=current_label_value,
+        update=update,
+        approvals=approvals,
+    )
+    if label_rewrite is None:
+        return None
+    if label_rewrite.reason != "approval-required":
+        return label_rewrite
+    raise DigestPinLabelRewriteApprovalRequired(
+        service=label_rewrite.service,
+        label_key=label_rewrite.label_key,
+        current_label_value=label_rewrite.current_label_value,
+        planned_tag=label_rewrite.planned_tag,
+        proposed_label_value=label_rewrite.proposed_label_value,
+        proposed_label_regex=label_rewrite.proposed_label_regex,
+    )
+
+
+def _validate_service_image(
+    service: str,
+    current_image: object,
+    expected_image: str,
+) -> None:
+    if current_image == expected_image:
+        return
+    raise ComposeTagRewriteError(
+        f"Service {service} image is {current_image}, expected {expected_image}."
+    )
+
+
+def _validate_service_resolved_tag_marker(
+    services: CommentedMap,
+    service: str,
+    service_config: CommentedMap,
+    expected_tag: str,
+    *,
+    stack_name: str,
+) -> None:
+    marker_tag = _service_resolved_tag_marker(
+        services,
+        service,
+        service_config,
+    )
+    if not marker_tag or marker_tag == expected_tag:
+        return
+    label = f"{stack_name} " if stack_name else ""
+    raise ComposeTagRewriteError(
+        f"{label}Service {service} resolved-tag marker is "
+        f"{marker_tag}, expected {expected_tag}."
+    )
+
+
+def apply_compose_tag_updates(
+    compose_path: Path,
+    updates: Sequence[TagUpdate],
+) -> tuple[AppliedTagUpdate, ...]:
+    if not updates:
+        return ()
+
+    source, _yaml, _parsed, services = _load_compose_yaml(compose_path)
     line_offsets = _line_start_offsets(source)
     spans: list[tuple[int, int, str, TagUpdate]] = []
     counts = {id(update): 0 for update in updates}
     seen_spans: set[tuple[int, int]] = set()
 
     for update in updates:
-        if not update.services:
-            raise ComposeTagRewriteError(
-                f"No compose service was mapped for {update.old_image}."
-            )
+        _require_update_services(update.old_image, update.services)
         for service in update.services:
-            service_config = _direct_service_config(services, service)
-            _reject_yaml_anchor_or_alias_service_config(
+            _rewrite_service_config(
                 services,
                 service,
-                service_config,
+                direct_image_required=False,
             )
-            if (
-                not _commented_map_has_direct_key(service_config, "image")
-                and service_config.get("image") is not None
-            ):
-                raise ComposeTagRewriteError(
-                    f"Service {service} image is inherited and needs manual review."
-                )
-            _reject_yaml_anchor_or_alias_image_value(services, service, service_config)
-            span_start, span_end, replacement_prefix = _service_image_scalar_rewrite(
+            span_start, span_end, replacement_prefix = _unique_image_rewrite(
                 services,
                 service,
                 update.old_image,
                 source,
                 line_offsets,
+                seen_spans,
             )
-            span = (span_start, span_end)
-            if span in seen_spans:
-                raise ComposeTagRewriteError(
-                    f"Service {service} image for {update.old_image} was "
-                    "selected more than once."
-                )
-            seen_spans.add(span)
             spans.append(
                 (
                     span_start,
@@ -224,76 +396,37 @@ def render_compose_digest_pins(
     if not updates:
         return compose_path.read_text(encoding="utf-8"), ()
 
-    source = compose_path.read_text(encoding="utf-8")
-    yaml = YAML(typ="rt")
-    yaml.preserve_quotes = True
-    yaml.width = 4096
-    try:
-        parsed = yaml.load(source)
-    except YAMLError as exc:
-        raise ComposeTagRewriteError(
-            f"Compose file YAML could not be parsed: {exc}"
-        ) from exc
-    if not isinstance(parsed, CommentedMap):
-        raise ComposeTagRewriteError("Compose file is not a YAML mapping.")
-    services = parsed.get("services")
-    if not isinstance(services, CommentedMap):
-        raise ComposeTagRewriteError("Compose file has no services mapping.")
-
+    source, yaml, parsed, services = _load_compose_yaml(compose_path, width=4096)
     line_offsets = _line_start_offsets(source)
     counts = {id(update): 0 for update in updates}
     label_rewrites = {id(update): [] for update in updates}
     seen_spans: set[tuple[int, int]] = set()
 
     for update in updates:
-        if not update.services:
-            raise ComposeTagRewriteError(
-                f"No compose service was mapped for {update.old_image}."
-            )
+        _require_update_services(update.old_image, update.services)
         for service in update.services:
-            service_config = _direct_service_config(services, service)
-            _reject_yaml_anchor_or_alias_service_config(
+            service_config = _rewrite_service_config(
                 services,
                 service,
-                service_config,
+                direct_image_required=True,
             )
-            if not _commented_map_has_direct_key(service_config, "image"):
-                raise ComposeTagRewriteError(
-                    f"Service {service} image is inherited and needs manual review."
-                )
-            _reject_yaml_anchor_or_alias_image_value(services, service, service_config)
             current_image = service_config.get("image")
-            if current_image == update.resolved_image:
-                expected_image = update.resolved_image
-            elif current_image == update.old_image:
-                expected_image = update.old_image
-            else:
-                raise ComposeTagRewriteError(
-                    f"Service {service} image is {current_image}, expected "
-                    f"{update.old_image} or {update.resolved_image}."
-                )
-            span = _service_image_scalar_span(
+            expected_image = _digest_pin_expected_image(service, current_image, update)
+            _unique_image_span(
                 services,
                 service,
                 expected_image,
                 source,
                 line_offsets,
+                seen_spans,
+                selected_image=update.old_image,
             )
-            if span in seen_spans:
-                raise ComposeTagRewriteError(
-                    f"Service {service} image for {update.old_image} was "
-                    "selected more than once."
-                )
-            seen_spans.add(span)
 
-            _materialize_inherited_service_labels(service_config, service)
-            labels = service_config.get("labels")
-            if labels is not None:
-                _reject_yaml_anchor_or_alias_labels(services, service, labels)
+            _prepare_service_labels(services, service, service_config)
             current_include = compose_unescape_dollars(
                 _get_service_label_value(service_config, update.label_key)
             )
-            label_rewrite = _digest_pin_label_rewrite(
+            label_rewrite = _digest_pin_label_rewrite_or_raise(
                 stack_name=stack_name,
                 service=service,
                 current_image=str(current_image),
@@ -303,15 +436,6 @@ def render_compose_digest_pins(
             )
             if label_rewrite is not None:
                 label_rewrites[id(update)].append(label_rewrite)
-                if label_rewrite.reason == "approval-required":
-                    raise DigestPinLabelRewriteApprovalRequired(
-                        service=label_rewrite.service,
-                        label_key=label_rewrite.label_key,
-                        current_label_value=label_rewrite.current_label_value,
-                        planned_tag=label_rewrite.planned_tag,
-                        proposed_label_value=label_rewrite.proposed_label_value,
-                        proposed_label_regex=label_rewrite.proposed_label_regex,
-                    )
             _set_service_label_value(
                 service_config,
                 update.label_key,
@@ -324,8 +448,6 @@ def render_compose_digest_pins(
             )
             counts[id(update)] += 1
 
-    output = StringIO()
-    yaml.dump(parsed, output)
     applied = tuple(
         AppliedDigestPinUpdate(
             old_image=update.old_image,
@@ -345,7 +467,7 @@ def render_compose_digest_pins(
     )
     if any(item.replacements < 1 for item in applied):
         return "", ()
-    return output.getvalue(), applied
+    return _dump_compose_yaml(yaml, parsed), applied
 
 
 def render_compose_digest_unpins(
@@ -359,78 +481,40 @@ def render_compose_digest_unpins(
     if not updates:
         return compose_path.read_text(encoding="utf-8"), ()
 
-    source = compose_path.read_text(encoding="utf-8")
-    yaml = YAML(typ="rt")
-    yaml.preserve_quotes = True
-    try:
-        parsed = yaml.load(source)
-    except YAMLError as exc:
-        raise ComposeTagRewriteError(
-            f"Compose file YAML could not be parsed: {exc}"
-        ) from exc
-    if not isinstance(parsed, CommentedMap):
-        raise ComposeTagRewriteError("Compose file is not a YAML mapping.")
-    services = parsed.get("services")
-    if not isinstance(services, CommentedMap):
-        raise ComposeTagRewriteError("Compose file has no services mapping.")
-
+    source, yaml, parsed, services = _load_compose_yaml(compose_path)
     line_offsets = _line_start_offsets(source)
     counts = {id(update): 0 for update in updates}
     seen_spans: set[tuple[int, int]] = set()
 
     for update in updates:
-        if not update.services:
-            raise ComposeTagRewriteError(
-                f"No compose service was mapped for {update.old_image}."
-            )
+        _require_update_services(update.old_image, update.services)
         for service in update.services:
-            service_config = _direct_service_config(services, service)
-            _reject_yaml_anchor_or_alias_service_config(
+            service_config = _rewrite_service_config(
                 services,
                 service,
-                service_config,
+                direct_image_required=True,
             )
-            if not _commented_map_has_direct_key(service_config, "image"):
-                raise ComposeTagRewriteError(
-                    f"Service {service} image is inherited and needs manual review."
-                )
-            _reject_yaml_anchor_or_alias_image_value(services, service, service_config)
             current_image = service_config.get("image")
-            if current_image != update.old_image:
-                raise ComposeTagRewriteError(
-                    f"Service {service} image is {current_image}, expected "
-                    f"{update.old_image}."
-                )
-            span = _service_image_scalar_span(
+            _validate_service_image(service, current_image, update.old_image)
+            _unique_image_span(
                 services,
                 service,
                 update.old_image,
                 source,
                 line_offsets,
+                seen_spans,
+                selected_image=update.old_image,
             )
-            if span in seen_spans:
-                raise ComposeTagRewriteError(
-                    f"Service {service} image for {update.old_image} was "
-                    "selected more than once."
-                )
-            seen_spans.add(span)
 
-            marker_tag = _service_resolved_tag_marker(
+            _validate_service_resolved_tag_marker(
                 services,
                 service,
                 service_config,
+                update.watch_tag,
+                stack_name=stack_name,
             )
-            if marker_tag and marker_tag != update.watch_tag:
-                label = f"{stack_name} " if stack_name else ""
-                raise ComposeTagRewriteError(
-                    f"{label}Service {service} resolved-tag marker is "
-                    f"{marker_tag}, expected {update.watch_tag}."
-                )
 
-            _materialize_inherited_service_labels(service_config, service)
-            labels = service_config.get("labels")
-            if labels is not None:
-                _reject_yaml_anchor_or_alias_labels(services, service, labels)
+            _prepare_service_labels(services, service, service_config)
             current_include = _get_service_label_value(service_config, update.label_key)
             _validate_digest_unpin_include(
                 stack_name=stack_name,
@@ -452,8 +536,6 @@ def render_compose_digest_unpins(
             service_config["image"] = update.tag_image
             counts[id(update)] += 1
 
-    output = StringIO()
-    yaml.dump(parsed, output)
     applied = tuple(
         AppliedDigestUnpinUpdate(
             old_image=update.old_image,
@@ -472,7 +554,7 @@ def render_compose_digest_unpins(
     )
     if any(item.replacements < 1 for item in applied):
         return "", ()
-    return output.getvalue(), applied
+    return _dump_compose_yaml(yaml, parsed), applied
 
 
 def render_compose_tag_exclusions(
@@ -486,21 +568,7 @@ def render_compose_tag_exclusions(
     if not updates:
         return compose_path.read_text(encoding="utf-8"), ()
 
-    source = compose_path.read_text(encoding="utf-8")
-    yaml = YAML(typ="rt")
-    yaml.preserve_quotes = True
-    try:
-        parsed = yaml.load(source)
-    except YAMLError as exc:
-        raise ComposeTagRewriteError(
-            f"Compose file YAML could not be parsed: {exc}"
-        ) from exc
-    if not isinstance(parsed, CommentedMap):
-        raise ComposeTagRewriteError("Compose file is not a YAML mapping.")
-    services = parsed.get("services")
-    if not isinstance(services, CommentedMap):
-        raise ComposeTagRewriteError("Compose file has no services mapping.")
-
+    source, yaml, parsed, services = _load_compose_yaml(compose_path)
     line_offsets = _line_start_offsets(source)
     service_tags: dict[str, set[str]] = {}
     service_repos: dict[str, str] = {}
@@ -525,10 +593,7 @@ def render_compose_tag_exclusions(
                 f"Service {service} is not a mapping with direct labels."
             )
         _reject_yaml_anchor_or_alias_service_config(services, service, service_config)
-        _materialize_inherited_service_labels(service_config, service)
-        labels = service_config.get("labels")
-        if labels is not None:
-            _reject_yaml_anchor_or_alias_labels(services, service, labels)
+        _prepare_service_labels(services, service, service_config)
         existing_tags = set(existing_exact_tags.get(service, set()))
         new_tags = existing_tags | service_tags[service]
         current_value = _get_service_label_value(service_config, "wud.tag.exclude")
@@ -555,9 +620,7 @@ def render_compose_tag_exclusions(
             )
         )
 
-    output = StringIO()
-    yaml.dump(parsed, output)
-    return output.getvalue(), tuple(applied)
+    return _dump_compose_yaml(yaml, parsed), tuple(applied)
 
 
 def service_resolved_tag_marker(
@@ -568,20 +631,7 @@ def service_resolved_tag_marker(
 ) -> str:
     """Return the WUD digest-pin resolved tag marker for one service, if present."""
 
-    source = compose_path.read_text(encoding="utf-8")
-    yaml = YAML(typ="rt")
-    yaml.preserve_quotes = True
-    try:
-        parsed = yaml.load(source)
-    except YAMLError as exc:
-        raise ComposeTagRewriteError(
-            f"Compose file YAML could not be parsed: {exc}"
-        ) from exc
-    if not isinstance(parsed, CommentedMap):
-        raise ComposeTagRewriteError("Compose file is not a YAML mapping.")
-    services = parsed.get("services")
-    if not isinstance(services, CommentedMap):
-        raise ComposeTagRewriteError("Compose file has no services mapping.")
+    _source, _yaml, _parsed, services = _load_compose_yaml(compose_path)
     service_config = _direct_service_config(services, service)
     if expected_image and service_config.get("image") != expected_image:
         raise ComposeTagRewriteError(
