@@ -29,6 +29,6 @@ def refresh_wud_pending_source(
     source = web_pending_sources.resolve_pending_source(
         active_settings,
         include_wud_metadata=include_wud_metadata,
-        force_api=False if watch_all else force,
+        force_api=force,
     )
     return WudPendingRefresh(source=source, watch_result=watch_result)

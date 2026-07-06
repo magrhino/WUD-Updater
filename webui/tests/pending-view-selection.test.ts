@@ -232,6 +232,7 @@ describe("pending view selection actions", () => {
     const lifecycle = mockPendingLifecycle(settings, updates);
     vi.spyOn(connection, "loadStatus").mockImplementation(async () => {
       connection.status = statusResponse({
+        // Compared against updates.pending.source_hash, not the prior poll result.
         source_hash: "changed-source-hash",
         wud_api: wudApiStatus({
           last_checked_at: updates.pendingWudMetadataCheckedAt,
