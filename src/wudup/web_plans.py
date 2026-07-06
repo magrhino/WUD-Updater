@@ -174,7 +174,7 @@ def build_web_plan(
     force_api: bool = False,
 ) -> DryRunPlan:
     base_config = _effective_config(settings)
-    config = (
+    config: UpdaterConfig = (
         base_config
         if update_mode_override is None
         else replace(base_config, update_mode=update_mode_override)
