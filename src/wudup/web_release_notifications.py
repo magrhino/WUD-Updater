@@ -983,7 +983,6 @@ def _payload_batches(
         }
         batches.append(
             {
-                "index": len(batches) + 1,
                 "count": len(batch_items),
                 "items": batch_items,
                 "payload": payload,
