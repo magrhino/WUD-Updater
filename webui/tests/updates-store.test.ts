@@ -2,12 +2,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { flushPromises } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  webApi,
-  type SecurityScanJobResponse,
-  type SecurityScanInfo,
-  type SecurityScansResponse,
-} from "../src/api/client";
+import { webApi } from "../src/api/client";
 import { useAuthStore } from "../src/stores/auth";
 import { useConnectionStore } from "../src/stores/connection";
 import { useSettingsStore } from "../src/stores/settings";
@@ -26,6 +21,7 @@ import {
 import {
   applyJobLogResponse,
   applyJobResponse,
+  completeSecurityScanInfo,
   pendingItem,
   pendingResponse,
   pendingRescanResponse,
@@ -38,7 +34,8 @@ import {
   retagPreviewJobResponse,
   retagTarget,
   retagTargetsResponse,
-  securityScanInfo as baseSecurityScanInfo,
+  securityScanJobResponse,
+  securityScansResponse,
   planResponse,
   selfUpdateApplyResponse,
   selfUpdatePlanResponse,
@@ -104,67 +101,6 @@ function expectReleaseChangelogFetches(fetchMock: ReturnType<typeof vi.fn>): voi
     "https://api.github.com/repos/t-mart/mousehole/releases/tags/v0.5.0",
   );
   expect(fetchMock.mock.calls[1][0]).toBe(TEST_CHANGELOG_URL);
-}
-
-function completeSecurityScanInfo(
-  overrides: Partial<SecurityScanInfo> = {},
-): SecurityScanInfo {
-  return baseSecurityScanInfo({
-    state: "complete",
-    verdict: "findings",
-    scanner_version: "test",
-    scanner_schema: "2",
-    scanned_at: "2026-06-26T00:00:00+00:00",
-    severity_counts: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
-    fixable_counts: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
-    subject: {
-      requested_ref: "repo/app:1.0",
-      reported_digest: "sha256:test",
-      manifest_digest: "sha256:test-child",
-      platform: "linux/amd64",
-    },
-    ...overrides,
-  });
-}
-
-function securityScansResponse(
-  items: SecurityScanInfo[],
-  overrides: Partial<SecurityScansResponse> = {},
-): SecurityScansResponse {
-  return {
-    source_file: "/out/images.todo",
-    source: {
-      configured: "file",
-      active: "file",
-      label: "Pending file",
-      fresh: true,
-      degraded: false,
-      fallback_reason: "",
-      detail: "",
-    },
-    source_hash: "pending-source-hash",
-    scanning_enabled: true,
-    scanner: "trivy",
-    scan_mode: "registry",
-    count: items.length,
-    items,
-    warnings: [],
-    ...overrides,
-  };
-}
-
-function securityScanJobResponse(
-  overrides: Partial<SecurityScanJobResponse> = {},
-): SecurityScanJobResponse {
-  return {
-    job_id: "security-scan-test",
-    status: "success",
-    total_count: 1,
-    completed_count: 1,
-    result: securityScansResponse([completeSecurityScanInfo()]),
-    error: "",
-    ...overrides,
-  };
 }
 
 describe("updates store", () => {
