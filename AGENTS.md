@@ -21,10 +21,10 @@ Repo-local routing/context only for WUDup. Global instructions control default b
 | `webui/` | Vue 3/Vite/TypeScript SPA for the read-only WebUI plus static GitHub Pages demo mode. | `webui/AGENTS.md`, then the owning store/API/component and focused tests. | Follow scoped frontend, store, and demo guidance. | Public demo mutation backends or machine-specific dev assumptions. |
 | `Makefile` | Developer convenience targets for WebUI demo state and local dev. | `Makefile`, `webui/package.json`, `webui/scripts/*`, and relevant tests. | Keep targets thin wrappers around checked-in scripts; do not hard-code machine-specific paths. | Production install or release behavior unless the task explicitly targets it. |
 | `wud/on-update.sh`, `wud/append-updates.sh` | WUD notification callback and line-oriented update-list writer. | Both files plus WUD env variable usage. | Keep POSIX `sh` compatibility and container defaults for `/wud` and `/out`. | Host-specific paths, secrets, or behavior that belongs in `bin/`. |
-| `wud/release-notes-to-discord.sh`, `wud/github-release-embed.sh`, `wud/tag-manager.sh`, `wud/http.sh`, `wud/upstreams.txt` | Canonical shell Discord/GitHub release-note router, compatibility wrappers, shared HTTP behavior, and LinuxServer.io upstream mapping. | `wud/release-notes-to-discord.sh`, wrapper entrypoint when compatibility is involved, `wud/http.sh`, `wud/upstreams.txt`, and `src/wudup/release_notes.py` for WebUI metadata. | Keep WUD callbacks shell-based; keep legacy wrapper arguments/env accepted; keep webhook/token values environment-driven and redacted in logs. Preserve standardized `curl`/`jq`-based GitHub and Discord behavior. | Network calls unless validating release-note behavior. |
+| `wud/release-notes-to-discord.sh`, `wud/release-parser.sh`, `wud/github-release-embed.sh`, `wud/tag-manager.sh`, `wud/http.sh`, `wud/upstreams.txt` | Canonical shell Discord/GitHub release-note router, parser, compatibility wrappers, shared HTTP behavior, and LinuxServer.io upstream mapping. | `wud/release-notes-to-discord.sh`, `wud/release-parser.sh` when parsing is involved, wrapper entrypoint when compatibility is involved, `wud/http.sh`, `wud/upstreams.txt`, and `src/wudup/release_notes.py` for WebUI metadata. | Keep WUD callbacks shell-based; keep legacy wrapper arguments/env accepted; keep webhook/token values environment-driven and redacted in logs. Preserve standardized `curl`/`jq`-based GitHub and Discord behavior. | Network calls unless validating release-note behavior. |
 | `install.sh` | Idempotent installer that chmods scripts and creates host symlinks for CLI commands and WUD scripts. | `install.sh`, then README install section. | Preserve refusal to replace non-symlink targets and existing env overrides. | Changing default target layout unless the task asks for installer behavior changes. |
 | `Dockerfile`, `entrypoint.sh`, `docs/examples/docker-compose.example.yml`, `docs/examples/docker-compose.webui.yml`, `docs/examples/docker-compose.hardened.yml`, `docs/examples/docker-compose.truenas.yml`, `docs/examples/docker-compose.build.yml`, `.dockerignore` | Container packaging for running the updater helpers with Docker CLI access, the long-running WebUI container, and optional TrueNAS API reachability. | `README.md`, `docs/DEPLOYMENT.md`, `entrypoint.sh`, `bin/updates`, `bin/docker-update-from-wud`, `src/wudup/web.py` for WebUI examples. | Keep the default command non-mutating, keep WebUI examples read-only unless mutation work is explicit, preserve command dispatch, keep Docker socket or socket-proxy access and host stack mounts explicit, and keep TrueNAS API keys secret-file based in examples. | Replacing WUD's separate `/wud` script mount, enabling WebUI mutations by default, or baking version-specific TrueNAS clients into the default image. |
-| `tests/` | Local test runner, focused shell tests, Python tests, fake command implementations, WebUI backend tests, and Docker E2E harnesses. | `tests/run-all.sh`, then the focused test for the behavior being changed. | Keep tests temp-dir based; fake Docker for default tests; reserve real Docker mutations for explicit Docker-gated harnesses; keep Python dev dependencies explicit in `pyproject.toml`. | Adding dependencies or broad fixtures when a small shell fake, unittest, or Docker-gated E2E fixture is enough. |
+| `tests/` | Local test runner, focused shell tests, Python tests, fake command implementations, WebUI backend tests, and Docker E2E harnesses. | `tests/AGENTS.md`, `tests/run-all.sh`, then the focused test for the behavior being changed. | Follow scoped test ownership and validation guidance. | Adding dependencies or broad fixtures when a small shell fake, unittest, or Docker-gated E2E fixture is enough. |
 | `.github/workflows/ci.yml` | Cost-conscious CI for PRs to `main`, pushes to `main`, optional macOS/Docker checks, Docker E2E, and workflow linting. | `tests/run-all.sh`, `tests/container-build.sh`, `tests/e2e-docker-compose.sh`, workflow file. | Keep default CI Linux-only; keep macOS gated by `ci:macos` or manual dispatch; keep Docker build gated by `ci:docker`, manual dispatch, or image-impacting path changes; keep Docker E2E separate and gated by `ci:e2e`, manual dispatch, or image-impacting path changes. Ensure new Compose examples are covered by container-build config validation. | Scheduled workflows, broad matrices, caches, artifacts, or always-on macOS/Docker jobs unless explicitly requested. |
 | `.github/dependabot.yml`, `renovate.json` | Dependency update automation. Dependabot owns pip, npm, and GitHub Actions; Renovate owns Dockerfile image tags. | Existing updater configs and `Dockerfile` when image updates are involved. | Keep managers split so Renovate handles only Dockerfile image tags; preserve stable-only Docker update behavior. | Enabling overlapping Docker managers or broad Renovate managers without explicitly disabling duplicates. |
 | `.github/workflows/webui-demo-pages.yml` | Static GitHub Pages deployment for the public fixture-backed WebUI demo. | `webui/package.json`, `webui/vite.config.ts`, `docs/DEVELOPMENT.md`, workflow file. | Build only static assets with demo mode; keep Pages permissions narrow; never deploy FastAPI, fake Docker, SQLite, dev auth bypass, or real mutation backends. | Server-side demo hosting, secrets, custom domains, or Pages environment assumptions unless requested. |
@@ -49,6 +49,7 @@ Repo-local routing/context only for WUDup. Global instructions control default b
 ## Scoped AGENTS
 
 - `src/wudup/AGENTS.md` owns Python backend module boundaries, WebUI backend safety, updater compatibility, and focused Python test guidance.
+- `tests/AGENTS.md` owns test ownership, shared test helpers, and focused test validation.
 - `webui/AGENTS.md` owns frontend state, typed API client, components/views, static demo, and frontend validation guidance.
 - Prefer the closest scoped file over expanding root; nested guidance should replace duplicated root detail.
 
@@ -65,7 +66,7 @@ Use the shell already used by the target script.
 |---|---|
 | install | `./install.sh` |
 | shell lint | `shellcheck install.sh bin/updates bin/docker-update-from-wud wud/*.sh` |
-| Bash syntax check | `bash -n install.sh bin/updates bin/docker-update-from-wud wud/http.sh wud/release-notes-to-discord.sh wud/github-release-embed.sh wud/tag-manager.sh` |
+| Bash syntax check | `bash -n install.sh bin/updates bin/docker-update-from-wud wud/http.sh wud/release-parser.sh wud/release-notes-to-discord.sh wud/github-release-embed.sh wud/tag-manager.sh` |
 | POSIX syntax check | `sh -n wud/on-update.sh wud/append-updates.sh` |
 | updater dry run | `bin/docker-update-from-wud --base "$DOCKER_BASE" --file "$WUD_OUT_FILE" --dry-run` |
 | host status dry run | `bin/updates --dry-run` |
@@ -76,6 +77,7 @@ Use the shell already used by the target script.
 | full local test suite | `tests/run-all.sh` |
 | updater behavior tests | `tests/test-docker-update-from-wud.sh` |
 | WUD append tests | `tests/test-wud-append-updates.sh` |
+| release parser tests | `tests/test-release-parser.sh` |
 | release-note payload tests | `tests/test-release-notes-to-discord.sh` |
 | installer tests | `tests/test-install.sh` |
 | host wrapper tests | `tests/test-updates-wrapper.sh` |
@@ -104,7 +106,7 @@ Use the shell already used by the target script.
 - Installer change: run `tests/test-install.sh`; tests should use temp env overrides for `BIN_DIR`, `DOCKER_BASE`, `WUD_SCRIPTS_LINK`, and `WUD_OUT_DIR`.
 - Host wrapper change: run `tests/test-updates-wrapper.sh`; fake `sudo` and configured updater commands rather than invoking real system mutation.
 - Container packaging change: run `bash -n entrypoint.sh`, ShellCheck through `tests/run-all.sh`, `tests/test-entrypoint.sh`, and `tests/container-build.sh` when Docker is available. Run `tests/e2e-docker-compose.sh` when Docker socket, updater handoff, WUD script sync, or real Compose update behavior changes. The container build test validates Compose config, including the TrueNAS API example, builds the image, and smoke-runs the default non-mutating command; the Docker E2E test uses a local registry and real Compose stack to verify update and callback wiring.
-- Release-note behavior change: syntax-check the touched scripts, run ShellCheck, run `tests/test-release-notes-to-discord.sh`, and avoid live Discord/GitHub calls unless explicitly requested or needed. For wrapper compatibility changes, cover `wud/github-release-embed.sh` and `wud/tag-manager.sh` legacy invocation paths. For WebUI release-note metadata changes, also follow the scoped Python/WebUI validation files.
+- Release-note behavior change: syntax-check the touched scripts, run ShellCheck, run `tests/test-release-parser.sh` when parser behavior changes, run `tests/test-release-notes-to-discord.sh`, and avoid live Discord/GitHub calls unless explicitly requested or needed. For wrapper compatibility changes, cover `wud/github-release-embed.sh` and `wud/tag-manager.sh` legacy invocation paths. For WebUI release-note metadata changes, also follow the scoped Python/WebUI validation files.
 - Python updater/config change: use `src/wudup/AGENTS.md`.
 - Rich terminal rendering change: create or update focused tests that exercise the Rich-enabled path for the touched surface, using mocks when local Rich is unavailable; run `python3 -m unittest tests.test_python_terminal` plus Python syntax checks before broader suites.
 - WebUI frontend change: use `webui/AGENTS.md`; also use `src/wudup/AGENTS.md` when API contracts or auth assumptions change.
@@ -139,8 +141,7 @@ Do not read or edit unless directly required.
 
 ## Nested AGENTS Suggestions
 
-Intentional scoped guides: `src/wudup/AGENTS.md` and `webui/AGENTS.md`.
-Do not add `tests/AGENTS.md` until focused backend test files make test ownership stable enough to replace root guidance.
+Intentional scoped guides: `src/wudup/AGENTS.md`, `tests/AGENTS.md`, and `webui/AGENTS.md`.
 
 ## Edit Discipline
 
