@@ -175,10 +175,13 @@ const retagTargetTagError = computed(() => {
 const unavailable = computed(() => updates.retagTargets?.status === "unavailable");
 const loaded = computed(() => updates.retagTargets !== null);
 const mutationsEnabled = computed(() => auth.session?.mutations_enabled === true);
-const retagMutationDisabled = computed(() => !isDemoMode && !mutationsEnabled.value);
+const retagMutationDisabled = computed(() => !mutationsEnabled.value);
+const retagChoiceDisabled = computed(
+  () => !isDemoMode && retagMutationDisabled.value,
+);
 const retagMutationNotice = computed(() => {
   if (isDemoMode) {
-    return "Demo mode retag apply runs only in this browser session.";
+    return "Static demo mode is read-only. Preview stays available; apply is disabled.";
   }
   if (!mutationsEnabled.value) {
     return "Read-only mode keeps retag switch/apply disabled.";
@@ -288,7 +291,7 @@ const bulkSelectionDisabled = computed(
   () =>
     updates.loading ||
     applyJobActive.value ||
-    retagMutationDisabled.value ||
+    retagChoiceDisabled.value ||
     unavailable.value,
 );
 const retagAllDisabled = computed(
@@ -370,7 +373,7 @@ async function previewRetagChanges(): Promise<void> {
 }
 
 async function onGithubLatestFallbackUpdate(enabled: boolean): Promise<void> {
-  if (updates.loading || retagMutationDisabled.value) {
+  if (updates.loading || retagChoiceDisabled.value) {
     return;
   }
   await updates.setRetagGithubLatestFallback(enabled).catch(() => undefined);
@@ -577,7 +580,7 @@ onMounted(() => {
             <n-switch
               id="github-latest-fallback-switch"
               :value="updates.retagGithubLatestFallback"
-              :disabled="updates.loading || retagMutationDisabled"
+              :disabled="updates.loading || retagChoiceDisabled"
               aria-label="Use cached GitHub latest fallback"
               @update:value="onGithubLatestFallbackUpdate"
             />
@@ -669,7 +672,7 @@ onMounted(() => {
         :loading="updates.loading"
         :choices="updates.retagChoices"
         :target-tags="updates.retagTargetTags"
-        :mutation-disabled="retagMutationDisabled"
+        :mutation-disabled="retagChoiceDisabled"
         :mutation-notice="retagMutationNotice"
         @choice-update="onRetagChoiceUpdate"
         @retag-only="onRetagOnly"
@@ -681,7 +684,7 @@ onMounted(() => {
         :rows="filteredRows"
         :choices="updates.retagChoices"
         :target-tags="updates.retagTargetTags"
-        :mutation-disabled="retagMutationDisabled"
+        :mutation-disabled="retagChoiceDisabled"
         :mutation-notice="retagMutationNotice"
         @choice-update="onRetagChoiceUpdate"
         @retag-only="onRetagOnly"

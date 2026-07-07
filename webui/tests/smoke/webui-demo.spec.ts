@@ -92,11 +92,14 @@ test("static demo renders current pending state in read-only mode", async ({
   const applyButton = page
     .getByRole("dialog")
     .getByRole("button", { name: /Apply 1 update/ });
-  await expect(applyButton).toBeEnabled();
-  await applyButton.click();
-  await expect(page.getByRole("heading", { name: "Apply complete" })).toBeVisible();
-  await expect(page.getByText("1 update finished. Pending updates and run history were refreshed.")).toBeVisible();
-  await expect(page.getByText("6 pending updates")).toBeVisible();
+  await expect(applyButton).toBeDisabled();
+  await expect(
+    page.getByText(
+      "The public static demo is read-only. Run WUDup locally to apply changes.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(page.getByText("7 pending updates")).toBeVisible();
 });
 
 test("static demo renders seeded audit log records", async ({ page }) => {
@@ -121,7 +124,9 @@ test("static demo renders retag review fixtures", async ({ page }) => {
   await expect(page.getByText("Retag available").first()).toBeVisible();
   await expect(page.getByText("home/home-assistant")).toBeVisible();
   await expect(
-    page.getByText("Demo mode retag apply runs only in this browser session."),
+    page.getByText(
+      "Static demo mode is read-only. Preview stays available; apply is disabled.",
+    ).first(),
   ).toBeVisible();
   const serviceRow = page
     .getByRole("row")
@@ -140,18 +145,11 @@ test("static demo renders retag review fixtures", async ({ page }) => {
     page.getByRole("heading", { name: "Review retag preview" }),
   ).toBeVisible();
   await expect(page.getByText("1 service ready to retag.")).toBeVisible();
-  await page
-    .getByLabel("Review retag preview")
-    .getByRole("button", { name: "Apply selected retags" })
-    .click();
   await expect(
-    page.getByRole("heading", { name: "Apply selected retags" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Confirm and apply" }).click();
-  await expect(page.getByText("Retag complete")).toBeVisible();
-  await expect(
-    page.getByText("1 retag finished. Retag targets and run history were refreshed."),
-  ).toBeVisible();
+    page
+      .getByLabel("Review retag preview")
+      .getByRole("button", { name: "Apply selected retags" }),
+  ).toBeDisabled();
 });
 
 test("static demo mobile layout stays within the viewport", async ({ page }) => {
@@ -178,6 +176,11 @@ test("static demo mobile layout stays within the viewport", async ({ page }) => 
 
   await page.goto(demoRoute("/#/settings"));
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  await expect(
+    page.getByText(
+      "The public static demo is read-only. Run WUDup locally to apply changes.",
+    ).first(),
+  ).toBeVisible();
   await expectTouchTargetHeight(page, "Download support bundle");
   await expectTouchTargetHeight(page, "Copy");
 });

@@ -16,16 +16,14 @@ import type {
   TagExclusionStatusFilter,
   TagOverrideRequest,
 } from "../types";
-import { DEMO_CSRF_TOKEN } from "./constants";
-import { clone } from "./helpers";
+import {
+  DEMO_CSRF_TOKEN,
+  STATIC_DEMO_READ_ONLY_MESSAGE,
+} from "./constants";
 import { DemoApiState } from "./state";
-import type { DemoJobRecord } from "./types";
-
-const STATIC_DEMO_READ_ONLY =
-  "The public static demo is read-only. Run WUDup locally to apply changes.";
 
 function rejectStaticDemoMutation(): never {
-  throw new Error(STATIC_DEMO_READ_ONLY);
+  throw new Error(STATIC_DEMO_READ_ONLY_MESSAGE);
 }
 
 export function createDemoWebApi(): WebApi {
@@ -88,11 +86,11 @@ export function createDemoWebApi(): WebApi {
       _options = {},
     ) => state.createRetagPlan(choices),
     applyRetagPlan: async (
-      planId: string,
-      choices: RetagChoiceRequest[],
+      _planId: string,
+      _choices: RetagChoiceRequest[],
       _csrfToken: string,
       _options = {},
-    ) => state.createRetagJob(planId, choices),
+    ) => rejectStaticDemoMutation(),
     diagnosticsSupportBundle: async () => state.diagnosticsSupportBundle(),
     cleanupPending: async (
       _cleanupId: string,
@@ -156,125 +154,26 @@ export function createDemoWebApi(): WebApi {
         digestPinLabelRewriteApprovals,
       ),
     createJob: async (
-      planId: string,
-      lineNumbers: number[],
-      allowTagUpdates: boolean,
-      tagOverrides: TagOverrideRequest[],
-      digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
+      _planId: string,
+      _lineNumbers: number[],
+      _allowTagUpdates: boolean,
+      _tagOverrides: TagOverrideRequest[],
+      _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
       _csrfToken: string,
-    ) =>
-      state.createJob(
-        planId,
-        lineNumbers,
-        allowTagUpdates,
-        tagOverrides,
-        digestPinLabelRewriteApprovals,
-      ),
+    ) => rejectStaticDemoMutation(),
     applyPlan: async (
-      planId: string,
-      lineNumbers: number[],
-      allowTagUpdates: boolean,
-      tagOverrides: TagOverrideRequest[],
-      digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
+      _planId: string,
+      _lineNumbers: number[],
+      _allowTagUpdates: boolean,
+      _tagOverrides: TagOverrideRequest[],
+      _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
       _csrfToken: string,
-    ) =>
-      state.createJob(
-        planId,
-        lineNumbers,
-        allowTagUpdates,
-        tagOverrides,
-        digestPinLabelRewriteApprovals,
-      ),
-    job: async (jobId: string) => clone(requireJob(state, jobId).job),
-    applyJob: async (jobId: string) => clone(requireJob(state, jobId).job),
-    openJobStream: (jobId: string) =>
-      new DemoJobStream(state, jobId) as unknown as EventSource,
+    ) => rejectStaticDemoMutation(),
+    job: async (_jobId: string) => rejectStaticDemoMutation(),
+    applyJob: async (_jobId: string) => rejectStaticDemoMutation(),
+    openJobStream: (_jobId: string) => rejectStaticDemoMutation(),
     runs: async () => state.runSummaries(),
     runDetail: async (runId: number) => state.runDetail(runId),
     runLog: async (runId: number, _tailBytes = 262_144) => state.runLog(runId),
   };
-}
-
-class DemoJobStream extends EventTarget {
-  onerror: ((event: Event) => void) | null = null;
-  private timers: number[] = [];
-
-  constructor(
-    private readonly state: DemoApiState,
-    private readonly jobId: string,
-  ) {
-    super();
-    this.schedule();
-  }
-
-  close(): void {
-    for (const timer of this.timers) {
-      globalThis.clearTimeout(timer);
-    }
-    this.timers = [];
-  }
-
-  private schedule(): void {
-    const record = this.state.jobs.get(this.jobId);
-    if (!record) {
-      this.queue(() => this.onerror?.(new Event("error")), 0);
-      return;
-    }
-    if (record.job.status === "failure") {
-      this.queue(() => {
-        this.emit("job", record.job);
-        this.close();
-      }, 0);
-      return;
-    }
-    this.queue(() => {
-      const [first] = this.state.jobProgress(this.jobId);
-      if (first) {
-        const progress = this.state.recordJobProgress(this.jobId, first);
-        if (progress) {
-          this.emit("progress", progress);
-        }
-      }
-      const running = this.state.jobs.get(this.jobId);
-      if (running) {
-        this.emit("job", running.job);
-      }
-    }, 40);
-    this.queue(() => {
-      for (const progress of this.state.jobProgress(this.jobId).slice(1)) {
-        const event = this.state.recordJobProgress(this.jobId, progress);
-        if (event) {
-          this.emit("progress", event);
-        }
-      }
-      const completed = this.state.completeJob(this.jobId);
-      if (!completed) {
-        this.onerror?.(new Event("error"));
-        return;
-      }
-      this.emit("log", completed.log);
-      this.emit("job", completed.job);
-      this.close();
-    }, 140);
-  }
-
-  private queue(callback: () => void, delay: number): void {
-    this.timers.push(globalThis.setTimeout(callback, delay));
-  }
-
-  private emit(type: string, data: unknown): void {
-    this.dispatchEvent(
-      new MessageEvent(type, {
-        data: JSON.stringify(data),
-      }),
-    );
-  }
-}
-
-function requireJob(state: DemoApiState, jobId: string): DemoJobRecord {
-  const job = state.jobs.get(jobId);
-  if (!job) {
-    throw new Error(`Demo job ${jobId} was not found`);
-  }
-  return job;
 }
