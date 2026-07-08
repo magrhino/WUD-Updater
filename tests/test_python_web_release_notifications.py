@@ -1098,7 +1098,7 @@ def test_release_notification_send_posts_discord_payload_and_audits(
     assert body["audit_run_id"]
     assert len(posted) == 1
     assert posted[0][0] == "https://discord.test/webhook-secret"
-    assert posted[0][1]["embeds"][0]["title"] == "v2.0.0"
+    assert posted[0][1]["embeds"][0]["title"] == "app Tag Update"
     db_path = tmp_path / "state" / "wud.sqlite"
     with open_db(db_path) as conn:
         run = conn.execute(
@@ -1121,6 +1121,27 @@ def test_release_notification_send_posts_discord_payload_and_audits(
     assert event_metadata["items"][0]["line_no"] == 1
     serialized = json.dumps({"run": run_metadata, "event": event_metadata})
     assert "webhook-secret" not in serialized
+
+
+def test_release_notification_send_describes_digest_update_title(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client, posted = _release_notification_client(tmp_path, monkeypatch)
+    _write_pending_lines(
+        tmp_path,
+        [f"ghcr.io/acme/app:1.0.0 sha256={'a' * 64}"],
+    )
+
+    response = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "confirmation": "send-release-notes"},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    assert len(posted) == 1
+    assert posted[0][1]["embeds"][0]["title"] == "app Digest Update"
 
 
 def test_release_notification_send_uses_persisted_discord_webhook(
