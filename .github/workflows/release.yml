@@ -253,7 +253,7 @@ jobs:
       packages: write
     needs:
       - validate-tag
-      - publish-image
+      - release-validations
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
