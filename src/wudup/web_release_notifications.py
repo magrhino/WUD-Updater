@@ -23,6 +23,7 @@ from . import (
 )
 from .config import VALID_UPDATE_MODES
 from .db import DatabaseError, init_db, open_db, utc_timestamp
+from .images import image_repo_ref
 from .release_notes import refresh_release_notes
 from .web_auth import (
     _redact_sensitive_text,
@@ -57,7 +58,7 @@ from .web_settings import (
     effective_release_notification_webhook,
     effective_release_notes_enabled,
 )
-from .wud_file import WudTarget, parse_wud_text
+from .wud_file import WudTarget, is_digest_target_line, parse_wud_text
 
 DISCORD_EMBEDS_PER_MESSAGE = 10
 DISCORD_EMBED_DESCRIPTION_LIMIT = 4096
@@ -733,6 +734,7 @@ def _notification_items(
             triggers,
             image_repo=image_repo,
             upstream_repo=upstream_repo,
+            update_kind=str(getattr(metadata, "update_kind", "") or ""),
             verbosity=config.verbosity,
         )
         candidates.append(
@@ -825,6 +827,7 @@ def _notification_copy(
     *,
     image_repo: str,
     upstream_repo: str,
+    update_kind: str = "",
     verbosity: str = "summary",
 ) -> tuple[str, str]:
     classification = getattr(note, "classification", None)
@@ -838,13 +841,13 @@ def _notification_copy(
     tag = note.release_tag or target.target.desired_tag or target.target.tag_token
     title = _notification_title(
         target,
-        note,
         repo=repo,
         upstream_repo=upstream_repo,
         tag=tag,
         build_suffix=build_suffix,
         image_rebuild=image_rebuild,
         upstream_update=upstream_update,
+        update_kind=update_kind,
     )
     lines = _notification_description_lines(
         settings,
@@ -866,7 +869,6 @@ def _notification_copy(
 
 def _notification_title(
     target: _NotificationTarget,
-    note: ReleaseNoteInfo,
     *,
     repo: str,
     upstream_repo: str,
@@ -874,6 +876,7 @@ def _notification_title(
     build_suffix: str,
     image_rebuild: bool,
     upstream_update: bool,
+    update_kind: str,
 ) -> str:
     if image_rebuild:
         return _lsio_image_rebuild_title(repo, tag, build_suffix)
@@ -881,8 +884,21 @@ def _notification_title(
         title = _upstream_application_update_title(repo, upstream_repo, tag)
         if title:
             return title
-    title = note.title or (f"Release {tag} for {repo}" if tag and repo else "")
-    return title or f"Update available: {target.target.first}"
+    return (
+        f"{_notification_title_subject(repo, target)} "
+        f"{_notification_title_kind(target, update_kind)}"
+    )
+
+
+def _notification_title_subject(repo: str, target: _NotificationTarget) -> str:
+    subject = image_repo_ref(repo or target.target.repo or target.target.first)
+    return subject.rsplit("/", 1)[-1] or subject or target.target.first
+
+
+def _notification_title_kind(target: _NotificationTarget, update_kind: str) -> str:
+    if update_kind == "digest" or is_digest_target_line(target.target):
+        return "Digest Update"
+    return "Tag Update"
 
 
 def _lsio_image_rebuild_title(repo: str, tag: str, build_suffix: str) -> str:
