@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.53.3](https://github.com/magrhino/wudup/compare/v0.53.2...v0.53.3) (2026-07-08)
+
+
+### Bug Fixes
+
+* **ui:** describe discord release notification titles ([#505](https://github.com/magrhino/wudup/issues/505)) ([3dc3ba8](https://github.com/magrhino/wudup/commit/3dc3ba83bdad1585b28a1e526530d3c14598f935))
+
 ## [0.53.2](https://github.com/magrhino/wudup/compare/v0.53.1...v0.53.2) (2026-07-06)
 
 
