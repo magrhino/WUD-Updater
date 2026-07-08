@@ -1140,6 +1140,7 @@ def test_release_notification_send_describes_digest_update_title(
     )
 
     assert response.status_code == 200
+    assert len(posted) == 1
     assert posted[0][1]["embeds"][0]["title"] == "app Digest Update"
 
 
