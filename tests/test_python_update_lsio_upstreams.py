@@ -61,6 +61,15 @@ def test_source_dir_reads_readme_vars_then_jenkins_and_github_only(tmp_path: Pat
     }
 
 
+def test_source_dir_accepts_single_repo_checkout(tmp_path: Path):
+    source = tmp_path / "source"
+    write_metadata(source, "docker-radarr", "readme-vars.yml", "https://github.com/Radarr/Radarr/")
+
+    assert lsio.source_entries_from_dir(source / "docker-radarr") == {
+        "linuxserver/docker-radarr": "Radarr/Radarr",
+    }
+
+
 def test_render_preserves_commented_overrides_and_sorts(tmp_path: Path):
     map_path = tmp_path / "upstreams.txt"
     map_path.write_text(
@@ -115,9 +124,7 @@ linuxserver/docker-removed: old/removed
         encoding="utf-8",
     )
 
-    assert lsio.main(
-        ["--check", "--map", str(map_path), "--source-dir", str(source)]
-    ) == 1
+    assert lsio.main(["--map", str(map_path), "--source-dir", str(source)]) == 1
 
     output = capsys.readouterr().out
     assert "missing: linuxserver/docker-beta: new/beta" in output
@@ -159,6 +166,6 @@ def test_default_github_mode_requires_token(tmp_path: Path, monkeypatch, capsys)
         lambda: (_ for _ in ()).throw(AssertionError("network should not run")),
     )
 
-    assert lsio.main(["--check", "--map", str(map_path)]) == 2
+    assert lsio.main(["--map", str(map_path)]) == 2
 
     assert "requires GITHUB_TOKEN or GH_TOKEN" in capsys.readouterr().err

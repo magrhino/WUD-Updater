@@ -43,17 +43,6 @@ class MapEntry:
         return bool(self.comments)
 
 
-@dataclass(frozen=True)
-class Drift:
-    missing: list[tuple[str, str]]
-    changed: list[tuple[str, str, str]]
-    removed: list[tuple[str, str]]
-
-    @property
-    def found(self) -> bool:
-        return bool(self.missing or self.changed or self.removed)
-
-
 def read_map(path: Path) -> dict[str, MapEntry]:
     entries: dict[str, MapEntry] = {}
     pending_comments: list[str] = []
@@ -123,14 +112,14 @@ def source_entries_from_dir(source_dir: Path) -> dict[str, str]:
     repo_dirs = (
         [source_dir]
         if source_dir.name.startswith("docker-")
-        else [
+        else sorted(
             path
             for path in source_dir.iterdir()
             if path.is_dir() and path.name.startswith("docker-")
-        ]
+        )
     )
     entries: dict[str, str] = {}
-    for repo_dir in sorted(repo_dirs, key=lambda path: path.name):
+    for repo_dir in repo_dirs:
         upstream = read_source_repo(repo_dir)
         if upstream is not None:
             entries[f"linuxserver/{repo_dir.name}"] = upstream
@@ -220,7 +209,14 @@ def source_entries_from_github() -> dict[str, str]:
     return entries
 
 
-def compare_entries(current: dict[str, MapEntry], source: dict[str, str]) -> Drift:
+def compare_entries(
+    current: dict[str, MapEntry],
+    source: dict[str, str],
+) -> tuple[
+    list[tuple[str, str]],
+    list[tuple[str, str, str]],
+    list[tuple[str, str]],
+]:
     missing = [
         (key, source[key])
         for key in sorted(source)
@@ -238,7 +234,7 @@ def compare_entries(current: dict[str, MapEntry], source: dict[str, str]) -> Dri
         for key, entry in sorted(current.items())
         if key not in source and not entry.is_override
     ]
-    return Drift(missing, changed, removed)
+    return missing, changed, removed
 
 
 def build_output_entries(
@@ -276,17 +272,22 @@ def repair_command(map_path: Path) -> str:
     return " ".join(shlex.quote(part) for part in command)
 
 
-def print_drift(drift: Drift, map_path: Path) -> None:
-    if not drift.found:
+def print_drift(
+    missing: list[tuple[str, str]],
+    changed: list[tuple[str, str, str]],
+    removed: list[tuple[str, str]],
+    map_path: Path,
+) -> None:
+    if not (missing or changed or removed):
         print("ok - LSIO upstream map is current")
         return
 
     print("LSIO upstream map drift found:")
-    for key, value in drift.missing:
+    for key, value in missing:
         print(f"missing: {key}: {value}")
-    for key, current, expected in drift.changed:
+    for key, current, expected in changed:
         print(f"changed: {key}: {current} -> {expected}")
-    for key, value in drift.removed:
+    for key, value in removed:
         print(f"removed: {key}: {value}")
     print(f"Regenerate with: {repair_command(map_path)}")
 
@@ -295,9 +296,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Check or update the checked-in LSIO upstream map."
     )
-    action = parser.add_mutually_exclusive_group()
-    action.add_argument("--check", action="store_true", help="report map drift")
-    action.add_argument("--write", action="store_true", help="rewrite the map")
+    parser.add_argument("--write", action="store_true", help="rewrite the map")
     parser.add_argument("--map", default=DEFAULT_MAP, type=Path, help="upstream map path")
     parser.add_argument(
         "--source-dir",
@@ -331,9 +330,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"wrote {args.map}")
         return 0
 
-    drift = compare_entries(current, source)
-    print_drift(drift, args.map)
-    return 1 if drift.found else 0
+    missing, changed, removed = compare_entries(current, source)
+    print_drift(missing, changed, removed, args.map)
+    return 1 if missing or changed or removed else 0
 
 
 if __name__ == "__main__":
