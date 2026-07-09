@@ -17,6 +17,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MAP = REPO_ROOT / "wud" / "upstreams.txt"
+JENKINS_VARS_FILE = "jenkins-vars.yml"
 HEADER = """# /wud/upstreams.txt
 # Format: linuxserver/docker-<image>: <Owner>/<Repo>
 # Keep entries sorted by the linuxserver/docker-* key.
@@ -128,13 +129,13 @@ def extract_upstream_repo(filename: str, text: str) -> str | None:
     upstream = normalize_github_project(extract_project_url(text))
     if upstream is not None:
         return upstream
-    if filename == "jenkins-vars.yml":
+    if filename == JENKINS_VARS_FILE:
         return extract_jenkins_ext_repo(text)
     return None
 
 
 def read_source_repo(repo_dir: Path) -> str | None:
-    for filename in ("readme-vars.yml", "jenkins-vars.yml"):
+    for filename in ("readme-vars.yml", JENKINS_VARS_FILE):
         path = repo_dir / filename
         if not path.exists():
             continue
@@ -254,7 +255,7 @@ def linuxserver_repos_from_github() -> list[tuple[str, str]]:
 
 
 def source_entry_from_github_repo(repo: str, branch: str) -> tuple[str, str] | None:
-    for filename in ("readme-vars.yml", "jenkins-vars.yml"):
+    for filename in ("readme-vars.yml", JENKINS_VARS_FILE):
         content = github_file(repo, branch, filename)
         if content is None:
             continue
