@@ -966,6 +966,57 @@ describe("pending view selection actions", () => {
     expect(createPlan).toHaveBeenCalledWith([2], true, [], []);
   });
 
+  it("shows matched snoozes before stale entries without selecting them in bulk", async () => {
+    const snoozedItem = pendingGroupedItem({
+      line_no: 1,
+      image: "repo/app:1.0",
+      repo: "repo/app",
+      services: ["app"],
+    });
+    const stackItem = pendingGroupedItem({
+      line_no: 3,
+      image: "repo/db:1.0",
+      repo: "repo/db",
+      services: ["db"],
+    });
+    const staleItem = {
+      ...unmatchedPendingItem(),
+      line_no: 2,
+    };
+    const grouping = pendingGrouping([snoozedItem, stackItem]);
+    const { pinia, settings, updates } = setupStores(true);
+    settings.snoozes = [
+      snooze({
+        service_key: "media/app",
+        reason: "maintenance window",
+      }),
+    ];
+    updates.pending = {
+      ...pendingResponse([snoozedItem, staleItem, stackItem]),
+      grouping: {
+        ...grouping,
+        unmatched: [staleItem],
+      },
+    };
+    mockPendingLifecycle(settings, updates);
+    const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
+    const wrapper = mountPendingView(pinia);
+    const text = wrapper.text();
+
+    expect(text).toContain("Snoozed pending entries");
+    expect(text).toContain("repo/app:1.0");
+    expect(text.indexOf("Snoozed pending entries")).toBeLessThan(
+      text.indexOf("Stale pending entries"),
+    );
+    expect(
+      wrapper.find('input[aria-label="Select update repo/app:1.0"]').exists(),
+    ).toBe(true);
+
+    await selectAllAndPreview(wrapper);
+
+    expect(createPlan).toHaveBeenCalledWith([3], true, [], []);
+  });
+
   it("selects tag update rows and enables tag rewrites when an override is edited", async () => {
     const item = pendingItem();
     const { pinia, settings, updates } = setupStores(true);

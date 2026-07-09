@@ -69,6 +69,12 @@ test("static demo renders current pending state in read-only mode", async ({
   await expect(page.getByText("7 pending updates")).toBeVisible();
   await expect(page.getByText("Read-only", { exact: true })).toBeVisible();
   await expect(page.getByText("3 items need review")).toBeVisible();
+  const snoozedPanel = page
+    .locator("article")
+    .filter({ hasText: "Snoozed pending entries" });
+  await expect(snoozedPanel).toBeVisible();
+  await snoozedPanel.getByText("Details", { exact: true }).click();
+  await expect(snoozedPanel.getByText("media / radarr")).toBeVisible();
   await expect(
     page.getByTitle("ghcr.io/home-assistant/home-assistant:2026.5.1").first(),
   ).toBeVisible();

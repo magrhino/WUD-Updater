@@ -47,6 +47,7 @@ import {
 } from "../src/views/pending/utils";
 import {
   pendingGroupedItem,
+  pendingGrouping,
   pendingItem,
   pendingResponse,
   planResponse,
@@ -57,6 +58,10 @@ import {
   wudContainerMetadata,
 } from "./helpers/fixtures";
 import { mountWithApp, naiveStubs } from "./helpers/mount";
+import {
+  activeSnoozedServiceKeys,
+  snoozedItemsForGroups,
+} from "../src/views/pending/snoozeSelection";
 
 type RenderColumn = {
   key?: string;
@@ -242,6 +247,29 @@ describe("pending helper modules", () => {
     ).toBe(
       "repo/app@sha256:abcdefghijklmnopqrstuvwxyz0123456789 -> repo/app:latest",
     );
+  });
+
+  it("finds matched active snoozes", () => {
+    const radarr = pendingGroupedItem({
+      line_no: 1,
+      services: ["radarr"],
+    });
+    const groups = pendingGrouping([radarr]).groups;
+    const activeKeys = activeSnoozedServiceKeys([
+      snooze({ service_key: "media/radarr" }),
+      snooze({
+        kind: "dependency",
+        service_key: "media/sonarr",
+        wait_for_service_key: "media/prowlarr",
+        snoozed_until: null,
+      }),
+      snooze({ active: false, service_key: "media/expired" }),
+    ]);
+
+    expect([...activeKeys]).toEqual(["media/radarr", "media/sonarr"]);
+    expect(
+      snoozedItemsForGroups(groups, activeKeys).map(({ item }) => item.line_no),
+    ).toEqual([1]);
   });
 
   it("builds safety cues from versions, release notes, policies, and snoozes", () => {
