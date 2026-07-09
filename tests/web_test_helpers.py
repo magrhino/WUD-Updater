@@ -115,6 +115,9 @@ def _wud_api_container(
     remote_tag: str = "2.0",
     remote_digest: str = "",
     update_kind: str = "tag",
+    update_available: bool = True,
+    local_value: str | None = None,
+    remote_value: str | None = None,
     platform: str = "",
     registry_url: str = "",
 ) -> dict[str, object]:
@@ -134,6 +137,9 @@ def _wud_api_container(
         registry_url=registry_url,
         platform=platform_payload,
     )
+    update_remote_value = remote_tag or remote_digest
+    if remote_value is not None:
+        update_remote_value = remote_value
 
     return {
         "id": f"docker.local.{name}",
@@ -149,15 +155,15 @@ def _wud_api_container(
         },
         "updateKind": {
             "kind": update_kind,
-            "localValue": tag,
-            "remoteValue": remote_tag or remote_digest,
+            "localValue": tag if local_value is None else local_value,
+            "remoteValue": update_remote_value,
             "semverDiff": "major",
         },
         "labels": {
             "org.opencontainers.image.source": "https://github.com/acme/app",
         },
         "error": {"message": ""},
-        "updateAvailable": True,
+        "updateAvailable": update_available,
     }
 
 

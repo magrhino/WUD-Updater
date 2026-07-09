@@ -1,6 +1,7 @@
 import type {
   PendingGroupedItem,
   PendingItem,
+  PendingSnoozedCandidate,
   PendingStackGroup,
   ReleaseNoteInfo,
 } from "../../api/client";
@@ -114,6 +115,19 @@ export function filterSnoozedItems<
   );
 }
 
+export function filterSnoozedCandidates<T extends PendingSnoozedCandidate>(
+  items: T[],
+  query: string,
+): T[] {
+  const normalizedQuery = normalizePendingSearch(query);
+  if (!normalizedQuery) {
+    return items;
+  }
+  return items.filter((item) =>
+    searchableText(snoozedCandidateSearchParts(item)).includes(normalizedQuery),
+  );
+}
+
 function stackGroupWithMatchedItems(
   group: PendingStackGroup,
   items: PendingGroupedItem[],
@@ -187,6 +201,24 @@ function groupedItemParts(item: PendingItem): string[] {
     ...item.compose_images,
     ...item.services,
     ...diagnosticParts(item),
+  ];
+}
+
+function snoozedCandidateSearchParts(item: PendingSnoozedCandidate): string[] {
+  return [
+    item.service_key,
+    item.service_key.replaceAll("/", " "),
+    item.stack,
+    item.service,
+    item.image,
+    item.target_image,
+    item.current_tag,
+    item.desired_tag,
+    item.digest,
+    item.source_id,
+    item.reason,
+    item.snoozed_until ?? "",
+    item.wait_for_service_key,
   ];
 }
 

@@ -168,6 +168,24 @@ export interface PendingGrouping {
   warnings: string[];
 }
 
+export interface PendingSnoozedCandidate {
+  key: string;
+  service_key: string;
+  stack: string;
+  service: string;
+  image: string;
+  target_image: string;
+  current_tag: string;
+  desired_tag: string;
+  digest: string;
+  source_id: string;
+  wud_metadata: WudContainerMetadata;
+  snooze_kind: SnoozeKind;
+  reason: string;
+  snoozed_until: string | null;
+  wait_for_service_key: string;
+}
+
 export interface PendingResponse {
   source_file: string;
   source: PendingSourceInfo;
@@ -176,6 +194,7 @@ export interface PendingResponse {
   count: number;
   items: PendingItem[];
   grouping: PendingGrouping;
+  snoozed_candidates: PendingSnoozedCandidate[];
   wud_api: WudApiStatus;
   warnings: string[];
 }

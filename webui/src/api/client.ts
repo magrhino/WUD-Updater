@@ -22,6 +22,7 @@ export type {
   PendingGroupedItem,
   PendingStackGroup,
   PendingGrouping,
+  PendingSnoozedCandidate,
   PendingResponse,
   PendingMetadataRefreshStatus,
   PendingMetadataRefreshLine,

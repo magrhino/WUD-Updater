@@ -3,6 +3,7 @@ import { computed, ref, type ComputedRef } from "vue";
 import type {
   PendingGroupedItem,
   PendingItem,
+  PendingSnoozedCandidate,
   PendingStackGroup,
   ReleaseNoteInfo,
 } from "../../api/client";
@@ -12,6 +13,7 @@ import type { SnoozedPendingItem } from "./snoozeSelection";
 import {
   filterPendingItems,
   filterPendingStackGroups,
+  filterSnoozedCandidates,
   filterSnoozedItems,
   normalizePendingSearch,
 } from "./pendingFilter";
@@ -20,6 +22,7 @@ import { pluralize } from "./utils";
 type UsePendingSearchStateOptions = {
   pendingItems: ComputedRef<PendingItem[]>;
   groupingReady: ComputedRef<boolean>;
+  snoozedCandidates: ComputedRef<PendingSnoozedCandidate[]>;
   snoozedItems: ComputedRef<SnoozedPendingItem[]>;
   selectableLineNumbers: ComputedRef<number[]>;
   selectAllLabel: ComputedRef<string>;
@@ -69,6 +72,12 @@ export function usePendingSearchState(options: UsePendingSearchStateOptions) {
       pendingSearchContext,
     ),
   );
+  const filteredSnoozedCandidates = computed(() =>
+    filterSnoozedCandidates(
+      options.snoozedCandidates.value,
+      pendingSearchText.value,
+    ),
+  );
   const filteredPendingItems = computed(() =>
     filterPendingItems(
       options.pendingItems.value,
@@ -98,14 +107,28 @@ export function usePendingSearchState(options: UsePendingSearchStateOptions) {
   const pendingSearchEmpty = computed(
     () =>
       pendingSearchActive.value &&
-      options.pendingItems.value.length > 0 &&
-      visibleLineNumbers.value.length === 0,
+      (options.pendingItems.value.length > 0 ||
+        options.snoozedCandidates.value.length > 0) &&
+      visibleLineNumbers.value.length === 0 &&
+      filteredSnoozedCandidates.value.length === 0,
   );
   const pendingSearchResultLabel = computed(() => {
     if (!pendingSearchActive.value) {
       return "";
     }
-    return `${pluralize(visibleLineNumbers.value.length, "visible update")} matched`;
+    const updateLabel = pluralize(
+      visibleLineNumbers.value.length,
+      "visible update",
+    );
+    const snoozeCount = filteredSnoozedCandidates.value.length;
+    if (!snoozeCount) {
+      return `${updateLabel} matched`;
+    }
+    const snoozeLabel = pluralize(snoozeCount, "visible snooze");
+    if (visibleLineNumbers.value.length === 0) {
+      return `${snoozeLabel} matched`;
+    }
+    return `${updateLabel} and ${snoozeLabel} matched`;
   });
 
   function clearPendingSearch(): void {
@@ -115,6 +138,7 @@ export function usePendingSearchState(options: UsePendingSearchStateOptions) {
   return {
     clearPendingSearch,
     filteredPendingItems,
+    filteredSnoozedCandidates,
     filteredSnoozedItems,
     filteredStackGroups,
     filteredUnmatchedItems,

@@ -91,6 +91,7 @@ __all__ = (
     "PendingSourceActive",
     "PendingSourceInfo",
     "PendingSourceMode",
+    "PendingSnoozedCandidate",
     "PendingStackGroup",
     "PendingUpdateRecord",
     "PlanAction",
@@ -575,11 +576,30 @@ class PendingStackGroup(BaseModel):
     line_numbers: list[int] = Field(default_factory=list)
     items: list[PendingGroupedItem] = Field(default_factory=list)
 
+
 class PendingGrouping(BaseModel):
     status: PendingGroupingStatus
     groups: list[PendingStackGroup] = Field(default_factory=list)
     unmatched: list[PendingGroupedItem] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class PendingSnoozedCandidate(BaseModel):
+    key: str
+    service_key: str
+    stack: str
+    service: str
+    image: str
+    target_image: str
+    current_tag: str
+    desired_tag: str
+    digest: str
+    source_id: str
+    wud_metadata: WudContainerMetadata
+    snooze_kind: SnoozeKind
+    reason: str
+    snoozed_until: str | None = None
+    wait_for_service_key: str = ""
 
 class PendingResponse(BaseModel):
     source_file: str
@@ -591,6 +611,7 @@ class PendingResponse(BaseModel):
     grouping: PendingGrouping = Field(
         default_factory=lambda: PendingGrouping(status="unavailable")
     )
+    snoozed_candidates: list[PendingSnoozedCandidate] = Field(default_factory=list)
     wud_api: WudApiStatus = Field(
         default_factory=lambda: WudApiStatus(
             state="unavailable",

@@ -295,6 +295,42 @@ DEMO_SNOOZES = (
     },
 )
 
+DEMO_PENDING_SNOOZED_CANDIDATE = {
+    "key": "demo-hidden-media-radarr",
+    "service_key": DEMO_RADARR_SERVICE_KEY,
+    "stack": "media",
+    "service": "radarr",
+    "image": "lscr.io/linuxserver/radarr:5.21.1",
+    "target_image": "lscr.io/linuxserver/radarr:5.23.0",
+    "current_tag": "5.21.1",
+    "desired_tag": "5.23.0",
+    "digest": "",
+    "source_id": "docker.local.radarr-hidden",
+    "wud_metadata": {
+        "id": "docker.local.radarr-hidden",
+        "name": "radarr",
+        "display_name": "Radarr",
+        "status": "running",
+        "watcher": "local",
+        "local_tag": "5.21.1",
+        "local_digest": "sha256:demo-radarr-local",
+        "remote_tag": "5.23.0",
+        "remote_digest": "",
+        "update_kind": "tag",
+        "semver_diff": "minor",
+        "link": "https://github.com/Radarr/Radarr/releases/tag/v5.23.0",
+        "error": "",
+        "platform": "linux/amd64",
+        "platform_os": "linux",
+        "platform_architecture": "amd64",
+        "platform_variant": "",
+    },
+    "snooze_kind": "time",
+    "reason": "demo maintenance window",
+    "snoozed_until": "2099-01-01T00:00:00+00:00",
+    "wait_for_service_key": "",
+}
+
 DEMO_DEPENDENCY_SNOOZES = (
     {
         "service_key": "media/sonarr",
@@ -695,6 +731,12 @@ def _static_demo_payload(data: dict[str, Any]) -> dict[str, Any]:
         _static_demo_status(diagnostics.get("status"))
         _static_demo_settings(diagnostics.get("settings"))
         _static_demo_doctor(diagnostics.get("doctor_result"))
+
+    pending = payload.get("pending")
+    if isinstance(pending, dict):
+        pending["snoozed_candidates"] = [
+            copy.deepcopy(DEMO_PENDING_SNOOZED_CANDIDATE)
+        ]
 
     payload["planCases"] = []
     payload["removalCases"] = []

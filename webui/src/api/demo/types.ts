@@ -37,6 +37,13 @@ export type DemoPendingItem = PendingGroupedItem & {
   service: string;
 };
 
+type DemoDiagnosticsSupportBundleResponse = Omit<
+  DiagnosticsSupportBundleResponse,
+  "wudup_version" | "wud_updater_version" | "pending_summary"
+> & {
+  pending_summary: PendingResponse;
+};
+
 export type DemoRunFixture = {
   summary: RunSummary;
   detail: RunDetail;
@@ -84,10 +91,7 @@ export type DemoGeneratedFixtures = {
   releaseNotes: DemoReleaseNotesResponse;
   selfUpdate: SelfUpdateResponse;
   selfUpdatePlan: SelfUpdatePlanResponse;
-  diagnostics: Omit<
-    DiagnosticsSupportBundleResponse,
-    "wudup_version" | "wud_updater_version"
-  >;
+  diagnostics: DemoDiagnosticsSupportBundleResponse;
   servicePolicies: ServicePolicyRecord[];
   snoozes: {
     active: SnoozeRecord[];

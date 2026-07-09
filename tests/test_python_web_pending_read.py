@@ -1,8 +1,11 @@
 from __future__ import annotations
+import hashlib
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from wudup import web_pending as pending_module
 from wudup import web_wud_api
 from wudup.config import ConfigError
+from wudup.db import init_db, insert_snooze, open_db
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -109,6 +112,141 @@ def test_pending_endpoint_reads_wud_api_source_without_wud_file(
     assert body["grouping"]["groups"][0]["items"][0]["source"] == "api"
     assert body["grouping"]["groups"][0]["items"][0]["source_id"] == "docker.local.app"
     assert not (tmp_path / "state" / "images.todo").exists()
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_pending_endpoint_returns_hidden_wud_api_snoozed_candidates(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    _install_wud_api(
+        monkeypatch,
+        containers=[
+            _wud_api_container(
+                name="app",
+                update_available=False,
+                update_kind="tag",
+                local_value="1.0",
+                remote_value="2.0",
+            ),
+            _wud_api_container(
+                name="db",
+                image="repo/db",
+                update_available=False,
+                update_kind="unknown",
+                local_value="1.0",
+                remote_value="2.0",
+            ),
+            _wud_api_container(
+                name="worker",
+                image="repo/worker",
+                update_available=False,
+                update_kind="tag",
+                local_value="1.0",
+                remote_value="2.0",
+            ),
+        ],
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:1.0", "cid-app"),
+            ("db", "repo/db:1.0", "cid-db"),
+            ("worker", "repo/worker:1.0", "cid-worker"),
+        ],
+    )
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    db_path = state_dir / "wud.sqlite"
+    future = (
+        datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
+    ).isoformat()
+    with open_db(db_path) as conn:
+        init_db(conn)
+        insert_snooze(
+            conn,
+            service_key="stack/app",
+            snoozed_until=future,
+            reason="maintenance window",
+        )
+        insert_snooze(
+            conn,
+            service_key="stack/db",
+            snoozed_until=future,
+            reason="unknown kind should not surface",
+        )
+
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.hidden-candidates.test:3000",
+            **fake_env,
+        },
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"]["active"] == "api"
+    assert body["count"] == 0
+    assert body["items"] == []
+    assert body["source_hash"] == hashlib.sha256(b"").hexdigest()
+    assert body["grouping"]["status"] == "ready"
+    assert body["grouping"]["groups"] == []
+    assert body["grouping"]["unmatched"] == []
+    assert [item["service_key"] for item in body["snoozed_candidates"]] == [
+        "stack/app"
+    ]
+    candidate = body["snoozed_candidates"][0]
+    assert candidate["image"] == "repo/app:1.0"
+    assert candidate["target_image"] == "repo/app:2.0"
+    assert candidate["source_id"] == "docker.local.app"
+    assert candidate["snooze_kind"] == "time"
+    assert candidate["reason"] == "maintenance window"
+    assert candidate["wud_metadata"]["update_kind"] == "tag"
+    assert candidate["wud_metadata"]["remote_tag"] == "2.0"
+    assert "line_no" not in candidate
+
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+    cleanup = client.post(
+        "/api/v1/pending/cleanup",
+        json={
+            "cleanup_id": "candidate",
+            "lines": [{"line_no": 1, "raw": candidate["image"]}],
+            "confirmation": "remove_unmatched",
+        },
+        headers=headers,
+    )
+    removal = client.post(
+        "/api/v1/pending/removal-plan",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+
+    assert plan.status_code == 422
+    assert plan.json()["detail"] == (
+        "line_numbers must reference actionable WUD target lines: 1"
+    )
+    assert cleanup.status_code == 409
+    assert cleanup.json()["detail"] == (
+        "pending cleanup only supports WUD_OUT_FILE source"
+    )
+    assert removal.status_code == 409
+    assert removal.json()["detail"] == (
+        "pending removal only supports WUD_OUT_FILE source"
+    )
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 

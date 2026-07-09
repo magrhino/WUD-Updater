@@ -10,6 +10,7 @@ import {
   pendingItem,
   pendingResponse,
   pendingRescanResponse,
+  pendingSnoozedCandidate,
   pendingSourceInfo,
   planResponse,
   snooze,
@@ -964,6 +965,73 @@ describe("pending view selection actions", () => {
 
     expect(wrapper.text()).toContain("Snoozed pending entries");
     expect(createPlan).toHaveBeenCalledWith([2], true, [], []);
+  });
+
+  it("shows matched snoozes before stale entries without selecting them in bulk", async () => {
+    const snoozedItem = pendingGroupedItem({
+      line_no: 1,
+      image: "repo/app:1.0",
+      repo: "repo/app",
+      services: ["app"],
+    });
+    const stackItem = pendingGroupedItem({
+      line_no: 3,
+      image: "repo/db:1.0",
+      repo: "repo/db",
+      services: ["db"],
+    });
+    const staleItem = {
+      ...unmatchedPendingItem(),
+      line_no: 2,
+    };
+    const candidate = pendingSnoozedCandidate({
+      key: "hidden-candidate",
+      service_key: "media/tv/hidden",
+      stack: "media",
+      service: "hidden",
+      image: "repo/hidden:1.0",
+      target_image: "repo/hidden:1.1",
+      source_id: "docker.local.hidden",
+    });
+    const grouping = pendingGrouping([snoozedItem, stackItem]);
+    const { pinia, settings, updates } = setupStores(true);
+    settings.snoozes = [
+      snooze({
+        service_key: "media/app",
+        reason: "maintenance window",
+      }),
+    ];
+    updates.pending = {
+      ...pendingResponse([snoozedItem, staleItem, stackItem]),
+      grouping: {
+        ...grouping,
+        unmatched: [staleItem],
+      },
+      snoozed_candidates: [candidate],
+    };
+    mockPendingLifecycle(settings, updates);
+    const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
+    const wrapper = mountPendingView(pinia);
+    const text = wrapper.text();
+
+    expect(text).toContain("Snoozed pending entries");
+    expect(text).toContain("repo/app:1.0");
+    expect(text).toContain("media / tv / hidden");
+    expect(text).toContain("repo/hidden:1.0 -> repo/hidden:1.1");
+    expect(text).toContain("No matching pending update row.");
+    expect(text.indexOf("Snoozed pending entries")).toBeLessThan(
+      text.indexOf("Stale pending entries"),
+    );
+    expect(
+      wrapper.find('input[aria-label="Select update repo/app:1.0"]').exists(),
+    ).toBe(true);
+    expect(
+      wrapper.find('input[aria-label="Select update repo/hidden:1.0"]').exists(),
+    ).toBe(false);
+
+    await selectAllAndPreview(wrapper);
+
+    expect(createPlan).toHaveBeenCalledWith([3], true, [], []);
   });
 
   it("selects tag update rows and enables tag rewrites when an override is edited", async () => {

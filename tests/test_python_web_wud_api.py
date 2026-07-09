@@ -52,6 +52,8 @@ def _container_payload(
     tag: str = "1.0.0",
     remote_tag: str = "1.1.0",
     result_digest: str = "sha256:remote",
+    update_kind: str = "tag",
+    local_value: str | None = None,
     remote_value: str | None = None,
     source: str = "https://github.com/acme/app",
     link: str = "https://github.com/acme/app/releases/tag/v1.1.0",
@@ -79,8 +81,8 @@ def _container_payload(
             "link": link,
         },
         "updateKind": {
-            "kind": "tag",
-            "localValue": tag,
+            "kind": update_kind,
+            "localValue": tag if local_value is None else local_value,
             "remoteValue": remote_tag if remote_value is None else remote_value,
             "semverDiff": "minor",
         },
@@ -119,7 +121,11 @@ def test_wud_api_snapshot_reads_update_metadata(tmp_path: Path, monkeypatch) -> 
             200,
             [
                 _container_payload(),
-                _container_payload(name="already-current", update_available=False),
+                _container_payload(
+                    name="already-current",
+                    update_available=False,
+                    remote_value="1.0.0",
+                ),
             ],
         ),
     )
@@ -141,6 +147,56 @@ def test_wud_api_snapshot_reads_update_metadata(tmp_path: Path, monkeypatch) -> 
     assert container.remote_digest == "sha256:remote"
     assert container.update_kind == "tag"
     assert container.semver_diff == "minor"
+    assert snapshot.hidden_update_candidates == ()
+
+
+def test_wud_api_snapshot_reads_hidden_update_candidates_from_update_kind_delta(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(
+        monkeypatch,
+        containers=(
+            200,
+            [
+                _container_payload(
+                    name="snoozed",
+                    update_available=False,
+                    update_kind="digest",
+                    local_value="sha256:local",
+                    remote_value="sha256:remote",
+                ),
+                _container_payload(
+                    name="unknown-kind",
+                    update_available=False,
+                    update_kind="unknown",
+                    local_value="1.0.0",
+                    remote_value="1.1.0",
+                ),
+                _container_payload(
+                    name="same-tag",
+                    update_available=False,
+                    local_value="1.0.0",
+                    remote_value="1.0.0",
+                ),
+            ],
+        ),
+    )
+
+    snapshot = web_wud_api.get_snapshot(
+        _settings(tmp_path, "https://wud.hidden-candidates.test:3000"),
+        include_containers=True,
+        force=True,
+    )
+
+    assert snapshot.containers == ()
+    assert len(snapshot.hidden_update_candidates) == 1
+    candidate = snapshot.hidden_update_candidates[0]
+    assert candidate.name == "snoozed"
+    assert candidate.image == "registry.example/acme/app:1.0.0"
+    assert candidate.remote_tag == "1.1.0"
+    assert candidate.remote_digest == "sha256:remote"
+    assert candidate.update_kind == "digest"
 
 
 def test_wud_api_snapshot_preserves_registry_url_for_unqualified_images(

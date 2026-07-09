@@ -36,6 +36,7 @@ import {
   uniqueStrings,
 } from "../src/views/pending/pendingDisplay";
 import {
+  filterSnoozedCandidates,
   filterPendingStackGroups,
   normalizePendingSearch,
   pendingItemMatchesSearch,
@@ -47,8 +48,10 @@ import {
 } from "../src/views/pending/utils";
 import {
   pendingGroupedItem,
+  pendingGrouping,
   pendingItem,
   pendingResponse,
+  pendingSnoozedCandidate,
   planResponse,
   releaseNoteInfo,
   securityScanInfo,
@@ -57,6 +60,10 @@ import {
   wudContainerMetadata,
 } from "./helpers/fixtures";
 import { mountWithApp, naiveStubs } from "./helpers/mount";
+import {
+  activeSnoozedServiceKeys,
+  snoozedItemsForGroups,
+} from "../src/views/pending/snoozeSelection";
 
 type RenderColumn = {
   key?: string;
@@ -242,6 +249,29 @@ describe("pending helper modules", () => {
     ).toBe(
       "repo/app@sha256:abcdefghijklmnopqrstuvwxyz0123456789 -> repo/app:latest",
     );
+  });
+
+  it("finds matched active snoozes", () => {
+    const radarr = pendingGroupedItem({
+      line_no: 1,
+      services: ["radarr"],
+    });
+    const groups = pendingGrouping([radarr]).groups;
+    const activeKeys = activeSnoozedServiceKeys([
+      snooze({ service_key: "media/radarr" }),
+      snooze({
+        kind: "dependency",
+        service_key: "media/sonarr",
+        wait_for_service_key: "media/prowlarr",
+        snoozed_until: null,
+      }),
+      snooze({ active: false, service_key: "media/expired" }),
+    ]);
+
+    expect([...activeKeys]).toEqual(["media/radarr", "media/sonarr"]);
+    expect(
+      snoozedItemsForGroups(groups, activeKeys).map(({ item }) => item.line_no),
+    ).toEqual([1]);
   });
 
   it("builds safety cues from versions, release notes, policies, and snoozes", () => {
@@ -1074,6 +1104,33 @@ describe("pending helper modules", () => {
     );
     expect(groupMatchedGroups[0].items).toEqual([app, db]);
     expect(groupMatchedGroups[0].visibleLineNumbers).toEqual([7, 8]);
+  });
+
+  it("matches display-only snoozed candidates by visible fields", () => {
+    const candidate = pendingSnoozedCandidate({
+      service_key: "media/hidden",
+      image: "repo/hidden:1.0",
+      target_image: "repo/hidden:1.1",
+      source_id: "docker.local.hidden",
+      reason: "maintenance window",
+      wud_metadata: wudContainerMetadata({
+        link: "https://metadata-only.example/releases",
+      }),
+    });
+
+    expect(filterSnoozedCandidates([candidate], "media hidden")).toEqual([
+      candidate,
+    ]);
+    expect(filterSnoozedCandidates([candidate], "repo/hidden")).toEqual([
+      candidate,
+    ]);
+    expect(filterSnoozedCandidates([candidate], "docker.local.hidden")).toEqual([
+      candidate,
+    ]);
+    expect(filterSnoozedCandidates([candidate], "metadata-only.example")).toEqual(
+      [],
+    );
+    expect(filterSnoozedCandidates([candidate], "does-not-match")).toEqual([]);
   });
 
   it("matches diagnostic details without recursing through circular references", () => {

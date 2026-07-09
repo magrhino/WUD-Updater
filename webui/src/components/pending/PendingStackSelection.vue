@@ -4,18 +4,17 @@ import { NTag } from "naive-ui";
 import type {
   PendingGroupedItem,
   PendingItem,
+  PendingSnoozedCandidate,
   PendingStackGroup,
   ReleaseNoteInfo,
   SecurityScanInfo,
 } from "../../api/client";
 import type { SnoozedPendingItem } from "../../views/pending/snoozeSelection";
-import {
-  groupedItemServices,
-  type PendingTagInputProps,
-} from "../../views/pending/pendingDisplay";
+import type { PendingTagInputProps } from "../../views/pending/pendingDisplay";
 import type { SafetyCue } from "../../views/pending/safetyCues";
 import { pluralize } from "../../views/pending/utils";
 import PendingEmptyQueueState from "./PendingEmptyQueueState.vue";
+import PendingSnoozedEntriesPanel from "./PendingSnoozedEntriesPanel.vue";
 import PendingStackCard from "./PendingStackCard.vue";
 import PendingUpdateRow from "./PendingUpdateRow.vue";
 
@@ -30,6 +29,7 @@ defineProps<{
   securityScanFor: (item: PendingGroupedItem) => SecurityScanInfo | null;
   selectedLineSet: Set<number>;
   showSetupLink: boolean;
+  snoozedCandidates: PendingSnoozedCandidate[];
   snoozedItems: SnoozedPendingItem[];
   stackGroups: PendingStackGroup[];
   stackHasSelection: (group: PendingStackGroup) => boolean;
@@ -78,52 +78,17 @@ const emit = defineEmits<{
       @update-tag="(item, value) => emit('updateTag', item, value)"
     />
 
-    <article v-if="snoozedItems.length" class="stack-card needs-review">
-      <div class="stack-card-header">
-        <div class="stack-title-block">
-          <strong class="wrap-anywhere">Snoozed pending entries</strong>
-          <span class="stack-path wrap-anywhere">
-            Excluded from bulk selection while snoozed.
-          </span>
-        </div>
-        <div class="stack-card-side">
-          <div class="stack-card-tags">
-            <n-tag size="small" type="default">
-              {{ pluralize(snoozedItems.length, "item") }}
-            </n-tag>
-          </div>
-        </div>
-      </div>
-      <details class="stack-details">
-        <summary
-          class="disclosure-summary disclosure-summary-triangle"
-          aria-label="Details for snoozed updates"
-        >
-          Details
-        </summary>
-        <div class="stack-items">
-          <PendingUpdateRow
-            v-for="{ group, item } in snoozedItems"
-            :key="`snoozed-${item.line_no}`"
-            :item="item"
-            :selected="selectedLineSet.has(item.line_no)"
-            :group-name="group.name"
-            :service-label="groupedItemServices(item)"
-            status-label="Snoozed"
-            status-tag-type="default"
-            :risk-cues="riskCues(item)"
-            :security-scan="securityScanFor(item)"
-            :show-diagnostic="false"
-            :show-release-notes="false"
-            :tag-override-value="tagOverrideValue(item)"
-            :show-tag-input="Boolean(item.desired_tag)"
-            :tag-input-props="tagInputProps(item)"
-            @toggle="(lineNo, checked) => emit('toggleLine', lineNo, checked)"
-            @update-tag="emit('updateTag', item, $event)"
-          />
-        </div>
-      </details>
-    </article>
+    <PendingSnoozedEntriesPanel
+      :risk-cues="riskCues"
+      :security-scan-for="securityScanFor"
+      :selected-line-set="selectedLineSet"
+      :snoozed-candidates="snoozedCandidates"
+      :snoozed-items="snoozedItems"
+      :tag-input-props="tagInputProps"
+      :tag-override-value="tagOverrideValue"
+      @toggle-line="(lineNo, checked) => emit('toggleLine', lineNo, checked)"
+      @update-tag="(item, value) => emit('updateTag', item, value)"
+    />
 
     <article v-if="unmatchedItems.length" class="stack-card needs-review">
       <div class="stack-card-header">
@@ -176,6 +141,7 @@ const emit = defineEmits<{
     <PendingEmptyQueueState
       v-if="
         !stackGroups.length &&
+        !snoozedCandidates.length &&
         !snoozedItems.length &&
         !unmatchedItems.length
       "

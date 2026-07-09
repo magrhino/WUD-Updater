@@ -12,6 +12,7 @@ import type {
   PendingItem,
   PendingResponse,
   PendingRescanResponse,
+  PendingSnoozedCandidate,
   PendingSourceInfo,
   PlanResponse,
   ReleaseNoteInfo,
@@ -623,6 +624,35 @@ export function pendingGroupedItem(
   };
 }
 
+export function pendingSnoozedCandidate(
+  overrides: Partial<PendingSnoozedCandidate> = {},
+): PendingSnoozedCandidate {
+  return {
+    key: "demo-hidden-media-worker",
+    service_key: "media/worker",
+    stack: "media",
+    service: "worker",
+    image: "repo/worker:1.0",
+    target_image: "repo/worker:1.1",
+    current_tag: "1.0",
+    desired_tag: "1.1",
+    digest: "",
+    source_id: "docker.local.worker",
+    wud_metadata: wudContainerMetadata({
+      id: "docker.local.worker",
+      name: "worker",
+      display_name: "Worker",
+      local_tag: "1.0",
+      remote_tag: "1.1",
+    }),
+    snooze_kind: "time",
+    reason: "maintenance window",
+    snoozed_until: "2099-01-01T00:00:00+00:00",
+    wait_for_service_key: "",
+    ...overrides,
+  };
+}
+
 export function securityScanInfo(
   overrides: Partial<SecurityScanInfo> = {},
 ): SecurityScanInfo {
@@ -715,6 +745,7 @@ export function pendingResponse(items = [pendingItem()]): PendingResponse {
     count: items.length,
     items,
     grouping: pendingGrouping(groupedItems),
+    snoozed_candidates: [],
     wud_api: wudApiStatus(),
     warnings: [],
   };

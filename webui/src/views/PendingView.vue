@@ -76,6 +76,7 @@ const {
   riskCues,
   selectableLineNumbers,
   selectAllLabel,
+  snoozedCandidates,
   snoozedItems,
   stackGroups,
   unmatchedItems,
@@ -83,6 +84,7 @@ const {
 const {
   clearPendingSearch,
   filteredPendingItems,
+  filteredSnoozedCandidates,
   filteredSnoozedItems,
   filteredStackGroups,
   filteredUnmatchedItems,
@@ -96,6 +98,7 @@ const {
 } = usePendingSearchState({
   pendingItems,
   groupingReady,
+  snoozedCandidates,
   snoozedItems,
   selectableLineNumbers,
   selectAllLabel,
@@ -880,7 +883,9 @@ onBeforeUnmount(() => {
       :selected-rescan-disabled="selectedRescanDisabled"
       :selected-rescan-disabled-message="selectedRescanDisabledMessage"
       :selected-rescan-visible="selectedRescanVisible"
-      :snoozed-count="filteredSnoozedItems.length"
+      :snoozed-count="
+        filteredSnoozedItems.length + filteredSnoozedCandidates.length
+      "
       :stack-count="filteredStackGroups.length"
       :unmatched-review-count-label="visibleUnmatchedReviewCountLabel"
       :update-selected-disabled="updateSelectedDisabled"
@@ -918,6 +923,7 @@ onBeforeUnmount(() => {
         :security-scan-for="updates.securityScanFor"
         :selected-line-set="selectedLineSet"
         :show-setup-link="showSetupLink"
+        :snoozed-candidates="filteredSnoozedCandidates"
         :snoozed-items="filteredSnoozedItems"
         :stack-groups="filteredStackGroups"
         :stack-has-selection="stackHasSelection"
