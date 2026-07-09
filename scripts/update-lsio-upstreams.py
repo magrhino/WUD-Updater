@@ -42,6 +42,10 @@ class MapEntry:
         return bool(self.comments)
 
 
+class GitHubRequestError(RuntimeError):
+    pass
+
+
 def safe_map_path(path: Path) -> Path:
     resolved = path.expanduser().resolve(strict=False)
     allowed_roots = (REPO_ROOT.resolve(), Path.cwd().resolve())
@@ -53,7 +57,6 @@ def safe_map_path(path: Path) -> Path:
 def read_map(path: Path) -> dict[str, MapEntry]:
     entries: dict[str, MapEntry] = {}
     pending_comments: list[str] = []
-    seen_entry = False
 
     if not path.exists():
         return entries
@@ -64,8 +67,7 @@ def read_map(path: Path) -> dict[str, MapEntry]:
             pending_comments.clear()
             continue
         if line.startswith("#"):
-            if seen_entry:
-                pending_comments.append(line)
+            pending_comments.append(line)
             continue
 
         match = ENTRY_RE.match(line)
@@ -75,7 +77,6 @@ def read_map(path: Path) -> dict[str, MapEntry]:
         key, value = match.groups()
         entries[key] = MapEntry(key, value, tuple(pending_comments))
         pending_comments.clear()
-        seen_entry = True
 
     return entries
 
@@ -151,8 +152,16 @@ def github_token() -> str:
 
 def github_json(url: str) -> object:
     request = urllib.request.Request(url, headers=github_headers())
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code in {403, 429}:
+            raise GitHubRequestError(
+                f"GitHub API request failed with HTTP {exc.code} ({exc.msg}); "
+                "retry later or set GITHUB_TOKEN/GH_TOKEN for a higher rate limit."
+            ) from exc
+        raise
 
 
 def github_file(repo: str, branch: str, filename: str) -> str | None:
@@ -346,11 +355,15 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
-    source = (
-        source_entries_from_dir(args.source_dir)
-        if args.source_dir is not None
-        else source_entries_from_github()
-    )
+    try:
+        source = (
+            source_entries_from_dir(args.source_dir)
+            if args.source_dir is not None
+            else source_entries_from_github()
+        )
+    except GitHubRequestError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     if args.write:
         args.map.write_text(

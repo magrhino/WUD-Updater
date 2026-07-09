@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -102,6 +103,25 @@ linuxserver/docker-zed: new/zed
 """
 
 
+def test_read_map_preserves_leading_override_comment(tmp_path: Path):
+    map_path = tmp_path / "upstreams.txt"
+    map_path.write_text(
+        """# Leading override.
+linuxserver/docker-first: example/first
+
+# Cleared comment.
+
+linuxserver/docker-second: example/second
+""",
+        encoding="utf-8",
+    )
+
+    entries = lsio.read_map(map_path)
+
+    assert entries["linuxserver/docker-first"].comments == ("# Leading override.",)
+    assert entries["linuxserver/docker-second"].comments == ()
+
+
 def test_check_reports_missing_changed_and_removed_without_overrides(
     tmp_path: Path,
     monkeypatch,
@@ -176,10 +196,35 @@ def test_default_github_mode_requires_token(tmp_path: Path, monkeypatch, capsys)
     assert "requires GITHUB_TOKEN or GH_TOKEN" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("status,message", [(403, "Forbidden"), (429, "Too Many Requests")])
+def test_github_mode_reports_throttling_without_traceback(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+    status: int,
+    message: str,
+):
+    def throttled(_request, *, timeout: float):
+        raise urllib.error.HTTPError("https://api.github.com/test", status, message, {}, None)
+
+    monkeypatch.chdir(tmp_path)
+    map_path = tmp_path / "upstreams.txt"
+    map_path.write_text("", encoding="utf-8")
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setattr(lsio.urllib.request, "urlopen", throttled)
+
+    assert lsio.main(["--map", str(map_path)]) == 2
+
+    captured = capsys.readouterr()
+    assert f"HTTP {status} ({message})" in captured.err
+    assert "Traceback" not in captured.err
+
+
 def test_map_path_must_stay_inside_repo_or_cwd(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    outside_upstreams = tmp_path.parent / "outside-upstreams.txt"
 
     with pytest.raises(SystemExit) as exc_info:
-        lsio.parse_args(["--map", str(tmp_path.parent / "outside-upstreams.txt")])
+        lsio.parse_args(["--map", str(outside_upstreams)])
 
     assert exc_info.value.code == 2
