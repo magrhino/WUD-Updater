@@ -162,6 +162,10 @@ def github_json(url: str) -> object:
                 "retry later or set GITHUB_TOKEN/GH_TOKEN for a higher rate limit."
             ) from exc
         raise
+    except OSError as exc:
+        raise GitHubRequestError(
+            f"GitHub API request failed due to a network error ({exc}); retry later."
+        ) from exc
 
 
 def github_file(repo: str, branch: str, filename: str) -> str | None:

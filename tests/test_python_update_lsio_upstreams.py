@@ -220,6 +220,47 @@ def test_github_mode_reports_throttling_without_traceback(
     assert "Traceback" not in captured.err
 
 
+@pytest.mark.parametrize(
+    "network_exc",
+    [
+        urllib.error.URLError("temporary failure in name resolution"),
+        TimeoutError("timed out"),
+    ],
+)
+def test_github_json_wraps_network_failures(monkeypatch, network_exc: OSError):
+    def failed(_request, *, timeout: float):
+        raise network_exc
+
+    monkeypatch.setattr(lsio.urllib.request, "urlopen", failed)
+
+    with pytest.raises(lsio.GitHubRequestError) as exc_info:
+        lsio.github_json("https://api.github.com/test")
+
+    assert exc_info.value.__cause__ is network_exc
+    assert "network error" in str(exc_info.value)
+    assert "retry later" in str(exc_info.value)
+
+
+def test_github_json_reraises_non_throttling_http_errors(monkeypatch):
+    http_error = urllib.error.HTTPError(
+        "https://api.github.com/test",
+        500,
+        "Server Error",
+        {},
+        None,
+    )
+
+    def failed(_request, *, timeout: float):
+        raise http_error
+
+    monkeypatch.setattr(lsio.urllib.request, "urlopen", failed)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        lsio.github_json("https://api.github.com/test")
+
+    assert exc_info.value is http_error
+
+
 def test_map_path_must_stay_inside_repo_or_cwd(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     outside_upstreams = tmp_path.parent / "outside-upstreams.txt"
