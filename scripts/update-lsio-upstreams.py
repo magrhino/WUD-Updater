@@ -48,7 +48,7 @@ class MapEntry:
 
 @dataclass(frozen=True)
 class SourceScan:
-    seen: set[str]
+    seen: frozenset[str]
     entries: dict[str, str]
 
 
@@ -163,7 +163,7 @@ def source_entries_from_dir(source_dir: Path) -> SourceScan:
         upstream = read_source_repo(repo_dir)
         if upstream is not None:
             entries[key] = upstream
-    return SourceScan(seen, entries)
+    return SourceScan(frozenset(seen), entries)
 
 
 def github_headers() -> dict[str, str]:
@@ -274,7 +274,7 @@ def source_entries_from_github() -> SourceScan:
         if entry is not None:
             key, upstream = entry
             entries[key] = upstream
-    return SourceScan(seen, entries)
+    return SourceScan(frozenset(seen), entries)
 
 
 def compare_entries(
