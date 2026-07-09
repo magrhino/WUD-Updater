@@ -12,11 +12,23 @@ from typing import Any, Protocol
 
 from fastapi import HTTPException, Request
 
-from . import web_database, web_jobs, web_pending_sources, web_wud_api, web_wud_refresh
+from . import (
+    web_database,
+    web_jobs,
+    web_pending_snoozes,
+    web_pending_sources,
+    web_wud_api,
+    web_wud_refresh,
+)
 from .command import CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError
 from .config import ConfigError, UpdaterConfig
-from .db import DatabaseError, init_db, open_db, utc_timestamp
+from .db import (
+    DatabaseError,
+    init_db,
+    open_db,
+    utc_timestamp,
+)
 from .file_ops import OwnerConfig
 from .images import image_tag, repo_key
 from .plans import (
@@ -57,7 +69,11 @@ from .web_models import (
     WebSettings,
     WudApiStatus,
 )
-from .wud_file import ParsedWudFile, parse_wud_file, remove_lines_before_run
+from .wud_file import (
+    ParsedWudFile,
+    parse_wud_file,
+    remove_lines_before_run,
+)
 
 
 class EffectiveConfigLoader(Protocol):
@@ -332,6 +348,15 @@ def pending_response(
         if include_grouping
         else PendingGrouping(status="unavailable")
     )
+    snoozed_candidates = (
+        web_pending_snoozes.pending_snoozed_candidates(
+            settings,
+            source,
+            _effective_config(settings),
+        )
+        if include_grouping
+        else []
+    )
     provenance_by_line = _pending_grouping_provenance_by_line(grouping)
     items = [
         PendingItem(
@@ -368,6 +393,7 @@ def pending_response(
         count=len(items),
         items=items,
         grouping=grouping,
+        snoozed_candidates=snoozed_candidates,
         wud_api=_wud_api_status(source.wud_snapshot),
         warnings=list(source.warnings),
     )

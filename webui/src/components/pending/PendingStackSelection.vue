@@ -4,6 +4,7 @@ import { NTag } from "naive-ui";
 import type {
   PendingGroupedItem,
   PendingItem,
+  PendingSnoozedCandidate,
   PendingStackGroup,
   ReleaseNoteInfo,
   SecurityScanInfo,
@@ -28,6 +29,7 @@ defineProps<{
   securityScanFor: (item: PendingGroupedItem) => SecurityScanInfo | null;
   selectedLineSet: Set<number>;
   showSetupLink: boolean;
+  snoozedCandidates: PendingSnoozedCandidate[];
   snoozedItems: SnoozedPendingItem[];
   stackGroups: PendingStackGroup[];
   stackHasSelection: (group: PendingStackGroup) => boolean;
@@ -80,6 +82,7 @@ const emit = defineEmits<{
       :risk-cues="riskCues"
       :security-scan-for="securityScanFor"
       :selected-line-set="selectedLineSet"
+      :snoozed-candidates="snoozedCandidates"
       :snoozed-items="snoozedItems"
       :tag-input-props="tagInputProps"
       :tag-override-value="tagOverrideValue"
@@ -138,6 +141,7 @@ const emit = defineEmits<{
     <PendingEmptyQueueState
       v-if="
         !stackGroups.length &&
+        !snoozedCandidates.length &&
         !snoozedItems.length &&
         !unmatchedItems.length
       "

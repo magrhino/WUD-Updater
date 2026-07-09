@@ -73,6 +73,9 @@ export function usePendingQueueState() {
   const snoozedItems = computed(() =>
     snoozedItemsForGroups(rawStackGroups.value, bulkSnoozedServiceKeys.value),
   );
+  const snoozedCandidates = computed(
+    () => updates.pending?.snoozed_candidates ?? [],
+  );
   const stackGroups = computed(() =>
     stackGroupsWithoutSnoozedItems(
       rawStackGroups.value,
@@ -190,6 +193,7 @@ export function usePendingQueueState() {
     riskCues,
     selectableLineNumbers,
     selectAllLabel,
+    snoozedCandidates,
     snoozedItems,
     stackGroups,
     stackLineNumbers,

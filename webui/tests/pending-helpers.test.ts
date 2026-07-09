@@ -36,6 +36,7 @@ import {
   uniqueStrings,
 } from "../src/views/pending/pendingDisplay";
 import {
+  filterSnoozedCandidates,
   filterPendingStackGroups,
   normalizePendingSearch,
   pendingItemMatchesSearch,
@@ -50,6 +51,7 @@ import {
   pendingGrouping,
   pendingItem,
   pendingResponse,
+  pendingSnoozedCandidate,
   planResponse,
   releaseNoteInfo,
   securityScanInfo,
@@ -1102,6 +1104,33 @@ describe("pending helper modules", () => {
     );
     expect(groupMatchedGroups[0].items).toEqual([app, db]);
     expect(groupMatchedGroups[0].visibleLineNumbers).toEqual([7, 8]);
+  });
+
+  it("matches display-only snoozed candidates by visible fields", () => {
+    const candidate = pendingSnoozedCandidate({
+      service_key: "media/hidden",
+      image: "repo/hidden:1.0",
+      target_image: "repo/hidden:1.1",
+      source_id: "docker.local.hidden",
+      reason: "maintenance window",
+      wud_metadata: wudContainerMetadata({
+        link: "https://metadata-only.example/releases",
+      }),
+    });
+
+    expect(filterSnoozedCandidates([candidate], "media hidden")).toEqual([
+      candidate,
+    ]);
+    expect(filterSnoozedCandidates([candidate], "repo/hidden")).toEqual([
+      candidate,
+    ]);
+    expect(filterSnoozedCandidates([candidate], "docker.local.hidden")).toEqual([
+      candidate,
+    ]);
+    expect(filterSnoozedCandidates([candidate], "metadata-only.example")).toEqual(
+      [],
+    );
+    expect(filterSnoozedCandidates([candidate], "does-not-match")).toEqual([]);
   });
 
   it("matches diagnostic details without recursing through circular references", () => {

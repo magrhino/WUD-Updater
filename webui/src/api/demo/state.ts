@@ -76,7 +76,6 @@ const DEMO_FINDING_SECURITY_COUNTS: SecurityScanSeverityCounts = {
   low: 0,
   unknown: 0,
 };
-
 type DemoSecurityScanDecision = {
   hasFindings: boolean;
   state: SecurityScanInfo["state"];
@@ -290,7 +289,7 @@ function materializeRunFixture(fixture: DemoRunFixture, runId: number): DemoRunF
 }
 
 function filterPendingResponse(activeKeys: Set<string>): PendingResponse {
-  const response = clone(fixtures.pending);
+  const response: PendingResponse = clone(fixtures.pending);
   response.items = response.items.filter((item) => activeKeys.has(cleanupLineKey(item)));
   response.count = response.items.length;
   response.grouping.groups = response.grouping.groups

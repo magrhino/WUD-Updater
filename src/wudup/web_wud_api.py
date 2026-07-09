@@ -117,6 +117,7 @@ class WudApiContainer:
 class WudApiSnapshot:
     status: WudApiStatus
     containers: tuple[WudApiContainer, ...] = ()
+    hidden_update_candidates: tuple[WudApiContainer, ...] = ()
     metadata_checked: bool = False
     checked_monotonic: float = 0.0
 
@@ -660,6 +661,11 @@ def _refresh_snapshot(
         for item in (_parse_container(raw, settings) for raw in payload)
         if item is not None
     )
+    hidden_update_candidates = tuple(
+        item
+        for item in (_parse_hidden_update_candidate(raw, settings) for raw in payload)
+        if item is not None
+    )
     snapshot = _snapshot(
         "ready",
         available=True,
@@ -669,6 +675,7 @@ def _refresh_snapshot(
         checked_monotonic=checked_monotonic,
         metadata_checked=True,
         containers=containers,
+        hidden_update_candidates=hidden_update_candidates,
     )
     _store_snapshot(_cache_key(settings, base_url), snapshot)
     return snapshot
@@ -871,6 +878,7 @@ def _snapshot(
     checked_monotonic: float,
     metadata_checked: bool = False,
     containers: Sequence[WudApiContainer] = (),
+    hidden_update_candidates: Sequence[WudApiContainer] = (),
 ) -> WudApiSnapshot:
     return WudApiSnapshot(
         status=WudApiStatus(
@@ -881,6 +889,7 @@ def _snapshot(
             detail=detail,
         ),
         containers=tuple(containers),
+        hidden_update_candidates=tuple(hidden_update_candidates),
         metadata_checked=metadata_checked,
         checked_monotonic=checked_monotonic,
     )
@@ -966,6 +975,33 @@ def _parse_container(
 ) -> WudApiContainer | None:
     if not isinstance(raw, dict) or raw.get("updateAvailable") is not True:
         return None
+    return _parse_container_payload(raw, settings)
+
+
+def _parse_hidden_update_candidate(
+    raw: object,
+    settings: WebSettings,
+) -> WudApiContainer | None:
+    if not isinstance(raw, dict) or raw.get("updateAvailable") is True:
+        return None
+    update_kind = _object(raw.get("updateKind"))
+    if not _hidden_update_kind_has_delta(update_kind):
+        return None
+    return _parse_container_payload(raw, settings)
+
+
+def _hidden_update_kind_has_delta(update_kind: Mapping[str, object]) -> bool:
+    if _string(update_kind.get("kind")) not in {"tag", "digest"}:
+        return False
+    local_value = _string(update_kind.get("localValue"))
+    remote_value = _string(update_kind.get("remoteValue"))
+    return bool(local_value and remote_value and local_value != remote_value)
+
+
+def _parse_container_payload(
+    raw: Mapping[str, object],
+    settings: WebSettings,
+) -> WudApiContainer | None:
     image = _object(raw.get("image"))
     result = _object(raw.get("result"))
     update_kind = _object(raw.get("updateKind"))

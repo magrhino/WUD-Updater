@@ -74,7 +74,15 @@ test("static demo renders current pending state in read-only mode", async ({
     .filter({ hasText: "Snoozed pending entries" });
   await expect(snoozedPanel).toBeVisible();
   await snoozedPanel.getByText("Details", { exact: true }).click();
-  await expect(snoozedPanel.getByText("media / radarr")).toBeVisible();
+  await expect(snoozedPanel.getByText("media / radarr").first()).toBeVisible();
+  await expect(
+    snoozedPanel.getByText(
+      "lscr.io/linuxserver/radarr:5.21.1 -> lscr.io/linuxserver/radarr:5.23.0",
+    ),
+  ).toBeVisible();
+  await expect(
+    snoozedPanel.getByText("No matching pending update row."),
+  ).toBeVisible();
   await expect(
     page.getByTitle("ghcr.io/home-assistant/home-assistant:2026.5.1").first(),
   ).toBeVisible();

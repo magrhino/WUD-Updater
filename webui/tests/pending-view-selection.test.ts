@@ -10,6 +10,7 @@ import {
   pendingItem,
   pendingResponse,
   pendingRescanResponse,
+  pendingSnoozedCandidate,
   pendingSourceInfo,
   planResponse,
   snooze,
@@ -983,6 +984,15 @@ describe("pending view selection actions", () => {
       ...unmatchedPendingItem(),
       line_no: 2,
     };
+    const candidate = pendingSnoozedCandidate({
+      key: "hidden-candidate",
+      service_key: "media/hidden",
+      stack: "media",
+      service: "hidden",
+      image: "repo/hidden:1.0",
+      target_image: "repo/hidden:1.1",
+      source_id: "docker.local.hidden",
+    });
     const grouping = pendingGrouping([snoozedItem, stackItem]);
     const { pinia, settings, updates } = setupStores(true);
     settings.snoozes = [
@@ -997,6 +1007,7 @@ describe("pending view selection actions", () => {
         ...grouping,
         unmatched: [staleItem],
       },
+      snoozed_candidates: [candidate],
     };
     mockPendingLifecycle(settings, updates);
     const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
@@ -1005,12 +1016,18 @@ describe("pending view selection actions", () => {
 
     expect(text).toContain("Snoozed pending entries");
     expect(text).toContain("repo/app:1.0");
+    expect(text).toContain("media / hidden");
+    expect(text).toContain("repo/hidden:1.0 -> repo/hidden:1.1");
+    expect(text).toContain("No matching pending update row.");
     expect(text.indexOf("Snoozed pending entries")).toBeLessThan(
       text.indexOf("Stale pending entries"),
     );
     expect(
       wrapper.find('input[aria-label="Select update repo/app:1.0"]').exists(),
     ).toBe(true);
+    expect(
+      wrapper.find('input[aria-label="Select update repo/hidden:1.0"]').exists(),
+    ).toBe(false);
 
     await selectAllAndPreview(wrapper);
 
