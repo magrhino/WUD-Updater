@@ -986,7 +986,7 @@ describe("pending view selection actions", () => {
     };
     const candidate = pendingSnoozedCandidate({
       key: "hidden-candidate",
-      service_key: "media/hidden",
+      service_key: "media/tv/hidden",
       stack: "media",
       service: "hidden",
       image: "repo/hidden:1.0",
@@ -1016,7 +1016,7 @@ describe("pending view selection actions", () => {
 
     expect(text).toContain("Snoozed pending entries");
     expect(text).toContain("repo/app:1.0");
-    expect(text).toContain("media / hidden");
+    expect(text).toContain("media / tv / hidden");
     expect(text).toContain("repo/hidden:1.0 -> repo/hidden:1.1");
     expect(text).toContain("No matching pending update row.");
     expect(text.indexOf("Snoozed pending entries")).toBeLessThan(

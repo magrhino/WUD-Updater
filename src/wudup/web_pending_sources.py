@@ -182,7 +182,7 @@ def _api_source(
             warnings=(f"WUD API pending source degraded: {detail}",),
         )
 
-    lines = _api_pending_lines(snapshot.containers)
+    lines = api_pending_lines(snapshot.containers)
     text = _pending_text(line.raw for line in lines)
     parsed, source_hash = _parse_pending_source_text(text)
     metadata_by_line = {
@@ -243,17 +243,17 @@ def _empty_api_source(
 
 
 @dataclass(frozen=True)
-class _ApiPendingLine:
+class ApiPendingLine:
     raw: str
     container: web_wud_api.WudApiContainer
     container_ids: tuple[str, ...]
     source_ids: tuple[str, ...]
 
 
-def _api_pending_lines(
+def api_pending_lines(
     containers: tuple[web_wud_api.WudApiContainer, ...],
-) -> tuple[_ApiPendingLine, ...]:
-    by_raw: dict[str, _ApiPendingLine] = {}
+) -> tuple[ApiPendingLine, ...]:
+    by_raw: dict[str, ApiPendingLine] = {}
     for container in sorted(containers, key=_container_sort_key):
         raw = _container_pending_line(container)
         if not raw:
@@ -261,7 +261,7 @@ def _api_pending_lines(
         source_id = _container_source_id(container)
         existing = by_raw.get(raw)
         if existing is None:
-            by_raw[raw] = _ApiPendingLine(
+            by_raw[raw] = ApiPendingLine(
                 raw=raw,
                 container=container,
                 container_ids=_container_ids(container),

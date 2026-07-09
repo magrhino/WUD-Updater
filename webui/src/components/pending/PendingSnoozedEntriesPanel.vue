@@ -32,7 +32,7 @@ const emit = defineEmits<{
 }>();
 
 function candidateServiceLabel(candidate: PendingSnoozedCandidate): string {
-  return candidate.service_key.replace("/", " / ");
+  return candidate.service_key.replaceAll("/", " / ");
 }
 
 function candidateTargetLabel(candidate: PendingSnoozedCandidate): string {

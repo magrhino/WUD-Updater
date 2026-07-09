@@ -35,7 +35,7 @@ def pending_snoozed_candidates(
         or not snapshot.hidden_update_candidates
     ):
         return []
-    lines = web_pending_sources._api_pending_lines(snapshot.hidden_update_candidates)
+    lines = web_pending_sources.api_pending_lines(snapshot.hidden_update_candidates)
     if not lines:
         return []
     text = "\n".join(line.raw for line in lines)
@@ -70,6 +70,20 @@ def pending_snoozed_candidates(
     if not active_snoozes:
         return []
 
+    return _build_snoozed_candidates(
+        grouping,
+        candidate_metadata,
+        source_ids_by_line,
+        active_snoozes,
+    )
+
+
+def _build_snoozed_candidates(
+    grouping,
+    candidate_metadata: dict,
+    source_ids_by_line: dict,
+    active_snoozes: dict[str, _ActivePendingSnooze],
+) -> list[PendingSnoozedCandidate]:
     candidates: list[PendingSnoozedCandidate] = []
     seen: set[str] = set()
     for group in grouping.groups:
