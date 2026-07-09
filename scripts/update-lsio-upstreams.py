@@ -26,7 +26,6 @@ ENTRY_RE = re.compile(
     r"^(linuxserver/docker-[A-Za-z0-9._-]+): "
     r"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)$"
 )
-PROJECT_URL_RE = re.compile(r"^project_url:\s*(.*?)\s*$")
 GITHUB_PROJECT_RE = re.compile(
     r"^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:\.git)?/?$"
 )
@@ -41,6 +40,14 @@ class MapEntry:
     @property
     def is_override(self) -> bool:
         return bool(self.comments)
+
+
+def safe_map_path(path: Path) -> Path:
+    resolved = path.expanduser().resolve(strict=False)
+    allowed_roots = (REPO_ROOT.resolve(), Path.cwd().resolve())
+    if any(resolved == root or resolved.is_relative_to(root) for root in allowed_roots):
+        return resolved
+    raise ValueError(f"map path {path} is outside the repo or current directory")
 
 
 def read_map(path: Path) -> dict[str, MapEntry]:
@@ -77,10 +84,10 @@ def extract_project_url(text: str) -> str | None:
     for line in text.splitlines():
         if line.startswith((" ", "\t")):
             continue
-        match = PROJECT_URL_RE.match(line)
-        if match is None:
+        key, separator, value = line.partition(":")
+        if separator != ":" or key != "project_url":
             continue
-        value = match.group(1).strip()
+        value = value.strip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
             value = value[1:-1]
         return value
@@ -169,7 +176,17 @@ def github_file(repo: str, branch: str, filename: str) -> str | None:
     return base64.b64decode(content).decode("utf-8")
 
 
-def source_entries_from_github() -> dict[str, str]:
+def docker_repo_from_github_item(item: object) -> tuple[str, str] | None:
+    if not isinstance(item, dict):
+        return None
+    name = item.get("name")
+    if not isinstance(name, str) or not name.startswith("docker-"):
+        return None
+    branch = item.get("default_branch")
+    return name, branch if isinstance(branch, str) else "master"
+
+
+def linuxserver_repos_from_github() -> list[tuple[str, str]]:
     repos: list[tuple[str, str]] = []
     page = 1
     while True:
@@ -182,30 +199,38 @@ def source_entries_from_github() -> dict[str, str]:
             break
 
         for item in data:
-            if not isinstance(item, dict):
-                continue
-            name = item.get("name")
-            if isinstance(name, str) and name.startswith("docker-"):
-                branch = item.get("default_branch")
-                repos.append((name, branch if isinstance(branch, str) else "master"))
+            repo = docker_repo_from_github_item(item)
+            if repo is not None:
+                repos.append(repo)
 
         if len(data) < 100:
             break
         page += 1
+    return sorted(repos)
 
+
+def source_entry_from_github_repo(repo: str, branch: str) -> tuple[str, str] | None:
+    for filename in ("readme-vars.yml", "jenkins-vars.yml"):
+        content = github_file(repo, branch, filename)
+        if content is None:
+            continue
+        raw_url = extract_project_url(content)
+        if raw_url is None:
+            continue
+        upstream = normalize_github_project(raw_url)
+        if upstream is not None:
+            return f"linuxserver/{repo}", upstream
+        break
+    return None
+
+
+def source_entries_from_github() -> dict[str, str]:
     entries: dict[str, str] = {}
-    for repo, branch in sorted(repos):
-        for filename in ("readme-vars.yml", "jenkins-vars.yml"):
-            content = github_file(repo, branch, filename)
-            if content is None:
-                continue
-            raw_url = extract_project_url(content)
-            if raw_url is None:
-                continue
-            upstream = normalize_github_project(raw_url)
-            if upstream is not None:
-                entries[f"linuxserver/{repo}"] = upstream
-            break
+    for repo, branch in linuxserver_repos_from_github():
+        entry = source_entry_from_github_repo(repo, branch)
+        if entry is not None:
+            key, upstream = entry
+            entries[key] = upstream
     return entries
 
 
@@ -303,7 +328,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         type=Path,
         help="local directory containing linuxserver docker-* source checkouts",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    try:
+        args.map = safe_map_path(args.map)
+    except ValueError as exc:
+        parser.error(str(exc))
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -4,6 +4,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 
 def load_script():
     script = Path(__file__).resolve().parents[1] / "scripts" / (
@@ -102,8 +104,10 @@ linuxserver/docker-zed: new/zed
 
 def test_check_reports_missing_changed_and_removed_without_overrides(
     tmp_path: Path,
+    monkeypatch,
     capsys,
 ):
+    monkeypatch.chdir(tmp_path)
     source = tmp_path / "source"
     source.mkdir()
     write_metadata(source, "docker-alpha", "readme-vars.yml", "https://github.com/new/alpha")
@@ -134,7 +138,8 @@ linuxserver/docker-removed: old/removed
     assert "Regenerate with: scripts/update-lsio-upstreams.py --write --map" in output
 
 
-def test_write_updates_map_deterministically(tmp_path: Path):
+def test_write_updates_map_deterministically(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     source = tmp_path / "source"
     source.mkdir()
     write_metadata(source, "docker-zed", "readme-vars.yml", "https://github.com/zed/app")
@@ -156,16 +161,25 @@ linuxserver/docker-zed: zed/app
 
 
 def test_default_github_mode_requires_token(tmp_path: Path, monkeypatch, capsys):
+    def fail_network():
+        raise AssertionError("network should not run")
+
+    monkeypatch.chdir(tmp_path)
     map_path = tmp_path / "upstreams.txt"
     map_path.write_text("", encoding="utf-8")
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.delenv("GH_TOKEN", raising=False)
-    monkeypatch.setattr(
-        lsio,
-        "source_entries_from_github",
-        lambda: (_ for _ in ()).throw(AssertionError("network should not run")),
-    )
+    monkeypatch.setattr(lsio, "source_entries_from_github", fail_network)
 
     assert lsio.main(["--map", str(map_path)]) == 2
 
     assert "requires GITHUB_TOKEN or GH_TOKEN" in capsys.readouterr().err
+
+
+def test_map_path_must_stay_inside_repo_or_cwd(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(SystemExit) as exc_info:
+        lsio.parse_args(["--map", str(tmp_path.parent / "outside-upstreams.txt")])
+
+    assert exc_info.value.code == 2
