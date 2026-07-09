@@ -146,3 +146,19 @@ def test_write_updates_map_deterministically(tmp_path: Path):
 linuxserver/docker-alpha: alpha/app
 linuxserver/docker-zed: zed/app
 """
+
+
+def test_default_github_mode_requires_token(tmp_path: Path, monkeypatch, capsys):
+    map_path = tmp_path / "upstreams.txt"
+    map_path.write_text("", encoding="utf-8")
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.setattr(
+        lsio,
+        "source_entries_from_github",
+        lambda: (_ for _ in ()).throw(AssertionError("network should not run")),
+    )
+
+    assert lsio.main(["--check", "--map", str(map_path)]) == 2
+
+    assert "requires GITHUB_TOKEN or GH_TOKEN" in capsys.readouterr().err

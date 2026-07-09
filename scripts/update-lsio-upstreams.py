@@ -143,10 +143,14 @@ def github_headers() -> dict[str, str]:
         "User-Agent": "wudup-lsio-upstreams",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    token = github_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers
+
+
+def github_token() -> str:
+    return os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or ""
 
 
 def github_json(url: str) -> object:
@@ -306,6 +310,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     current = read_map(args.map)
+    if args.source_dir is None and not github_token():
+        print(
+            "error: GitHub mode requires GITHUB_TOKEN or GH_TOKEN; "
+            "pass --source-dir to use local LSIO checkouts.",
+            file=sys.stderr,
+        )
+        return 2
     source = (
         source_entries_from_dir(args.source_dir)
         if args.source_dir is not None
