@@ -1,8 +1,8 @@
 # /wud/upstreams.txt
 # Format: linuxserver/docker-<image>: <Owner>/<Repo>
 # Keep entries sorted by the linuxserver/docker-* key.
-# Last updated: 2026-06-24
 
+linuxserver/docker-adguardhome-sync: bakito/adguardhome-sync
 linuxserver/docker-airsonic-advanced: kagemomiji/airsonic-advanced
 linuxserver/docker-altus: amanharwara/altus
 linuxserver/docker-apprise-api: caronc/apprise-api
