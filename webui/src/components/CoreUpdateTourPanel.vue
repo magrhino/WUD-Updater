@@ -136,15 +136,16 @@ onMounted(() => {
 .core-tour-main h2 {
   margin: 0;
   color: var(--color-ink);
-  font-size: 1rem;
-  line-height: 1.25;
+  font-size: var(--text-title-size);
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .core-tour-main p {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.45;
+  font-size: var(--text-body-size);
+  line-height: 1.5;
 }
 
 .core-tour-actions {

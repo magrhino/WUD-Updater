@@ -246,7 +246,7 @@ onMounted(() => {
   gap: 7px;
   min-width: 0;
   color: var(--color-muted-text);
-  font-size: 0.82rem;
+  font-size: var(--text-metadata-size);
   font-weight: 600;
 }
 
@@ -259,7 +259,7 @@ onMounted(() => {
   min-width: 0;
   margin: 7px 0 0 27px;
   color: var(--color-ink);
-  font-size: 1.08rem;
+  font-size: var(--text-body-size);
   font-weight: 700;
   line-height: 1.2;
   overflow-wrap: anywhere;

@@ -173,7 +173,7 @@ defineEmits<{
 
 .retag-summary-strip strong {
   color: var(--color-ink);
-  font-size: 1.1rem;
+  font-size: var(--text-body-size);
   line-height: 1.2;
 }
 

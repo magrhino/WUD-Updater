@@ -3,8 +3,15 @@
   color: var(--color-ink);
   background: var(--color-body-bg);
   font-family: var(--font-sans);
-  font-size: 16px;
+  font-size: 100%;
+  line-height: 1.5;
   letter-spacing: 0;
+  font-kerning: normal;
+  --text-title-size: 1.35rem;
+  --text-body-size: 1rem;
+  --text-metadata-size: 0.84rem;
+  --text-label-size: 0.78rem;
+  --text-data-size: 0.84rem;
   --motion-fast: 120ms;
   --motion-base: 180ms;
   --motion-route: 220ms;

@@ -77,6 +77,7 @@ describe("webui theme tokens", () => {
     expect(themeOverrides.common?.tableHeaderColor).toBe(
       designTokens.color.tableHead,
     );
+    expect(themeOverrides.common?.fontSize).toBe("1rem");
     expect(themeOverrides.Tag?.colorError).toBe(designTokens.color.errorBg);
     expect(themeOverrides.Tag?.textColorError).toBe(
       designTokens.color.errorFg,

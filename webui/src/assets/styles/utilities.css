@@ -28,7 +28,7 @@
 .eyebrow {
   margin: 0 0 4px;
   color: var(--color-muted-text);
-  font-size: 0.82rem;
+  font-size: var(--text-metadata-size);
   font-weight: 600;
   line-height: 1.25;
   letter-spacing: 0;
@@ -37,7 +37,7 @@
 .value-eyebrow {
   max-width: min(100%, 92ch);
   font-family: var(--font-mono);
-  font-size: 0.76rem;
+  font-size: var(--text-data-size);
   font-weight: 700;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -52,7 +52,7 @@
 .text-link,
 .icon-link {
   color: var(--color-action-blue);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .icon-link {

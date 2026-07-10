@@ -162,7 +162,7 @@ function wudLabel(status: RunVerificationWudStatus): string {
   flex-wrap: wrap;
   gap: 6px 12px;
   color: var(--color-muted-text);
-  font-size: 0.8rem;
+  font-size: var(--text-metadata-size);
 }
 
 .run-verification-list {
@@ -190,18 +190,18 @@ function wudLabel(status: RunVerificationWudStatus): string {
 
 .run-verification-main span {
   color: var(--color-muted-text);
-  font-size: 0.8rem;
+  font-size: var(--text-label-size);
   font-weight: 700;
 }
 
 .run-verification-main strong {
   color: var(--color-ink);
-  font-size: 0.86rem;
+  font-size: var(--text-metadata-size);
 }
 
 .run-verification-main em {
   color: var(--color-muted-text);
-  font-size: 0.8rem;
+  font-size: var(--text-metadata-size);
   font-style: normal;
 }
 

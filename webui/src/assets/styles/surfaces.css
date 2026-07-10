@@ -2,7 +2,8 @@
 .auth-heading h1 {
   margin: 0;
   color: var(--color-ink);
-  font-size: 1.35rem;
+  font-size: var(--text-title-size);
+  font-weight: 700;
   line-height: 1.2;
 }
 
@@ -29,13 +30,13 @@
 
 .metric-card span {
   color: var(--color-muted-text);
-  font-size: 0.85rem;
+  font-size: var(--text-metadata-size);
 }
 
 .metric-card strong {
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 1.25rem;
+  font-size: var(--text-body-size);
 }
 
 .section-panel {
@@ -77,8 +78,43 @@
   max-width: 72ch;
   margin: 2px 0 0;
   color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.45;
+  font-size: var(--text-body-size);
+  line-height: 1.5;
+}
+
+.settings-zone-heading h2,
+.settings-zone-heading p,
+.settings-preference-group-heading h3,
+.settings-preference-group-heading p {
+  margin: 0;
+}
+
+.settings-zone-heading h2 {
+  color: var(--color-ink);
+  font-size: var(--text-title-size);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.settings-zone-heading p {
+  max-width: 72ch;
+  color: var(--color-text-secondary);
+  font-size: var(--text-body-size);
+  line-height: 1.5;
+}
+
+.settings-preference-group-heading h3 {
+  color: var(--color-ink);
+  font-size: var(--text-body-size);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.settings-preference-group-heading p {
+  max-width: 72ch;
+  color: var(--color-muted-text);
+  font-size: var(--text-metadata-size);
+  line-height: 1.4;
 }
 
 .summary-grid {
@@ -96,14 +132,14 @@
 .summary-item span {
   min-width: 0;
   color: var(--color-muted-text);
-  font-size: 0.82rem;
+  font-size: var(--text-metadata-size);
   overflow-wrap: anywhere;
 }
 
 .summary-item strong {
   min-width: 0;
   color: var(--color-ink);
-  font-size: 1.08rem;
+  font-size: var(--text-body-size);
   line-height: 1.2;
   overflow-wrap: anywhere;
 }
@@ -125,7 +161,7 @@
   border-radius: 999px;
   background: var(--color-surface);
   color: var(--color-text-secondary);
-  font-size: 0.8rem;
+  font-size: var(--text-metadata-size);
   line-height: 1.2;
   overflow-wrap: anywhere;
 }
@@ -212,7 +248,7 @@
 
 .clear-queue-state strong {
   color: var(--color-ink);
-  font-size: 0.98rem;
+  font-size: var(--text-body-size);
 }
 
 .clear-queue-state span:not(.clear-queue-mark) {
@@ -351,7 +387,7 @@
   background: var(--color-log-bg);
   color: var(--color-log-text);
   font-family: var(--font-mono);
-  font-size: 0.84rem;
+  font-size: var(--text-data-size);
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

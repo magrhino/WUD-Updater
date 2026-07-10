@@ -204,7 +204,7 @@ const emit = defineEmits<{
 }
 
 .selection-summary strong {
-  font-size: 0.95rem;
+  font-size: var(--text-body-size);
 }
 
 .selection-summary span {

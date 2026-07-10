@@ -67,7 +67,8 @@ defineEmits<{
 .topbar h1 {
   margin: 0;
   color: var(--color-ink);
-  font-size: 1.35rem;
+  font-size: var(--text-title-size);
+  font-weight: 700;
   line-height: 1.2;
 }
 

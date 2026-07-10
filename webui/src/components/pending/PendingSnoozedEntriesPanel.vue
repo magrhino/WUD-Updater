@@ -193,7 +193,7 @@ function candidateMeta(candidate: PendingSnoozedCandidate): string {
   width: fit-content;
   min-height: 32px;
   color: var(--color-action-blue);
-  font-size: 0.86rem;
+  font-size: var(--text-metadata-size);
   font-weight: 700;
 }
 
@@ -230,12 +230,12 @@ function candidateMeta(candidate: PendingSnoozedCandidate): string {
 
 .pending-snooze-record-target {
   color: var(--color-heading);
-  font-size: 0.9rem;
+  font-size: var(--text-body-size);
 }
 
 .pending-snooze-record-meta {
   color: var(--color-muted-text);
-  font-size: 0.8rem;
+  font-size: var(--text-metadata-size);
 }
 
 @media (--wud-compact) {

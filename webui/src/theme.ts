@@ -253,7 +253,7 @@ function themeOverridesFor(tokens: ThemeTokens): GlobalThemeOverrides {
       iconColor: tokens.color.mutedText,
       fontFamily: tokens.font.sans,
       fontFamilyMono: tokens.font.mono,
-      fontSize: "16px",
+      fontSize: "1rem",
       borderRadius: "7px",
       borderRadiusSmall: "7px",
     },

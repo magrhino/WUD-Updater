@@ -88,7 +88,7 @@ defineEmits<{
 .self-update-banner-main span,
 .self-update-disabled {
   color: var(--color-muted-text);
-  font-size: 0.86rem;
+  font-size: var(--text-metadata-size);
   overflow-wrap: anywhere;
 }
 

@@ -171,13 +171,13 @@ function shortEventDigest(value: string): string {
           :show-icon="false"
         />
         <div v-else class="compact-list">
-          <div v-for="event in run.events" :key="event.id" class="list-row" style="flex-direction: column; align-items: flex-start; gap: 4px;">
-            <div style="display: flex; gap: 8px; width: 100%;">
+          <div v-for="event in run.events" :key="event.id" class="list-row run-event-row">
+            <div class="run-event-summary">
               <span>{{ event.service_name || event.stack_name || "service" }}</span>
               <strong>{{ event.status }}</strong>
               <em>{{ event.image }}</em>
             </div>
-            <div style="font-size: 0.85em; color: var(--text-muted); display: flex; flex-direction: column; gap: 2px;">
+            <div class="run-event-provenance">
               <span
                 v-if="digestProvenanceDisplay(event.digest_provenance)"
                 :title="digestProvenanceDisplay(event.digest_provenance)?.title"
@@ -200,6 +200,29 @@ function shortEventDigest(value: string): string {
 .run-metadata-block {
   min-height: 0;
   max-height: 18rem;
-  font-size: 0.82rem;
+  font-size: var(--text-data-size);
+}
+
+.run-event-row,
+.run-event-provenance {
+  display: flex;
+  flex-direction: column;
+}
+
+.run-event-row {
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.run-event-summary {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.run-event-provenance {
+  gap: 2px;
+  color: var(--color-muted-text);
+  font-size: var(--text-metadata-size);
 }
 </style>

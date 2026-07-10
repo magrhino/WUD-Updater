@@ -38,6 +38,12 @@ typography:
     fontWeight: 400
     lineHeight: 1.5
     letterSpacing: "0"
+  metadata:
+    fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+    fontSize: "0.84rem"
+    fontWeight: 400
+    lineHeight: 1.4
+    letterSpacing: "0"
   label:
     fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
     fontSize: "0.78rem"
@@ -202,6 +208,8 @@ The palette is a restrained product palette: cool neutrals carry the surface, da
 **The Fixed Scale Rule.** Do not use fluid headline clamps in the app shell. This is an operator tool, so type should stay predictable across screen sizes.
 
 **The No Display Voice Rule.** Do not introduce display fonts for labels, buttons, tables, or navigation.
+
+**The Semantic Token Rule.** Use `--text-title-size`, `--text-body-size`, `--text-metadata-size`, `--text-label-size`, and `--text-data-size` for shared or previously off-ramp roles. Compact utility line heights between 1.25 and 1.45 remain deliberate density choices; body copy uses 1.5 and log output uses 1.55.
 
 ## 4. Elevation
 
