@@ -88,6 +88,7 @@ describe("demo web API", () => {
     await expect(api.runs()).resolves.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 6 })]),
     );
+    await expect(api.rollbackPlan(1)).resolves.toMatchObject({ run_id: 1 });
   });
 
   it("previews pending plans and blocks apply in the static demo", async () => {

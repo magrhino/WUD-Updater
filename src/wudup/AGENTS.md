@@ -21,6 +21,7 @@ Prefer small modules with one clear reason to change:
 | Web auth, setup, sessions, CSRF, Host/Origin safety | `web_auth.py` | Security-sensitive; preserve failure bodies, cookies, headers, and redaction. |
 | Web health, readiness, and doctor routes | `web_health.py` | Preserve unauthenticated `/healthz`, local-only `/readyz`, authenticated readiness, doctor option/env construction, and redaction. |
 | Web diagnostics support bundle and apply preflight | `web_diagnostics.py` | Preserve support-bundle redaction and apply preflight missing-check aggregation, status codes, failures, and warnings. |
+| Web run history, verification, logs, and rollback guidance | `web_runs.py`, `web_run_verification.py`, `web_rollback.py` | Keep run reads authenticated and read-only; rollback guidance must fail closed and never pull, retag, rewrite Compose, restart services, or write audit state. |
 | Web onboarding checklist and core update tour | `web_onboarding.py` | Preserve auth/CSRF behavior, dismissed-onboarding short-circuiting, SQLite setting keys, and read-only-mode tour persistence. |
 | Web read-only database helpers | `web_database.py` | Preserve read-only SQLite URI handling, schema validation, and database readiness messages. |
 | Web pending reads, cleanup, removal, and WUD rescans | `web_pending.py`, `web_pending_rescan*.py` | Keep WUD rescan non-file-mutating; preserve source hashes, stale selection checks, WUD locks, audit records, and WUD API degradation handling. |

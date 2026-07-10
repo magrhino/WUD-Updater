@@ -158,3 +158,23 @@ docker-update-from-wud --yes --exclude-tag-lines 1 --recreate-excluded-services
 Interactive `updates` runs can apply all entries, select numbered entries,
 exclude numbered entries, or skip. Unselected entries stay pending unless you
 choose to remove them before running the selected updates.
+
+## Planning a Rollback
+
+For a completed updater run, open **History**, select the run, and choose
+**Check rollback plan**. The check is read-only: it does not pull or tag images,
+edit Compose, restart services, change the WUD output file, or write audit data.
+
+A service is marked ready only when all of the following still hold:
+
+- no later successful updater run superseded the recorded event;
+- the current Compose service still uses the recorded target image;
+- every running replica uses the recorded new image ID; and
+- the exact previous digest-pinned image still resolves locally to the recorded
+  previous image ID.
+
+Ready entries show the exact digest-pinned rollback target and a conservative
+recovery sequence. Blocked entries retain the recorded evidence and explain
+what could not be proven. WUDup does not pull a missing previous image or
+generate host-specific rollback commands; recover or verify that image manually
+before changing Compose.

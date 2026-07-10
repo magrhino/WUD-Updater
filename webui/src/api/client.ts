@@ -144,6 +144,10 @@ export type {
   RunVerificationStatus,
   RunVerificationSummary,
   RunVerificationWudStatus,
+  RollbackPlanItem,
+  RollbackPlanItemStatus,
+  RollbackPlanResponse,
+  RollbackPlanStatus,
   RunLogResponse,
   LogTail,
   // Diagnostics
@@ -231,6 +235,7 @@ import type {
   ApplyJobResponse,
   RunSummary,
   RunDetail,
+  RollbackPlanResponse,
   RunLogResponse,
 } from "./types";
 
@@ -759,6 +764,8 @@ const plansApi = {
 const runsApi = {
   runs: () => apiRequest<RunSummary[]>("/runs"),
   runDetail: (runId: number) => apiRequest<RunDetail>(`/runs/${runId}`),
+  rollbackPlan: (runId: number) =>
+    apiRequest<RollbackPlanResponse>(`/runs/${runId}/rollback-plan`),
   runLog: (runId: number, tailBytes = 262_144) =>
     apiRequest<RunLogResponse>(`/runs/${runId}/log?tail_bytes=${tailBytes}`),
 };

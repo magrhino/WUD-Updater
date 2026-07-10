@@ -219,13 +219,24 @@ describe("webApi", () => {
       webApi.applyJob("job"),
       webApi.runs(),
       webApi.runDetail(1),
+      webApi.rollbackPlan(1),
       webApi.runLog(1),
     ]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(46);
+    expect(fetchMock).toHaveBeenCalledTimes(47);
     for (const call of fetchMock.mock.calls) {
       expect(requestInit(call).credentials).toBe("include");
     }
+  });
+
+  it("loads rollback plans through a read-only run endpoint", async () => {
+    const fetchMock = mockFetch({ status: "blocked", items: [] });
+
+    await webApi.rollbackPlan(42);
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/runs/42/rollback-plan");
+    expect(requestInit(fetchMock.mock.calls[0]).method).toBeUndefined();
+    expect(requestInit(fetchMock.mock.calls[0]).body).toBeUndefined();
   });
 
   it("loads retag targets through a read-only GET request", async () => {

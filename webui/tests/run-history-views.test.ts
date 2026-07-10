@@ -8,6 +8,7 @@ import type {
   PendingUpdateRecord,
   RunDetail,
   RunEventRecord,
+  RollbackPlanResponse,
   RunSummary,
   RunVerificationSummary,
 } from "../src/api/client";
@@ -21,6 +22,7 @@ import RunsView from "../src/views/RunsView.vue";
 import {
   authSession,
   coreUpdateTourResponse,
+  rollbackPlan,
   runVerification,
   runSummary,
 } from "./helpers/fixtures";
@@ -501,6 +503,147 @@ describe("RunDetailView", () => {
     expect(wrapper.text()).toContain("#43");
     expect(wrapper.text()).toContain("failure");
     expect(wrapper.text()).toContain("No log path");
+  });
+
+  it("loads and renders verified rollback guidance only on demand", async () => {
+    const { pinia, router, runs } = await setupRoute("/runs/51");
+    const detail = runDetail({
+      id: 51,
+      mode: "stop",
+      dry_run: false,
+      finished_at: "2026-05-28T12:05:00+00:00",
+      events: [runEvent({ id: 51, run_id: 51 })],
+    });
+    runs.runDetails = { 51: detail };
+    vi.spyOn(runs, "loadRunDetail").mockResolvedValue();
+
+    const ready = rollbackPlan({ run_id: 51 }).items[0]!;
+    const plan = rollbackPlan({
+      run_id: 51,
+      status: "partial",
+      detail: "Some services have verified rollback targets; others are blocked.",
+      ready_count: 1,
+      blocked_count: 1,
+      items: [
+        ready,
+        {
+          ...ready,
+          event_id: 52,
+          service_key: "media/worker",
+          service_name: "worker",
+          status: "blocked",
+          reason: "A later successful updater run #52 changed this service.",
+          rollback_image: "",
+        },
+      ],
+    });
+    const loadRollbackPlan = vi
+      .spyOn(runs, "loadRollbackPlan")
+      .mockImplementation(async () => {
+        runs.rollbackPlans = { 51: plan };
+      });
+
+    const wrapper = mountWithApp(RunDetailView, { pinia, router });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Rollback plan");
+    expect(wrapper.text()).toContain("Read-only guidance");
+    expect(wrapper.text()).not.toContain("Exact rollback target");
+
+    await wrapper.get("button").trigger("click");
+    await flushPromises();
+
+    expect(loadRollbackPlan).toHaveBeenCalledWith(51);
+    expect(wrapper.text()).toContain("partial");
+    expect(wrapper.text()).toContain("1 ready · 1 blocked · 0 not needed");
+    expect(wrapper.text()).toContain("media/app");
+    expect(wrapper.text()).toContain(ready.rollback_image);
+    expect(wrapper.text()).toContain("Replace this service image with the exact rollback target.");
+    expect(wrapper.text()).toContain("media/worker");
+    expect(wrapper.text()).toContain("later successful updater run #52");
+    expect(wrapper.text()).not.toContain("docker compose -f");
+  });
+
+  it.each([
+    {
+      label: "ready",
+      plan: rollbackPlan({ run_id: 61 }),
+      expected: "Exact rollback target",
+      guidance: true,
+    },
+    {
+      label: "blocked",
+      plan: rollbackPlan({
+        run_id: 61,
+        status: "blocked",
+        detail: "No service has a verified rollback target; review each blocker.",
+        ready_count: 0,
+        blocked_count: 1,
+        items: [
+          {
+            ...rollbackPlan().items[0]!,
+            status: "blocked",
+            reason: "The current Compose image no longer matches the recorded target image.",
+          },
+        ],
+      }),
+      expected: "current Compose image no longer matches",
+      guidance: false,
+    },
+    {
+      label: "unavailable",
+      plan: rollbackPlan({
+        run_id: 61,
+        status: "unavailable",
+        detail: "Could not verify current Compose state.",
+        ready_count: 0,
+        items: [],
+      }),
+      expected: "Could not verify current Compose state.",
+      guidance: false,
+    },
+    {
+      label: "empty",
+      plan: rollbackPlan({
+        run_id: 61,
+        status: "not_applicable",
+        detail: "This run has no recorded update events.",
+        ready_count: 0,
+        items: [],
+      }),
+      expected: "This run has no recorded update events.",
+      guidance: false,
+    },
+  ] satisfies Array<{
+    label: string;
+    plan: RollbackPlanResponse;
+    expected: string;
+    guidance: boolean;
+  }>)("renders the $label rollback-plan state", async ({ plan, expected, guidance }) => {
+    const { pinia, router, runs } = await setupRoute("/runs/61");
+    runs.runDetails = {
+      61: runDetail({
+        id: 61,
+        mode: "stop",
+        dry_run: false,
+        finished_at: "2026-05-28T12:05:00+00:00",
+        events: [runEvent({ id: 61, run_id: 61 })],
+      }),
+    };
+    vi.spyOn(runs, "loadRunDetail").mockResolvedValue();
+    vi.spyOn(runs, "loadRollbackPlan").mockImplementation(async () => {
+      runs.rollbackPlans = { 61: plan };
+    });
+
+    const wrapper = mountWithApp(RunDetailView, { pinia, router });
+    await flushPromises();
+    await wrapper.get("button").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain(expected);
+    expect(wrapper.text()).toContain(plan.status.replaceAll("_", " "));
+    expect(wrapper.text()).toContain("Read-only guidance");
+    expect(wrapper.text().includes("Replace this service image")).toBe(guidance);
   });
 
   it("renders fallback labels for unexpected verification statuses", async () => {

@@ -22,6 +22,7 @@ import type {
   RetagPreviewJobResponse,
   RetagTargetItem,
   RetagTargetsResponse,
+  RollbackPlanResponse,
   RunVerificationSummary,
   RunSummary,
   SecurityScanInfo,
@@ -1239,6 +1240,37 @@ export function runVerification(
         wud_status: "removed",
         follow_up_needed: false,
         summary: "new image running, container recreated, health passed, WUD line removed.",
+      },
+    ],
+    ...overrides,
+  };
+}
+
+export function rollbackPlan(
+  overrides: Partial<RollbackPlanResponse> = {},
+): RollbackPlanResponse {
+  return {
+    run_id: 1,
+    status: "ready",
+    detail: "The listed services have verified local rollback targets.",
+    ready_count: 1,
+    blocked_count: 0,
+    not_needed_count: 0,
+    items: [
+      {
+        event_id: 1,
+        service_key: "media/app",
+        stack_name: "media",
+        service_name: "app",
+        status: "ready",
+        reason: "Current and previous image state was verified from Docker and Compose.",
+        recorded_previous_image: "repo/app:1.0",
+        recorded_target_image: "repo/app:1.1",
+        rollback_image: `repo/app@sha256:${"a".repeat(64)}`,
+        previous_image_id: "sha256:old-image",
+        previous_digest: `sha256:${"a".repeat(64)}`,
+        current_compose_image: "repo/app:1.1",
+        current_container_image_ids: ["sha256:new-image"],
       },
     ],
     ...overrides,

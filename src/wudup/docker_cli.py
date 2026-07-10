@@ -11,6 +11,7 @@ DEFAULT_CONTAINER_FORMAT = "{{.Names}}\t{{.Image}}"
 IMAGE_ID_FORMAT = "{{.Id}}"
 IMAGE_DIGESTS_FORMAT = "{{range .RepoDigests}}{{println .}}{{end}}"
 CONTAINER_ID_FORMAT = "{{.Id}}"
+CONTAINER_IMAGE_ID_FORMAT = "{{.Image}}"
 
 
 @dataclass(frozen=True)
@@ -123,6 +124,11 @@ class DockerCli:
 
     def container_id(self, container: str) -> str:
         return _first_nonblank(self.inspect(container, CONTAINER_ID_FORMAT))
+
+    def try_container_image_id(self, container: str) -> str:
+        return _first_nonblank(
+            self.try_inspect(container, CONTAINER_IMAGE_ID_FORMAT)
+        )
 
     def restart_container(
         self,

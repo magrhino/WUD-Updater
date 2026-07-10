@@ -37,6 +37,7 @@ from . import (
     web_release_notifications,
     web_release_notes,
     web_retags,
+    web_rollback,
     web_runs,
     web_scheduler,
     web_security,
@@ -528,6 +529,12 @@ def create_app(
         web_runs.api_run_detail,
         methods=["GET"],
         response_model=web_models.RunDetail,
+    )
+    router.add_api_route(
+        "/runs/{run_id}/rollback-plan",
+        web_rollback.api_rollback_plan,
+        methods=["GET"],
+        response_model=web_models.RollbackPlanResponse,
     )
     router.add_api_route(
         "/runs/{run_id}/log",

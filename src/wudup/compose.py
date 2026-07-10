@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -229,10 +229,12 @@ class ComposeCli:
         *,
         project_base: str | Path | None = None,
         ignore_paths: Sequence[str | Path] | None = None,
+        required_stack_names: Collection[str] = (),
     ) -> tuple[ComposeStack, ...]:
         docker_base_path = Path(docker_base)
         project_base_path = Path(project_base) if project_base is not None else None
         normalized_ignore_paths = normalize_compose_ignore_paths(ignore_paths)
+        required_names = set(required_stack_names)
         stacks: list[ComposeStack] = []
         for compose_file in _compose_files_under(
             docker_base_path,
@@ -246,6 +248,7 @@ class ComposeCli:
                 docker_base_path,
                 project_base_path,
             )
+            required = directory.name in required_names
             try:
                 images = tuple(
                     self.config_images(
@@ -254,7 +257,24 @@ class ComposeCli:
                         project_directory=project_directory,
                     )
                 )
-            except CommandError:
+                service_images = (
+                    self.service_image_pairs(
+                        directory,
+                        file_name,
+                        project_directory=project_directory,
+                    )
+                    if required
+                    else self.try_service_image_pairs(
+                        directory,
+                        file_name,
+                        project_directory=project_directory,
+                    )
+                )
+            except (CommandError, ValueError) as exc:
+                if required:
+                    raise ComposeDiscoveryError(
+                        "Could not inspect a required Compose stack."
+                    ) from exc
                 continue
             stacks.append(
                 ComposeStack(
@@ -263,11 +283,7 @@ class ComposeCli:
                     file=file_name,
                     name=directory.name,
                     images=images,
-                    service_images=self.try_service_image_pairs(
-                        directory,
-                        file_name,
-                        project_directory=project_directory,
-                    ),
+                    service_images=service_images,
                     project_directory=project_directory,
                 )
             )

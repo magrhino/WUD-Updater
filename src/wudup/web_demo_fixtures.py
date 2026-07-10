@@ -63,6 +63,7 @@ web_pending: Any = None
 web_plans: Any = None
 web_release_notes: Any = None
 web_retags: Any = None
+web_rollback: Any = None
 web_runs: Any = None
 web_self_update: Any = None
 web_settings: Any = None
@@ -81,7 +82,7 @@ def _ensure_web_fixture_imports() -> None:
     global Request
     global web_app, web_auth, web_diagnostics, web_health, web_jobs
     global web_onboarding, web_pending, web_plans, web_release_notes, web_retags
-    global web_runs, web_self_update, web_settings, web_state, web_static
+    global web_rollback, web_runs, web_self_update, web_settings, web_state, web_static
     global web_wud_api
     global GitHubClient, refresh_release_notes
     global SelfUpdateResponse, SelfUpdatePlanResponse
@@ -101,6 +102,7 @@ def _ensure_web_fixture_imports() -> None:
     from wudup import web_plans as _web_plans
     from wudup import web_release_notes as _web_release_notes
     from wudup import web_retags as _web_retags
+    from wudup import web_rollback as _web_rollback
     from wudup import web_runs as _web_runs
     from wudup import web_self_update as _web_self_update
     from wudup import web_settings as _web_settings
@@ -128,6 +130,7 @@ def _ensure_web_fixture_imports() -> None:
     web_plans = _web_plans
     web_release_notes = _web_release_notes
     web_retags = _web_retags
+    web_rollback = _web_rollback
     web_runs = _web_runs
     web_self_update = _web_self_update
     web_settings = _web_settings
@@ -705,6 +708,12 @@ def _fixture_payload(context: SimpleNamespace) -> dict[str, Any]:
                 "logs": {
                     str(run["id"]): _dump(
                         web_runs.api_run_log(run["id"], request, tail_bytes=262_144)
+                    )
+                    for run in runs
+                },
+                "rollbackPlans": {
+                    str(run["id"]): _dump(
+                        web_rollback.api_rollback_plan(run["id"], request)
                     )
                     for run in runs
                 },

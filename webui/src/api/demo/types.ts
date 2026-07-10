@@ -10,6 +10,7 @@ import type {
   RetagTargetsResponse,
   RunDetail,
   RunLogResponse,
+  RollbackPlanResponse,
   RunSummary,
   SelfUpdatePlanResponse,
   SelfUpdateResponse,
@@ -91,5 +92,6 @@ export type DemoGeneratedFixtures = {
     summaries: RunSummary[];
     details: Record<string, RunDetail>;
     logs: Record<string, RunLogResponse>;
+    rollbackPlans: Record<string, RollbackPlanResponse>;
   };
 };

@@ -174,6 +174,7 @@ export function createDemoWebApi(): WebApi {
     openJobStream: (_jobId: string) => rejectStaticDemoMutation(),
     runs: async () => state.runSummaries(),
     runDetail: async (runId: number) => state.runDetail(runId),
+    rollbackPlan: async (runId: number) => state.rollbackPlan(runId),
     runLog: async (runId: number, _tailBytes = 262_144) => state.runLog(runId),
   };
 }

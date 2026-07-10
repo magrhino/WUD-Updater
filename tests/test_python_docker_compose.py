@@ -202,6 +202,7 @@ class DockerCliTests(FakeDockerCase):
         self.assertEqual(docker.image_id("repo/web:latest"), "")
         self.assertEqual(docker.image_repo_digests("repo/web:latest"), [])
         self.assertEqual(docker.try_inspect("cid-web", "{{.Name}}"), [])
+        self.assertEqual(docker.try_container_image_id("cid-web"), "")
 
     def test_ps_image_inspect_and_inspect_use_shell_formats(self) -> None:
         (self.fake_root / "containers.tsv").write_text(
@@ -211,6 +212,10 @@ class DockerCliTests(FakeDockerCase):
         self.set_image_state("repo/web:latest", "sha256:image-id", "sha256:digest")
         (self.fake_root / "containers" / "cid-web.summary").write_text(
             "/web|running|healthy|0|0\n",
+            encoding="utf-8",
+        )
+        (self.fake_root / "containers" / "cid-web.image-id").write_text(
+            "sha256:container-image-id\n",
             encoding="utf-8",
         )
 
@@ -229,6 +234,10 @@ class DockerCliTests(FakeDockerCase):
         self.assertEqual(
             self.docker.try_inspect("cid-web", "{{.Name}}|{{.State.Status}}"),
             ["/web|running|healthy|0|0"],
+        )
+        self.assertEqual(
+            self.docker.try_container_image_id("cid-web"),
+            "sha256:container-image-id",
         )
 
         self.assertIn("ps --format {{.Names}}\t{{.Image}}", self.call_commands())

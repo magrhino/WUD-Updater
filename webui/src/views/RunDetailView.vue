@@ -7,6 +7,7 @@ import { NAlert, NEmpty, NGi, NGrid } from "naive-ui";
 import type { RunEventRecord } from "../api/client";
 import { useRouteRefresh } from "../components/app/routeRefresh";
 import RunVerificationPanel from "../components/RunVerificationPanel.vue";
+import RunRollbackPlanPanel from "../components/RunRollbackPlanPanel.vue";
 import { useRunsStore } from "../stores/runs";
 import {
   digestProvenanceDisplay,
@@ -24,9 +25,23 @@ const hasRunMetadata = computed(
 const runMetadataJson = computed(() =>
   run.value ? JSON.stringify(run.value.metadata, null, 2) : "",
 );
+const rollbackPlan = computed(
+  () => runs.rollbackPlans[runId.value] ?? null,
+);
+const rollbackEligible = computed(
+  () =>
+    Boolean(run.value?.finished_at) &&
+    !run.value?.dry_run &&
+    ["pause", "stop", "live"].includes(run.value?.mode ?? "") &&
+    Boolean(run.value?.events.length),
+);
 
 async function load(): Promise<void> {
   await runs.loadRunDetail(runId.value);
+}
+
+async function loadRollbackPlan(): Promise<void> {
+  await runs.loadRollbackPlan(runId.value);
 }
 
 useRouteRefresh(load);
@@ -101,6 +116,13 @@ function shortEventDigest(value: string): string {
       <RunVerificationPanel
         :verification="run.verification"
         title="Post-update verification"
+      />
+
+      <RunRollbackPlanPanel
+        v-if="rollbackEligible"
+        :plan="rollbackPlan"
+        :loading="runs.loading"
+        @check="runInBackground(loadRollbackPlan())"
       />
 
       <section v-if="hasRunMetadata" class="section-panel">

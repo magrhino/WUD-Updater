@@ -1176,6 +1176,42 @@ export interface RunDetail extends RunSummary {
   verification: RunVerificationSummary;
 }
 
+export type RollbackPlanStatus =
+  | "ready"
+  | "partial"
+  | "blocked"
+  | "not_needed"
+  | "not_applicable"
+  | "unavailable";
+
+export type RollbackPlanItemStatus = "ready" | "blocked" | "not_needed";
+
+export interface RollbackPlanItem {
+  event_id: number;
+  service_key: string;
+  stack_name: string;
+  service_name: string;
+  status: RollbackPlanItemStatus;
+  reason: string;
+  recorded_previous_image: string;
+  recorded_target_image: string;
+  rollback_image: string;
+  previous_image_id: string;
+  previous_digest: string;
+  current_compose_image: string;
+  current_container_image_ids: string[];
+}
+
+export interface RollbackPlanResponse {
+  run_id: number;
+  status: RollbackPlanStatus;
+  detail: string;
+  ready_count: number;
+  blocked_count: number;
+  not_needed_count: number;
+  items: RollbackPlanItem[];
+}
+
 export interface RunLogResponse {
   run_id: number;
   log_file: string;

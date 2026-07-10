@@ -17,6 +17,10 @@ def test_static_demo_fixture_generation_matches_read_only_contract() -> None:
     assert data["planCases"] == []
     assert data["removalCases"] == []
     assert data["retagCases"] == []
+    assert data["runs"]["rollbackPlans"]
+    assert set(data["runs"]["rollbackPlans"]) == {
+        str(run["id"]) for run in data["runs"]["summaries"]
+    }
     assert data["pending"]["count"] == 7
     assert data["pending"]["snoozed_candidates"] == [
         web_demo_fixtures.DEMO_PENDING_SNOOZED_CANDIDATE
