@@ -250,7 +250,7 @@ const emit = defineEmits<{
       var(--color-surface) 94%,
       var(--color-action-blue) 6%);
   color: var(--color-text-secondary);
-  font-size: 0.875rem;
+  font-size: var(--text-metadata-size);
   line-height: 1.35;
   transition:
     border-color var(--motion-base) var(--ease-out-quart),
@@ -270,9 +270,9 @@ const emit = defineEmits<{
 
 .stack-checkbox-kicker {
   color: var(--color-muted-text);
-  font-size: 0.76rem;
+  font-size: var(--text-label-size);
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.2;
 }
 
 .stack-identity {
@@ -357,7 +357,7 @@ const emit = defineEmits<{
   width: fit-content;
   min-height: 32px;
   color: var(--color-action-blue);
-  font-size: 0.86rem;
+  font-size: var(--text-metadata-size);
   font-weight: 700;
 }
 
@@ -433,7 +433,7 @@ const emit = defineEmits<{
     margin-bottom: 1px;
     color: var(--color-muted-text);
     font-family: var(--font-sans);
-    font-size: 0.74rem;
+    font-size: var(--text-label-size);
     font-weight: 700;
     line-height: 1.2;
   }

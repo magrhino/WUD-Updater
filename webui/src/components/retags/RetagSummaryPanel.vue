@@ -119,10 +119,12 @@ defineEmits<{
 .retag-summary-panel {
   display: grid;
   gap: 16px;
+  min-width: 0;
 }
 
 .retag-heading {
   align-items: flex-start;
+  min-width: 0;
 }
 
 .retag-preview-action {
@@ -132,6 +134,7 @@ defineEmits<{
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  min-width: 0;
   max-width: 420px;
 }
 
@@ -170,7 +173,7 @@ defineEmits<{
 
 .retag-summary-strip strong {
   color: var(--color-ink);
-  font-size: 1.1rem;
+  font-size: var(--text-body-size);
   line-height: 1.2;
 }
 
@@ -190,14 +193,20 @@ defineEmits<{
   }
 }
 
-@media (--wud-compact) {
+@media (--wud-data-cards) {
+  .retag-heading {
+    display: grid;
+  }
+
   .retag-preview-action {
     display: grid;
     justify-content: stretch;
+    width: 100%;
   }
 
   .retag-bulk-actions {
     display: grid;
+    width: 100%;
   }
 
   .retag-summary-strip {

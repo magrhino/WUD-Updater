@@ -410,24 +410,6 @@ const {
   min-width: 0;
 }
 
-.settings-zone-heading h2,
-.settings-zone-heading p {
-  margin: 0;
-}
-
-.settings-zone-heading h2 {
-  color: var(--color-ink);
-  font-size: 1.08rem;
-  line-height: 1.25;
-}
-
-.settings-zone-heading p {
-  max-width: 72ch;
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.45;
-}
-
 .settings-preference-groups {
   display: grid;
   gap: 18px;
@@ -444,24 +426,6 @@ const {
   display: grid;
   gap: 3px;
   min-width: 0;
-}
-
-.settings-preference-group-heading h3,
-.settings-preference-group-heading p {
-  margin: 0;
-}
-
-.settings-preference-group-heading h3 {
-  color: var(--color-ink);
-  font-size: 0.96rem;
-  line-height: 1.25;
-}
-
-.settings-preference-group-heading p {
-  max-width: 72ch;
-  color: var(--color-muted-text);
-  font-size: 0.85rem;
-  line-height: 1.4;
 }
 
 .settings-preference-list {
@@ -489,7 +453,7 @@ const {
 
 .settings-preference-row span {
   color: var(--color-muted-text);
-  font-size: 0.86rem;
+  font-size: var(--text-metadata-size);
 }
 
 .settings-preference-row>.settings-preference-controls {

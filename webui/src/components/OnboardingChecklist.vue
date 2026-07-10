@@ -452,8 +452,8 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
 .onboarding-next-main span {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.45;
+  font-size: var(--text-body-size);
+  line-height: 1.5;
 }
 
 .onboarding-check-list {
@@ -527,8 +527,8 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
 .onboarding-check-main p {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.45;
+  font-size: var(--text-body-size);
+  line-height: 1.5;
 }
 
 .onboarding-check-code-group {
@@ -556,7 +556,7 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
   border-radius: 999px;
   color: var(--color-code-text);
   font-family: var(--font-mono);
-  font-size: 0.76rem;
+  font-size: var(--text-data-size);
   background: var(--color-panel-tint);
 }
 
@@ -634,8 +634,8 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
 
 .onboarding-suggestion span {
   color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.45;
+  font-size: var(--text-body-size);
+  line-height: 1.5;
 }
 
 .onboarding-suggestion code {

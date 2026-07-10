@@ -28,16 +28,16 @@
 .eyebrow {
   margin: 0 0 4px;
   color: var(--color-muted-text);
-  font-size: 0.78rem;
-  font-weight: 700;
+  font-size: var(--text-metadata-size);
+  font-weight: 600;
+  line-height: 1.25;
   letter-spacing: 0;
-  text-transform: uppercase;
 }
 
 .value-eyebrow {
   max-width: min(100%, 92ch);
   font-family: var(--font-mono);
-  font-size: 0.76rem;
+  font-size: var(--text-data-size);
   font-weight: 700;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -52,7 +52,7 @@
 .text-link,
 .icon-link {
   color: var(--color-action-blue);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .icon-link {
@@ -98,6 +98,22 @@ body .n-switch:focus-within {
 }
 
 @media (--wud-compact) {
+  body .n-button,
+  body .n-checkbox,
+  body .n-input,
+  body .n-base-selection,
+  body .n-radio-button,
+  body .n-switch,
+  .history-view-tab,
+  .stack-details summary,
+  .apply-job-details summary,
+  .preflight-details summary,
+  .release-changelog-summary,
+  .settings-disclosure-summary,
+  .onboarding-check-diagnostics summary {
+    min-height: var(--size-touch-target);
+  }
+
   a.text-link,
   a.icon-link {
     display: inline-flex;

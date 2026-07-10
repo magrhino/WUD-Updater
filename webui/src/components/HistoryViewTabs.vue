@@ -48,7 +48,7 @@ const historyViews = [
   border: 1px solid transparent;
   border-radius: 7px;
   color: var(--color-muted-text);
-  font-size: 0.88rem;
+  font-size: var(--text-metadata-size);
   font-weight: 700;
   line-height: 1.2;
   transition:

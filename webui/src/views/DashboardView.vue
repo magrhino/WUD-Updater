@@ -100,50 +100,44 @@ onMounted(() => {
       </div>
     </CoreUpdateTourPanel>
 
-    <n-grid responsive="self" cols="1 560:2 920:5" :x-gap="12" :y-gap="12">
-      <n-gi>
-        <article class="metric-card">
-          <ListChecks :size="22" />
-          <span>Pending</span>
-          <strong>{{ connection.status?.pending_count ?? updates.pending?.count ?? "0" }}</strong>
-        </article>
-      </n-gi>
-      <n-gi>
-        <article class="metric-card">
-          <Database :size="22" />
-          <span>Database</span>
-          <strong>{{ connection.status?.db_ready ? "Ready" : "Missing" }}</strong>
-        </article>
-      </n-gi>
-      <n-gi>
-        <article class="metric-card">
-          <Clock3 :size="22" />
-          <span>Last run</span>
-          <strong>{{ latestRun ? `#${latestRun.id}` : "None" }}</strong>
-        </article>
-      </n-gi>
-      <n-gi>
-        <article class="metric-card">
-          <CheckCircle2 v-if="connection.status?.ok" :size="22" />
-          <AlertTriangle v-else :size="22" />
-          <span>Status</span>
-          <strong>{{ connection.status?.ok ? "OK" : "Needs attention" }}</strong>
-        </article>
-      </n-gi>
-      <n-gi>
-        <article class="metric-card">
-          <CheckCircle2 v-if="connection.status?.wud_api?.metadata_available" :size="22" />
-          <AlertTriangle v-else :size="22" />
-          <span>WUD API</span>
-          <strong>{{ wudApiLabel }}</strong>
-        </article>
-      </n-gi>
-    </n-grid>
+    <dl class="dashboard-status-strip" aria-label="System status">
+      <div class="dashboard-status-item">
+        <dt><ListChecks :size="20" aria-hidden="true" />Pending</dt>
+        <dd>{{ connection.status?.pending_count ?? updates.pending?.count ?? "0" }}</dd>
+      </div>
+      <div class="dashboard-status-item">
+        <dt><Database :size="20" aria-hidden="true" />Database</dt>
+        <dd>{{ connection.status?.db_ready ? "Ready" : "Missing" }}</dd>
+      </div>
+      <div class="dashboard-status-item">
+        <dt><Clock3 :size="20" aria-hidden="true" />Last run</dt>
+        <dd>{{ latestRun ? `#${latestRun.id}` : "None" }}</dd>
+      </div>
+      <div class="dashboard-status-item">
+        <dt>
+          <CheckCircle2 v-if="connection.status?.ok" :size="20" aria-hidden="true" />
+          <AlertTriangle v-else :size="20" aria-hidden="true" />
+          Status
+        </dt>
+        <dd>{{ connection.status?.ok ? "OK" : "Needs attention" }}</dd>
+      </div>
+      <div class="dashboard-status-item">
+        <dt>
+          <CheckCircle2
+            v-if="connection.status?.wud_api?.metadata_available"
+            :size="20"
+            aria-hidden="true"
+          />
+          <AlertTriangle v-else :size="20" aria-hidden="true" />
+          WUD API
+        </dt>
+        <dd>{{ wudApiLabel }}</dd>
+      </div>
+    </dl>
 
     <section class="section-panel">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Queue</p>
           <h2>Pending updates</h2>
         </div>
         <RouterLink to="/pending" class="text-link">View pending</RouterLink>
@@ -170,7 +164,6 @@ onMounted(() => {
     <section class="section-panel">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">History</p>
           <h2>Recent runs</h2>
         </div>
         <RouterLink to="/runs" class="text-link">View history</RouterLink>
@@ -198,7 +191,6 @@ onMounted(() => {
     <section class="section-panel">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Controls</p>
           <h2>Management</h2>
         </div>
       </div>
@@ -230,6 +222,49 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.dashboard-status-strip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-border-subtle);
+}
+
+.dashboard-status-item {
+  min-width: 0;
+  padding: 14px 16px;
+  background: var(--color-surface);
+}
+
+.dashboard-status-item dt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--color-muted-text);
+  font-size: var(--text-metadata-size);
+  font-weight: 600;
+}
+
+.dashboard-status-item dt svg {
+  flex: 0 0 auto;
+  color: var(--color-operational-teal);
+}
+
+.dashboard-status-item dd {
+  min-width: 0;
+  margin: 7px 0 0 27px;
+  color: var(--color-ink);
+  font-size: var(--text-body-size);
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
 .shortcut-grid {
   margin-top: 16px;
 }
@@ -266,6 +301,26 @@ onMounted(() => {
 .shortcut-card strong {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+@media (--wud-app-shell) {
+  .dashboard-status-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-status-item:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (--wud-compact) {
+  .dashboard-status-strip {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-status-item:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
 }
 
 </style>

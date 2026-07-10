@@ -175,24 +175,6 @@ const {
   min-width: 0;
 }
 
-.settings-zone-heading h2,
-.settings-zone-heading p {
-  margin: 0;
-}
-
-.settings-zone-heading h2 {
-  color: var(--color-ink);
-  font-size: 1.08rem;
-  line-height: 1.25;
-}
-
-.settings-zone-heading p {
-  max-width: 72ch;
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.45;
-}
-
 .settings-zone-grid {
   align-items: start;
 }
@@ -219,7 +201,7 @@ const {
 
 .settings-risk-fact strong {
   color: var(--color-ink);
-  font-size: 0.9rem;
+  font-size: var(--text-body-size);
 }
 
 .settings-action-row {

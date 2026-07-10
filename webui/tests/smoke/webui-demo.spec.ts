@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { responsiveBreakpoints } from "../../src/responsive";
 import { touchTargetSizePx } from "../../src/touchTargets";
 
 const demoBasePath = process.env.PLAYWRIGHT_WEBUI_DEMO_BASE_PATH ?? "";
@@ -58,13 +59,29 @@ async function expectTouchTargetHeight(page: Page, buttonName: string) {
   expect(box.width).toBeGreaterThanOrEqual(touchTargetSizePx);
 }
 
+async function expectNoHorizontalOverflow(page: Page, viewportWidth: number) {
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        innerWidth: window.innerWidth,
+        hasHorizontalOverflow:
+          document.documentElement.scrollWidth > window.innerWidth,
+      })),
+    )
+    .toEqual({ innerWidth: viewportWidth, hasHorizontalOverflow: false });
+}
+
 test("static demo renders current pending state in read-only mode", async ({
   page,
 }) => {
   await page.goto(demoRoute("/#/pending"));
 
   await expect(
-    page.getByRole("heading", { name: "Pending updates", exact: true }),
+    page.getByRole("heading", {
+      name: "Pending updates",
+      exact: true,
+      level: 1,
+    }),
   ).toBeVisible();
   await expect(page.getByText("7 pending updates")).toBeVisible();
   await expect(page.getByText("Read-only", { exact: true })).toBeVisible();
@@ -154,21 +171,23 @@ test("static demo renders retag review fixtures", async ({ page }) => {
 
 test("static demo mobile layout stays within the viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(demoRoute("/#/"));
+  await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
+  await expect(page.getByLabel("System status")).toBeVisible();
+  await expectNoHorizontalOverflow(page, 390);
+
   await page.goto(demoRoute("/#/pending"));
 
   await expect(
-    page.getByRole("heading", { name: "Pending updates", exact: true }),
+    page.getByRole("heading", {
+      name: "Pending updates",
+      exact: true,
+      level: 1,
+    }),
   ).toBeVisible();
   await expect(page.getByRole("checkbox", { name: /Select stack media/ })).toBeVisible();
   await expectTouchTargetHeight(page, "Pull image");
-  await expect
-    .poll(() =>
-      page.evaluate(() => ({
-        innerWidth: window.innerWidth,
-        scrollWidth: document.documentElement.scrollWidth,
-      })),
-    )
-    .toEqual({ innerWidth: 390, scrollWidth: 390 });
+  await expectNoHorizontalOverflow(page, 390);
 
   await page.goto(demoRoute("/#/doctor"));
   await expect(page.getByRole("heading", { name: "Doctor", level: 1 })).toBeVisible();
@@ -183,4 +202,28 @@ test("static demo mobile layout stays within the viewport", async ({ page }) => 
   ).toBeVisible();
   await expectTouchTargetHeight(page, "Download support bundle");
   await expectTouchTargetHeight(page, "Copy");
+
+  await page.goto(demoRoute("/#/retags"));
+  await expect(page.getByRole("heading", { name: "Retags", level: 1 })).toBeVisible();
+  await expectTouchTargetHeight(page, "Preview retag changes");
+  await expectTouchTargetHeight(page, "Retag only media/wudup");
+  const retagChoiceGroup = page.locator(".retag-card .n-radio-group").first();
+  const retagChoiceButtons = retagChoiceGroup.locator(".n-radio-button");
+  await expect(retagChoiceGroup).toBeVisible();
+  const keepBox = await retagChoiceButtons.nth(0).boundingBox();
+  const retagBox = await retagChoiceButtons.nth(1).boundingBox();
+  expect(keepBox?.height).toBeGreaterThanOrEqual(touchTargetSizePx);
+  expect(retagBox?.height).toBeGreaterThanOrEqual(touchTargetSizePx);
+  expect(keepBox?.y).toBe(retagBox?.y);
+  await expectNoHorizontalOverflow(page, 390);
+
+  for (const width of [
+    responsiveBreakpoints.compact + 1,
+    responsiveBreakpoints.dataCards,
+  ]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(demoRoute("/#/retags"));
+    await expect(page.locator(".retag-card").first()).toBeVisible();
+    await expectNoHorizontalOverflow(page, width);
+  }
 });

@@ -70,7 +70,7 @@ import { SETTINGS_NAV_GROUPS } from "./settingsDisplay";
 .settings-map-group-heading h2 {
   margin: 0;
   color: var(--color-ink);
-  font-size: 0.92rem;
+  font-size: var(--text-body-size);
   line-height: 1.25;
 }
 
@@ -118,7 +118,7 @@ import { SETTINGS_NAV_GROUPS } from "./settingsDisplay";
 
 .settings-map-link span {
   color: var(--color-ink);
-  font-size: 0.86rem;
+  font-size: var(--text-metadata-size);
   font-weight: 700;
   line-height: 1.25;
 }

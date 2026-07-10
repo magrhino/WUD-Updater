@@ -710,7 +710,7 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   color: var(--color-muted-text);
-  font-size: 0.9rem;
+  font-size: var(--text-body-size);
   white-space: nowrap;
 }
 
@@ -724,10 +724,20 @@ onMounted(() => {
   color: var(--color-operational-teal);
 }
 
-@media (--wud-compact) {
+@media (--wud-data-cards) {
   .retag-controls {
     display: grid;
     justify-content: stretch;
+  }
+
+  .retag-fallback-toggle {
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .retag-fallback-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 }
 </style>

@@ -219,7 +219,7 @@ const emit = defineEmits<{
   width: fit-content;
   min-height: 32px;
   color: var(--color-action-blue);
-  font-size: 0.86rem;
+  font-size: var(--text-metadata-size);
   font-weight: 700;
 }
 

@@ -230,4 +230,20 @@ const emit = defineEmits<{
   font-size: 0.78rem;
   line-height: 1.35;
 }
+
+@media (--wud-data-cards) {
+  .retag-card dl > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .retag-card :deep(.n-radio-group) {
+    display: flex;
+    width: 100%;
+  }
+
+  .retag-card :deep(.n-radio-button) {
+    flex: 1 1 0;
+    min-height: var(--size-touch-target);
+  }
+}
 </style>

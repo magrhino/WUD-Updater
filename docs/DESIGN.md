@@ -9,7 +9,7 @@ colors:
   sidebar-hover: "#21383f"
   sidebar-text: "#f7fbfc"
   sidebar-muted: "#c9d6d9"
-  muted-text: "#65747a"
+  muted-text: "#627177"
   border: "#dbe3e6"
   dark-border: "#31444b"
   border-subtle: "#e6ecef"
@@ -37,6 +37,12 @@ typography:
     fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.5
+    letterSpacing: "0"
+  metadata:
+    fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+    fontSize: "0.84rem"
+    fontWeight: 400
+    lineHeight: 1.4
     letterSpacing: "0"
   label:
     fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
@@ -193,8 +199,8 @@ The palette is a restrained product palette: cool neutrals carry the surface, da
 ### Hierarchy
 - **Title** (700, 1.35rem, 1.2): Page headings, section headings, and login heading. Keep fixed rem sizing for product stability.
 - **Body** (400, 1rem, 1.5): Main content and control-adjacent copy. Keep long prose rare and cap explanatory copy around 65-75ch.
-- **Metadata** (400, 0.82-0.85rem): Secondary row values, metric captions, plan summary labels, and compact helper text.
-- **Label** (700, 0.78rem, uppercase only for short system labels): Eyebrows and management table heads. Use sparingly because repeated uppercase labels add noise.
+- **Metadata** (400-600, 0.82-0.85rem): Secondary row values, metric captions, plan summary labels, compact helper text, and sentence-case context labels.
+- **Label** (700, 0.78rem, uppercase only for short system labels): Management table heads and true system categories. Use sparingly because repeated uppercase labels add noise.
 - **Data Mono** (400, 0.82-0.84rem, 1.55 for logs): Digests, command arguments, and log output.
 
 ### Named Rules
@@ -202,6 +208,8 @@ The palette is a restrained product palette: cool neutrals carry the surface, da
 **The Fixed Scale Rule.** Do not use fluid headline clamps in the app shell. This is an operator tool, so type should stay predictable across screen sizes.
 
 **The No Display Voice Rule.** Do not introduce display fonts for labels, buttons, tables, or navigation.
+
+**The Semantic Token Rule.** Use `--text-title-size`, `--text-body-size`, `--text-metadata-size`, `--text-label-size`, and `--text-data-size` for shared or previously off-ramp roles. Compact utility line heights between 1.25 and 1.45 remain deliberate density choices; body copy uses 1.5 and log output uses 1.55.
 
 ## 4. Elevation
 

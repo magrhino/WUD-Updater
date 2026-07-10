@@ -441,7 +441,7 @@ function snapshotLineScope(
   max-width: 68ch;
   margin: 6px 0 0;
   color: var(--color-muted-text);
-  font-size: 0.9rem;
+  font-size: var(--text-body-size);
 }
 
 .apply-job-progress {
@@ -522,7 +522,7 @@ function snapshotLineScope(
 .apply-job-now-copy em,
 .apply-job-now-copy small {
   color: var(--color-text-secondary);
-  font-size: 0.86rem;
+  font-size: var(--text-metadata-size);
   font-style: normal;
   line-height: 1.35;
 }
@@ -716,14 +716,14 @@ function snapshotLineScope(
 
 .apply-progress-copy strong {
   color: var(--color-ink);
-  font-size: 0.88rem;
+  font-size: var(--text-metadata-size);
   line-height: 1.25;
 }
 
 .apply-progress-copy span,
 .apply-progress-copy em {
   color: var(--color-muted-text);
-  font-size: 0.8rem;
+  font-size: var(--text-metadata-size);
   font-style: normal;
   line-height: 1.35;
 }
