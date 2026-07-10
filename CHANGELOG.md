@@ -4,6 +4,18 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.55.0](https://github.com/magrhino/wudup/compare/v0.54.0...v0.55.0) (2026-07-10)
+
+
+### Features
+
+* **rollback:** add verified run rollback plans ([#516](https://github.com/magrhino/wudup/issues/516)) ([59311de](https://github.com/magrhino/wudup/commit/59311decfd10bf3d4cfafb3051397454c51bf19e))
+
+
+### Bug Fixes
+
+* **webui:** keep static demo apply paths read-only ([#504](https://github.com/magrhino/wudup/issues/504)) ([73934cb](https://github.com/magrhino/wudup/commit/73934cb0d01ca15cfc1e503c2d29969c878eb123))
+
 ## [0.54.0](https://github.com/magrhino/wudup/compare/v0.53.3...v0.54.0) (2026-07-10)
 
 
