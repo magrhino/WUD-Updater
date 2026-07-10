@@ -481,6 +481,15 @@ def test_digest_reason_priority_uses_deterministic_metadata() -> None:
     )[:2] == ("routine", "routine_digest")
 
 
+def test_semver_diff_rejects_unreasonably_long_numeric_parts() -> None:
+    oversized = "1" * 100
+
+    assert notifications_module._semver_diff(
+        f"{oversized}.0.0",
+        f"{oversized}.1.0",
+    ) == ""
+
+
 def test_digest_row_selects_compact_release_links() -> None:
     item = notifications_module.ReleaseNotificationItem(
         line_no=1,

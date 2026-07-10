@@ -69,6 +69,7 @@ DISCORD_DIGEST_VERSION_LIMIT = 128
 DISCORD_DIGEST_REASON_LIMIT = 160
 DISCORD_WEBHOOK_TIMEOUT_SECONDS = 10.0
 DISCORD_WEBHOOK_USER_AGENT = "wudup-webui-release-notifications/1.0"
+DISCORD_WEBHOOK_USERNAME = "WUDup Release Notes"
 DISCORD_COLOR = 0x57F287
 DISCORD_DIGEST_FOOTER = "Open WUDup for full notes, digests, and apply plan."
 DISCORD_DIGEST_CATEGORIES = (
@@ -76,7 +77,9 @@ DISCORD_DIGEST_CATEGORIES = (
     ("worth_noting", "🟡 Worth noting"),
     ("routine", "🟢 Routine"),
 )
-SEMVER_PARTS_RE = re.compile(r"(?<![0-9A-Za-z])v?(\d+)\.(\d+)(?:\.(\d+))?")
+SEMVER_PARTS_RE = re.compile(
+    r"(?<![0-9A-Za-z.])v?([0-9]{1,10})[.]([0-9]{1,10})(?:[.]([0-9]{1,10}))?"
+)
 RUN_NOTIFICATION_STATUS_REASON = "updated"
 NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL = (
     "no release-note notifications are available to send"
@@ -912,15 +915,23 @@ def _notification_digest_reason(
         )
     if semver_diff == "minor":
         return "worth_noting", "minor_bump", "minor update with release notes"
-    if note.provider == "lsio" and change_type == "upstream_update":
-        return "worth_noting", "lsio_upstream", "LSIO/upstream release"
-    if note.provider == "lsio" and change_type == "image_rebuild":
-        return "worth_noting", "lsio_rebuild", "LSIO image rebuild"
+    lsio_reason = _lsio_digest_reason(note.provider, change_type)
+    if lsio_reason is not None:
+        return "worth_noting", *lsio_reason
     if semver_diff == "patch":
         return "routine", "patch_bump", "patch update with release notes"
     if update_kind == "digest" or is_digest_target_line(target.target):
         return "routine", "routine_digest", "image digest update"
     return "routine", "routine_update", "update metadata available"
+
+
+def _lsio_digest_reason(provider: str, change_type: str) -> tuple[str, str] | None:
+    if provider != "lsio":
+        return None
+    return {
+        "upstream_update": ("lsio_upstream", "LSIO/upstream release"),
+        "image_rebuild": ("lsio_rebuild", "LSIO image rebuild"),
+    }.get(change_type)
 
 
 def _semver_diff(current_version: str, target_version: str) -> str:
@@ -1126,7 +1137,7 @@ def _payload_batches(
     batches: list[dict[str, object]] = []
     for item in sendable:
         payload = {
-            "username": "WUDup Release Notes",
+            "username": DISCORD_WEBHOOK_USERNAME,
             "allowed_mentions": {"parse": []},
             "embeds": [_discord_embed(item)],
         }
@@ -1161,7 +1172,7 @@ def _digest_payload_batches(
                 "count": len(batch_items),
                 "items": list(batch_items),
                 "payload": {
-                    "username": "WUDup Release Notes",
+                    "username": DISCORD_WEBHOOK_USERNAME,
                     "allowed_mentions": {"parse": []},
                     "content": content,
                 },
@@ -1171,9 +1182,12 @@ def _digest_payload_batches(
     for category, category_label in DISCORD_DIGEST_CATEGORIES:
         for item in (item for item in items if item.category == category):
             row = _digest_row(item)
-            prefix = []
-            if current_category != category:
-                prefix = ([""] if lines else []) + [category_label]
+            prefix = _digest_category_prefix(
+                lines,
+                current_category=current_category,
+                category=category,
+                category_label=category_label,
+            )
             candidate_lines = [*lines, *prefix, row]
             candidate = "\n\n".join(
                 (total_header, "\n".join(candidate_lines), DISCORD_DIGEST_FOOTER)
@@ -1188,6 +1202,18 @@ def _digest_payload_batches(
             current_category = category
     finish_batch()
     return batches
+
+
+def _digest_category_prefix(
+    lines: Sequence[str],
+    *,
+    current_category: str,
+    category: str,
+    category_label: str,
+) -> list[str]:
+    if current_category == category:
+        return []
+    return ([""] if lines else []) + [category_label]
 
 
 def _payload_messages(batches: Sequence[Mapping[str, object]]) -> list[str]:
@@ -1345,7 +1371,7 @@ def _post_discord_payload(webhook_url: str, payload: Mapping[str, object]) -> No
 
 def _test_discord_payload() -> dict[str, object]:
     return {
-        "username": "WUDup Release Notes",
+        "username": DISCORD_WEBHOOK_USERNAME,
         "allowed_mentions": {"parse": []},
         "embeds": [
             {
