@@ -241,9 +241,13 @@ const emit = defineEmits<{
   }
 
   .retag-card :deep(.n-radio-group) {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: flex;
+    min-height: var(--size-touch-target);
     width: 100%;
+  }
+
+  .retag-card :deep(.n-radio-button) {
+    flex: 1 1 0;
   }
 }
 </style>

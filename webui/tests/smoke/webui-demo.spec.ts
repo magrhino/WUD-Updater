@@ -200,6 +200,14 @@ test("static demo mobile layout stays within the viewport", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "Retags", level: 1 })).toBeVisible();
   await expectTouchTargetHeight(page, "Preview retag changes");
   await expectTouchTargetHeight(page, "Retag only media/wudup");
+  const retagChoiceGroup = page.locator(".retag-card .n-radio-group").first();
+  const retagChoiceButtons = retagChoiceGroup.locator(".n-radio-button");
+  await expect(retagChoiceGroup).toBeVisible();
+  const groupBox = await retagChoiceGroup.boundingBox();
+  const keepBox = await retagChoiceButtons.nth(0).boundingBox();
+  const retagBox = await retagChoiceButtons.nth(1).boundingBox();
+  expect(groupBox?.height).toBeGreaterThanOrEqual(touchTargetSizePx);
+  expect(keepBox?.y).toBe(retagBox?.y);
   await expect
     .poll(() =>
       page.evaluate(() => ({
