@@ -17,6 +17,29 @@ import {
 import { touchTargetSizePx } from "../src/touchTargets";
 import { authSession, settingsResponse } from "./helpers/fixtures";
 
+function relativeLuminance(hex: string): number {
+  const channels = hex
+    .slice(1)
+    .match(/.{2}/g)
+    ?.map((value) => Number.parseInt(value, 16) / 255);
+  if (!channels || channels.length !== 3) {
+    throw new Error(`Expected a six-digit hex color, received ${hex}`);
+  }
+  const [red, green, blue] = channels.map((value) =>
+    value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+function contrastRatio(first: string, second: string): number {
+  const firstLuminance = relativeLuminance(first);
+  const secondLuminance = relativeLuminance(second);
+  return (
+    (Math.max(firstLuminance, secondLuminance) + 0.05) /
+    (Math.min(firstLuminance, secondLuminance) + 0.05)
+  );
+}
+
 function mockMatchMedia(prefersDark: boolean): void {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
     matches: query === "(prefers-color-scheme: dark)" && prefersDark,
@@ -79,6 +102,15 @@ describe("webui theme tokens", () => {
     expect(themeOverridesByMode.dark.common?.tableHeaderColor).toBe(
       themeDesignTokens.dark.color.tableHead,
     );
+  });
+
+  it("keeps compact table headings at WCAG AA contrast", () => {
+    expect(
+      contrastRatio(
+        themeDesignTokens.light.color.mutedText,
+        themeDesignTokens.light.color.tableHead,
+      ),
+    ).toBeGreaterThanOrEqual(4.5);
   });
 
   it("detects the initial effective theme from stored preference or system", () => {

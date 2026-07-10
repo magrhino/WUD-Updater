@@ -85,7 +85,7 @@ const lightDesignTokens: ThemeTokens = {
     sidebarHover: "#21383f",
     sidebarText: "#f7fbfc",
     sidebarMuted: "#c9d6d9",
-    mutedText: "#65747a",
+    mutedText: "#627177",
     border: "#dbe3e6",
     borderSubtle: "#e6ecef",
     borderDashed: "#cbd8dd",

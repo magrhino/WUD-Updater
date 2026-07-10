@@ -9,7 +9,7 @@ colors:
   sidebar-hover: "#21383f"
   sidebar-text: "#f7fbfc"
   sidebar-muted: "#c9d6d9"
-  muted-text: "#65747a"
+  muted-text: "#627177"
   border: "#dbe3e6"
   dark-border: "#31444b"
   border-subtle: "#e6ecef"
