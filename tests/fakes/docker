@@ -498,6 +498,12 @@ inspect_cmd(){
     return 0
   fi
 
+  if [[ "$format" == *'.Image'* ]]; then
+    local image_file="$ROOT/containers/$target.image-id"
+    [[ -f "$image_file" ]] && cat "$image_file"
+    return 0
+  fi
+
   if [[ "$format" == *'.State.Health.Log'* ]]; then
     [[ -f "$ROOT/containers/$target.healthlog" ]] && cat "$ROOT/containers/$target.healthlog"
     return 0

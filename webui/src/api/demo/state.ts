@@ -21,6 +21,7 @@ import type {
   RetagTargetsResponse,
   RunDetail,
   RunLogResponse,
+  RollbackPlanResponse,
   RunSummary,
   SecurityScanInfo,
   SecurityScanJobResponse,
@@ -1159,6 +1160,14 @@ export class DemoApiState {
       throw new Error(`Demo run ${runId} was not found`);
     }
     return clone(log);
+  }
+
+  rollbackPlan(runId: number): RollbackPlanResponse {
+    const plan = fixtures.runs.rollbackPlans[String(runId)];
+    if (!plan) {
+      throw new Error(`Demo run ${runId} was not found`);
+    }
+    return clone(plan);
   }
 
   private normalizedRetagChoices(

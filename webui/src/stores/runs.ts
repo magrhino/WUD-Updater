@@ -4,6 +4,7 @@ import { defineStore } from "pinia";
 import {
   type RunDetail,
   type RunLogResponse,
+  type RollbackPlanResponse,
   type RunSummary,
   webApi,
 } from "../api/client";
@@ -13,6 +14,7 @@ export const useRunsStore = defineStore("runs", () => {
   const runs = ref<RunSummary[]>([]);
   const runDetails = ref<Record<number, RunDetail>>({});
   const runLogs = ref<Record<number, RunLogResponse>>({});
+  const rollbackPlans = ref<Record<number, RollbackPlanResponse>>({});
   const loading = ref(false);
   const error = ref("");
 
@@ -44,14 +46,25 @@ export const useRunsStore = defineStore("runs", () => {
     });
   }
 
+  async function loadRollbackPlan(runId: number): Promise<void> {
+    await loadWithState(async () => {
+      rollbackPlans.value = {
+        ...rollbackPlans.value,
+        [runId]: await webApi.rollbackPlan(runId),
+      };
+    });
+  }
+
   return {
     runs,
     runDetails,
     runLogs,
+    rollbackPlans,
     loading,
     error,
     loadRuns,
     loadRunDetail,
     loadRunLog,
+    loadRollbackPlan,
   };
 });

@@ -21,6 +21,7 @@ import {
   retagTarget,
   retagTargetsResponse,
   planResponse,
+  rollbackPlan,
   runVerification,
   runSummary,
   selfUpdateApplyResponse,
@@ -99,6 +100,21 @@ describe("runs store", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/runs/7");
     expect(runs.runDetails[5]).toEqual(existingDetail);
     expect(runs.runDetails[7]?.id).toBe(7);
+    expect(runs.loading).toBe(false);
+    expect(runs.error).toBe("");
+  });
+
+  it("loads rollback plans into a keyed record without clearing existing entries", async () => {
+    const existingPlan = rollbackPlan({ run_id: 5 });
+    const fetchMock = mockFetch(rollbackPlan({ run_id: 7, status: "blocked" }));
+    const runs = useRunsStore();
+    runs.rollbackPlans = { 5: existingPlan };
+
+    await runs.loadRollbackPlan(7);
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/runs/7/rollback-plan");
+    expect(runs.rollbackPlans[5]).toEqual(existingPlan);
+    expect(runs.rollbackPlans[7]?.status).toBe("blocked");
     expect(runs.loading).toBe(false);
     expect(runs.error).toBe("");
   });

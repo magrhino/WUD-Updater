@@ -141,6 +141,10 @@ __all__ = (
     "RunDetail",
     "RunEventRecord",
     "RunLogResponse",
+    "RollbackPlanItem",
+    "RollbackPlanItemStatus",
+    "RollbackPlanResponse",
+    "RollbackPlanStatus",
     "RunSummary",
     "RunVerificationContainerStatus",
     "RunVerificationHealthStatus",
@@ -1282,6 +1286,45 @@ class RunVerificationSummary(BaseModel):
 class RunDetail(RunSummary):
     pending_updates: list[PendingUpdateRecord] = Field(default_factory=list)
     verification: RunVerificationSummary = Field(default_factory=RunVerificationSummary)
+
+
+RollbackPlanStatus = Literal[
+    "ready",
+    "partial",
+    "blocked",
+    "not_needed",
+    "not_applicable",
+    "unavailable",
+]
+
+RollbackPlanItemStatus = Literal["ready", "blocked", "not_needed"]
+
+
+class RollbackPlanItem(BaseModel):
+    event_id: int
+    service_key: str
+    stack_name: str
+    service_name: str
+    status: RollbackPlanItemStatus
+    reason: str
+    recorded_previous_image: str
+    recorded_target_image: str
+    rollback_image: str = ""
+    previous_image_id: str
+    previous_digest: str
+    current_compose_image: str = ""
+    current_container_image_ids: list[str] = Field(default_factory=list)
+
+
+class RollbackPlanResponse(BaseModel):
+    run_id: int
+    status: RollbackPlanStatus
+    detail: str
+    ready_count: int = 0
+    blocked_count: int = 0
+    not_needed_count: int = 0
+    items: list[RollbackPlanItem] = Field(default_factory=list)
+
 
 class RunLogResponse(BaseModel):
     run_id: int
