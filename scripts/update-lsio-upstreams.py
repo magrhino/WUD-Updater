@@ -17,6 +17,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MAP = REPO_ROOT / "wud" / "upstreams.txt"
+JENKINS_VARS_FILE = "jenkins-vars.yml"
 HEADER = """# /wud/upstreams.txt
 # Format: linuxserver/docker-<image>: <Owner>/<Repo>
 # Keep entries sorted by the linuxserver/docker-* key.
@@ -29,6 +30,9 @@ ENTRY_RE = re.compile(
 GITHUB_PROJECT_RE = re.compile(
     r"^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:\.git)?/?$"
 )
+JENKINS_EXT_RE = re.compile(
+    r"^\s*-\s*(EXT_USER|EXT_REPO)\s*=\s*['\"]([^'\"]+)['\"]\s*$"
+)
 
 
 @dataclass(frozen=True)
@@ -40,6 +44,12 @@ class MapEntry:
     @property
     def is_override(self) -> bool:
         return bool(self.comments)
+
+
+@dataclass(frozen=True)
+class SourceScan:
+    seen: frozenset[str]
+    entries: dict[str, str]
 
 
 class GitHubRequestError(RuntimeError):
@@ -104,19 +114,38 @@ def normalize_github_project(value: str | None) -> str | None:
     return f"{match.group(1)}/{match.group(2)}"
 
 
-def read_source_repo(repo_dir: Path) -> str | None:
-    for filename in ("readme-vars.yml", "jenkins-vars.yml"):
-        path = repo_dir / filename
-        if not path.exists():
-            continue
-        raw_url = extract_project_url(path.read_text(encoding="utf-8"))
-        if raw_url is None:
-            continue
-        return normalize_github_project(raw_url)
+def extract_jenkins_ext_repo(text: str) -> str | None:
+    values: dict[str, str] = {}
+    for line in text.splitlines():
+        match = JENKINS_EXT_RE.match(line)
+        if match is not None:
+            values[match.group(1)] = match.group(2)
+    if values.get("EXT_USER") and values.get("EXT_REPO"):
+        return f"{values['EXT_USER']}/{values['EXT_REPO']}"
     return None
 
 
-def source_entries_from_dir(source_dir: Path) -> dict[str, str]:
+def extract_upstream_repo(filename: str, text: str) -> str | None:
+    upstream = normalize_github_project(extract_project_url(text))
+    if upstream is not None:
+        return upstream
+    if filename == JENKINS_VARS_FILE:
+        return extract_jenkins_ext_repo(text)
+    return None
+
+
+def read_source_repo(repo_dir: Path) -> str | None:
+    for filename in ("readme-vars.yml", JENKINS_VARS_FILE):
+        path = repo_dir / filename
+        if not path.exists():
+            continue
+        upstream = extract_upstream_repo(filename, path.read_text(encoding="utf-8"))
+        if upstream is not None:
+            return upstream
+    return None
+
+
+def source_entries_from_dir(source_dir: Path) -> SourceScan:
     repo_dirs = (
         [source_dir]
         if source_dir.name.startswith("docker-")
@@ -126,12 +155,15 @@ def source_entries_from_dir(source_dir: Path) -> dict[str, str]:
             if path.is_dir() and path.name.startswith("docker-")
         )
     )
+    seen: set[str] = set()
     entries: dict[str, str] = {}
     for repo_dir in repo_dirs:
+        key = f"linuxserver/{repo_dir.name}"
+        seen.add(key)
         upstream = read_source_repo(repo_dir)
         if upstream is not None:
-            entries[f"linuxserver/{repo_dir.name}"] = upstream
-    return entries
+            entries[key] = upstream
+    return SourceScan(frozenset(seen), entries)
 
 
 def github_headers() -> dict[str, str]:
@@ -223,64 +255,62 @@ def linuxserver_repos_from_github() -> list[tuple[str, str]]:
 
 
 def source_entry_from_github_repo(repo: str, branch: str) -> tuple[str, str] | None:
-    for filename in ("readme-vars.yml", "jenkins-vars.yml"):
+    for filename in ("readme-vars.yml", JENKINS_VARS_FILE):
         content = github_file(repo, branch, filename)
         if content is None:
             continue
-        raw_url = extract_project_url(content)
-        if raw_url is None:
-            continue
-        upstream = normalize_github_project(raw_url)
+        upstream = extract_upstream_repo(filename, content)
         if upstream is not None:
             return f"linuxserver/{repo}", upstream
-        break
     return None
 
 
-def source_entries_from_github() -> dict[str, str]:
+def source_entries_from_github() -> SourceScan:
+    seen: set[str] = set()
     entries: dict[str, str] = {}
     for repo, branch in linuxserver_repos_from_github():
+        seen.add(f"linuxserver/{repo}")
         entry = source_entry_from_github_repo(repo, branch)
         if entry is not None:
             key, upstream = entry
             entries[key] = upstream
-    return entries
+    return SourceScan(frozenset(seen), entries)
 
 
 def compare_entries(
     current: dict[str, MapEntry],
-    source: dict[str, str],
+    source: SourceScan,
 ) -> tuple[
     list[tuple[str, str]],
     list[tuple[str, str, str]],
     list[tuple[str, str]],
 ]:
     missing = [
-        (key, source[key])
-        for key in sorted(source)
+        (key, source.entries[key])
+        for key in sorted(source.entries)
         if key not in current
     ]
     changed = [
-        (key, current[key].value, source[key])
-        for key in sorted(source)
+        (key, current[key].value, source.entries[key])
+        for key in sorted(source.entries)
         if key in current
         and not current[key].is_override
-        and current[key].value != source[key]
+        and current[key].value != source.entries[key]
     ]
     removed = [
         (key, entry.value)
         for key, entry in sorted(current.items())
-        if key not in source and not entry.is_override
+        if key not in source.seen and not entry.is_override
     ]
     return missing, changed, removed
 
 
 def build_output_entries(
     current: dict[str, MapEntry],
-    source: dict[str, str],
+    source: SourceScan,
 ) -> dict[str, MapEntry]:
     entries: dict[str, MapEntry] = {}
-    for key, value in source.items():
+    for key, value in source.entries.items():
         current_entry = current.get(key)
         if current_entry is not None and current_entry.is_override:
             entries[key] = current_entry
@@ -288,7 +318,7 @@ def build_output_entries(
             entries[key] = MapEntry(key, value)
 
     for key, entry in current.items():
-        if key not in entries and entry.is_override:
+        if key not in entries and (entry.is_override or key in source.seen):
             entries[key] = entry
 
     return entries

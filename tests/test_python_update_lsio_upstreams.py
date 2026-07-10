@@ -33,6 +33,15 @@ def write_metadata(root: Path, repo: str, filename: str, project_url: str) -> No
     )
 
 
+def write_jenkins_ext(root: Path, repo: str, user: str, name: str) -> None:
+    repo_dir = root / repo
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / lsio.JENKINS_VARS_FILE).write_text(
+        f"---\nrepo_vars:\n  - EXT_USER = '{user}'\n  - EXT_REPO = '{name}'\n",
+        encoding="utf-8",
+    )
+
+
 def test_source_dir_reads_readme_vars_then_jenkins_and_github_only(tmp_path: Path):
     source = tmp_path / "source"
     source.mkdir()
@@ -40,7 +49,7 @@ def test_source_dir_reads_readme_vars_then_jenkins_and_github_only(tmp_path: Pat
     write_metadata(
         source,
         "docker-fallback",
-        "jenkins-vars.yml",
+        lsio.JENKINS_VARS_FILE,
         "https://github.com/example/fallback",
     )
     no_project_dir = source / "docker-no-project"
@@ -52,15 +61,29 @@ def test_source_dir_reads_readme_vars_then_jenkins_and_github_only(tmp_path: Pat
     write_metadata(
         source,
         "docker-no-project",
-        "jenkins-vars.yml",
+        lsio.JENKINS_VARS_FILE,
         "https://github.com/example/no-project",
     )
     write_metadata(source, "docker-web", "readme-vars.yml", "https://example.com/app")
 
-    assert lsio.source_entries_from_dir(source) == {
+    scan = lsio.source_entries_from_dir(source)
+
+    assert scan.entries == {
         "linuxserver/docker-fallback": "example/fallback",
         "linuxserver/docker-no-project": "example/no-project",
         "linuxserver/docker-radarr": "Radarr/Radarr",
+    }
+    assert "linuxserver/docker-web" in scan.seen
+
+
+def test_source_dir_falls_back_to_jenkins_ext_after_homepage_url(tmp_path: Path):
+    source = tmp_path / "source"
+    source.mkdir()
+    write_metadata(source, "docker-bazarr", "readme-vars.yml", "https://www.bazarr.media/")
+    write_jenkins_ext(source, "docker-bazarr", "morpheus65535", "bazarr")
+
+    assert lsio.source_entries_from_dir(source).entries == {
+        "linuxserver/docker-bazarr": "morpheus65535/bazarr",
     }
 
 
@@ -68,7 +91,7 @@ def test_source_dir_accepts_single_repo_checkout(tmp_path: Path):
     source = tmp_path / "source"
     write_metadata(source, "docker-radarr", "readme-vars.yml", "https://github.com/Radarr/Radarr/")
 
-    assert lsio.source_entries_from_dir(source / "docker-radarr") == {
+    assert lsio.source_entries_from_dir(source / "docker-radarr").entries == {
         "linuxserver/docker-radarr": "Radarr/Radarr",
     }
 
@@ -92,7 +115,9 @@ linuxserver/docker-old: old/removed
         "linuxserver/docker-zed": "new/zed",
     }
 
-    assert lsio.render_map(lsio.build_output_entries(current, source)) == """# /wud/upstreams.txt
+    scan = lsio.SourceScan(frozenset(source), source)
+
+    assert lsio.render_map(lsio.build_output_entries(current, scan)) == """# /wud/upstreams.txt
 # Format: linuxserver/docker-<image>: <Owner>/<Repo>
 # Keep entries sorted by the linuxserver/docker-* key.
 
@@ -178,6 +203,39 @@ def test_write_updates_map_deterministically(tmp_path: Path, monkeypatch):
 linuxserver/docker-alpha: alpha/app
 linuxserver/docker-zed: zed/app
 """
+
+
+def test_write_preserves_seen_unmapped_existing_entry(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "source"
+    source.mkdir()
+    write_metadata(source, "docker-sonarr", "readme-vars.yml", "https://sonarr.tv/")
+    map_path = tmp_path / "upstreams.txt"
+    map_path.write_text("linuxserver/docker-sonarr: Sonarr/Sonarr\n", encoding="utf-8")
+
+    assert lsio.main(
+        ["--write", "--map", str(map_path), "--source-dir", str(source)]
+    ) == 0
+
+    assert "linuxserver/docker-sonarr: Sonarr/Sonarr\n" in map_path.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_github_mode_checks_jenkins_after_homepage_project_url(monkeypatch):
+    def fake_github_file(_repo: str, _branch: str, filename: str) -> str | None:
+        if filename == "readme-vars.yml":
+            return '---\nproject_url: "https://www.bazarr.media/"\n'
+        if filename == lsio.JENKINS_VARS_FILE:
+            return "---\nrepo_vars:\n  - EXT_USER = 'morpheus65535'\n  - EXT_REPO = 'bazarr'\n"
+        return None
+
+    monkeypatch.setattr(lsio, "github_file", fake_github_file)
+
+    assert lsio.source_entry_from_github_repo("docker-bazarr", "master") == (
+        "linuxserver/docker-bazarr",
+        "morpheus65535/bazarr",
+    )
 
 
 def test_default_github_mode_requires_token(tmp_path: Path, monkeypatch, capsys):
