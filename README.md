@@ -7,8 +7,8 @@
 WUDup turns image update notices from What's Up Docker (WUD) into a
 reviewable Docker Compose update workflow. The recommended deployment is the
 long-running WebUI container, which provides a local browser dashboard,
-read-only safety defaults, Doctor checks, run history, logs, diagnostics, and an
-optional plan-first apply flow.
+read-only safety defaults, a pending-update review queue, Doctor checks, run
+history, logs, diagnostics, and optional scheduled automatic updates.
 
 **Project status:** Public beta. WUDup is maintainer-tested with Docker Compose,
 and early users are welcome. Start in read-only mode, try the
@@ -20,31 +20,28 @@ help or feedback.
 
 ## Why WUDup?
 
-WUD tells you that an image changed; WUDup adds a deliberate operations layer
-before Compose services change. It gives you a reviewable plan, readiness
-checks, explicit approval for mutations, targeted Compose updates, run history,
-and diagnostics instead of wiring an update notification directly to a restart
-script.
+WUD tells you that an image changed; WUDup queues the update for review before
+your Compose services change. Check readiness and apply updates manually, or
+configure policies to apply eligible updates automatically on your schedule.
+WUDup records each run in History and provides diagnostics when something needs
+attention.
 
 ## Web Deployment
 
 Try the [public, fixture-backed demo](https://magrhino.github.io/wudup/).
 
-The WebUI container serves the FastAPI backend and packaged Vue SPA from the
-same image. The WebUI normalizes both the callback todo file and WUD's internal
-API metadata into the same pending-line format before planning or applying
-updates. New WebUI deployments use WUD's API over a private Compose network;
-the callback todo file remains an explicit fallback/import source and the host
-CLI stays file-based.
+New WebUI deployments read available updates from WUD's API over a private
+Compose network and queue them on the Pending page. The callback todo file
+remains an explicit fallback/import source, and the host CLI stays file-based.
 
 ```text
 WUD detects an image update
--> WUD API or /wud/append-updates.sh produces pending lines
--> the WebUI shows pending updates, checks readiness, and builds an apply plan
--> approved plans run docker-update-from-wud and clean successful todo lines
+-> WUDup queues it on the Pending page
+-> review and apply it manually, or let an auto-update policy handle it
+-> check the result in History
 ```
 
-The WebUI deployment starts read-only. Browser-initiated Docker mutations stay
+The WebUI deployment starts read-only. Manual and automatic updates stay
 disabled unless `WUD_WEB_MUTATIONS_ENABLED=true` is set intentionally.
 
 ### Start The WebUI
