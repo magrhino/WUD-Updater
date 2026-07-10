@@ -4,6 +4,20 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.54.0](https://github.com/magrhino/wudup/compare/v0.53.3...v0.54.0) (2026-07-10)
+
+
+### Features
+
+* **notifications:** add categorized discord digests ([#513](https://github.com/magrhino/wudup/issues/513)) ([10d378d](https://github.com/magrhino/wudup/commit/10d378d3b6f9ff48e7ec74682adaacde303a350b))
+
+
+### Bug Fixes
+
+* **pending:** show api-hidden snoozed update candidates ([#512](https://github.com/magrhino/wudup/issues/512)) ([04c9f53](https://github.com/magrhino/wudup/commit/04c9f53cbe3a160162d773b1f9f301e29f32e99c))
+* **release-notes:** check LSIO upstream map drift ([#509](https://github.com/magrhino/wudup/issues/509)) ([d750f71](https://github.com/magrhino/wudup/commit/d750f7188b5fb53c6e60132c96eb967063a5e2cc))
+* **release-notes:** fill missing LSIO upstream mappings ([#511](https://github.com/magrhino/wudup/issues/511)) ([55c9295](https://github.com/magrhino/wudup/commit/55c9295163f1dff9dca0054b87893fa2ff96f88b))
+
 ## [0.53.3](https://github.com/magrhino/wudup/compare/v0.53.2...v0.53.3) (2026-07-08)
 
 
