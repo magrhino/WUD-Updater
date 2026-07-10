@@ -70,6 +70,7 @@ DISCORD_DIGEST_REASON_LIMIT = 160
 DISCORD_WEBHOOK_TIMEOUT_SECONDS = 10.0
 DISCORD_WEBHOOK_USER_AGENT = "wudup-webui-release-notifications/1.0"
 DISCORD_WEBHOOK_USERNAME = "WUDup Release Notes"
+DISCORD_SUPPRESS_EMBEDS_FLAG = 1 << 2
 DISCORD_COLOR = 0x57F287
 DISCORD_DIGEST_FOOTER = "Open WUDup for full notes, digests, and apply plan."
 DISCORD_DIGEST_CATEGORIES = (
@@ -1197,6 +1198,7 @@ def _digest_payload_batches(
                 "payload": {
                     "username": DISCORD_WEBHOOK_USERNAME,
                     "allowed_mentions": {"parse": []},
+                    "flags": DISCORD_SUPPRESS_EMBEDS_FLAG,
                     "content": content,
                 },
             }

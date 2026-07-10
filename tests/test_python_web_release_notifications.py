@@ -1418,6 +1418,7 @@ def test_release_notification_per_container_mode_keeps_detailed_embed(
     assert response.json()["mode"] == "per_container"
     assert response.json()["batch_count"] == 1
     assert response.json()["messages"] == []
+    assert "flags" not in posted[0][1]
     assert posted[0][1]["embeds"][0]["title"] == "app Tag Update"
     assert release_body in posted[0][1]["embeds"][0]["description"]
 
@@ -1761,6 +1762,10 @@ def test_release_notification_send_batches_discord_digest_by_content_limit(
     assert body["batch_count"] == len(posted)
     assert body["batch_count"] > 1
     assert body["messages"] == [payload["content"] for _url, payload in posted]
+    assert all(
+        payload["flags"] == notifications_module.DISCORD_SUPPRESS_EMBEDS_FLAG
+        for _url, payload in posted
+    )
     assert all(len(payload["content"]) <= 2000 for _url, payload in posted)
     assert sum(payload["content"].count("\n• ") for _url, payload in posted) == 25
     for _url, payload in posted:
