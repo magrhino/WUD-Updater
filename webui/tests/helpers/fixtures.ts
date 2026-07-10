@@ -1022,6 +1022,9 @@ export function releaseNotificationResponse(
     sendable_count: 1,
     skipped_count: 0,
     batch_count: 1,
+    messages: [
+      "🧾 WUDup batch — 1 updates found\n\n⚠️ Needs review\n• demo/app `2.0.0` → `v2.0.0` — major version bump\n\nOpen WUDup for full notes, digests, and apply plan.",
+    ],
     items: [
       {
         line_no: 1,
@@ -1033,6 +1036,11 @@ export function releaseNotificationResponse(
         release_tag: "v2.0.0",
         image_repo: "acme/app",
         upstream_repo: "acme/app",
+        current_version: "2.0.0",
+        target_version: "v2.0.0",
+        category: "needs_review",
+        reason_code: "major_bump",
+        reason_label: "major version bump",
         links: [],
         triggers: [
           {

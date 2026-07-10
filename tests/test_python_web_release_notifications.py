@@ -398,6 +398,138 @@ def test_notification_items_cache_wud_trigger_lookup_by_container(
     ]
 
 
+def test_digest_reason_priority_uses_deterministic_metadata() -> None:
+    target = notifications_module._NotificationTarget(
+        target=notifications_module.WudTarget(
+            line_no=1,
+            raw="ghcr.io/acme/app:1.0.0 tag=2.0.0",
+            first="ghcr.io/acme/app:1.0.0",
+            key="app",
+            repo="ghcr.io/acme/app",
+            has_tag=True,
+            allow_repo=True,
+            digest="",
+            desired_tag="2.0.0",
+            tag_token="1.0.0",
+        )
+    )
+    release_link = notifications_module.ReleaseNoteLink(
+        label="GitHub release",
+        url="https://github.com/acme/app/releases/tag/v2.0.0",
+        kind="github_release",
+    )
+
+    def reason(
+        *,
+        status: str = "ready",
+        breaking: bool = False,
+        links: list | None = None,
+        semver_diff: str = "",
+        current_version: str = "1.0.0",
+        target_version: str = "1.0.1",
+        provider: str = "github",
+        change_type: str = "unknown",
+        update_kind: str = "tag",
+    ) -> tuple[str, str, str]:
+        note = notifications_module.ReleaseNoteInfo(
+            line_no=1,
+            status=status,
+            provider=provider,
+            image_repo="acme/app",
+            upstream_repo="acme/app",
+            breaking=breaking,
+            links=[release_link] if links is None else links,
+            classification={"change_type": change_type},
+        )
+        metadata = SimpleNamespace(
+            semver_diff=semver_diff,
+            update_kind=update_kind,
+        )
+        return notifications_module._notification_digest_reason(
+            target,
+            note,
+            metadata,
+            current_version=current_version,
+            target_version=target_version,
+        )
+
+    assert reason(breaking=True, semver_diff="major") == (
+        "needs_review",
+        "breaking_change",
+        "possible breaking change",
+    )
+    assert reason(semver_diff="major")[:2] == ("needs_review", "major_bump")
+    assert reason(status="missing", semver_diff="minor")[:2] == (
+        "needs_review",
+        "release_notes_missing",
+    )
+    assert reason(current_version="latest", semver_diff="minor")[:2] == (
+        "needs_review",
+        "mutable_latest",
+    )
+    assert reason(links=[])[:2] == ("needs_review", "release_link_missing")
+    assert reason(semver_diff="minor")[:2] == ("worth_noting", "minor_bump")
+    assert reason(provider="lsio", change_type="upstream_update")[:2] == (
+        "worth_noting",
+        "lsio_upstream",
+    )
+    assert reason(semver_diff="patch")[:2] == ("routine", "patch_bump")
+    assert reason(
+        current_version="current image",
+        target_version="new digest",
+        update_kind="digest",
+    )[:2] == ("routine", "routine_digest")
+
+
+def test_semver_diff_rejects_unreasonably_long_numeric_parts() -> None:
+    oversized = "1" * 100
+
+    assert notifications_module._semver_diff(
+        f"{oversized}.0.0",
+        f"{oversized}.1.0",
+    ) == ""
+
+
+def test_digest_row_selects_compact_release_links() -> None:
+    item = notifications_module.ReleaseNotificationItem(
+        line_no=1,
+        image="ghcr.io/acme/app:1.0.0",
+        service_key="media/app",
+        title="app Tag Update",
+        description="",
+        status="ready",
+        current_version="1.0.0",
+        target_version="1.1.0",
+        category="worth_noting",
+        reason_code="minor_bump",
+        reason_label="minor update with release notes",
+        links=[
+            notifications_module.ReleaseNoteLink(
+                label="GitHub release",
+                url="https://example.test/release",
+                kind="github_release",
+            ),
+            notifications_module.ReleaseNoteLink(
+                label="Upstream release",
+                url="https://example.test/upstream",
+                kind="github_release",
+            ),
+            notifications_module.ReleaseNoteLink(
+                label="Changelog",
+                url="https://example.test/changelog",
+                kind="changelog",
+            ),
+        ],
+    )
+
+    row = notifications_module._digest_row(item)
+
+    assert row.startswith("• media/app `1.0.0` → `1.1.0`")
+    assert "[release](https://example.test/release)" in row
+    assert "[upstream](https://example.test/upstream)" in row
+    assert "[changelog](https://example.test/changelog)" in row
+
+
 def test_release_notification_preview_degrades_when_wud_triggers_require_auth(
     tmp_path: Path,
     monkeypatch,
@@ -988,7 +1120,7 @@ def test_release_notification_preview_and_send_redact_cached_errors(
     assert "webhook-secret" not in json.dumps([payload for _url, payload in posted])
 
 
-def test_release_notification_preview_and_embed_distinguish_lsio_rebuild(
+def test_release_notification_preview_and_digest_distinguish_lsio_rebuild(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -1062,7 +1194,6 @@ def test_release_notification_preview_and_embed_distinguish_lsio_rebuild(
     assert preview.status_code == 200
     assert send.status_code == 200
     preview_item = preview.json()["items"][0]
-    embed = posted[0][1]["embeds"][0]
     assert preview_item["title"].startswith("LSIO image rebuild:")
     assert "5.1.0-ls2" in preview_item["title"]
     assert preview_item["image_repo"] == "linuxserver/docker-radarr"
@@ -1072,11 +1203,12 @@ def test_release_notification_preview_and_embed_distinguish_lsio_rebuild(
     assert "Upstream: `Radarr/Radarr`" in preview_item["description"]
     assert "LinuxServer.io rebuild" in preview_item["description"]
     assert "LSIO build: `ls2`" in preview_item["description"]
-    assert embed["title"] == preview_item["title"]
-    assert "LinuxServer.io rebuild" in embed["description"]
-    fields = {field["name"]: field["value"] for field in embed["fields"]}
-    assert fields["Repository"] == "`linuxserver/docker-radarr`"
-    assert fields["Upstream"] == "`Radarr/Radarr`"
+    assert preview_item["category"] == "worth_noting"
+    assert preview_item["reason_code"] == "lsio_rebuild"
+    assert posted[0][1]["content"] == preview.json()["messages"][0]
+    assert "🟡 Worth noting" in posted[0][1]["content"]
+    assert "LSIO image rebuild" in posted[0][1]["content"]
+    assert "[release]" in posted[0][1]["content"]
 
 
 def test_release_notification_send_posts_discord_payload_and_audits(
@@ -1098,7 +1230,9 @@ def test_release_notification_send_posts_discord_payload_and_audits(
     assert body["audit_run_id"]
     assert len(posted) == 1
     assert posted[0][0] == "https://discord.test/webhook-secret"
-    assert posted[0][1]["embeds"][0]["title"] == "app Tag Update"
+    assert body["items"][0]["title"] == "app Tag Update"
+    assert posted[0][1]["content"] == body["messages"][0]
+    assert "major version bump" in posted[0][1]["content"]
     db_path = tmp_path / "state" / "wud.sqlite"
     with open_db(db_path) as conn:
         run = conn.execute(
@@ -1141,7 +1275,10 @@ def test_release_notification_send_describes_digest_update_title(
 
     assert response.status_code == 200
     assert len(posted) == 1
-    assert posted[0][1]["embeds"][0]["title"] == "app Digest Update"
+    assert response.json()["items"][0]["title"] == "app Digest Update"
+    assert response.json()["items"][0]["reason_code"] == "routine_digest"
+    assert "image digest update" in posted[0][1]["content"]
+    assert "sha256:" not in posted[0][1]["content"]
 
 
 def test_release_notification_send_uses_persisted_discord_webhook(
@@ -1210,6 +1347,32 @@ def test_release_notification_full_verbosity_includes_release_body(
     assert release_body not in summary.json()["items"][0]["description"]
     assert full.status_code == 200
     assert release_body in full.json()["items"][0]["description"]
+    assert release_body not in posted[0][1]["content"]
+
+
+def test_release_notification_per_container_mode_keeps_detailed_embed(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    release_body = "Full release notes body from GitHub."
+    _fake_release_refresh(monkeypatch, body=release_body)
+    posted = _capture_discord_posts(monkeypatch)
+    _store_web_setting(tmp_path, "release_notifications.mode", "per_container")
+    _store_web_setting(tmp_path, "release_notifications.verbosity", "full")
+    client = _client(tmp_path, _RELEASE_NOTIFICATION_ENV)
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
+
+    response = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "confirmation": "send-release-notes"},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["mode"] == "per_container"
+    assert response.json()["batch_count"] == 1
+    assert response.json()["messages"] == []
+    assert posted[0][1]["embeds"][0]["title"] == "app Tag Update"
     assert release_body in posted[0][1]["embeds"][0]["description"]
 
 
@@ -1526,21 +1689,21 @@ def test_release_notification_manual_resend_increments_history(
     assert history["send_count"] == 2
 
 
-def test_release_notification_send_batches_discord_embeds(
+def test_release_notification_send_batches_discord_digest_by_content_limit(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     client, posted = _release_notification_client(tmp_path, monkeypatch)
     lines = [
         f"ghcr.io/acme/app{i}:1.0.0 tag=2.0.0"
-        for i in range(1, 12)
+        for i in range(1, 26)
     ]
     _write_pending_lines(tmp_path, lines)
 
     response = client.post(
         "/api/v1/release-notifications/send",
         json={
-            "line_numbers": list(range(1, 12)),
+            "line_numbers": list(range(1, 26)),
             "confirmation": "send-release-notes",
         },
         headers=_csrf_headers(client),
@@ -1548,9 +1711,17 @@ def test_release_notification_send_batches_discord_embeds(
 
     body = response.json()
     assert response.status_code == 200
-    assert body["sendable_count"] == 11
-    assert body["batch_count"] == 2
-    assert [len(payload["embeds"]) for _url, payload in posted] == [10, 1]
+    assert body["sendable_count"] == 25
+    assert body["batch_count"] == len(posted)
+    assert body["batch_count"] > 1
+    assert body["messages"] == [payload["content"] for _url, payload in posted]
+    assert all(len(payload["content"]) <= 2000 for _url, payload in posted)
+    assert sum(payload["content"].count("\n• ") for _url, payload in posted) == 25
+    for _url, payload in posted:
+        row_count = payload["content"].count("\n• ")
+        assert payload["content"].startswith(
+            f"🧾 WUDup batch — {row_count} updates found"
+        )
 
 
 def test_release_notification_send_audits_partial_discord_failure(
@@ -1562,14 +1733,14 @@ def test_release_notification_send_audits_partial_discord_failure(
     client = _client(tmp_path, _RELEASE_NOTIFICATION_ENV)
     lines = [
         f"ghcr.io/acme/app{i}:1.0.0 tag=2.0.0"
-        for i in range(1, 12)
+        for i in range(1, 26)
     ]
     _write_pending_lines(tmp_path, lines)
 
     response = client.post(
         "/api/v1/release-notifications/send",
         json={
-            "line_numbers": list(range(1, 12)),
+            "line_numbers": list(range(1, 26)),
             "confirmation": "send-release-notes",
         },
         headers=_csrf_headers(client),
@@ -1608,13 +1779,13 @@ def test_release_notification_send_audits_partial_discord_failure(
     event_metadata = json.loads(event["metadata_json"])
     assert run["status"] == "failure"
     assert event["status"] == "failure"
-    assert run_metadata["sent_count"] == 10
+    assert 0 < run_metadata["sent_count"] < 25
     assert run_metadata["sent_batch_count"] == 1
-    assert run_metadata["batch_count"] == 2
+    assert run_metadata["batch_count"] > 1
     assert event_metadata["items"][0]["line_no"] == 1
     assert [(row["status"], row["count"]) for row in history_rows] == [
-        ("failure", 1),
-        ("sent", 10),
+        ("failure", 25 - run_metadata["sent_count"]),
+        ("sent", run_metadata["sent_count"]),
     ]
     serialized = json.dumps({"run": run_metadata, "event": event_metadata})
     assert "webhook-secret" not in serialized

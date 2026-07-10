@@ -874,6 +874,13 @@ class ReleaseNotificationItem(BaseModel):
     release_tag: str = ""
     image_repo: str = ""
     upstream_repo: str = ""
+    current_version: str = ""
+    target_version: str = ""
+    category: Literal[
+        "needs_review", "worth_noting", "routine"
+    ] = "needs_review"
+    reason_code: str = ""
+    reason_label: str = ""
     links: list[ReleaseNoteLink] = Field(default_factory=list)
     triggers: list[ReleaseNotificationTrigger] = Field(default_factory=list)
     notification_key: str = ""
@@ -895,6 +902,7 @@ class ReleaseNotificationResponse(BaseModel):
     sendable_count: int = 0
     skipped_count: int = 0
     batch_count: int = 0
+    messages: list[str] = Field(default_factory=list)
     items: list[ReleaseNotificationItem] = Field(default_factory=list)
     wud_api: WudApiStatus = Field(
         default_factory=lambda: WudApiStatus(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 import urllib.error
 import urllib.request
@@ -23,7 +24,7 @@ from . import (
 )
 from .config import VALID_UPDATE_MODES
 from .db import DatabaseError, init_db, open_db, utc_timestamp
-from .images import image_repo_ref
+from .images import image_repo_ref, image_tag
 from .release_notes import refresh_release_notes
 from .web_auth import (
     _redact_sensitive_text,
@@ -60,11 +61,25 @@ from .web_settings import (
 )
 from .wud_file import WudTarget, is_digest_target_line, parse_wud_text
 
-DISCORD_EMBEDS_PER_MESSAGE = 10
+DISCORD_MESSAGE_CONTENT_LIMIT = 2000
 DISCORD_EMBED_DESCRIPTION_LIMIT = 4096
+DISCORD_DIGEST_ROW_LIMIT = 1500
+DISCORD_DIGEST_SUBJECT_LIMIT = 160
+DISCORD_DIGEST_VERSION_LIMIT = 128
+DISCORD_DIGEST_REASON_LIMIT = 160
 DISCORD_WEBHOOK_TIMEOUT_SECONDS = 10.0
 DISCORD_WEBHOOK_USER_AGENT = "wudup-webui-release-notifications/1.0"
+DISCORD_WEBHOOK_USERNAME = "WUDup Release Notes"
 DISCORD_COLOR = 0x57F287
+DISCORD_DIGEST_FOOTER = "Open WUDup for full notes, digests, and apply plan."
+DISCORD_DIGEST_CATEGORIES = (
+    ("needs_review", "⚠️ Needs review"),
+    ("worth_noting", "🟡 Worth noting"),
+    ("routine", "🟢 Routine"),
+)
+SEMVER_PARTS_RE = re.compile(
+    r"(?<![0-9A-Za-z.])v?([0-9]{1,10})[.]([0-9]{1,10})(?:[.]([0-9]{1,10}))?"
+)
 RUN_NOTIFICATION_STATUS_REASON = "updated"
 NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL = (
     "no release-note notifications are available to send"
@@ -475,6 +490,7 @@ def _notification_response(
         resend=payload.resend,
     )
     sendable_count = sum(1 for item in items if not item.skipped_reason)
+    batches = _payload_batches(items, notification_config.mode)
     return ReleaseNotificationResponse(
         enabled=True,
         mode=notification_config.mode,
@@ -485,7 +501,8 @@ def _notification_response(
         count=len(items),
         sendable_count=sendable_count,
         skipped_count=len(items) - sendable_count,
-        batch_count=_payload_batch_count(sendable_count, notification_config.mode),
+        batch_count=len(batches),
+        messages=_payload_messages(batches),
         items=items,
         wud_api=source.wud_api,
         warnings=[*source.warnings, *warnings],
@@ -727,6 +744,18 @@ def _notification_items(
                 )
         image_repo = note.image_repo or target.target.repo
         upstream_repo = note.upstream_repo
+        current_version, target_version = _notification_versions(
+            target,
+            note,
+            metadata,
+        )
+        category, reason_code, reason_label = _notification_digest_reason(
+            target,
+            note,
+            metadata,
+            current_version=current_version,
+            target_version=target_version,
+        )
         title, description = _notification_copy(
             settings,
             target,
@@ -748,6 +777,11 @@ def _notification_items(
                 release_tag=note.release_tag,
                 image_repo=image_repo,
                 upstream_repo=upstream_repo,
+                current_version=current_version,
+                target_version=target_version,
+                category=category,
+                reason_code=reason_code,
+                reason_label=reason_label,
                 links=_release_note_links(note),
                 triggers=triggers,
                 notification_key=identity.notification_key,
@@ -817,6 +851,116 @@ def _release_note_links(note: ReleaseNoteInfo) -> list[ReleaseNoteLink]:
         )
         for link in note.links
     ]
+
+
+def _notification_versions(
+    target: _NotificationTarget,
+    note: ReleaseNoteInfo,
+    metadata: web_wud_api.WudApiContainer | None,
+) -> tuple[str, str]:
+    current_version = str(getattr(metadata, "local_tag", "") or "")
+    target_version = str(getattr(metadata, "remote_tag", "") or "")
+    digest_update = str(getattr(metadata, "update_kind", "") or "") == "digest"
+    digest_update = digest_update or is_digest_target_line(target.target)
+    if not current_version:
+        current_version = image_tag(target.target.first) or target.target.tag_token
+    if not target_version:
+        target_version = (
+            "new digest"
+            if digest_update
+            else target.target.desired_tag or note.release_tag
+        )
+    if not current_version:
+        current_version = "current image"
+    if not target_version:
+        target_version = "updated image"
+    return current_version, target_version
+
+
+def _notification_digest_reason(
+    target: _NotificationTarget,
+    note: ReleaseNoteInfo,
+    metadata: web_wud_api.WudApiContainer | None,
+    *,
+    current_version: str,
+    target_version: str,
+) -> tuple[str, str, str]:
+    semver_diff = str(getattr(metadata, "semver_diff", "") or "").lower()
+    if not semver_diff:
+        semver_diff = _semver_diff(current_version, target_version)
+    update_kind = str(getattr(metadata, "update_kind", "") or "")
+    classification = getattr(note, "classification", None)
+    change_type = str(getattr(classification, "change_type", "") or "")
+
+    if note.breaking:
+        return "needs_review", "breaking_change", "possible breaking change"
+    if semver_diff == "major":
+        return "needs_review", "major_bump", "major version bump"
+    status_reasons = {
+        "error": ("release_notes_error", "release-note lookup failed"),
+        "unsupported": ("release_notes_unsupported", "release notes unsupported"),
+        "missing": ("release_notes_missing", "release notes unavailable"),
+        "not_found": ("release_notes_not_found", "matching release not found"),
+    }
+    if note.status in status_reasons:
+        code, label = status_reasons[note.status]
+        return "needs_review", code, label
+    if "latest" in {current_version.lower(), target_version.lower()}:
+        return "needs_review", "mutable_latest", "mutable latest tag"
+    if not _has_release_or_changelog_link(note.links):
+        return (
+            "needs_review",
+            "release_link_missing",
+            "release or changelog link unavailable",
+        )
+    if semver_diff == "minor":
+        return "worth_noting", "minor_bump", "minor update with release notes"
+    lsio_reason = _lsio_digest_reason(note.provider, change_type)
+    if lsio_reason is not None:
+        return "worth_noting", *lsio_reason
+    if semver_diff == "patch":
+        return "routine", "patch_bump", "patch update with release notes"
+    if update_kind == "digest" or is_digest_target_line(target.target):
+        return "routine", "routine_digest", "image digest update"
+    return "routine", "routine_update", "update metadata available"
+
+
+def _lsio_digest_reason(provider: str, change_type: str) -> tuple[str, str] | None:
+    if provider != "lsio":
+        return None
+    return {
+        "upstream_update": ("lsio_upstream", "LSIO/upstream release"),
+        "image_rebuild": ("lsio_rebuild", "LSIO image rebuild"),
+    }.get(change_type)
+
+
+def _semver_diff(current_version: str, target_version: str) -> str:
+    current_match = SEMVER_PARTS_RE.search(current_version)
+    target_match = SEMVER_PARTS_RE.search(target_version)
+    if current_match is None or target_match is None:
+        return ""
+    current = tuple(int(part or 0) for part in current_match.groups())
+    target = tuple(int(part or 0) for part in target_match.groups())
+    if target[0] != current[0]:
+        return "major"
+    if target[1] != current[1]:
+        return "minor"
+    if target[2] != current[2]:
+        return "patch"
+    return ""
+
+
+def _has_release_or_changelog_link(links: Sequence[ReleaseNoteLink]) -> bool:
+    return any(
+        link.url
+        and (
+            "release" in link.kind.lower()
+            or "changelog" in link.kind.lower()
+            or "release" in link.label.lower()
+            or "changelog" in link.label.lower()
+        )
+        for link in links
+    )
 
 
 def _notification_copy(
@@ -987,30 +1131,152 @@ def _payload_batches(
     items: Sequence[ReleaseNotificationItem],
     mode: str = "digest",
 ) -> list[dict[str, object]]:
-    batches: list[dict[str, object]] = []
     sendable = [item for item in items if not item.skipped_reason]
-    batch_size = 1 if mode == "per_container" else DISCORD_EMBEDS_PER_MESSAGE
-    for index in range(0, len(sendable), batch_size):
-        batch_items = sendable[index : index + batch_size]
+    if mode == "digest":
+        return _digest_payload_batches(sendable)
+    batches: list[dict[str, object]] = []
+    for item in sendable:
         payload = {
-            "username": "WUDup Release Notes",
+            "username": DISCORD_WEBHOOK_USERNAME,
             "allowed_mentions": {"parse": []},
-            "embeds": [_discord_embed(item) for item in batch_items],
+            "embeds": [_discord_embed(item)],
         }
         batches.append(
             {
                 "index": len(batches) + 1,
-                "count": len(batch_items),
-                "items": batch_items,
+                "count": 1,
+                "items": [item],
                 "payload": payload,
             }
         )
     return batches
 
 
-def _payload_batch_count(sendable_count: int, mode: str = "digest") -> int:
-    batch_size = 1 if mode == "per_container" else DISCORD_EMBEDS_PER_MESSAGE
-    return (sendable_count + batch_size - 1) // batch_size
+def _digest_payload_batches(
+    items: Sequence[ReleaseNotificationItem],
+) -> list[dict[str, object]]:
+    if not items:
+        return []
+    total_header = f"🧾 WUDup batch — {len(items)} updates found"
+    batches: list[dict[str, object]] = []
+    lines: list[str] = []
+    batch_items: list[ReleaseNotificationItem] = []
+    current_category = ""
+
+    def finish_batch() -> None:
+        header = f"🧾 WUDup batch — {len(batch_items)} updates found"
+        content = "\n\n".join((header, "\n".join(lines), DISCORD_DIGEST_FOOTER))
+        batches.append(
+            {
+                "index": len(batches) + 1,
+                "count": len(batch_items),
+                "items": list(batch_items),
+                "payload": {
+                    "username": DISCORD_WEBHOOK_USERNAME,
+                    "allowed_mentions": {"parse": []},
+                    "content": content,
+                },
+            }
+        )
+
+    for category, category_label in DISCORD_DIGEST_CATEGORIES:
+        for item in (item for item in items if item.category == category):
+            row = _digest_row(item)
+            prefix = _digest_category_prefix(
+                lines,
+                current_category=current_category,
+                category=category,
+                category_label=category_label,
+            )
+            candidate_lines = [*lines, *prefix, row]
+            candidate = "\n\n".join(
+                (total_header, "\n".join(candidate_lines), DISCORD_DIGEST_FOOTER)
+            )
+            if batch_items and len(candidate) > DISCORD_MESSAGE_CONTENT_LIMIT:
+                finish_batch()
+                lines = [category_label, row]
+                batch_items = [item]
+            else:
+                lines = candidate_lines
+                batch_items.append(item)
+            current_category = category
+    finish_batch()
+    return batches
+
+
+def _digest_category_prefix(
+    lines: Sequence[str],
+    *,
+    current_category: str,
+    category: str,
+    category_label: str,
+) -> list[str]:
+    if current_category == category:
+        return []
+    return ([""] if lines else []) + [category_label]
+
+
+def _payload_messages(batches: Sequence[Mapping[str, object]]) -> list[str]:
+    messages: list[str] = []
+    for batch in batches:
+        payload = batch.get("payload")
+        if not isinstance(payload, Mapping):
+            continue
+        content = str(payload.get("content") or "")
+        if content:
+            messages.append(content)
+    return messages
+
+
+def _digest_row(item: ReleaseNotificationItem) -> str:
+    subject = item.service_key or image_repo_ref(
+        item.image_repo or item.image
+    ).rsplit("/", 1)[-1]
+    row = (
+        f"• {_discord_inline(subject)[:DISCORD_DIGEST_SUBJECT_LIMIT]} "
+        f"{_discord_code(item.current_version[:DISCORD_DIGEST_VERSION_LIMIT])} → "
+        f"{_discord_code(item.target_version[:DISCORD_DIGEST_VERSION_LIMIT])} — "
+        f"{item.reason_label[:DISCORD_DIGEST_REASON_LIMIT]}"
+    )
+    selected_links: list[str] = []
+    for link in _digest_links(item.links):
+        candidate = f"{row} — {' '.join([*selected_links, link])}"
+        if len(candidate) > DISCORD_DIGEST_ROW_LIMIT:
+            break
+        selected_links.append(link)
+    return f"{row} — {' '.join(selected_links)}" if selected_links else row
+
+
+def _digest_links(links: Sequence[ReleaseNoteLink]) -> list[str]:
+    selected: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for link in links:
+        kind = link.kind.lower()
+        label = link.label.lower()
+        if "changelog" in kind or "changelog" in label:
+            compact_label = "changelog"
+        elif "upstream" in kind or "upstream" in label:
+            compact_label = "upstream"
+        elif "release" in kind or "release" in label:
+            compact_label = "release"
+        elif "project" in kind or "project" in label:
+            compact_label = "project"
+        else:
+            continue
+        key = (compact_label, link.url)
+        if not link.url or key in seen:
+            continue
+        seen.add(key)
+        selected.append(_discord_link(compact_label, link.url))
+    return selected
+
+
+def _discord_inline(value: str) -> str:
+    return value.replace("`", "'").replace("\n", " ").strip()
+
+
+def _discord_code(value: str) -> str:
+    return f"`{_discord_inline(value)}`"
 
 
 def _discord_embed(item: ReleaseNotificationItem) -> dict[str, object]:
@@ -1105,7 +1371,7 @@ def _post_discord_payload(webhook_url: str, payload: Mapping[str, object]) -> No
 
 def _test_discord_payload() -> dict[str, object]:
     return {
-        "username": "WUDup Release Notes",
+        "username": DISCORD_WEBHOOK_USERNAME,
         "allowed_mentions": {"parse": []},
         "embeds": [
             {
@@ -1528,12 +1794,14 @@ def _release_notification_response_with_items(
     items: Sequence[ReleaseNotificationItem],
 ) -> ReleaseNotificationResponse:
     sendable_count = sum(1 for item in items if not item.skipped_reason)
+    batches = _payload_batches(items, response.mode)
     return response.model_copy(
         update={
             "count": len(items),
             "sendable_count": sendable_count,
             "skipped_count": len(items) - sendable_count,
-            "batch_count": _payload_batch_count(sendable_count, response.mode),
+            "batch_count": len(batches),
+            "messages": _payload_messages(batches),
             "items": list(items),
         }
     )

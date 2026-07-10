@@ -619,6 +619,11 @@ export interface ReleaseNotificationItem {
   release_tag: string;
   image_repo: string;
   upstream_repo: string;
+  current_version: string;
+  target_version: string;
+  category: "needs_review" | "worth_noting" | "routine";
+  reason_code: string;
+  reason_label: string;
   links: ReleaseNoteLink[];
   triggers: ReleaseNotificationTrigger[];
   notification_key: string;
@@ -643,6 +648,7 @@ export interface ReleaseNotificationResponse {
   sendable_count: number;
   skipped_count: number;
   batch_count: number;
+  messages: string[];
   items: ReleaseNotificationItem[];
   wud_api: WudApiStatus;
   warnings: string[];

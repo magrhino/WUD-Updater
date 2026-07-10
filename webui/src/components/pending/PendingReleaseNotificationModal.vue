@@ -183,6 +183,29 @@ function notificationDetail(item: ReleaseNotificationItem): string {
       </section>
 
       <section
+        v-if="response?.messages.length"
+        class="preflight-impact preflight-block"
+        aria-labelledby="release-digest-title"
+      >
+        <div class="preflight-impact-heading">
+          <strong id="release-digest-title">Discord digest preview</strong>
+          <n-tag size="small">{{ pluralize(response.messages.length, "message") }}</n-tag>
+        </div>
+        <div class="release-digest-messages">
+          <article
+            v-for="(message, index) in response.messages"
+            :key="index"
+            class="release-digest-message"
+          >
+            <span v-if="response.messages.length > 1">
+              Message {{ index + 1 }} of {{ response.messages.length }}
+            </span>
+            <pre>{{ message }}</pre>
+          </article>
+        </div>
+      </section>
+
+      <section
         v-if="response?.items.length"
         class="preflight-impact preflight-block"
         aria-labelledby="release-items-title"
@@ -249,3 +272,37 @@ function notificationDetail(item: ReleaseNotificationItem): string {
     </dialog>
   </n-modal>
 </template>
+
+<style scoped>
+.release-digest-messages {
+  display: grid;
+  gap: 8px;
+  max-height: min(44vh, 420px);
+  overflow: auto;
+}
+
+.release-digest-message {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-surface);
+}
+
+.release-digest-message > span {
+  color: var(--color-muted-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.release-digest-message pre {
+  margin: 0;
+  color: var(--color-code-text);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+</style>
