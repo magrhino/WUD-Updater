@@ -21,8 +21,10 @@ WebUI-managed webhook field.
 
 WUDup polls WUD's API for pending updates and builds Discord payloads in Python
 from the shared pending-line representation. It previews the notification
-summary without the webhook URL, posts one embed per update in Discord-sized
-batches, and records send history so duplicates follow WUDup's resend policy.
+summary without the webhook URL, posts a categorized digest split only when it
+reaches Discord's message limit, and records send history so duplicates follow
+WUDup's resend policy. Digest categories and reason labels come from WUD and
+release-note metadata; WUDup does not generate or summarize prose with AI.
 Use the delivery mode setting to choose API polling on detection or on-demand
 sends from preview/apply flows.
 
@@ -30,26 +32,33 @@ If a legacy shell release-note callback is also configured, Discord can receive
 duplicate notifications for the same WUD update. Keep only one notification path
 enabled unless duplicate posts are intentional.
 
-Example Discord notification:
+Example digest notification:
 
 ```text
-Release notes ready
+🧾 WUDup batch — 3 updates found
 
-radarr
-linuxserver/radarr:5.21.1 -> linuxserver/radarr:5.22.0
+⚠️ Needs review
+• media/qbittorrent `5.1.4` → `5.2.2` — release notes unavailable
 
-Release: v5.22.0.9716
-Source: https://github.com/Radarr/Radarr/releases/tag/v5.22.0.9716
+🟡 Worth noting
+• media/radarr `5.21.1` → `5.22.0` — minor update with release notes — [release](https://example.invalid/release)
 
-Highlights
-- Fixed manual import parsing for nested folders.
-- Updated translation files.
-- Improved health check messaging.
+🟢 Routine
+• home/home-assistant `2026.5.1` → `2026.5.3` — patch update with release notes — [release](https://example.invalid/release)
+
+Open WUDup for full notes, digests, and apply plan.
 ```
 
-With summary verbosity, WUDup keeps the message to the release summary and
-links. With full verbosity, the release body is appended and truncated to
-Discord's embed limits.
+`Needs review`, `Worth noting`, and `Routine` are assigned by priority-ordered
+rules such as breaking or major changes, missing release metadata, mutable
+`latest` tags, minor or LSIO updates, patch updates, and digest-only updates.
+Available release, upstream, changelog, or project links use compact labels.
+Raw digests and full release bodies remain in WUDup details instead of the
+digest copy.
+
+The optional `per_container` mode preserves the detailed embed format. In that
+mode, full verbosity appends the release body and truncates it to Discord's
+embed limits.
 
 ## Legacy Shell Callback
 
