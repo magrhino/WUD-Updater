@@ -385,6 +385,7 @@ def test_auto_update_candidate_reuses_effective_config_snapshot(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "file",
         },
     )
     settings = web_module.load_web_settings(env)

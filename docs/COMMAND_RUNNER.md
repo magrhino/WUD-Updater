@@ -95,8 +95,8 @@ can resolve to helper-only paths that the host Docker daemon cannot create. Set
 `WUD_OUT_FILE` to the todo file shared with WUD and `WUD_LOG_DIR` to the mounted
 log directory used by the updater.
 
-Compose discovery skips `old/` directories by default. To change archived-stack
-discovery without moving `DOCKER_BASE`, set `WUD_COMPOSE_IGNORE_PATHS` to a
+Compose discovery searches every directory by default. To exclude archived
+stacks without moving `DOCKER_BASE`, set `WUD_COMPOSE_IGNORE_PATHS` to a
 comma-separated list of relative directory names or paths, such as
 `old,archive/disabled`. Set it to an empty value to disable archive ignores.
 

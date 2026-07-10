@@ -191,6 +191,7 @@ class WebuiDemoStateTests(unittest.TestCase):
                     "WUD_DB_PATH": str(db_path),
                     "WUD_WEB_STATIC_DIR": str(static_dir),
                     "WUD_SECURITY_SCANNING_ENABLED": "true",
+                    "WUD_PENDING_SOURCE": "file",
                 }
             )
             security_scans = security_scans_response(settings)

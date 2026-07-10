@@ -959,6 +959,12 @@ def test_pending_source_rejects_invalid_values(tmp_path: Path) -> None:
     assert str(exc_info.value) == "WUD_PENDING_SOURCE must be one of: api, auto, file"
 
 
+def test_pending_source_defaults_to_api(tmp_path: Path) -> None:
+    settings = load_web_settings(environ=_web_env(tmp_path))
+
+    assert settings.pending_source == "api"
+
+
 def test_legacy_scripts_rejects_invalid_bool(tmp_path: Path) -> None:
     environ = _web_env(
         tmp_path,
@@ -1150,6 +1156,7 @@ def test_pending_endpoint_keeps_images_todo_fallback_when_wud_unavailable(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_API_BASE_URL": "https://wud.fallback.test:3000",
+            "WUD_PENDING_SOURCE": "auto",
         },
     )
     wud_file = tmp_path / "state" / "images.todo"
@@ -1175,6 +1182,7 @@ def test_pending_endpoint_falls_back_after_wud_api_connection_loss(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_API_BASE_URL": "https://wud.pending-loss.test:3000",
+            "WUD_PENDING_SOURCE": "auto",
         },
     )
     wud_file = tmp_path / "state" / "images.todo"
@@ -1263,6 +1271,7 @@ def test_release_notes_refresh_uses_wud_source_and_safe_remote_tag(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_API_BASE_URL": "https://wud.release-notes.test:3000",
+            "WUD_PENDING_SOURCE": "file",
             "WUD_RELEASE_NOTES_ENABLED": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
         },

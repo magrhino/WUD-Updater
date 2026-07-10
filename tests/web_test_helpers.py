@@ -84,6 +84,7 @@ def _client(
     create_root: bool = True,
 ) -> TestClient:
     values = _web_env(tmp_path, env, create_root=create_root)
+    values.setdefault("WUD_PENDING_SOURCE", "file")
     return TestClient(create_app(environ=values))
 
 
@@ -246,6 +247,7 @@ def _doctor_client(
             "WUDUP_USE_SUDO": "false",
             "TRUENAS_STATUS_CHECK": "false",
             "WUD_API_BASE_URL": "http://127.0.0.1:1",
+            "WUD_PENDING_SOURCE": "file",
             **(env or {}),
         },
     )

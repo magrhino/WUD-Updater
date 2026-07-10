@@ -313,7 +313,7 @@ def _container_env_values(answers: InitAnswers) -> list[tuple[str, str]]:
     if answers.profile in {"webui", "hardened"}:
         values.append(("WUD_API_BASE_URL", "http://wud:3000"))
         values.append(("WUD_API_STARTUP_WAIT_SECONDS", "5"))
-        values.append(("WUD_PENDING_SOURCE", "file"))
+        values.append(("WUD_PENDING_SOURCE", "api"))
         values.append(("WUDUP_LEGACY_SCRIPTS", "true"))
     if answers.profile == "webui":
         values.extend(
@@ -410,7 +410,7 @@ def _compose_environment(answers: InitAnswers) -> dict[str, str]:
         environment["WUD_API_STARTUP_WAIT_SECONDS"] = (
             "${WUD_API_STARTUP_WAIT_SECONDS:-5}"
         )
-        environment["WUD_PENDING_SOURCE"] = "${WUD_PENDING_SOURCE:-file}"
+        environment["WUD_PENDING_SOURCE"] = "${WUD_PENDING_SOURCE:-api}"
         environment["WUDUP_LEGACY_SCRIPTS"] = "${WUDUP_LEGACY_SCRIPTS:-true}"
     return environment
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+from wudup.web import create_app
 
 
 from tests.web_test_helpers import (
@@ -10,6 +12,7 @@ from tests.web_test_helpers import (
     _fake_docker_env,
     _install_wud_api,
     _make_fake_stack,
+    _web_env,
     _wud_api_container,
 )
 
@@ -22,6 +25,7 @@ def test_status_reports_missing_database_without_creating_it(tmp_path: Path) -> 
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_API_BASE_URL": "http://127.0.0.1:1",
+            "WUD_PENDING_SOURCE": "file",
         },
         create_root=False,
     )
@@ -46,6 +50,7 @@ def test_status_counts_pending_without_resolving_groups(tmp_path: Path) -> None:
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_API_BASE_URL": "http://127.0.0.1:1",
+            "WUD_PENDING_SOURCE": "file",
             **fake_env,
         },
     )
@@ -68,6 +73,40 @@ def test_status_counts_pending_without_resolving_groups(tmp_path: Path) -> None:
     assert body["pending_source"]["label"] == "Pending file"
     assert body["wud_api"]["metadata_available"] is False
     assert _fake_docker_calls(fake_root) == ""
+
+
+def test_pending_endpoint_defaults_to_wud_api_source(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(monkeypatch, containers=[_wud_api_container(name="app")])
+    client = TestClient(
+        create_app(
+            environ=_web_env(
+                tmp_path,
+                {
+                    "WUD_WEB_DEV_NO_AUTH": "true",
+                    "WUD_API_BASE_URL": "https://wud.default-source.test:3000",
+                },
+            )
+        )
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["source"] == {
+        "configured": "api",
+        "active": "api",
+        "label": "WUD API",
+        "fresh": True,
+        "degraded": False,
+        "fallback_reason": "",
+        "detail": "",
+    }
+    assert body["items"][0]["wud_metadata"]["name"] == "app"
 
 
 def test_status_reports_wud_api_metadata_for_file_pending_source(

@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 PENDING_SOURCE_ENV = "WUD_PENDING_SOURCE"
-DEFAULT_PENDING_SOURCE = "file"
+DEFAULT_PENDING_SOURCE = "api"
 VALID_PENDING_SOURCES: frozenset[PendingSourceMode] = frozenset(
     {"file", "api", "auto"}
 )

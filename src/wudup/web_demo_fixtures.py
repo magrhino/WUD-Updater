@@ -964,6 +964,7 @@ def _demo_environ(paths: dict[str, Path], static_dir: Path) -> dict[str, str]:
         "WUD_WEB_DEMO_SELF_UPDATE": "true",
         "WUD_WEB_ALLOWED_HOSTS": "testserver, 127.0.0.1, localhost",
         "WUD_WEB_ALLOWED_ORIGINS": "http://testserver",
+        "WUD_PENDING_SOURCE": "file",
         "WUD_WEB_UPSTREAM_MAP": str(REPO_ROOT / "wud" / "upstreams.txt"),
         "WUD_SCRIPTS_DIR": str(REPO_ROOT / "wud"),
         "WUD_SYNC_SCRIPTS": "false",

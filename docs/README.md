@@ -20,7 +20,7 @@ short; detailed setup and behavior notes live here.
 | Long-running WebUI Docker Compose example | [examples/docker-compose.webui.yml](examples/docker-compose.webui.yml) |
 | Long-running WebUI env example | [examples/webui.env.example](examples/webui.env.example) |
 | Hardened Docker Compose example | [examples/docker-compose.hardened.yml](examples/docker-compose.hardened.yml) |
-| TrueNAS status Docker Compose example | [examples/docker-compose.truenas.yml](examples/docker-compose.truenas.yml) |
+| Experimental TrueNAS Docker Compose example | [examples/docker-compose.truenas.yml](examples/docker-compose.truenas.yml) |
 | Local Docker Compose build artifact | [examples/docker-compose.build.yml](examples/docker-compose.build.yml) |
 | Environment template | [examples/template.env](examples/template.env) |
 | Changelog | [../CHANGELOG.md](../CHANGELOG.md) |

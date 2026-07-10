@@ -107,7 +107,7 @@ def test_onboarding_checklist_returns_redacted_setup_items(
     assert secret not in serialized
     assert "<redacted>" in serialized
 
-def test_onboarding_checklist_uses_default_compose_ignore_paths(
+def test_onboarding_checklist_searches_old_directory_by_default(
     tmp_path: Path,
 ) -> None:
     client = _doctor_client(tmp_path)
@@ -131,7 +131,7 @@ def test_onboarding_checklist_uses_default_compose_ignore_paths(
     assert response.status_code == 200
     assert compose_item["status"] == "PASS"
     check_codes = compose_item.get("check_codes") or []
-    assert all("old-ignored" not in code for code in check_codes)
+    assert any("old-ignored" in code for code in check_codes)
 
 def test_onboarding_dismissal_persists_in_sqlite(
     tmp_path: Path,

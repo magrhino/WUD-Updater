@@ -10,15 +10,32 @@ long-running WebUI container, which provides a local browser dashboard,
 read-only safety defaults, Doctor checks, run history, logs, diagnostics, and an
 optional plan-first apply flow.
 
+**Project status:** Public beta. WUDup is maintainer-tested with Docker Compose,
+and early users are welcome. Start in read-only mode, try the
+[public demo](https://magrhino.github.io/wudup/), and use
+[GitHub Discussions](https://github.com/magrhino/wudup/discussions) for setup
+help or feedback.
+
+![WUDup dashboard](docs/assets/wudup-dashboard.jpg)
+
+## Why WUDup?
+
+WUD tells you that an image changed; WUDup adds a deliberate operations layer
+before Compose services change. It gives you a reviewable plan, readiness
+checks, explicit approval for mutations, targeted Compose updates, run history,
+and diagnostics instead of wiring an update notification directly to a restart
+script.
+
 ## Web Deployment
-_Check out the demo: https://magrhino.github.io/wudup/_
+
+Try the [public, fixture-backed demo](https://magrhino.github.io/wudup/).
 
 The WebUI container serves the FastAPI backend and packaged Vue SPA from the
 same image. The WebUI normalizes both the callback todo file and WUD's internal
 API metadata into the same pending-line format before planning or applying
-updates. New WebUI deployments should treat `WUD_PENDING_SOURCE=api|auto` as
-the forward path once their WUD API access is healthy; the callback todo file
-remains the default fallback/import source and the host CLI stays file-based.
+updates. New WebUI deployments use WUD's API over a private Compose network;
+the callback todo file remains an explicit fallback/import source and the host
+CLI stays file-based.
 
 ```text
 WUD detects an image update
@@ -47,9 +64,10 @@ To start without the CLI, download the published hardened WebUI Compose example
 plus an env template in your deployment directory:
 
 ```bash
-curl -fsSL \
-  -o docker-compose.yml https://raw.githubusercontent.com/magrhino/wudup/main/docs/examples/docker-compose.hardened.yml \
-  -o .env https://raw.githubusercontent.com/magrhino/wudup/main/docs/examples/webui.env.example
+curl -fsSLo docker-compose.yml \
+  https://raw.githubusercontent.com/magrhino/wudup/main/docs/examples/docker-compose.hardened.yml
+curl -fsSLo .env \
+  https://raw.githubusercontent.com/magrhino/wudup/main/docs/examples/webui.env.example
 ```
 
 Review `.env` before starting: set `HOST_DOCKER_BASE` to your Compose stack
@@ -102,11 +120,6 @@ WebUI/API first.
 | Security policy and private vulnerability reporting | [SECURITY.md](SECURITY.md) |
 | Release notes | [CHANGELOG.md](CHANGELOG.md) |
 
-## Appreciate my work on this?
+## Support the project
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-orange?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/magrhino)
-
-or
-
-BTC: `bc1q3r9g3k8fyzxr29njgfjdqs53z9tuezwuaagx0h`
-ETH: `0x118c1b3b927b870a0cf0bd692e06cd769e5af6d9`
