@@ -193,8 +193,8 @@ The palette is a restrained product palette: cool neutrals carry the surface, da
 ### Hierarchy
 - **Title** (700, 1.35rem, 1.2): Page headings, section headings, and login heading. Keep fixed rem sizing for product stability.
 - **Body** (400, 1rem, 1.5): Main content and control-adjacent copy. Keep long prose rare and cap explanatory copy around 65-75ch.
-- **Metadata** (400, 0.82-0.85rem): Secondary row values, metric captions, plan summary labels, and compact helper text.
-- **Label** (700, 0.78rem, uppercase only for short system labels): Eyebrows and management table heads. Use sparingly because repeated uppercase labels add noise.
+- **Metadata** (400-600, 0.82-0.85rem): Secondary row values, metric captions, plan summary labels, compact helper text, and sentence-case context labels.
+- **Label** (700, 0.78rem, uppercase only for short system labels): Management table heads and true system categories. Use sparingly because repeated uppercase labels add noise.
 - **Data Mono** (400, 0.82-0.84rem, 1.55 for logs): Digests, command arguments, and log output.
 
 ### Named Rules

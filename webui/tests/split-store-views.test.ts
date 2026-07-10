@@ -135,6 +135,8 @@ describe("DashboardView split-store coverage", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("Database file is not ready");
+    expect(wrapper.find(".dashboard-status-strip").exists()).toBe(true);
+    expect(wrapper.find(".metric-card").exists()).toBe(false);
     expect(wrapper.text()).toContain("Pending");
     expect(wrapper.text()).toContain("3");
     expect(wrapper.text()).toContain("Missing");

@@ -154,6 +154,18 @@ test("static demo renders retag review fixtures", async ({ page }) => {
 
 test("static demo mobile layout stays within the viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(demoRoute("/#/"));
+  await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
+  await expect(page.getByLabel("System status")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        innerWidth: window.innerWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      })),
+    )
+    .toEqual({ innerWidth: 390, scrollWidth: 390 });
+
   await page.goto(demoRoute("/#/pending"));
 
   await expect(

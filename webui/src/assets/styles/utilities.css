@@ -28,10 +28,10 @@
 .eyebrow {
   margin: 0 0 4px;
   color: var(--color-muted-text);
-  font-size: 0.78rem;
-  font-weight: 700;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.25;
   letter-spacing: 0;
-  text-transform: uppercase;
 }
 
 .value-eyebrow {
