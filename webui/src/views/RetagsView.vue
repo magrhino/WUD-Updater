@@ -724,7 +724,7 @@ onMounted(() => {
   color: var(--color-operational-teal);
 }
 
-@media (--wud-compact) {
+@media (--wud-data-cards) {
   .retag-controls {
     display: grid;
     justify-content: stretch;

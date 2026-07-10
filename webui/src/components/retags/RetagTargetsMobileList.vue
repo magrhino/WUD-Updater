@@ -231,23 +231,19 @@ const emit = defineEmits<{
   line-height: 1.35;
 }
 
-@media (--wud-compact) {
+@media (--wud-data-cards) {
   .retag-card dl > div {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .retag-card dd {
-    min-width: 0;
-  }
-
   .retag-card :deep(.n-radio-group) {
     display: flex;
-    min-height: var(--size-touch-target);
     width: 100%;
   }
 
   .retag-card :deep(.n-radio-button) {
     flex: 1 1 0;
+    min-height: var(--size-touch-target);
   }
 }
 </style>

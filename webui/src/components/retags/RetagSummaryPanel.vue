@@ -193,7 +193,11 @@ defineEmits<{
   }
 }
 
-@media (--wud-compact) {
+@media (--wud-data-cards) {
+  .retag-heading {
+    display: grid;
+  }
+
   .retag-preview-action {
     display: grid;
     justify-content: stretch;
