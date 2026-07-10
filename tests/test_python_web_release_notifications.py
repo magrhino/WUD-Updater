@@ -1361,6 +1361,7 @@ def test_release_notification_per_container_mode_keeps_detailed_embed(
 
     assert response.status_code == 200
     assert response.json()["mode"] == "per_container"
+    assert response.json()["batch_count"] == 1
     assert response.json()["messages"] == []
     assert posted[0][1]["embeds"][0]["title"] == "app Tag Update"
     assert release_body in posted[0][1]["embeds"][0]["description"]
