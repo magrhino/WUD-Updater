@@ -199,7 +199,7 @@ code.pending-table-value {
   background: var(--color-panel-tint);
   color: var(--color-ink);
   font: inherit;
-  font-size: 0.82rem;
+  font-size: var(--text-data-size);
   line-height: 1.45;
   overflow: auto;
   white-space: pre-wrap;

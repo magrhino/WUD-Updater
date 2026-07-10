@@ -64,10 +64,11 @@ async function expectNoHorizontalOverflow(page: Page, viewportWidth: number) {
     .poll(() =>
       page.evaluate(() => ({
         innerWidth: window.innerWidth,
-        scrollWidth: document.documentElement.scrollWidth,
+        hasHorizontalOverflow:
+          document.documentElement.scrollWidth > window.innerWidth,
       })),
     )
-    .toEqual({ innerWidth: viewportWidth, scrollWidth: viewportWidth });
+    .toEqual({ innerWidth: viewportWidth, hasHorizontalOverflow: false });
 }
 
 test("static demo renders current pending state in read-only mode", async ({

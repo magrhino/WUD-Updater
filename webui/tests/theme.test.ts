@@ -105,11 +105,17 @@ describe("webui theme tokens", () => {
     );
   });
 
-  it("keeps compact table headings at WCAG AA contrast", () => {
+  it("keeps light muted text at WCAG AA contrast", () => {
     expect(
       contrastRatio(
         themeDesignTokens.light.color.mutedText,
         themeDesignTokens.light.color.tableHead,
+      ),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrastRatio(
+        themeDesignTokens.light.color.mutedText,
+        themeDesignTokens.light.color.bodyBg,
       ),
     ).toBeGreaterThanOrEqual(4.5);
   });
