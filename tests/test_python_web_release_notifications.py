@@ -1707,6 +1707,11 @@ def test_release_notification_send_batches_discord_digest_by_content_limit(
     assert body["messages"] == [payload["content"] for _url, payload in posted]
     assert all(len(payload["content"]) <= 2000 for _url, payload in posted)
     assert sum(payload["content"].count("\n• ") for _url, payload in posted) == 25
+    for _url, payload in posted:
+        row_count = payload["content"].count("\n• ")
+        assert payload["content"].startswith(
+            f"🧾 WUDup batch — {row_count} updates found"
+        )
 
 
 def test_release_notification_send_audits_partial_discord_failure(

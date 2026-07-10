@@ -1142,13 +1142,14 @@ def _digest_payload_batches(
 ) -> list[dict[str, object]]:
     if not items:
         return []
-    header = f"🧾 WUDup batch — {len(items)} updates found"
+    total_header = f"🧾 WUDup batch — {len(items)} updates found"
     batches: list[dict[str, object]] = []
     lines: list[str] = []
     batch_items: list[ReleaseNotificationItem] = []
     current_category = ""
 
     def finish_batch() -> None:
+        header = f"🧾 WUDup batch — {len(batch_items)} updates found"
         content = "\n\n".join((header, "\n".join(lines), DISCORD_DIGEST_FOOTER))
         batches.append(
             {
@@ -1171,7 +1172,7 @@ def _digest_payload_batches(
                 prefix = ([""] if lines else []) + [category_label]
             candidate_lines = [*lines, *prefix, row]
             candidate = "\n\n".join(
-                (header, "\n".join(candidate_lines), DISCORD_DIGEST_FOOTER)
+                (total_header, "\n".join(candidate_lines), DISCORD_DIGEST_FOOTER)
             )
             if batch_items and len(candidate) > DISCORD_MESSAGE_CONTENT_LIMIT:
                 finish_batch()
