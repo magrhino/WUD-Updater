@@ -119,10 +119,12 @@ defineEmits<{
 .retag-summary-panel {
   display: grid;
   gap: 16px;
+  min-width: 0;
 }
 
 .retag-heading {
   align-items: flex-start;
+  min-width: 0;
 }
 
 .retag-preview-action {
@@ -132,6 +134,7 @@ defineEmits<{
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  min-width: 0;
   max-width: 420px;
 }
 
@@ -194,10 +197,12 @@ defineEmits<{
   .retag-preview-action {
     display: grid;
     justify-content: stretch;
+    width: 100%;
   }
 
   .retag-bulk-actions {
     display: grid;
+    width: 100%;
   }
 
   .retag-summary-strip {

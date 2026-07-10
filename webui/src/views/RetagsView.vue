@@ -729,5 +729,15 @@ onMounted(() => {
     display: grid;
     justify-content: stretch;
   }
+
+  .retag-fallback-toggle {
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .retag-fallback-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
 }
 </style>

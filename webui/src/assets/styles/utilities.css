@@ -98,6 +98,22 @@ body .n-switch:focus-within {
 }
 
 @media (--wud-compact) {
+  body .n-button,
+  body .n-checkbox,
+  body .n-input,
+  body .n-base-selection,
+  body .n-radio-button,
+  body .n-switch,
+  .history-view-tab,
+  .stack-details summary,
+  .apply-job-details summary,
+  .preflight-details summary,
+  .release-changelog-summary,
+  .settings-disclosure-summary,
+  .onboarding-check-diagnostics summary {
+    min-height: var(--size-touch-target);
+  }
+
   a.text-link,
   a.icon-link {
     display: inline-flex;

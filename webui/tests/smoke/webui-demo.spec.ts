@@ -183,4 +183,17 @@ test("static demo mobile layout stays within the viewport", async ({ page }) => 
   ).toBeVisible();
   await expectTouchTargetHeight(page, "Download support bundle");
   await expectTouchTargetHeight(page, "Copy");
+
+  await page.goto(demoRoute("/#/retags"));
+  await expect(page.getByRole("heading", { name: "Retags", level: 1 })).toBeVisible();
+  await expectTouchTargetHeight(page, "Preview retag changes");
+  await expectTouchTargetHeight(page, "Retag only media/wudup");
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        innerWidth: window.innerWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      })),
+    )
+    .toEqual({ innerWidth: 390, scrollWidth: 390 });
 });
