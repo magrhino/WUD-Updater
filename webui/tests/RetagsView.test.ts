@@ -122,7 +122,7 @@ describe("RetagsView", () => {
     expect(applyButton?.attributes("disabled")).toBeUndefined();
   });
 
-  it("keeps demo fallback toggles local and skips GitHub latest refresh", async () => {
+  it("keeps demo previews interactive while apply and refresh stay read-only", async () => {
     vi.stubEnv("VITE_WUD_DEMO_MODE", "true");
     vi.resetModules();
     try {
@@ -142,6 +142,13 @@ describe("RetagsView", () => {
       const updates = useDemoUpdatesStore();
       updates.retagTargets = retagTargetsResponse();
       vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+      const createRetagPlan = vi
+        .spyOn(updates, "createRetagPlan")
+        .mockImplementation(async () => {
+          const plan = retagPlanResponse({ can_apply: false });
+          updates.retagPlan = plan;
+          return plan;
+        });
       const setRetagGithubLatestFallback = vi
         .spyOn(updates, "setRetagGithubLatestFallback")
         .mockResolvedValue();
@@ -163,6 +170,27 @@ describe("RetagsView", () => {
         .get('button[aria-label="Refresh GitHub latest candidates"]')
         .trigger("click");
       expect(refreshRetagGithubLatest).not.toHaveBeenCalled();
+
+      const retagControl = wrapper.get('input[value="switch-to-concrete"]');
+      expect(retagControl.attributes("disabled")).toBeUndefined();
+      await retagControl.setValue();
+      await wrapper
+        .findAll("button")
+        .find((button) => button.text().includes("Preview retag changes"))
+        ?.trigger("click");
+      await flushPromises();
+
+      expect(createRetagPlan).toHaveBeenCalledTimes(1);
+      expect(wrapper.text()).toContain(
+        "Static demo mode is read-only. Preview stays available; apply is disabled.",
+      );
+      const applyButtons = wrapper
+        .findAll("button")
+        .filter((button) => button.text().includes("Apply selected retags"));
+      expect(applyButtons.length).toBeGreaterThan(0);
+      expect(
+        applyButtons.every((button) => button.attributes("disabled") !== undefined),
+      ).toBe(true);
     } finally {
       vi.unstubAllEnvs();
       vi.resetModules();

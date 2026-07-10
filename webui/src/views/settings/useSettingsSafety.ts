@@ -49,6 +49,18 @@ export function useSettingsSafety() {
   );
   const preferencesDisabledReason = computed(() => {
     if (!mutationsEnabled.value) {
+      const managedEntries = settingsData.value?.managed ?? [];
+      if (
+        managedEntries.length > 0 &&
+        managedEntries.every((entry) => !entry.editable)
+      ) {
+        const detail = managedEntries.find(
+          (entry) => entry.disabled_reason,
+        )?.disabled_reason;
+        if (detail) {
+          return `Read-only mode is active. ${detail}`;
+        }
+      }
       return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to save managed WebUI preferences.";
     }
     return "";

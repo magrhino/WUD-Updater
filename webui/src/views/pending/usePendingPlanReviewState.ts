@@ -322,6 +322,12 @@ export function usePendingPlanReviewState(
       return "";
     }
     if (!auth.session?.mutations_enabled) {
+      const detail = updates.plan.apply_preflight.checks.find(
+        (check) => check.code === "mutations-enabled",
+      )?.detail;
+      if (detail) {
+        return `Read-only mode is active. ${detail}`;
+      }
       return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to apply updates.";
     }
     if (!updates.plan.apply_preflight.ok) {

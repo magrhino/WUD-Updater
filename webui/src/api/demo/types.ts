@@ -1,6 +1,4 @@
 import type {
-  ApplyJobLogResponse,
-  ApplyJobResponse,
   AuthSessionResponse,
   DiagnosticsSupportBundleResponse,
   DoctorResponse,
@@ -42,20 +40,6 @@ type DemoDiagnosticsSupportBundleResponse = Omit<
   "wudup_version" | "wud_updater_version" | "pending_summary"
 > & {
   pending_summary: PendingResponse;
-};
-
-export type DemoRunFixture = {
-  summary: RunSummary;
-  detail: RunDetail;
-  log: RunLogResponse;
-};
-
-export type DemoGeneratedJobFixture = {
-  queued: ApplyJobResponse;
-  terminal: ApplyJobResponse;
-  log: ApplyJobLogResponse;
-  run: DemoRunFixture | null;
-  removeLineNumbers: number[];
 };
 
 type ReleaseNoteNotificationFields =
@@ -108,11 +92,4 @@ export type DemoGeneratedFixtures = {
     details: Record<string, RunDetail>;
     logs: Record<string, RunLogResponse>;
   };
-};
-
-export type DemoJobRecord = {
-  job: ApplyJobResponse;
-  log: ApplyJobLogResponse;
-  fixture: DemoGeneratedJobFixture;
-  completed: boolean;
 };
