@@ -59,6 +59,17 @@ def _insert_update(
     return run_id
 
 
+def _insert_empty_run(tmp_path: Path, *, mode: str = "stop") -> int:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        init_db(conn)
+        return insert_update_run(
+            conn,
+            status="success",
+            dry_run=False,
+            mode=mode,
+        )
+
+
 def _live_client(tmp_path: Path):
     fake_env, fake_root = _fake_docker_env(tmp_path)
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
@@ -179,6 +190,21 @@ def test_rollback_plan_returns_not_found_for_missing_run(tmp_path: Path) -> None
     assert response.json() == {"detail": "run not found"}
 
 
+def test_rollback_plan_empty_run_is_not_applicable_without_docker(
+    tmp_path: Path,
+) -> None:
+    client, fake_root = _live_client(tmp_path)
+    run_id = _insert_empty_run(tmp_path)
+
+    response = client.get(f"/api/v1/runs/{run_id}/rollback-plan")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "not_applicable"
+    assert "no recorded update events" in response.json()["detail"]
+    assert response.json()["items"] == []
+    assert _fake_docker_calls(fake_root) == ""
+
+
 @pytest.mark.parametrize(
     ("dry_run", "mode", "expected_detail"),
     [
@@ -224,28 +250,41 @@ def test_rollback_plan_marks_no_change_without_live_service_lookup(
 
 
 @pytest.mark.parametrize(
-    ("overrides", "expected_reason"),
+    ("overrides", "expected_reason", "expected_rollback_image"),
     [
-        ({"event_status": "failure"}, "did not complete successfully"),
-        ({"old_image_id": ""}, "missing stack, service, image, or image ID"),
-        ({"old_digest": "sha256:short"}, "valid exact previous sha256 digest"),
+        (
+            {"event_status": "failure"},
+            "did not complete successfully",
+            f"repo/app@{OLD_DIGEST}",
+        ),
+        (
+            {"old_image_id": ""},
+            "missing stack, service, image, or image ID",
+            f"repo/app@{OLD_DIGEST}",
+        ),
+        (
+            {"old_digest": "sha256:short"},
+            "valid exact previous sha256 digest",
+            "",
+        ),
     ],
 )
 def test_rollback_plan_blocks_failed_or_incomplete_events(
     tmp_path: Path,
     overrides: dict[str, str],
     expected_reason: str,
+    expected_rollback_image: str,
 ) -> None:
     client, fake_root = _live_client(tmp_path)
     run_id = _insert_update(tmp_path, **overrides)
-    _write_live_service(tmp_path, fake_root)
 
     response = client.get(f"/api/v1/runs/{run_id}/rollback-plan")
 
     assert response.status_code == 200
     assert response.json()["status"] == "blocked"
     assert expected_reason in response.json()["items"][0]["reason"]
-    _assert_read_only_calls(_fake_docker_calls(fake_root))
+    assert response.json()["items"][0]["rollback_image"] == expected_rollback_image
+    assert _fake_docker_calls(fake_root) == ""
 
 
 def test_rollback_plan_blocks_superseded_service(tmp_path: Path) -> None:
@@ -260,7 +299,8 @@ def test_rollback_plan_blocks_superseded_service(tmp_path: Path) -> None:
     item = response.json()["items"][0]
     assert item["status"] == "blocked"
     assert f"run #{later_run_id}" in item["reason"]
-    assert " ps -q " not in _fake_docker_calls(fake_root)
+    assert item["rollback_image"] == f"repo/app@{OLD_DIGEST}"
+    assert _fake_docker_calls(fake_root) == ""
 
 
 @pytest.mark.parametrize(
@@ -302,6 +342,29 @@ def test_rollback_plan_blocks_live_state_drift(
     item = response.json()["items"][0]
     assert item["status"] == "blocked"
     assert expected_reason in item["reason"]
+    assert item["rollback_image"] == f"repo/app@{OLD_DIGEST}"
+    _assert_read_only_calls(_fake_docker_calls(fake_root))
+
+
+def test_rollback_plan_blocks_service_without_running_containers(
+    tmp_path: Path,
+) -> None:
+    client, fake_root = _live_client(tmp_path)
+    run_id = _insert_update(tmp_path)
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:2.0", None)],
+    )
+
+    response = client.get(f"/api/v1/runs/{run_id}/rollback-plan")
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["status"] == "blocked"
+    assert "No running container" in item["reason"]
+    assert item["rollback_image"] == f"repo/app@{OLD_DIGEST}"
     _assert_read_only_calls(_fake_docker_calls(fake_root))
 
 
@@ -377,3 +440,105 @@ def test_rollback_plan_sanitizes_compose_discovery_failure(
     assert str(tmp_path) not in body["detail"]
     assert "<redacted>" in body["detail"]
     assert "[REDACTED_PATH]" in body["detail"]
+
+
+def test_rollback_plan_retains_failed_event_when_compose_is_unavailable(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client, _fake_root = _live_client(tmp_path)
+    run_id = _insert_update(tmp_path)
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        insert_update_event(
+            conn,
+            run_id=run_id,
+            service_name="worker",
+            stack_name="stack",
+            image="repo/worker:1.0",
+            target_image="repo/worker:2.0",
+            old_image_id="sha256:worker-old",
+            new_image_id="sha256:worker-new",
+            old_digest=f"sha256:{'c' * 64}",
+            status="failure",
+        )
+
+    def fail_discovery(*_args, **_kwargs):
+        raise ComposeDiscoveryError("compose unavailable")
+
+    monkeypatch.setattr(web_rollback.ComposeCli, "discover_stacks", fail_discovery)
+
+    response = client.get(f"/api/v1/runs/{run_id}/rollback-plan")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "unavailable"
+    assert body["blocked_count"] == 2
+    failed = next(item for item in body["items"] if item["service_name"] == "worker")
+    assert "did not complete successfully" in failed["reason"]
+    assert failed["rollback_image"] == f"repo/worker@sha256:{'c' * 64}"
+
+
+def test_rollback_plan_treats_target_stack_discovery_failure_as_unavailable(
+    tmp_path: Path,
+) -> None:
+    secret = "target-stack-secret"
+    client, fake_root = _live_client(tmp_path)
+    run_id = _insert_update(tmp_path, stack_name="target")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "unrelated",
+        [("other", "repo/other:1.0", "cid-other")],
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "target",
+        [("app", "repo/app:2.0", "cid-app")],
+    )
+    (fake_root / "stacks" / "target" / "config_fail").touch()
+    (fake_root / "stacks" / "target" / "config_stderr").write_text(
+        f"could not read {tmp_path / 'docker' / 'target'} with {secret}\n",
+        encoding="utf-8",
+    )
+
+    response = client.get(f"/api/v1/runs/{run_id}/rollback-plan")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "unavailable"
+    assert body["blocked_count"] == 1
+    assert body["items"][0]["rollback_image"] == f"repo/app@{OLD_DIGEST}"
+    assert "could not verify current Compose state" in body["detail"]
+    assert secret not in body["detail"]
+    assert str(tmp_path) not in body["detail"]
+    _assert_read_only_calls(_fake_docker_calls(fake_root))
+
+
+def test_rollback_plan_executes_no_sqlite_writes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client, fake_root = _live_client(tmp_path)
+    run_id = _insert_update(tmp_path)
+    _write_live_service(tmp_path, fake_root)
+    _write_local_rollback_image(fake_root)
+    statements: list[str] = []
+    connect_readonly_db = web_rollback.connect_readonly_db
+
+    def traced_connection(settings):
+        conn = connect_readonly_db(settings)
+        conn.set_trace_callback(statements.append)
+        return conn
+
+    monkeypatch.setattr(web_rollback, "connect_readonly_db", traced_connection)
+
+    response = client.get(f"/api/v1/runs/{run_id}/rollback-plan")
+
+    assert response.status_code == 200
+    assert statements
+    write_prefixes = ("INSERT", "UPDATE", "DELETE", "REPLACE", "CREATE", "DROP", "ALTER")
+    assert not any(
+        statement.lstrip().upper().startswith(write_prefixes)
+        for statement in statements
+    )

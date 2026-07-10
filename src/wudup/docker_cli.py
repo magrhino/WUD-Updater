@@ -126,10 +126,9 @@ class DockerCli:
         return _first_nonblank(self.inspect(container, CONTAINER_ID_FORMAT))
 
     def try_container_image_id(self, container: str) -> str:
-        try:
-            return _first_nonblank(self.inspect(container, CONTAINER_IMAGE_ID_FORMAT))
-        except CommandError:
-            return ""
+        return _first_nonblank(
+            self.try_inspect(container, CONTAINER_IMAGE_ID_FORMAT)
+        )
 
     def restart_container(
         self,

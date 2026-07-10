@@ -77,17 +77,23 @@ def build_rollback_plan(
             status="not_applicable",
             detail=not_applicable,
         )
-    if all(_recorded_no_change(event) for event in events):
+    superseding_runs = superseding_runs or {}
+    recorded_items = [
+        _recorded_rollback_item(
+            event,
+            superseding_runs.get((event.stack_name, event.service_name)),
+        )
+        for event in events
+    ]
+    pending_events = [
+        event
+        for event, item in zip(events, recorded_items, strict=True)
+        if item is None
+    ]
+    if not pending_events:
         return _rollback_response(
             run.id,
-            [
-                RollbackPlanItem(
-                    **_item_values(event),
-                    status="not_needed",
-                    reason="The image reference and image ID did not change.",
-                )
-                for event in events
-            ],
+            [item for item in recorded_items if item is not None],
         )
 
     runner = CommandRunner(env=settings.command_env)
@@ -99,8 +105,20 @@ def build_rollback_plan(
             config.docker_base,
             project_base=settings.host_docker_base,
             ignore_paths=config.compose_ignore_paths,
+            required_stack_names={event.stack_name for event in pending_events},
         )
     except ComposeDiscoveryError as exc:
+        unavailable_items = iter(
+            _blocked_item(
+                _item_values(event),
+                "The current Compose state could not be verified.",
+            )
+            for event in pending_events
+        )
+        items = [
+            item if item is not None else next(unavailable_items)
+            for item in recorded_items
+        ]
         return RollbackPlanResponse(
             run_id=run.id,
             status="unavailable",
@@ -109,17 +127,17 @@ def build_rollback_plan(
                 "could not verify current Compose state",
                 exc,
             ),
+            blocked_count=sum(item.status == "blocked" for item in items),
+            not_needed_count=sum(item.status == "not_needed" for item in items),
+            items=items,
         )
 
+    live_items = iter(
+        _live_rollback_item(event, stacks, compose, docker)
+        for event in pending_events
+    )
     items = [
-        _rollback_item(
-            event,
-            stacks,
-            compose,
-            docker,
-            (superseding_runs or {}).get((event.stack_name, event.service_name)),
-        )
-        for event in events
+        item if item is not None else next(live_items) for item in recorded_items
     ]
     return _rollback_response(run.id, items)
 
@@ -163,19 +181,14 @@ def _superseding_runs(
     }
 
 
-def _rollback_item(
+def _recorded_rollback_item(
     event: RunEventRecord,
-    stacks: Sequence[ComposeStack],
-    compose: ComposeCli,
-    docker: DockerCli,
     superseding_run_id: int | None,
-) -> RollbackPlanItem:
+) -> RollbackPlanItem | None:
     base = _item_values(event)
     if event.status != "success":
-        return RollbackPlanItem(
-            **base,
-            status="blocked",
-            reason="The recorded update event did not complete successfully.",
+        return _blocked_item(
+            base, "The recorded update event did not complete successfully."
         )
     if _recorded_no_change(event):
         return RollbackPlanItem(
@@ -193,24 +206,34 @@ def _rollback_item(
             event.new_image_id,
         )
     ):
-        return RollbackPlanItem(
-            **base,
-            status="blocked",
-            reason="The event is missing stack, service, image, or image ID evidence.",
+        return _blocked_item(
+            base, "The event is missing stack, service, image, or image ID evidence."
         )
     if superseding_run_id is not None:
-        return RollbackPlanItem(
-            **base,
-            status="blocked",
-            reason=f"A later successful updater run #{superseding_run_id} changed this service.",
+        return _blocked_item(
+            base,
+            f"A later successful updater run #{superseding_run_id} changed this service.",
         )
+    if not base["rollback_image"]:
+        return _blocked_item(
+            base, "The event does not contain a valid exact previous sha256 digest."
+        )
+    return None
+
+
+def _live_rollback_item(
+    event: RunEventRecord,
+    stacks: Sequence[ComposeStack],
+    compose: ComposeCli,
+    docker: DockerCli,
+) -> RollbackPlanItem:
+    base = _item_values(event)
 
     matches = _stack_service_matches(stacks, event.stack_name, event.service_name)
     if len(matches) != 1:
-        return RollbackPlanItem(
-            **base,
-            status="blocked",
-            reason=(
+        return _blocked_item(
+            base,
+            (
                 "The current Compose service could not be found uniquely."
                 if not matches
                 else "More than one current Compose service matches this event."
@@ -219,10 +242,9 @@ def _rollback_item(
     stack, service = matches[0]
     base["current_compose_image"] = service.image
     if service.image != event.target_image:
-        return RollbackPlanItem(
-            **base,
-            status="blocked",
-            reason="The current Compose image no longer matches the recorded target image.",
+        return _blocked_item(
+            base,
+            "The current Compose image no longer matches the recorded target image.",
         )
 
     try:
@@ -233,47 +255,27 @@ def _rollback_item(
             project_directory=stack.project_directory,
         )
     except CommandError:
-        return RollbackPlanItem(
-            **base,
-            status="blocked",
-            reason="The running containers for this service could not be inspected.",
+        return _blocked_item(
+            base, "The running containers for this service could not be inspected."
         )
     if not container_ids:
-        return RollbackPlanItem(
-            **base,
-            status="blocked",
-            reason="No running container was found for this service.",
-        )
+        return _blocked_item(base, "No running container was found for this service.")
 
     image_ids = [docker.try_container_image_id(container) for container in container_ids]
     base["current_container_image_ids"] = sorted(set(filter(None, image_ids)))
     if any(not image_id for image_id in image_ids):
-        return RollbackPlanItem(
-            **base,
-            status="blocked",
-            reason="At least one running container image ID could not be inspected.",
+        return _blocked_item(
+            base, "At least one running container image ID could not be inspected."
         )
     if any(image_id != event.new_image_id for image_id in image_ids):
-        return RollbackPlanItem(
-            **base,
-            status="blocked",
-            reason="At least one running container no longer uses the recorded new image ID.",
+        return _blocked_item(
+            base,
+            "At least one running container no longer uses the recorded new image ID.",
         )
 
-    previous_digest = normalize_digest(event.old_digest)
-    if not _SHA256_DIGEST_RE.fullmatch(previous_digest):
-        return RollbackPlanItem(
-            **base,
-            status="blocked",
-            reason="The event does not contain a valid exact previous sha256 digest.",
-        )
-    rollback_image = image_with_digest(event.image, previous_digest)
-    base["rollback_image"] = rollback_image
-    if docker.image_id(rollback_image) != event.old_image_id:
-        return RollbackPlanItem(
-            **base,
-            status="blocked",
-            reason="The exact previous image is no longer available locally.",
+    if docker.image_id(str(base["rollback_image"])) != event.old_image_id:
+        return _blocked_item(
+            base, "The exact previous image is no longer available locally."
         )
     return RollbackPlanItem(
         **base,
@@ -284,6 +286,12 @@ def _rollback_item(
 
 def _item_values(event: RunEventRecord) -> dict[str, object]:
     service_key = "/".join(filter(None, (event.stack_name, event.service_name)))
+    previous_digest = normalize_digest(event.old_digest)
+    rollback_image = (
+        image_with_digest(event.image, previous_digest)
+        if event.image and _SHA256_DIGEST_RE.fullmatch(previous_digest)
+        else ""
+    )
     return {
         "event_id": event.id,
         "service_key": service_key,
@@ -291,9 +299,14 @@ def _item_values(event: RunEventRecord) -> dict[str, object]:
         "service_name": event.service_name,
         "recorded_previous_image": event.image,
         "recorded_target_image": event.target_image,
+        "rollback_image": rollback_image,
         "previous_image_id": event.old_image_id,
         "previous_digest": event.old_digest,
     }
+
+
+def _blocked_item(base: Mapping[str, object], reason: str) -> RollbackPlanItem:
+    return RollbackPlanItem(**base, status="blocked", reason=reason)
 
 
 def _recorded_no_change(event: RunEventRecord) -> bool:

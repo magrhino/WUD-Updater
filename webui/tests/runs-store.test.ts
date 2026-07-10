@@ -119,6 +119,89 @@ describe("runs store", () => {
     expect(runs.error).toBe("");
   });
 
+  it("removes a cached rollback plan when a recheck fails", async () => {
+    const ready = rollbackPlan({ run_id: 7 });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(ready))
+      .mockResolvedValueOnce(
+        jsonResponse({ detail: "could not verify current Compose state" }, 503),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const runs = useRunsStore();
+    runs.rollbackPlans = { 5: rollbackPlan({ run_id: 5 }) };
+
+    await runs.loadRollbackPlan(7);
+    await expect(runs.loadRollbackPlan(7)).rejects.toMatchObject({
+      message: "could not verify current Compose state",
+    });
+
+    expect(runs.rollbackPlans[5]?.run_id).toBe(5);
+    expect(runs.rollbackPlans[7]).toBeUndefined();
+    expect(runs.error).toBe("could not verify current Compose state");
+    expect(runs.loading).toBe(false);
+  });
+
+  it("ignores an older rollback success after a newer request fails", async () => {
+    const older = deferred<ReturnType<typeof rollbackPlan>>();
+    const newer = deferred<ReturnType<typeof rollbackPlan>>();
+    vi.spyOn(webApi, "rollbackPlan")
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    const runs = useRunsStore();
+    runs.rollbackPlans = { 7: rollbackPlan({ run_id: 7 }) };
+
+    const olderRequest = runs.loadRollbackPlan(7);
+    const newerRequest = runs.loadRollbackPlan(7);
+    const newerFailure = expect(newerRequest).rejects.toThrow("newer failed");
+    newer.reject(new Error("newer failed"));
+    await newerFailure;
+    older.resolve(rollbackPlan({ run_id: 7, status: "ready" }));
+    await olderRequest;
+
+    expect(runs.rollbackPlans[7]).toBeUndefined();
+    expect(runs.error).toBe("newer failed");
+  });
+
+  it("keeps a newer rollback success when an older request later fails", async () => {
+    const older = deferred<ReturnType<typeof rollbackPlan>>();
+    const newer = deferred<ReturnType<typeof rollbackPlan>>();
+    vi.spyOn(webApi, "rollbackPlan")
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    const runs = useRunsStore();
+
+    const olderRequest = runs.loadRollbackPlan(7);
+    const newerRequest = runs.loadRollbackPlan(7);
+    newer.resolve(rollbackPlan({ run_id: 7, status: "blocked" }));
+    await newerRequest;
+    older.reject(new Error("stale failed"));
+    await olderRequest;
+
+    expect(runs.rollbackPlans[7]?.status).toBe("blocked");
+    expect(runs.error).toBe("");
+  });
+
+  it("merges out-of-order rollback successes for different runs", async () => {
+    const first = deferred<ReturnType<typeof rollbackPlan>>();
+    const second = deferred<ReturnType<typeof rollbackPlan>>();
+    vi.spyOn(webApi, "rollbackPlan")
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const runs = useRunsStore();
+
+    const firstRequest = runs.loadRollbackPlan(7);
+    const secondRequest = runs.loadRollbackPlan(8);
+    second.resolve(rollbackPlan({ run_id: 8, status: "blocked" }));
+    await secondRequest;
+    first.resolve(rollbackPlan({ run_id: 7, status: "ready" }));
+    await firstRequest;
+
+    expect(runs.rollbackPlans[7]?.status).toBe("ready");
+    expect(runs.rollbackPlans[8]?.status).toBe("blocked");
+    expect(runs.error).toBe("");
+  });
+
   it("loads run logs with default and custom tail sizes", async () => {
     const fetchMock = vi
       .fn()

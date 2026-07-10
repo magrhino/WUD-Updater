@@ -15,6 +15,7 @@ export const useRunsStore = defineStore("runs", () => {
   const runDetails = ref<Record<number, RunDetail>>({});
   const runLogs = ref<Record<number, RunLogResponse>>({});
   const rollbackPlans = ref<Record<number, RollbackPlanResponse>>({});
+  const rollbackPlanRequests = new Map<number, symbol>();
   const loading = ref(false);
   const error = ref("");
 
@@ -47,12 +48,31 @@ export const useRunsStore = defineStore("runs", () => {
   }
 
   async function loadRollbackPlan(runId: number): Promise<void> {
-    await loadWithState(async () => {
-      rollbackPlans.value = {
-        ...rollbackPlans.value,
-        [runId]: await webApi.rollbackPlan(runId),
-      };
-    });
+    const request = Symbol();
+    rollbackPlanRequests.set(runId, request);
+    await runWithStoreState(
+      loading,
+      error,
+      async () => {
+        try {
+          const plan = await webApi.rollbackPlan(runId);
+          if (rollbackPlanRequests.get(runId) !== request) return;
+          rollbackPlans.value = { ...rollbackPlans.value, [runId]: plan };
+          rollbackPlanRequests.delete(runId);
+        } catch (exc) {
+          if (rollbackPlanRequests.get(runId) !== request) return;
+          throw exc;
+        }
+      },
+      {
+        onError: () => {
+          const plans = { ...rollbackPlans.value };
+          delete plans[runId];
+          rollbackPlans.value = plans;
+          rollbackPlanRequests.delete(runId);
+        },
+      },
+    );
   }
 
   return {
