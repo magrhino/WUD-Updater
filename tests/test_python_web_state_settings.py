@@ -199,7 +199,7 @@ def test_settings_reports_effective_non_secret_configuration(
     assert webui["WUD_PENDING_SOURCE"] == {
         "name": "WUD_PENDING_SOURCE",
         "value": "auto",
-        "default_value": "file",
+        "default_value": "api",
         "configured": True,
         "source": "configured",
     }
@@ -252,8 +252,8 @@ def test_settings_reports_effective_non_secret_configuration(
     }
     assert managed["compose_ignore_paths"] == {
         "key": "compose_ignore_paths",
-        "value": "old",
-        "default_value": "old",
+        "value": "",
+        "default_value": "",
         "source": "default",
         "editable": True,
         "allowed_values": [],
@@ -942,7 +942,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert event_metadata["before"] == {
         "theme_preference": "system",
         "onboarding_checklist": "visible",
-        "compose_ignore_paths": "old",
+        "compose_ignore_paths": "",
         "digest_pin_updates": "false",
         "release_notes_enabled": "false",
         "release_notifications_delivery_mode": (

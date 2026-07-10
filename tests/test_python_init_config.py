@@ -20,6 +20,8 @@ from wudup.init_config import (
     run_init_from_namespace,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 class InitConfigTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -79,7 +81,7 @@ class InitConfigTests(unittest.TestCase):
         self.assertIn("WUD_WEB_ALLOWED_HOSTS=", content)
         self.assertIn("WUD_API_BASE_URL=http://wud:3000", content)
         self.assertIn("WUD_API_STARTUP_WAIT_SECONDS=5", content)
-        self.assertIn("WUD_PENDING_SOURCE=file", content)
+        self.assertIn("WUD_PENDING_SOURCE=api", content)
         self.assertIn("WUDUP_LEGACY_SCRIPTS=true", content)
         self.assertNotIn("WUDUP_TRIGGER_TOKEN=", content)
         self.assertNotIn("WUDUP_TRIGGER_TOKEN_FILE=", content)
@@ -378,7 +380,7 @@ class InitConfigTests(unittest.TestCase):
         )
         self.assertEqual(
             environment["WUD_PENDING_SOURCE"],
-            "${WUD_PENDING_SOURCE:-file}",
+            "${WUD_PENDING_SOURCE:-api}",
         )
         self.assertEqual(
             environment["WUDUP_LEGACY_SCRIPTS"],
@@ -464,7 +466,7 @@ class InitConfigTests(unittest.TestCase):
         )
         self.assertEqual(
             service["environment"]["WUD_PENDING_SOURCE"],
-            "${WUD_PENDING_SOURCE:-file}",
+            "${WUD_PENDING_SOURCE:-api}",
         )
         self.assertEqual(
             service["environment"]["WUDUP_LEGACY_SCRIPTS"],
@@ -483,6 +485,32 @@ class InitConfigTests(unittest.TestCase):
             ],
         )
         self.assertNotIn("healthcheck", service)
+
+    def test_webui_examples_use_api_source_on_internal_app_network(self) -> None:
+        yaml = YAML(typ="safe")
+        for name in ("docker-compose.webui.yml", "docker-compose.hardened.yml"):
+            with self.subTest(name=name):
+                compose = yaml.load(
+                    (REPO_ROOT / "docs" / "examples" / name).read_text(
+                        encoding="utf-8"
+                    )
+                )
+                self.assertTrue(compose["networks"]["wudup-app"]["internal"])
+                for service_name in ("wud", "wudup"):
+                    self.assertIn(
+                        "wudup-app",
+                        compose["services"][service_name]["networks"],
+                    )
+                self.assertEqual(
+                    compose["services"]["wudup"]["environment"][
+                        "WUD_API_BASE_URL"
+                    ],
+                    "${WUD_API_BASE_URL:-http://wud:3000}",
+                )
+                self.assertEqual(
+                    compose["services"]["wudup"]["environment"]["WUD_PENDING_SOURCE"],
+                    "${WUD_PENDING_SOURCE:-api}",
+                )
 
     def test_host_doctor_status_becomes_command_status(self) -> None:
         with mock.patch(

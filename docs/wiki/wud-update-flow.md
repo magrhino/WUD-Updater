@@ -22,9 +22,10 @@ This is the legacy file-mode flow used by `updates` and `docker-update-from-wud`
 The default WUD output path is `/out/images.todo` inside the WUD container. Host
 installs commonly map that to `$HOME/docker/wud/out/images.todo`.
 
-For WebUI deployments, `WUD_PENDING_SOURCE=api` skips the callback file and
-derives the same pending lines from WUD `/api/containers`; `auto` uses that API
-when available and falls back to `WUD_OUT_FILE`.
+WebUI deployments default to `WUD_PENDING_SOURCE=api`, which skips the callback
+file and derives the same pending lines from WUD `/api/containers` over the
+private Compose app network. `auto` uses that API when available and falls back
+to `WUD_OUT_FILE`; `file` keeps the legacy callback-only behavior.
 
 WUDup polls WUD's API directly for WebUI release-note notifications. Set
 `WUDUP_LEGACY_SCRIPTS=false` only after removing legacy WUD command triggers and

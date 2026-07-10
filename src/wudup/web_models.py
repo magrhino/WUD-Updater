@@ -331,7 +331,7 @@ class WebSettings:
     wud_api_client: WudApiClientConfig = dataclass_field(
         default_factory=WudApiClientConfig
     )
-    pending_source: PendingSourceMode = "file"
+    pending_source: PendingSourceMode = "api"
     legacy_scripts_enabled: bool = True
     release_notes_enabled_env: bool | None = None
     security_scan: SecurityScanConfig = dataclass_field(

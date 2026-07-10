@@ -69,15 +69,16 @@ The WebUI can read pending updates from WUD's API, from the shared callback todo
 file, or from API-first mode with file fallback:
 
 ```dotenv
-WUD_PENDING_SOURCE=file
-# WUD_PENDING_SOURCE=api
+WUD_PENDING_SOURCE=api
+# WUD_PENDING_SOURCE=file
 # WUD_PENDING_SOURCE=auto
 ```
 
-Keep the default `file` mode until WUD API access is healthy. `api` derives
-pending lines from WUD's `/api/containers` metadata. `auto` uses the API when
-usable and falls back to `WUD_OUT_FILE` when needed. The host `updates` and
-`docker-update-from-wud` commands remain legacy file-mode helpers.
+The default `api` mode derives pending lines from WUD's `/api/containers`
+metadata over the private Compose app network. `file` uses the legacy callback
+todo file, and `auto` uses the API when usable before falling back to
+`WUD_OUT_FILE`. The host `updates` and `docker-update-from-wud` commands remain
+legacy file-mode helpers.
 
 The Compose examples place WUD and WUDup on a private app network and set
 `WUD_API_BASE_URL=http://wud:3000` so WUDup can read WUD metadata without

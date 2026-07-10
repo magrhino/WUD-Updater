@@ -7,27 +7,41 @@
 WUDup turns image update notices from What's Up Docker (WUD) into a
 reviewable Docker Compose update workflow. The recommended deployment is the
 long-running WebUI container, which provides a local browser dashboard,
-read-only safety defaults, Doctor checks, run history, logs, diagnostics, and an
-optional plan-first apply flow.
+read-only safety defaults, a pending-update review queue, Doctor checks, run
+history, logs, diagnostics, and optional scheduled automatic updates.
+
+**Project status:** Public beta. WUDup is maintainer-tested with Docker Compose,
+and early users are welcome. Start in read-only mode, try the
+[public demo](https://magrhino.github.io/wudup/), and use
+[GitHub Discussions](https://github.com/magrhino/wudup/discussions) for setup
+help or feedback.
+
+![WUDup dashboard](docs/assets/wudup-dashboard.jpg)
+
+## Why WUDup?
+
+WUD tells you that an image changed; WUDup queues the update for review before
+your Compose services change. Check readiness and apply updates manually, or
+configure policies to apply eligible updates automatically on your schedule.
+WUDup records each run in History and provides diagnostics when something needs
+attention.
 
 ## Web Deployment
-_Check out the demo: https://magrhino.github.io/wudup/_
 
-The WebUI container serves the FastAPI backend and packaged Vue SPA from the
-same image. The WebUI normalizes both the callback todo file and WUD's internal
-API metadata into the same pending-line format before planning or applying
-updates. New WebUI deployments should treat `WUD_PENDING_SOURCE=api|auto` as
-the forward path once their WUD API access is healthy; the callback todo file
-remains the default fallback/import source and the host CLI stays file-based.
+Try the [public, fixture-backed demo](https://magrhino.github.io/wudup/).
+
+New WebUI deployments read available updates from WUD's API over a private
+Compose network and queue them on the Pending page. The callback todo file
+remains an explicit fallback/import source, and the host CLI stays file-based.
 
 ```text
 WUD detects an image update
--> WUD API or /wud/append-updates.sh produces pending lines
--> the WebUI shows pending updates, checks readiness, and builds an apply plan
--> approved plans run docker-update-from-wud and clean successful todo lines
+-> WUDup queues it on the Pending page
+-> review and apply it manually, or let an auto-update policy handle it
+-> check the result in History
 ```
 
-The WebUI deployment starts read-only. Browser-initiated Docker mutations stay
+The WebUI deployment starts read-only. Manual and automatic updates stay
 disabled unless `WUD_WEB_MUTATIONS_ENABLED=true` is set intentionally.
 
 ### Start The WebUI
@@ -47,9 +61,10 @@ To start without the CLI, download the published hardened WebUI Compose example
 plus an env template in your deployment directory:
 
 ```bash
-curl -fsSL \
-  -o docker-compose.yml https://raw.githubusercontent.com/magrhino/wudup/main/docs/examples/docker-compose.hardened.yml \
-  -o .env https://raw.githubusercontent.com/magrhino/wudup/main/docs/examples/webui.env.example
+curl -fsSLo docker-compose.yml \
+  https://raw.githubusercontent.com/magrhino/wudup/main/docs/examples/docker-compose.hardened.yml
+curl -fsSLo .env \
+  https://raw.githubusercontent.com/magrhino/wudup/main/docs/examples/webui.env.example
 ```
 
 Review `.env` before starting: set `HOST_DOCKER_BASE` to your Compose stack
@@ -102,7 +117,7 @@ WebUI/API first.
 | Security policy and private vulnerability reporting | [SECURITY.md](SECURITY.md) |
 | Release notes | [CHANGELOG.md](CHANGELOG.md) |
 
-## Appreciate my work on this?
+## Support the project
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-orange?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/magrhino)
 
