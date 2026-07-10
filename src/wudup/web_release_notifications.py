@@ -63,6 +63,10 @@ from .wud_file import WudTarget, is_digest_target_line, parse_wud_text
 
 DISCORD_MESSAGE_CONTENT_LIMIT = 2000
 DISCORD_EMBED_DESCRIPTION_LIMIT = 4096
+DISCORD_DIGEST_ROW_LIMIT = 1500
+DISCORD_DIGEST_SUBJECT_LIMIT = 160
+DISCORD_DIGEST_VERSION_LIMIT = 128
+DISCORD_DIGEST_REASON_LIMIT = 160
 DISCORD_WEBHOOK_TIMEOUT_SECONDS = 10.0
 DISCORD_WEBHOOK_USER_AGENT = "wudup-webui-release-notifications/1.0"
 DISCORD_COLOR = 0x57F287
@@ -1203,14 +1207,15 @@ def _digest_row(item: ReleaseNotificationItem) -> str:
         item.image_repo or item.image
     ).rsplit("/", 1)[-1]
     row = (
-        f"• {_discord_inline(subject)[:160]} "
-        f"{_discord_code(item.current_version[:128])} → "
-        f"{_discord_code(item.target_version[:128])} — {item.reason_label[:160]}"
+        f"• {_discord_inline(subject)[:DISCORD_DIGEST_SUBJECT_LIMIT]} "
+        f"{_discord_code(item.current_version[:DISCORD_DIGEST_VERSION_LIMIT])} → "
+        f"{_discord_code(item.target_version[:DISCORD_DIGEST_VERSION_LIMIT])} — "
+        f"{item.reason_label[:DISCORD_DIGEST_REASON_LIMIT]}"
     )
     selected_links: list[str] = []
     for link in _digest_links(item.links):
         candidate = f"{row} — {' '.join([*selected_links, link])}"
-        if len(candidate) > 1500:
+        if len(candidate) > DISCORD_DIGEST_ROW_LIMIT:
             break
         selected_links.append(link)
     return f"{row} — {' '.join(selected_links)}" if selected_links else row
