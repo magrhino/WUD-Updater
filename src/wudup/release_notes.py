@@ -540,19 +540,22 @@ def _prune_digest_cache(
 
     with conn:
         for identity, digests in active_digests.items():
-            placeholders = ", ".join("?" for _digest in digests)
-            conn.execute(
-                f"""
-                DELETE FROM release_note_cache
+            rows = conn.execute(
+                """
+                SELECT cache_key, target_digest
+                FROM release_note_cache
                 WHERE provider = ?
                   AND image_repo = ?
                   AND upstream_repo = ?
                   AND current_tag = ?
                   AND target_tag = ?
                   AND target_digest != ''
-                  AND target_digest NOT IN ({placeholders})
                 """,
-                (*identity, *sorted(digests)),
+                identity,
+            )
+            conn.executemany(
+                "DELETE FROM release_note_cache WHERE cache_key = ?",
+                ((row["cache_key"],) for row in rows if row["target_digest"] not in digests),
             )
 
 
