@@ -912,6 +912,8 @@ def _fetch_release(
     repo: str,
     tag: str,
 ) -> dict[str, Any] | None:
+    if tag.lower() == "latest":
+        return _fetch_latest(client, repo)
     if tag:
         candidates = [tag] if tag[:1].lower() == "v" else [f"v{tag}", tag]
         for candidate in candidates:

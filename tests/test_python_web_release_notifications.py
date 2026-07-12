@@ -467,18 +467,64 @@ def test_digest_reason_priority_uses_deterministic_metadata() -> None:
         "needs_review",
         "mutable_latest",
     )
+    assert reason(
+        provider="lsio",
+        change_type="upstream_update",
+        current_version="latest",
+        target_version="latest (release v2.0.0)",
+    ) == (
+        "needs_review",
+        "lsio_upstream",
+        "LSIO/upstream release via mutable latest",
+    )
     assert reason(links=[])[:2] == ("needs_review", "release_link_missing")
     assert reason(semver_diff="minor")[:2] == ("worth_noting", "minor_bump")
-    assert reason(provider="lsio", change_type="upstream_update")[:2] == (
+    assert reason(
+        provider="lsio",
+        change_type="upstream_update",
+        semver_diff="minor",
+    )[:2] == (
         "worth_noting",
         "lsio_upstream",
     )
+    assert reason(provider="lsio")[:2] == ("worth_noting", "lsio_update")
     assert reason(semver_diff="patch")[:2] == ("routine", "patch_bump")
     assert reason(
         current_version="current image",
         target_version="new digest",
         update_kind="digest",
     )[:2] == ("routine", "routine_digest")
+
+
+def test_latest_digest_version_includes_resolved_release_tag() -> None:
+    target = notifications_module._NotificationTarget(
+        target=notifications_module.WudTarget(
+            line_no=1,
+            raw="ghcr.io/acme/app:latest",
+            first="ghcr.io/acme/app:latest",
+            key="app",
+            repo="ghcr.io/acme/app",
+            has_tag=True,
+            allow_repo=True,
+            digest="",
+            desired_tag="",
+            tag_token="latest",
+        )
+    )
+    note = notifications_module.ReleaseNoteInfo(
+        line_no=1,
+        status="ready",
+        provider="github",
+        image_repo="acme/app",
+        upstream_repo="acme/app",
+        release_tag="v2.0.0",
+    )
+
+    assert notifications_module._notification_versions(
+        target,
+        note,
+        SimpleNamespace(local_tag="latest", remote_tag="latest", update_kind="digest"),
+    ) == ("latest", "latest (release v2.0.0)")
 
 
 def test_semver_diff_rejects_unreasonably_long_numeric_parts() -> None:

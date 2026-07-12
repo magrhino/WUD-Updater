@@ -250,6 +250,42 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertEqual(items[0].release_tag, "v2.35.1")
         self.assertEqual(items[0].links[0].label, "GitHub release")
 
+    def test_latest_target_tag_uses_latest_release_endpoint(self) -> None:
+        parsed = parse_wud_text("advplyr/audiobookshelf:latest\n")
+        calls: list[str] = []
+
+        def fetch_json(url: str) -> object:
+            calls.append(url)
+            return {
+                "tag_name": "v2.35.1",
+                "name": "v2.35.1",
+                "html_url": (
+                    "https://github.com/advplyr/audiobookshelf/releases/tag/v2.35.1"
+                ),
+                "body": "Routine update",
+                "published_at": "2026-05-27T20:00:00Z",
+            }
+
+        with open_db(":memory:") as conn:
+            init_db(conn)
+            items = refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=GitHubClient(fetch_json=fetch_json),
+                source_resolver=lambda _target: (
+                    "https://github.com/advplyr/audiobookshelf"
+                ),
+                target_tag_resolver=lambda _target: "latest",
+            )
+
+        self.assertEqual(items[0].status, "ready")
+        self.assertEqual(items[0].release_tag, "v2.35.1")
+        self.assertEqual(
+            calls,
+            ["https://api.github.com/repos/advplyr/audiobookshelf/releases/latest"],
+        )
+
     def test_lsio_release_metadata_includes_both_links(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             upstream_map = Path(tmp) / "upstreams.txt"

@@ -870,6 +870,12 @@ def _notification_versions(
             if digest_update
             else target.target.desired_tag or note.release_tag
         )
+    if (
+        target_version.lower() == "latest"
+        and note.release_tag
+        and note.release_tag.lower() != "latest"
+    ):
+        target_version = f"latest (release {note.release_tag})"
     if not current_version:
         current_version = "current image"
     if not target_version:
@@ -905,7 +911,17 @@ def _notification_digest_reason(
     if note.status in status_reasons:
         code, label = status_reasons[note.status]
         return "needs_review", code, label
-    if "latest" in {current_version.lower(), target_version.lower()}:
+    lsio_reason = _lsio_digest_reason(note.provider, change_type)
+    if _mutable_latest(current_version, target_version):
+        if note.provider == "lsio":
+            if lsio_reason is not None:
+                code, label = lsio_reason
+                return "needs_review", code, f"{label} via mutable latest"
+            return (
+                "needs_review",
+                "lsio_latest",
+                "LSIO image update via mutable latest",
+            )
         return "needs_review", "mutable_latest", "mutable latest tag"
     if not _has_release_or_changelog_link(note.links):
         return (
@@ -913,16 +929,23 @@ def _notification_digest_reason(
             "release_link_missing",
             "release or changelog link unavailable",
         )
-    if semver_diff == "minor":
-        return "worth_noting", "minor_bump", "minor update with release notes"
-    lsio_reason = _lsio_digest_reason(note.provider, change_type)
     if lsio_reason is not None:
         return "worth_noting", *lsio_reason
+    if note.provider == "lsio":
+        return "worth_noting", "lsio_update", "LSIO image update"
+    if semver_diff == "minor":
+        return "worth_noting", "minor_bump", "minor update with release notes"
     if semver_diff == "patch":
         return "routine", "patch_bump", "patch update with release notes"
     if update_kind == "digest" or is_digest_target_line(target.target):
         return "routine", "routine_digest", "image digest update"
     return "routine", "routine_update", "update metadata available"
+
+
+def _mutable_latest(current_version: str, target_version: str) -> bool:
+    return current_version.lower() == "latest" or target_version.lower().startswith(
+        "latest ("
+    )
 
 
 def _lsio_digest_reason(provider: str, change_type: str) -> tuple[str, str] | None:
