@@ -872,7 +872,13 @@ def _notification_versions(
             else target.target.desired_tag or note.release_tag
         )
     if (
-        target_version.lower() == "latest"
+        (
+            target_version.lower() == "latest"
+            or (
+                current_version.lower() == "latest"
+                and target_version == "new digest"
+            )
+        )
         and note.release_tag
         and note.release_tag.lower() != "latest"
     ):

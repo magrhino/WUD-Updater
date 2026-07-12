@@ -539,17 +539,17 @@ def test_digest_reason_priority_uses_deterministic_metadata() -> None:
     )[:2] == ("routine", "routine_digest")
 
 
-def test_latest_digest_version_includes_resolved_release_tag() -> None:
+def test_latest_digest_version_includes_resolved_release_tag_without_metadata() -> None:
     target = notifications_module._NotificationTarget(
         target=notifications_module.WudTarget(
             line_no=1,
-            raw="ghcr.io/acme/app:latest",
+            raw="ghcr.io/acme/app:latest sha256=new",
             first="ghcr.io/acme/app:latest",
             key="app",
             repo="ghcr.io/acme/app",
             has_tag=True,
             allow_repo=True,
-            digest="",
+            digest="sha256:new",
             desired_tag="",
             tag_token="latest",
         )
@@ -566,8 +566,54 @@ def test_latest_digest_version_includes_resolved_release_tag() -> None:
     assert notifications_module._notification_versions(
         target,
         note,
+        None,
+    ) == ("latest", "latest (release v2.0.0)")
+    assert notifications_module._notification_versions(
+        target,
+        note,
         SimpleNamespace(local_tag="latest", remote_tag="latest", update_kind="digest"),
     ) == ("latest", "latest (release v2.0.0)")
+
+    versioned_target = notifications_module._NotificationTarget(
+        target=notifications_module.parse_wud_text(
+            "ghcr.io/acme/app:1.0.0 sha256=new"
+        ).targets[0]
+    )
+    assert notifications_module._notification_versions(
+        versioned_target,
+        note,
+        None,
+    ) == ("1.0.0", "new digest")
+
+    lsio_note = note.model_copy(
+        update={
+            "provider": "lsio",
+            "classification": note.classification.model_copy(
+                update={"change_type": "upstream_update"}
+            ),
+        }
+    )
+    current_version, target_version = notifications_module._notification_versions(
+        target,
+        lsio_note,
+        None,
+    )
+
+    assert (current_version, target_version) == (
+        "latest",
+        "latest (release v2.0.0)",
+    )
+    assert notifications_module._notification_digest_reason(
+        target,
+        lsio_note,
+        None,
+        current_version=current_version,
+        target_version=target_version,
+    ) == (
+        "needs_review",
+        "lsio_upstream",
+        "LSIO/upstream release via mutable latest",
+    )
 
 
 def test_semver_diff_rejects_unreasonably_long_numeric_parts() -> None:
@@ -1101,6 +1147,17 @@ def test_release_notification_preview_uses_completed_run_source(
             service_key="media/pending",
             status="pending",
         )
+        insert_pending_update(
+            conn,
+            run_id=run_id,
+            line_no=12,
+            raw="ghcr.io/acme/latest:latest sha256=new",
+            image="ghcr.io/acme/latest:latest",
+            desired_tag="",
+            service_key="media/latest",
+            status="resolved",
+            status_reason="updated",
+        )
 
     response = client.post(
         "/api/v1/release-notifications/preview",
@@ -1111,8 +1168,10 @@ def test_release_notification_preview_uses_completed_run_source(
     assert response.status_code == 200
     body = response.json()
     assert body["source_file"] == f"Run #{run_id}"
-    assert [item["line_no"] for item in body["items"]] == [7]
+    assert [item["line_no"] for item in body["items"]] == [7, 12]
     assert body["items"][0]["service_key"] == "media/app"
+    assert body["items"][1]["current_version"] == "latest"
+    assert body["items"][1]["target_version"] == "latest (release 2.0.0)"
 
 
 def test_release_notification_preview_rejects_non_update_run_source(
