@@ -4,6 +4,18 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.56.0](https://github.com/magrhino/wudup/compare/v0.55.1...v0.56.0) (2026-07-12)
+
+
+### Features
+
+* **webui:** prepare API-first public beta ([#519](https://github.com/magrhino/wudup/issues/519)) ([2cd7649](https://github.com/magrhino/wudup/commit/2cd76494064e9488d243a6b0a3f6838076f56290))
+
+
+### Bug Fixes
+
+* **notifications:** clarify release note digests ([#523](https://github.com/magrhino/wudup/issues/523)) ([f8f6039](https://github.com/magrhino/wudup/commit/f8f6039b4a148a41c865026b39ad13b2db5e0cde))
+
 ## [0.55.1](https://github.com/magrhino/wudup/compare/v0.55.0...v0.55.1) (2026-07-10)
 
 
