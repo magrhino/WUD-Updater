@@ -484,6 +484,16 @@ def test_digest_reason_priority_uses_deterministic_metadata() -> None:
             code,
             f"LSIO image update: {label}",
         )
+    assert reason(
+        provider="lsio",
+        status="error",
+        current_version="latest",
+        target_version="latest (release v2.0.0)",
+    ) == (
+        "needs_review",
+        "release_notes_error",
+        "LSIO image update: release-note lookup failed",
+    )
     assert reason(current_version="latest", semver_diff="minor")[:2] == (
         "needs_review",
         "mutable_latest",

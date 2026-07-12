@@ -91,6 +91,7 @@ class ReleaseNoteContext:
     upstream_repo: str
     current_tag: str
     target_tag: str
+    target_digest: str = ""
     error: str = ""
 
 
@@ -414,6 +415,7 @@ def _context(
         upstream_repo=upstream_repo,
         current_tag=current_tag,
         target_tag=target_tag,
+        target_digest=target.digest,
         error=error,
     )
 
@@ -534,6 +536,26 @@ def _upsert_cache(
         sort_keys=True,
     )
     with conn:
+        if context.target_digest:
+            conn.execute(
+                """
+                DELETE FROM release_note_cache
+                WHERE cache_key != ?
+                  AND provider = ?
+                  AND image_repo = ?
+                  AND upstream_repo = ?
+                  AND current_tag = ?
+                  AND target_tag = ?
+                """,
+                (
+                    context.cache_key,
+                    context.provider,
+                    context.image_repo,
+                    context.upstream_repo,
+                    context.current_tag,
+                    context.target_tag,
+                ),
+            )
         conn.execute(
             """
             INSERT INTO release_note_cache (

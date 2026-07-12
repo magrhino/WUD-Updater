@@ -325,9 +325,13 @@ class ReleaseNotesTests(unittest.TestCase):
             second_items = refresh_release_notes(
                 conn, second.targets, {}, **refresh_kwargs
             )
+            cached_releases = conn.execute(
+                "SELECT release_tag FROM release_note_cache"
+            ).fetchall()
 
         self.assertEqual(first_items[0].release_tag, "v1.0.0")
         self.assertEqual(second_items[0].release_tag, "v1.1.0")
+        self.assertEqual([row[0] for row in cached_releases], ["v1.1.0"])
         self.assertEqual(
             calls,
             [
