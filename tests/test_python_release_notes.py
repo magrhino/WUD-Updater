@@ -250,6 +250,147 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertEqual(items[0].release_tag, "v2.35.1")
         self.assertEqual(items[0].links[0].label, "GitHub release")
 
+    def test_latest_target_tag_uses_latest_release_endpoint(self) -> None:
+        parsed = parse_wud_text("advplyr/audiobookshelf:latest\n")
+        calls: list[str] = []
+
+        def fetch_json(url: str) -> object:
+            calls.append(url)
+            return {
+                "tag_name": "v2.35.1",
+                "name": "v2.35.1",
+                "html_url": (
+                    "https://github.com/advplyr/audiobookshelf/releases/tag/v2.35.1"
+                ),
+                "body": "Routine update",
+                "published_at": "2026-05-27T20:00:00Z",
+            }
+
+        with open_db(":memory:") as conn:
+            init_db(conn)
+            items = refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=GitHubClient(fetch_json=fetch_json),
+                source_resolver=lambda _target: (
+                    "https://github.com/advplyr/audiobookshelf"
+                ),
+                target_tag_resolver=lambda _target: "latest",
+            )
+
+        self.assertEqual(items[0].status, "ready")
+        self.assertEqual(items[0].release_tag, "v2.35.1")
+        self.assertEqual(
+            calls,
+            ["https://api.github.com/repos/advplyr/audiobookshelf/releases/latest"],
+        )
+
+    def test_latest_digest_change_refreshes_release_within_cache_ttl(self) -> None:
+        calls: list[str] = []
+        release_tags = iter(("v1.0.0", "v1.1.0"))
+
+        def fetch_json(url: str) -> object:
+            calls.append(url)
+            release_tag = next(release_tags)
+            return {
+                "tag_name": release_tag,
+                "name": release_tag,
+                "html_url": (
+                    "https://github.com/advplyr/audiobookshelf/releases/tag/"
+                    f"{release_tag}"
+                ),
+                "body": "Routine update",
+                "published_at": "2026-07-12T12:00:00Z",
+            }
+
+        first = parse_wud_text(
+            f"advplyr/audiobookshelf:latest sha256={'a' * 64}\n"
+        )
+        second = parse_wud_text(
+            f"advplyr/audiobookshelf:latest sha256={'b' * 64}\n"
+        )
+        refresh_kwargs = {
+            "client": GitHubClient(fetch_json=fetch_json),
+            "now": "2026-07-12T12:00:00+00:00",
+            "source_resolver": lambda _target: (
+                "https://github.com/advplyr/audiobookshelf"
+            ),
+            "target_tag_resolver": lambda _target: "latest",
+        }
+
+        with open_db(":memory:") as conn:
+            init_db(conn)
+            first_items = refresh_release_notes(conn, first.targets, {}, **refresh_kwargs)
+            second_items = refresh_release_notes(
+                conn, second.targets, {}, **refresh_kwargs
+            )
+            cached_releases = conn.execute(
+                "SELECT release_tag FROM release_note_cache"
+            ).fetchall()
+
+        self.assertEqual(first_items[0].release_tag, "v1.0.0")
+        self.assertEqual(second_items[0].release_tag, "v1.1.0")
+        self.assertEqual([row[0] for row in cached_releases], ["v1.1.0"])
+        self.assertEqual(
+            calls,
+            [
+                "https://api.github.com/repos/advplyr/audiobookshelf/releases/latest",
+                "https://api.github.com/repos/advplyr/audiobookshelf/releases/latest",
+            ],
+        )
+
+    def test_concurrent_latest_digests_do_not_evict_each_other(self) -> None:
+        calls: list[str] = []
+
+        def fetch_json(url: str) -> object:
+            calls.append(url)
+            return {
+                "tag_name": "v1.1.0",
+                "name": "v1.1.0",
+                "html_url": (
+                    "https://github.com/advplyr/audiobookshelf/releases/tag/v1.1.0"
+                ),
+                "body": "Routine update",
+                "published_at": "2026-07-12T12:00:00Z",
+            }
+
+        parsed = parse_wud_text(
+            f"advplyr/audiobookshelf:latest sha256={'a' * 64}\n"
+            f"advplyr/audiobookshelf:latest sha256={'b' * 64}\n"
+        )
+        refresh_kwargs = {
+            "client": GitHubClient(fetch_json=fetch_json),
+            "now": "2026-07-12T12:00:00+00:00",
+            "source_resolver": lambda _target: (
+                "https://github.com/advplyr/audiobookshelf"
+            ),
+            "target_tag_resolver": lambda _target: "latest",
+        }
+
+        with open_db(":memory:") as conn:
+            init_db(conn)
+            first_items = refresh_release_notes(
+                conn, parsed.targets, {}, **refresh_kwargs
+            )
+            second_items = refresh_release_notes(
+                conn, parsed.targets, {}, **refresh_kwargs
+            )
+            cached_digests = [
+                row[0]
+                for row in conn.execute(
+                    "SELECT target_digest FROM release_note_cache ORDER BY target_digest"
+                )
+            ]
+
+        self.assertEqual(len(first_items), 2)
+        self.assertEqual(len(second_items), 2)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(
+            cached_digests,
+            [f"sha256:{'a' * 64}", f"sha256:{'b' * 64}"],
+        )
+
     def test_lsio_release_metadata_includes_both_links(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             upstream_map = Path(tmp) / "upstreams.txt"

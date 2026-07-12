@@ -91,6 +91,7 @@ class ReleaseNoteContext:
     upstream_repo: str
     current_tag: str
     target_tag: str
+    target_digest: str = ""
     error: str = ""
 
 
@@ -195,12 +196,14 @@ def refresh_release_notes(
     active_client = client or GitHubClient(token=environ.get("GITHUB_TOKEN", ""))
     timestamp = now or utc_timestamp()
     infos: list[ReleaseNoteInfo] = []
-    for context in release_note_contexts(
+    contexts = release_note_contexts(
         targets,
         environ,
         source_resolver=source_resolver,
         target_tag_resolver=target_tag_resolver,
-    ):
+    )
+    _prune_digest_cache(conn, contexts)
+    for context in contexts:
         cached = _cached_info(conn, context)
         legacy_classification_cache = (
             cached.status != "missing"
@@ -401,6 +404,8 @@ def _context(
         "current_tag": current_tag,
         "target_tag": target_tag,
     }
+    if target.digest:
+        key_payload["target_digest"] = target.digest
     cache_key = hashlib.sha256(
         json.dumps(key_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
@@ -412,6 +417,7 @@ def _context(
         upstream_repo=upstream_repo,
         current_tag=current_tag,
         target_tag=target_tag,
+        target_digest=target.digest,
         error=error,
     )
 
@@ -516,6 +522,43 @@ def _lsio_release_tag_from_links(raw: str) -> str:
     return ""
 
 
+def _prune_digest_cache(
+    conn: sqlite3.Connection,
+    contexts: Iterable[ReleaseNoteContext],
+) -> None:
+    active_digests: dict[tuple[str, str, str, str, str], set[str]] = {}
+    for context in contexts:
+        if context.target_digest:
+            identity = (
+                context.provider,
+                context.image_repo,
+                context.upstream_repo,
+                context.current_tag,
+                context.target_tag,
+            )
+            active_digests.setdefault(identity, set()).add(context.target_digest)
+
+    with conn:
+        for identity, digests in active_digests.items():
+            rows = conn.execute(
+                """
+                SELECT cache_key, target_digest
+                FROM release_note_cache
+                WHERE provider = ?
+                  AND image_repo = ?
+                  AND upstream_repo = ?
+                  AND current_tag = ?
+                  AND target_tag = ?
+                  AND target_digest != ''
+                """,
+                identity,
+            )
+            conn.executemany(
+                "DELETE FROM release_note_cache WHERE cache_key = ?",
+                ((row["cache_key"],) for row in rows if row["target_digest"] not in digests),
+            )
+
+
 def _upsert_cache(
     conn: sqlite3.Connection,
     context: ReleaseNoteContext,
@@ -552,9 +595,10 @@ def _upsert_cache(
                 body,
                 created_at,
                 updated_at,
-                metadata_json
+                metadata_json,
+                target_digest
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(cache_key) DO UPDATE SET
                 provider = excluded.provider,
                 image_repo = excluded.image_repo,
@@ -571,7 +615,8 @@ def _upsert_cache(
                 error = excluded.error,
                 body = excluded.body,
                 updated_at = excluded.updated_at,
-                metadata_json = excluded.metadata_json
+                metadata_json = excluded.metadata_json,
+                target_digest = excluded.target_digest
             """,
             (
                 context.cache_key,
@@ -592,6 +637,7 @@ def _upsert_cache(
                 timestamp,
                 timestamp,
                 metadata_json,
+                context.target_digest,
             ),
         )
 
@@ -912,6 +958,8 @@ def _fetch_release(
     repo: str,
     tag: str,
 ) -> dict[str, Any] | None:
+    if tag.lower() == "latest":
+        return _fetch_latest(client, repo)
     if tag:
         candidates = [tag] if tag[:1].lower() == "v" else [f"v{tag}", tag]
         for candidate in candidates:

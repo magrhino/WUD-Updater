@@ -19,6 +19,14 @@ Configure a Discord webhook from Settings, or set `DISCORD_WEBHOOK` in the
 WUDup runtime environment. Environment webhooks override and disable the
 WebUI-managed webhook field.
 
+The Settings test-webhook action sends a representative digest through the
+same formatter used for real notifications. Use a private Discord test channel
+to verify the rendered message before enabling automatic delivery. Confirm that
+the resolved release appears beside mutable `latest`, the Jellyfin row is
+identified as an LSIO image update, Markdown links remain clickable without
+expanding into separate link-preview cards, and the rows remain readable in
+both desktop and narrow/mobile Discord clients.
+
 WUDup polls WUD's API for pending updates and builds Discord payloads in Python
 from the shared pending-line representation. It previews the notification
 summary without the webhook URL, posts a categorized digest split only when it

@@ -9,7 +9,7 @@ from typing import Callable
 
 from .digest_provenance import DIGEST_PROVENANCE_SQL_COLUMNS
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 ColumnSchema = tuple[str, str, int, str | None, int]
 SchemaDefinition = dict[str, tuple[ColumnSchema, ...]]
@@ -22,6 +22,13 @@ SECURITY_SCAN_CACHE_FINDINGS_COLUMN: ColumnSchema = (
     0,
 )
 RELEASE_NOTE_BODY_COLUMN: ColumnSchema = ("body", "TEXT", 1, "''", 0)
+RELEASE_NOTE_TARGET_DIGEST_COLUMN: ColumnSchema = (
+    "target_digest",
+    "TEXT",
+    1,
+    "''",
+    0,
+)
 DIGEST_PROVENANCE_COLUMN_SCHEMA: tuple[ColumnSchema, ...] = tuple(
     (column, "TEXT", 1, "''", 0) for column in DIGEST_PROVENANCE_SQL_COLUMNS
 )
@@ -142,6 +149,7 @@ EXPECTED_SCHEMA: SchemaDefinition = {
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
         RELEASE_NOTE_BODY_COLUMN,
+        RELEASE_NOTE_TARGET_DIGEST_COLUMN,
     ),
     "release_notification_history": (
         ("notification_key", "TEXT", 0, None, 1),
@@ -229,10 +237,17 @@ WEB_SCHEMA_TABLES = frozenset(
     {"schema_migrations", "web_users", "web_sessions", "web_settings"}
 )
 
-EXPECTED_SCHEMA_V11: SchemaDefinition = dict(EXPECTED_SCHEMA)
-EXPECTED_SCHEMA_V11["release_note_cache"] = tuple(
+EXPECTED_SCHEMA_V12: SchemaDefinition = dict(EXPECTED_SCHEMA)
+EXPECTED_SCHEMA_V12["release_note_cache"] = tuple(
     column
     for column in EXPECTED_SCHEMA["release_note_cache"]
+    if column[0] != RELEASE_NOTE_TARGET_DIGEST_COLUMN[0]
+)
+
+EXPECTED_SCHEMA_V11: SchemaDefinition = dict(EXPECTED_SCHEMA_V12)
+EXPECTED_SCHEMA_V11["release_note_cache"] = tuple(
+    column
+    for column in EXPECTED_SCHEMA_V12["release_note_cache"]
     if column[0] != RELEASE_NOTE_BODY_COLUMN[0]
 )
 
@@ -322,6 +337,7 @@ _EXPECTED_SCHEMAS_BY_VERSION: dict[int, SchemaDefinition] = {
     9: EXPECTED_SCHEMA_V9,
     10: EXPECTED_SCHEMA_V10,
     11: EXPECTED_SCHEMA_V11,
+    12: EXPECTED_SCHEMA_V12,
     SCHEMA_VERSION: EXPECTED_SCHEMA,
 }
 _SCHEMA_IDENTIFIERS = frozenset(EXPECTED_SCHEMA) | frozenset(
@@ -604,10 +620,20 @@ def init_schema(conn: sqlite3.Connection) -> None:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 metadata_json TEXT NOT NULL DEFAULT '{}',
-                body TEXT NOT NULL DEFAULT ''
+                body TEXT NOT NULL DEFAULT '',
+                target_digest TEXT NOT NULL DEFAULT ''
             );
             CREATE INDEX IF NOT EXISTS idx_release_note_cache_updated_at
                 ON release_note_cache (updated_at);
+            CREATE INDEX IF NOT EXISTS idx_release_note_cache_identity_digest
+                ON release_note_cache (
+                    provider,
+                    image_repo,
+                    upstream_repo,
+                    current_tag,
+                    target_tag,
+                    target_digest
+                );
 
             CREATE TABLE IF NOT EXISTS release_notification_history (
                 notification_key TEXT PRIMARY KEY,
@@ -675,7 +701,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
         _validate_schema(conn)
         _backfill_schema_migrations(conn, SCHEMA_VERSION)
         conn.execute(  # nosemgrep: PRAGMA needs a literal internal version.
-            "PRAGMA user_version = 12"
+            "PRAGMA user_version = 13"
         )
 
 
@@ -1218,6 +1244,36 @@ def _migrate_v11_to_v12(conn: sqlite3.Connection) -> None:
     _record_schema_migration(conn, 12)
 
 
+def _migrate_v12_to_v13(conn: sqlite3.Connection) -> None:
+    _validate_table_columns(
+        conn,
+        "release_note_cache",
+        EXPECTED_SCHEMA_V12["release_note_cache"],
+    )
+    with conn:
+        conn.execute(
+            """
+            ALTER TABLE release_note_cache
+                ADD COLUMN target_digest TEXT NOT NULL DEFAULT ''
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_release_note_cache_identity_digest
+                ON release_note_cache (
+                    provider,
+                    image_repo,
+                    upstream_repo,
+                    current_tag,
+                    target_tag,
+                    target_digest
+                )
+            """
+        )
+        conn.execute("PRAGMA user_version = 13")
+    _record_schema_migration(conn, 13)
+
+
 _MIGRATIONS_BY_TARGET_VERSION: dict[int, Migration] = {
     2: _migrate_v1_to_v2,
     3: _migrate_v2_to_v3,
@@ -1230,4 +1286,5 @@ _MIGRATIONS_BY_TARGET_VERSION: dict[int, Migration] = {
     10: _migrate_v9_to_v10,
     11: _migrate_v10_to_v11,
     12: _migrate_v11_to_v12,
+    13: _migrate_v12_to_v13,
 }

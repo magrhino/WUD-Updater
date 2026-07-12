@@ -458,27 +458,172 @@ def test_digest_reason_priority_uses_deterministic_metadata() -> None:
         "breaking_change",
         "possible breaking change",
     )
+    assert reason(provider="lsio", breaking=True, semver_diff="major") == (
+        "needs_review",
+        "breaking_change",
+        "LSIO image update: possible breaking change",
+    )
     assert reason(semver_diff="major")[:2] == ("needs_review", "major_bump")
+    assert reason(provider="lsio", semver_diff="major") == (
+        "needs_review",
+        "major_bump",
+        "LSIO image update: major version bump",
+    )
     assert reason(status="missing", semver_diff="minor")[:2] == (
         "needs_review",
         "release_notes_missing",
+    )
+    for status, code, label in (
+        ("error", "release_notes_error", "release-note lookup failed"),
+        ("unsupported", "release_notes_unsupported", "release notes unsupported"),
+        ("missing", "release_notes_missing", "release notes unavailable"),
+        ("not_found", "release_notes_not_found", "matching release not found"),
+    ):
+        assert reason(provider="lsio", status=status, semver_diff="minor") == (
+            "needs_review",
+            code,
+            f"LSIO image update: {label}",
+        )
+    assert reason(
+        provider="lsio",
+        status="error",
+        current_version="latest",
+        target_version="latest (release v2.0.0)",
+    ) == (
+        "needs_review",
+        "release_notes_error",
+        "LSIO image update: release-note lookup failed",
     )
     assert reason(current_version="latest", semver_diff="minor")[:2] == (
         "needs_review",
         "mutable_latest",
     )
-    assert reason(links=[])[:2] == ("needs_review", "release_link_missing")
+    assert reason(
+        current_version="1.0.0",
+        target_version="latest",
+        semver_diff="minor",
+    )[:2] == (
+        "needs_review",
+        "mutable_latest",
+    )
+    assert reason(
+        provider="lsio",
+        change_type="upstream_update",
+        current_version="latest",
+        target_version="latest (release v2.0.0)",
+    ) == (
+        "needs_review",
+        "lsio_upstream",
+        "LSIO/upstream release via mutable latest",
+    )
+    assert reason(
+        provider="lsio",
+        current_version="latest",
+        target_version="latest (release v2.0.0)",
+    )[:2] == ("needs_review", "lsio_latest")
+    assert reason(links=[]) == (
+        "needs_review",
+        "release_link_missing",
+        "release or changelog link unavailable",
+    )
+    assert reason(provider="lsio", links=[]) == (
+        "needs_review",
+        "release_link_missing",
+        "LSIO image update: release or changelog link unavailable",
+    )
     assert reason(semver_diff="minor")[:2] == ("worth_noting", "minor_bump")
-    assert reason(provider="lsio", change_type="upstream_update")[:2] == (
+    assert reason(
+        provider="lsio",
+        change_type="upstream_update",
+        semver_diff="minor",
+    )[:2] == (
         "worth_noting",
         "lsio_upstream",
     )
+    assert reason(provider="lsio")[:2] == ("worth_noting", "lsio_update")
     assert reason(semver_diff="patch")[:2] == ("routine", "patch_bump")
     assert reason(
         current_version="current image",
         target_version="new digest",
         update_kind="digest",
     )[:2] == ("routine", "routine_digest")
+
+
+def test_latest_digest_version_includes_resolved_release_tag_without_metadata() -> None:
+    target = notifications_module._NotificationTarget(
+        target=notifications_module.WudTarget(
+            line_no=1,
+            raw="ghcr.io/acme/app:latest sha256=new",
+            first="ghcr.io/acme/app:latest",
+            key="app",
+            repo="ghcr.io/acme/app",
+            has_tag=True,
+            allow_repo=True,
+            digest="sha256:new",
+            desired_tag="",
+            tag_token="latest",
+        )
+    )
+    note = notifications_module.ReleaseNoteInfo(
+        line_no=1,
+        status="ready",
+        provider="github",
+        image_repo="acme/app",
+        upstream_repo="acme/app",
+        release_tag="v2.0.0",
+    )
+
+    assert notifications_module._notification_versions(
+        target,
+        note,
+        None,
+    ) == ("latest", "latest (release v2.0.0)")
+    assert notifications_module._notification_versions(
+        target,
+        note,
+        SimpleNamespace(local_tag="latest", remote_tag="latest", update_kind="digest"),
+    ) == ("latest", "latest (release v2.0.0)")
+
+    versioned_target = notifications_module._NotificationTarget(
+        target=notifications_module.parse_wud_text(
+            "ghcr.io/acme/app:1.0.0 sha256=new"
+        ).targets[0]
+    )
+    assert notifications_module._notification_versions(
+        versioned_target,
+        note,
+        None,
+    ) == ("1.0.0", "new digest")
+
+    lsio_note = note.model_copy(
+        update={
+            "provider": "lsio",
+            "classification": note.classification.model_copy(
+                update={"change_type": "upstream_update"}
+            ),
+        }
+    )
+    current_version, target_version = notifications_module._notification_versions(
+        target,
+        lsio_note,
+        None,
+    )
+
+    assert (current_version, target_version) == (
+        "latest",
+        "latest (release v2.0.0)",
+    )
+    assert notifications_module._notification_digest_reason(
+        target,
+        lsio_note,
+        None,
+        current_version=current_version,
+        target_version=target_version,
+    ) == (
+        "needs_review",
+        "lsio_upstream",
+        "LSIO/upstream release via mutable latest",
+    )
 
 
 def test_semver_diff_rejects_unreasonably_long_numeric_parts() -> None:
@@ -528,6 +673,7 @@ def test_digest_row_selects_compact_release_links() -> None:
     assert "[release](https://example.test/release)" in row
     assert "[upstream](https://example.test/upstream)" in row
     assert "[changelog](https://example.test/changelog)" in row
+    assert "[release](https://example.test/release) | [upstream]" in row
 
 
 def test_release_notification_preview_degrades_when_wud_triggers_require_auth(
@@ -767,7 +913,12 @@ def test_release_notification_test_webhook_posts_payload_and_audits(
     assert body["audit_run_id"]
     assert len(posted) == 1
     assert posted[0][0] == "https://discord.test/webhook-secret"
-    assert posted[0][1]["embeds"][0]["title"] == "WUDup test notification"
+    payload = posted[0][1]
+    assert payload["flags"] == notifications_module.DISCORD_SUPPRESS_EMBEDS_FLAG
+    assert "WUDup batch — 2 updates found" in payload["content"]
+    assert "latest (release v1.2.3)" in payload["content"]
+    assert "LSIO image update via mutable latest" in payload["content"]
+    assert "https://github.com/jellyfin/jellyfin/releases" in payload["content"]
     db_path = tmp_path / "state" / "wud.sqlite"
     with open_db(db_path) as conn:
         run = conn.execute(
@@ -1006,6 +1157,17 @@ def test_release_notification_preview_uses_completed_run_source(
             service_key="media/pending",
             status="pending",
         )
+        insert_pending_update(
+            conn,
+            run_id=run_id,
+            line_no=12,
+            raw="ghcr.io/acme/latest:latest sha256=new",
+            image="ghcr.io/acme/latest:latest",
+            desired_tag="",
+            service_key="media/latest",
+            status="resolved",
+            status_reason="updated",
+        )
 
     response = client.post(
         "/api/v1/release-notifications/preview",
@@ -1016,8 +1178,10 @@ def test_release_notification_preview_uses_completed_run_source(
     assert response.status_code == 200
     body = response.json()
     assert body["source_file"] == f"Run #{run_id}"
-    assert [item["line_no"] for item in body["items"]] == [7]
+    assert [item["line_no"] for item in body["items"]] == [7, 12]
     assert body["items"][0]["service_key"] == "media/app"
+    assert body["items"][1]["current_version"] == "latest"
+    assert body["items"][1]["target_version"] == "latest (release 2.0.0)"
 
 
 def test_release_notification_preview_rejects_non_update_run_source(
@@ -1372,6 +1536,7 @@ def test_release_notification_per_container_mode_keeps_detailed_embed(
     assert response.json()["mode"] == "per_container"
     assert response.json()["batch_count"] == 1
     assert response.json()["messages"] == []
+    assert "flags" not in posted[0][1]
     assert posted[0][1]["embeds"][0]["title"] == "app Tag Update"
     assert release_body in posted[0][1]["embeds"][0]["description"]
 
@@ -1715,6 +1880,10 @@ def test_release_notification_send_batches_discord_digest_by_content_limit(
     assert body["batch_count"] == len(posted)
     assert body["batch_count"] > 1
     assert body["messages"] == [payload["content"] for _url, payload in posted]
+    assert all(
+        payload["flags"] == notifications_module.DISCORD_SUPPRESS_EMBEDS_FLAG
+        for _url, payload in posted
+    )
     assert all(len(payload["content"]) <= 2000 for _url, payload in posted)
     assert sum(payload["content"].count("\n• ") for _url, payload in posted) == 25
     for _url, payload in posted:

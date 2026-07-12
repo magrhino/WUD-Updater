@@ -49,9 +49,11 @@ class FakeConnection:
         self.statements.append(statement)
 
 
-def _drop_release_note_cache_body(conn: sqlite3.Connection) -> None:
+def _downgrade_release_note_cache_to_v11(conn: sqlite3.Connection) -> None:
+    conn.execute("DROP INDEX idx_release_note_cache_identity_digest")
+    conn.execute("ALTER TABLE release_note_cache DROP COLUMN target_digest")
     conn.execute("ALTER TABLE release_note_cache DROP COLUMN body")
-    conn.execute("DELETE FROM schema_migrations WHERE version = 12")
+    conn.execute("DELETE FROM schema_migrations WHERE version >= 12")
 
 
 class DatabaseTests(unittest.TestCase):
@@ -389,7 +391,7 @@ class DatabaseTests(unittest.TestCase):
     def test_init_db_migrates_v8_schema_and_adds_security_scan_cache(self) -> None:
         with db_connection(":memory:") as conn:
             init_db(conn)
-            _drop_release_note_cache_body(conn)
+            _downgrade_release_note_cache_to_v11(conn)
             conn.execute("DROP TABLE security_scan_cache")
             conn.execute("DELETE FROM schema_migrations WHERE version = 9")
             conn.execute("PRAGMA user_version = 8")
@@ -432,7 +434,7 @@ class DatabaseTests(unittest.TestCase):
             db_connection(Path(tmpdir) / "wudup.sqlite") as conn,
         ):
             init_db(conn)
-            _drop_release_note_cache_body(conn)
+            _downgrade_release_note_cache_to_v11(conn)
             conn.execute(
                 "ALTER TABLE security_scan_cache RENAME TO old_security_scan_cache"
             )
@@ -458,7 +460,7 @@ class DatabaseTests(unittest.TestCase):
             db_connection(Path(tmpdir) / "wudup.sqlite") as conn,
         ):
             init_db(conn)
-            _drop_release_note_cache_body(conn)
+            _downgrade_release_note_cache_to_v11(conn)
             conn.execute(
                 "ALTER TABLE security_scan_cache RENAME TO old_security_scan_cache"
             )
@@ -502,7 +504,7 @@ class DatabaseTests(unittest.TestCase):
         with db_connection(":memory:") as conn:
             init_db(conn)
             conn.execute("DROP TABLE release_notification_history")
-            _drop_release_note_cache_body(conn)
+            _downgrade_release_note_cache_to_v11(conn)
             conn.execute("DELETE FROM schema_migrations WHERE version = 11")
             conn.execute("PRAGMA user_version = 10")
 
@@ -539,7 +541,7 @@ class DatabaseTests(unittest.TestCase):
     def test_init_db_migrates_v11_and_adds_release_note_body(self) -> None:
         with db_connection(":memory:") as conn:
             init_db(conn)
-            _drop_release_note_cache_body(conn)
+            _downgrade_release_note_cache_to_v11(conn)
             conn.execute("PRAGMA user_version = 11")
 
             init_db(conn)
@@ -553,10 +555,45 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(version, SCHEMA_VERSION)
         self.assertIn("body", columns)
 
+    def test_init_db_migrates_v12_and_adds_release_note_target_digest(self) -> None:
+        with db_connection(":memory:") as conn:
+            init_db(conn)
+            conn.execute(
+                """
+                INSERT INTO release_note_cache (
+                    cache_key,
+                    provider,
+                    status,
+                    created_at,
+                    updated_at
+                )
+                VALUES ('cache', 'github', 'ready', 'now', 'now')
+                """
+            )
+            conn.execute("DROP INDEX idx_release_note_cache_identity_digest")
+            conn.execute("ALTER TABLE release_note_cache DROP COLUMN target_digest")
+            conn.execute("DELETE FROM schema_migrations WHERE version = 13")
+            conn.execute("PRAGMA user_version = 12")
+
+            init_db(conn)
+
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            row = conn.execute(
+                "SELECT provider, target_digest FROM release_note_cache"
+            ).fetchone()
+            indexes = {
+                item[1]
+                for item in conn.execute("PRAGMA index_list('release_note_cache')")
+            }
+
+        self.assertEqual(version, SCHEMA_VERSION)
+        self.assertEqual(row, ("github", ""))
+        self.assertIn("idx_release_note_cache_identity_digest", indexes)
+
     def test_init_db_rejects_v8_schema_with_conflicting_security_cache(self) -> None:
         with db_connection(":memory:") as conn:
             init_db(conn)
-            _drop_release_note_cache_body(conn)
+            _downgrade_release_note_cache_to_v11(conn)
             conn.execute("DROP TABLE security_scan_cache")
             conn.execute("CREATE VIEW security_scan_cache AS SELECT 1 AS dummy_column")
             conn.execute("DELETE FROM schema_migrations WHERE version = 9")

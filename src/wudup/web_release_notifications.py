@@ -70,6 +70,7 @@ DISCORD_DIGEST_REASON_LIMIT = 160
 DISCORD_WEBHOOK_TIMEOUT_SECONDS = 10.0
 DISCORD_WEBHOOK_USER_AGENT = "wudup-webui-release-notifications/1.0"
 DISCORD_WEBHOOK_USERNAME = "WUDup Release Notes"
+DISCORD_SUPPRESS_EMBEDS_FLAG = 1 << 2
 DISCORD_COLOR = 0x57F287
 DISCORD_DIGEST_FOOTER = "Open WUDup for full notes, digests, and apply plan."
 DISCORD_DIGEST_CATEGORIES = (
@@ -860,8 +861,7 @@ def _notification_versions(
 ) -> tuple[str, str]:
     current_version = str(getattr(metadata, "local_tag", "") or "")
     target_version = str(getattr(metadata, "remote_tag", "") or "")
-    digest_update = str(getattr(metadata, "update_kind", "") or "") == "digest"
-    digest_update = digest_update or is_digest_target_line(target.target)
+    digest_update = _is_digest_update(target, metadata)
     if not current_version:
         current_version = image_tag(target.target.first) or target.target.tag_token
     if not target_version:
@@ -870,11 +870,36 @@ def _notification_versions(
             if digest_update
             else target.target.desired_tag or note.release_tag
         )
+    if (
+        _should_annotate_latest_release(current_version, target_version)
+        and note.release_tag
+        and note.release_tag.lower() != "latest"
+    ):
+        target_version = f"latest (release {note.release_tag})"
     if not current_version:
         current_version = "current image"
     if not target_version:
         target_version = "updated image"
     return current_version, target_version
+
+
+def _is_digest_update(
+    target: _NotificationTarget,
+    metadata: web_wud_api.WudApiContainer | None,
+) -> bool:
+    return (
+        str(getattr(metadata, "update_kind", "") or "") == "digest"
+        or is_digest_target_line(target.target)
+    )
+
+
+def _should_annotate_latest_release(
+    current_version: str,
+    target_version: str,
+) -> bool:
+    return target_version.lower() == "latest" or (
+        current_version.lower() == "latest" and target_version == "new digest"
+    )
 
 
 def _notification_digest_reason(
@@ -888,14 +913,18 @@ def _notification_digest_reason(
     semver_diff = str(getattr(metadata, "semver_diff", "") or "").lower()
     if not semver_diff:
         semver_diff = _semver_diff(current_version, target_version)
-    update_kind = str(getattr(metadata, "update_kind", "") or "")
     classification = getattr(note, "classification", None)
     change_type = str(getattr(classification, "change_type", "") or "")
+    provider_prefix = "LSIO image update: " if note.provider == "lsio" else ""
 
     if note.breaking:
-        return "needs_review", "breaking_change", "possible breaking change"
+        return (
+            "needs_review",
+            "breaking_change",
+            f"{provider_prefix}possible breaking change",
+        )
     if semver_diff == "major":
-        return "needs_review", "major_bump", "major version bump"
+        return "needs_review", "major_bump", f"{provider_prefix}major version bump"
     status_reasons = {
         "error": ("release_notes_error", "release-note lookup failed"),
         "unsupported": ("release_notes_unsupported", "release notes unsupported"),
@@ -904,25 +933,58 @@ def _notification_digest_reason(
     }
     if note.status in status_reasons:
         code, label = status_reasons[note.status]
-        return "needs_review", code, label
-    if "latest" in {current_version.lower(), target_version.lower()}:
-        return "needs_review", "mutable_latest", "mutable latest tag"
+        return "needs_review", code, f"{provider_prefix}{label}"
+    lsio_reason = _lsio_digest_reason(note.provider, change_type)
+    mutable_latest_reason = _mutable_latest_digest_reason(
+        current_version,
+        target_version,
+        note.provider,
+        lsio_reason,
+    )
+    if mutable_latest_reason is not None:
+        return mutable_latest_reason
     if not _has_release_or_changelog_link(note.links):
         return (
             "needs_review",
             "release_link_missing",
-            "release or changelog link unavailable",
+            f"{provider_prefix}release or changelog link unavailable",
         )
-    if semver_diff == "minor":
-        return "worth_noting", "minor_bump", "minor update with release notes"
-    lsio_reason = _lsio_digest_reason(note.provider, change_type)
     if lsio_reason is not None:
         return "worth_noting", *lsio_reason
+    if note.provider == "lsio":
+        return "worth_noting", "lsio_update", "LSIO image update"
+    if semver_diff == "minor":
+        return "worth_noting", "minor_bump", "minor update with release notes"
     if semver_diff == "patch":
         return "routine", "patch_bump", "patch update with release notes"
-    if update_kind == "digest" or is_digest_target_line(target.target):
+    if _is_digest_update(target, metadata):
         return "routine", "routine_digest", "image digest update"
     return "routine", "routine_update", "update metadata available"
+
+
+def _mutable_latest_digest_reason(
+    current_version: str,
+    target_version: str,
+    provider: str,
+    lsio_reason: tuple[str, str] | None,
+) -> tuple[str, str, str] | None:
+    normalized_target = target_version.lower()
+    if (
+        current_version.lower() != "latest"
+        and normalized_target != "latest"
+        and not normalized_target.startswith("latest (")
+    ):
+        return None
+    if provider != "lsio":
+        return "needs_review", "mutable_latest", "mutable latest tag"
+    if lsio_reason is None:
+        return (
+            "needs_review",
+            "lsio_latest",
+            "LSIO image update via mutable latest",
+        )
+    code, label = lsio_reason
+    return "needs_review", code, f"{label} via mutable latest"
 
 
 def _lsio_digest_reason(provider: str, change_type: str) -> tuple[str, str] | None:
@@ -1174,6 +1236,7 @@ def _digest_payload_batches(
                 "payload": {
                     "username": DISCORD_WEBHOOK_USERNAME,
                     "allowed_mentions": {"parse": []},
+                    "flags": DISCORD_SUPPRESS_EMBEDS_FLAG,
                     "content": content,
                 },
             }
@@ -1240,11 +1303,11 @@ def _digest_row(item: ReleaseNotificationItem) -> str:
     )
     selected_links: list[str] = []
     for link in _digest_links(item.links):
-        candidate = f"{row} — {' '.join([*selected_links, link])}"
+        candidate = f"{row} — {' | '.join([*selected_links, link])}"
         if len(candidate) > DISCORD_DIGEST_ROW_LIMIT:
             break
         selected_links.append(link)
-    return f"{row} — {' '.join(selected_links)}" if selected_links else row
+    return f"{row} — {' | '.join(selected_links)}" if selected_links else row
 
 
 def _digest_links(links: Sequence[ReleaseNoteLink]) -> list[str]:
@@ -1370,19 +1433,60 @@ def _post_discord_payload(webhook_url: str, payload: Mapping[str, object]) -> No
 
 
 def _test_discord_payload() -> dict[str, object]:
-    return {
-        "username": DISCORD_WEBHOOK_USERNAME,
-        "allowed_mentions": {"parse": []},
-        "embeds": [
-            {
-                "title": "WUDup test notification",
-                "description": (
-                    "Discord webhook delivery is configured correctly for WUDup."
+    items = [
+        ReleaseNotificationItem(
+            line_no=1,
+            image="ghcr.io/magrhino/wudup:latest",
+            service_key="system/wudup",
+            title="WUDup test notification",
+            description="Representative mutable-tag digest row.",
+            status="ready",
+            image_repo="magrhino/wudup",
+            upstream_repo="magrhino/wudup",
+            current_version="latest",
+            target_version="latest (release v1.2.3)",
+            category="needs_review",
+            reason_code="mutable_latest",
+            reason_label="mutable latest tag",
+            links=[
+                ReleaseNoteLink(
+                    label="GitHub release",
+                    url="https://github.com/magrhino/wudup/releases",
+                    kind="github_release",
+                )
+            ],
+        ),
+        ReleaseNotificationItem(
+            line_no=2,
+            image="lscr.io/linuxserver/jellyfin:latest",
+            service_key="media/jellyfin",
+            title="Jellyfin test notification",
+            description="Representative LSIO digest row.",
+            status="ready",
+            image_repo="linuxserver/docker-jellyfin",
+            upstream_repo="jellyfin/jellyfin",
+            current_version="latest",
+            target_version="latest (release v10.11.0)",
+            category="needs_review",
+            reason_code="lsio_latest",
+            reason_label="LSIO image update via mutable latest",
+            links=[
+                ReleaseNoteLink(
+                    label="LSIO release",
+                    url="https://github.com/linuxserver/docker-jellyfin/releases",
+                    kind="lsio_release",
                 ),
-                "color": DISCORD_COLOR,
-            }
-        ],
-    }
+                ReleaseNoteLink(
+                    label="Upstream release",
+                    url="https://github.com/jellyfin/jellyfin/releases",
+                    kind="github_release",
+                ),
+            ],
+        ),
+    ]
+    payload = _digest_payload_batches(items)[0]["payload"]
+    assert isinstance(payload, dict)
+    return payload
 
 
 def _safe_release_notification_exception_detail(
