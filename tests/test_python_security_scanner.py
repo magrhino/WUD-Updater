@@ -26,12 +26,20 @@ class FakeRunner:
         del check
         normalized = tuple(args)
         self.calls.append((normalized, timeout_seconds))
-        if normalized == ("trivy", "--version"):
+        if len(normalized) >= 2 and normalized[:2] == ("trivy", "version"):
             return CommandResult(
                 args=normalized,
                 cwd=None,
                 returncode=0,
-                stdout="Version: 0.50.0\n",
+                stdout=json.dumps(
+                    {
+                        "Version": "0.50.0",
+                        "VulnerabilityDB": {
+                            "Version": "2",
+                            "UpdatedAt": "2026-06-26T00:00:00Z",
+                        },
+                    }
+                ),
             )
         return CommandResult(
             args=normalized,
@@ -51,11 +59,14 @@ class SecurityScannerTests(unittest.TestCase):
         payload = {
             "SchemaVersion": 2,
             "VulnerabilityDB": {
-                "Version": "2026-06-26",
+                "Version": "2",
                 "UpdatedAt": "2026-06-26T00:00:00Z",
             },
             "Results": [
                 {
+                    "Target": "debian:12",
+                    "Class": "os-pkgs",
+                    "Type": "debian",
                     "Vulnerabilities": [
                         {"Severity": "HIGH", "FixedVersion": "1.2.3"},
                         {
@@ -71,6 +82,11 @@ class SecurityScannerTests(unittest.TestCase):
                             "PkgName": "ignored-url",
                             "PrimaryURL": "javascript:alert(1)",
                             "Severity": "LOW",
+                            "VulnerabilityID": "CVE-2026-0002",
+                        },
+                        {
+                            "PkgName": "duplicate-higher-severity",
+                            "Severity": "CRITICAL",
                             "VulnerabilityID": "CVE-2026-0002",
                         },
                     ],
@@ -94,13 +110,22 @@ class SecurityScannerTests(unittest.TestCase):
         self.assertEqual(result.verdict, "findings")
         self.assertEqual(result.scanner_version, "0.50.0")
         self.assertEqual(result.scanner_schema, "2")
-        self.assertEqual(result.db_revision, "2026-06-26")
+        self.assertEqual(result.db_revision, "2")
+        self.assertEqual(result.db_updated_at, "2026-06-26T00:00:00Z")
         self.assertEqual(result.severity_counts["high"], 1)
         self.assertEqual(result.severity_counts["medium"], 1)
         self.assertEqual(result.severity_counts["low"], 1)
+        self.assertEqual(result.severity_counts["critical"], 1)
+        self.assertEqual(result.advisory_counts["high"], 0)
+        self.assertEqual(result.advisory_counts["medium"], 1)
+        self.assertEqual(result.advisory_counts["low"], 0)
+        self.assertEqual(result.advisory_counts["critical"], 1)
         self.assertEqual(result.fixable_counts["high"], 1)
-        self.assertEqual(result.unfixed_count, 2)
+        self.assertEqual(result.unfixed_count, 3)
         self.assertEqual(result.findings[1].vulnerability_id, "CVE-2026-0001")
+        self.assertEqual(result.findings[1].target, "debian:12")
+        self.assertEqual(result.findings[1].target_class, "os-pkgs")
+        self.assertEqual(result.findings[1].target_type, "debian")
         self.assertEqual(result.findings[1].package_name, "openssl")
         self.assertEqual(result.findings[1].installed_version, "2.0.0")
         self.assertEqual(result.findings[1].fixed_version, "")

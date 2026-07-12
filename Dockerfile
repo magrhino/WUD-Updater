@@ -17,6 +17,7 @@ RUN npm run build
 FROM python:3.14.5-slim-bookworm@sha256:a9bee15510a364124aa24692899d269835683b883de42f7ebec8c293cf679ccb AS wudup-runtime
 
 ARG TRUENAS_API_CLIENT_REF=""
+ARG APT_REFRESH="local"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     DOCKER_BASE=/host/docker \
@@ -27,7 +28,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/app/bin:$PATH
 
 RUN set -eux; \
+    printf 'APT refresh key: %s\n' "$APT_REFRESH"; \
     apt-get update; \
+    apt-get upgrade -y; \
     apt-get install -y --no-install-recommends \
       bash \
       bsdextrautils \

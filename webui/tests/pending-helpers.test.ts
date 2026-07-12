@@ -108,6 +108,9 @@ function securityFinding(
 ): SecurityScanFinding {
   const id = String(index).padStart(4, "0");
   return {
+    target: "debian:12",
+    target_class: "os-pkgs",
+    target_type: "debian",
     vulnerability_id: `CVE-2026-${id}`,
     package_name: `package-${id}`,
     installed_version: "1.0.0",
@@ -573,6 +576,9 @@ describe("pending helper modules", () => {
         },
         findings: [
           {
+            target: "debian:12",
+            target_class: "os-pkgs",
+            target_type: "debian",
             vulnerability_id: "CVE-2026-0001",
             package_name: "openssl",
             installed_version: "1.0.0",
@@ -588,6 +594,15 @@ describe("pending helper modules", () => {
     expect(wrapper.text()).toContain("1 finding");
     expect(wrapper.text()).toContain("1 High");
     expect(wrapper.text()).toContain("1 fixable finding");
+    expect(wrapper.text()).toContain("1 raw occurrence");
+    expect(wrapper.text()).toContain("1 unique advisory");
+    expect(wrapper.text()).toContain(
+      "Scanner trivy; version 0.71.2; schema Unknown",
+    );
+    expect(wrapper.text()).toContain("DB revision Unknown; updated Unknown");
+    expect(wrapper.text()).toContain("debian:12");
+    expect(wrapper.text()).toContain("os-pkgs");
+    expect(wrapper.text()).toContain("debian");
     expect(wrapper.text()).toContain("CVE-2026-0001");
     expect(wrapper.text()).toContain("openssl");
     expect(wrapper.text()).toContain("1.0.0");
@@ -595,6 +610,26 @@ describe("pending helper modules", () => {
     expect(wrapper.find("a").attributes("href")).toBe(
       "https://avd.aquasec.com/nvd/cve-2026-0001",
     );
+  });
+
+  it("renders unavailable when cached unique advisory counts are unknown", () => {
+    const wrapper = mountPendingModal(PendingSecurityScanDetails, {
+      scan: securityScanInfo({
+        state: "complete",
+        verdict: "findings",
+        advisory_counts_known: false,
+        severity_counts: {
+          critical: 0,
+          high: 2,
+          medium: 0,
+          low: 0,
+          unknown: 0,
+        },
+      }),
+    });
+
+    expect(wrapper.text()).toContain("Unique advisories unavailable");
+    expect(wrapper.text()).not.toContain("0 unique advisories");
   });
 
   it("renders security scan comparison deltas and report copy action", () => {
@@ -614,10 +649,13 @@ describe("pending helper modules", () => {
         scanner_version: "0.71.2",
         scanner_schema: "trivy-json",
         db_revision: "trivy-db-2026-06-26",
+        db_updated_at: "2026-06-26T12:00:00Z",
         subject: {
           requested_ref: "repo/app:2.0",
           reported_digest: "sha256:candidate",
+          index_digest: "sha256:candidate",
           manifest_digest: "sha256:candidate-child",
+          immutable_ref: "repo/app@sha256:candidate-child",
           platform: "linux/amd64",
         },
         severity_counts: {
@@ -633,7 +671,9 @@ describe("pending helper modules", () => {
           current_subject: {
             requested_ref: "repo/app:1.0",
             reported_digest: "sha256:installed",
+            index_digest: "sha256:installed",
             manifest_digest: "sha256:installed-child",
+            immutable_ref: "repo/app@sha256:installed-child",
             platform: "linux/amd64",
           },
           fixed_findings: [fixed],
@@ -654,6 +694,8 @@ describe("pending helper modules", () => {
     expect(text).toContain("Installed");
     expect(text).toContain("Candidate");
     expect(text).toContain("linux/amd64");
+    expect(text).toContain("DB revision trivy-db-2026-06-26");
+    expect(text).toContain("updated 2026-06-26T12:00:00Z");
     expect(text).toContain("Copy report");
     expect(text).toContain("CVE-2026-0002");
     expect(text).toContain("CVE-2026-0003");
@@ -752,6 +794,28 @@ describe("pending helper modules", () => {
     expect(scan.comparison.remaining_findings).toEqual([]);
   });
 
+  it("includes provenance before comparing completed demo scans", () => {
+    const scan = (new DemoApiState() as unknown as DemoSecurityScanBuilder).securityScanInfo(
+      pendingItem({
+        digest: "sha256:candidate",
+        platform: "linux/amd64",
+        wud_metadata: wudContainerMetadata({
+          local_digest: "sha256:installed",
+          platform: "linux/amd64",
+        }),
+      }),
+      true,
+    );
+
+    expect(scan.state).toBe("complete");
+    expect(scan.scanner_version).toBe("demo");
+    expect(scan.scanner_schema).toBe("trivy-json");
+    expect(scan.db_revision).toBe("demo");
+    expect(scan.db_updated_at).toBe("2026-05-28T12:00:00+00:00");
+    expect(scan.comparison.status).toBe("unchanged");
+    expect(scan.comparison.remaining_findings).toHaveLength(1);
+  });
+
   it("filters candidate security scan findings by present severity categories", async () => {
     const wrapper = mountPendingModal(PendingSecurityScanDetails, {
       scan: securityScanWithFindings([
@@ -808,11 +872,15 @@ describe("pending helper modules", () => {
   it("paginates candidate security scan findings", async () => {
     const wrapper = mountPendingModal(PendingSecurityScanDetails, {
       scan: securityScanWithFindings(
-        Array.from({ length: 12 }, (_, index) => securityFinding(index + 1)),
+        Array.from({ length: 12 }, (_, index) =>
+          securityFinding(index + 1, "high", { package_name: "openssl" }),
+        ),
       ),
     });
 
     expect(wrapper.text()).toContain("Showing 1-10 of 12 findings");
+    expect(wrapper.text()).toContain("12 occurrences");
+    expect(wrapper.text()).toContain("12 advisory occurrences");
     expect(wrapper.text()).toContain("CVE-2026-0001");
     expect(wrapper.text()).toContain("CVE-2026-0010");
     expect(wrapper.text()).not.toContain("CVE-2026-0011");
@@ -822,6 +890,8 @@ describe("pending helper modules", () => {
     await pageTwo?.trigger("click");
 
     expect(wrapper.text()).toContain("Showing 11-12 of 12 findings");
+    expect(wrapper.text()).toContain("12 occurrences");
+    expect(wrapper.text()).toContain("12 advisory occurrences");
     expect(wrapper.text()).not.toContain("CVE-2026-0001");
     expect(wrapper.text()).toContain("CVE-2026-0011");
     expect(wrapper.text()).toContain("CVE-2026-0012");
@@ -950,6 +1020,7 @@ describe("pending helper modules", () => {
         scanner_version: "0.71.2",
         scanner_schema: "trivy-json",
         db_revision: "trivy-db-2026-06-26",
+        db_updated_at: "2026-06-26T12:00:00Z",
         comparison: {
           status: "improved",
           current_subject: {
@@ -971,6 +1042,9 @@ describe("pending helper modules", () => {
     );
 
     expect(report).toContain("Fixed installed findings (1):");
+    expect(report).toContain(
+      "database revision trivy-db-2026-06-26; updated 2026-06-26T12:00:00Z",
+    );
     expect(report).toContain("CVE-2026-0001 in openssl");
     expect(report).not.toContain("Remaining candidate findings");
     expect(report).not.toContain("Introduced candidate findings");

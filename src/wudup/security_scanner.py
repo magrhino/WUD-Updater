@@ -15,6 +15,9 @@ from .web_models import SecurityScanConfig
 
 @dataclass(frozen=True)
 class SecurityScanFinding:
+    target: str = ""
+    target_class: str = ""
+    target_type: str = ""
     vulnerability_id: str = ""
     package_name: str = ""
     installed_version: str = ""
@@ -34,6 +37,7 @@ class SecurityScanResult:
     db_revision: str = ""
     db_updated_at: str = ""
     severity_counts: Mapping[str, int] = field(default_factory=dict)
+    advisory_counts: Mapping[str, int] = field(default_factory=dict)
     fixable_counts: Mapping[str, int] = field(default_factory=dict)
     unfixed_count: int = 0
     findings: tuple[SecurityScanFinding, ...] = ()
@@ -52,6 +56,7 @@ class TrivyScanner:
         self.config = config
         self.runner = runner or CommandRunner()
         self._version: str | None = None
+        self._provenance: Mapping[str, Any] = {}
 
     def scan(self, subject: ResolvedImageSubject) -> SecurityScanResult:
         if subject.identity_status != "exact" or not subject.immutable_ref:
@@ -95,19 +100,26 @@ class TrivyScanner:
             )
         return _result_from_trivy_payload(
             payload,
-            scanner_version=self.version(),
+            provenance=self.provenance(),
         )
 
     def version(self) -> str:
+        return str(self.provenance().get("Version") or "")
+
+    def provenance(self) -> Mapping[str, Any]:
         if self._version is not None:
-            return self._version
+            return self._provenance
+        args = [self.config.executable, "version", "--format", "json"]
+        if self.config.cache_dir:
+            args.extend(["--cache-dir", self.config.cache_dir])
         result = self.runner.capture(
-            [self.config.executable, "--version"],
+            args,
             check=False,
             timeout_seconds=10,
         )
-        self._version = _parse_trivy_version(result.stdout) if result.ok else ""
-        return self._version
+        self._provenance = _parse_trivy_provenance(result.stdout) if result.ok else {}
+        self._version = str(self._provenance.get("Version") or "")
+        return self._provenance
 
     def _scan_args(self, subject: ResolvedImageSubject) -> list[str]:
         args = [
@@ -135,8 +147,9 @@ class TrivyScanner:
 def _result_from_trivy_payload(
     payload: Mapping[str, Any],
     *,
-    scanner_version: str,
+    provenance: Mapping[str, Any],
 ) -> SecurityScanResult:
+    scanner_version = str(provenance.get("Version") or "")
     if not isinstance(payload.get("Results"), list):
         return SecurityScanResult(
             state="error",
@@ -145,20 +158,31 @@ def _result_from_trivy_payload(
             error_message="scanner JSON did not include a Results array",
         )
     severity_counts = _empty_counts()
+    advisory_severities: dict[str, str] = {}
     fixable_counts = _empty_counts()
     unfixed_count = 0
     findings: list[SecurityScanFinding] = []
-    for vuln in _vulnerabilities(payload):
+    for result, vuln in _vulnerabilities(payload):
         severity = normalize_security_severity(vuln.get("Severity"))
         severity_counts[severity] += 1
+        vulnerability_id = str(vuln.get("VulnerabilityID") or "").strip()
+        if vulnerability_id:
+            previous = advisory_severities.get(vulnerability_id)
+            if previous is None or SECURITY_SEVERITIES.index(
+                severity
+            ) < SECURITY_SEVERITIES.index(previous):
+                advisory_severities[vulnerability_id] = severity
         fixed_version = str(vuln.get("FixedVersion") or "").strip()
         if fixed_version:
             fixable_counts[severity] += 1
         else:
             unfixed_count += 1
-        findings.append(_finding_from_vulnerability(vuln, severity))
+        findings.append(_finding_from_vulnerability(result, vuln, severity))
     total = sum(severity_counts.values())
-    db = _db_metadata(payload)
+    advisory_counts = _empty_counts()
+    for severity in advisory_severities.values():
+        advisory_counts[severity] += 1
+    db = _db_metadata(provenance) or _db_metadata(payload)
     return SecurityScanResult(
         state="complete",
         verdict="findings" if total else "none_reported",
@@ -173,14 +197,17 @@ def _result_from_trivy_payload(
             or ""
         ),
         severity_counts=severity_counts,
+        advisory_counts=advisory_counts,
         fixable_counts=fixable_counts,
         unfixed_count=unfixed_count,
         findings=tuple(findings),
     )
 
 
-def _vulnerabilities(payload: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
-    values: list[Mapping[str, Any]] = []
+def _vulnerabilities(
+    payload: Mapping[str, Any],
+) -> tuple[tuple[Mapping[str, Any], Mapping[str, Any]], ...]:
+    values: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
     results = payload.get("Results")
     if not isinstance(results, list):
         return ()
@@ -190,7 +217,7 @@ def _vulnerabilities(payload: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...
         vulns = result.get("Vulnerabilities")
         if not isinstance(vulns, list):
             continue
-        values.extend(item for item in vulns if isinstance(item, Mapping))
+        values.extend((result, item) for item in vulns if isinstance(item, Mapping))
     return tuple(values)
 
 
@@ -211,10 +238,14 @@ def _empty_counts() -> dict[str, int]:
 
 
 def _finding_from_vulnerability(
+    result: Mapping[str, Any],
     vuln: Mapping[str, Any],
     severity: str,
 ) -> SecurityScanFinding:
     return SecurityScanFinding(
+        target=str(result.get("Target") or "").strip(),
+        target_class=str(result.get("Class") or "").strip(),
+        target_type=str(result.get("Type") or "").strip(),
         vulnerability_id=str(vuln.get("VulnerabilityID") or "").strip(),
         package_name=str(vuln.get("PkgName") or "").strip(),
         installed_version=str(vuln.get("InstalledVersion") or "").strip(),
@@ -234,9 +265,9 @@ def _http_url(value: object) -> str:
     return ""
 
 
-def _parse_trivy_version(output: str) -> str:
-    for line in output.splitlines():
-        line = line.strip()
-        if line.lower().startswith("version:"):
-            return line.split(":", 1)[1].strip()
-    return output.splitlines()[0].strip() if output.splitlines() else ""
+def _parse_trivy_provenance(output: str) -> Mapping[str, Any]:
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, Mapping) else {}

@@ -57,6 +57,7 @@ import {
 
 const fixtures: DemoGeneratedFixtures = generatedFixtures;
 const DEMO_NOW = "2026-05-31T00:00:00.000Z";
+const DEMO_DB_UPDATED_AT = "2026-05-28T12:00:00+00:00";
 const TAG_VALUE_PATTERN = /^\w[\w.-]{0,127}$/;
 const EMPTY_SECURITY_COUNTS: SecurityScanSeverityCounts = {
   critical: 0,
@@ -936,6 +937,9 @@ export class DemoApiState {
     const findings = decision.hasFindings
       ? [
           {
+            target: "debian:12",
+            target_class: "os-pkgs",
+            target_type: "debian",
             vulnerability_id: "CVE-2026-0001",
             package_name: "demo-package",
             installed_version: "1.0.0",
@@ -949,18 +953,29 @@ export class DemoApiState {
     const subject = {
       requested_ref: item.image,
       reported_digest: reportedDigest,
+      index_digest: reportedDigest,
       manifest_digest: reportedDigest,
+      immutable_ref: reportedDigest ? `${item.image.split("@")[0]}@${reportedDigest}` : "",
       platform,
     };
     const currentDigest = normalizeSecurityDigest(item.wud_metadata?.local_digest ?? "");
     const currentSubject = {
       requested_ref: item.image,
       reported_digest: currentDigest,
+      index_digest: currentDigest,
       manifest_digest: currentDigest,
+      immutable_ref: currentDigest ? `${item.image.split("@")[0]}@${currentDigest}` : "",
       platform,
     };
+    const scannerVersion = decision.hasFindings ? "demo" : "";
+    const scannerSchema = decision.hasFindings ? "trivy-json" : "";
+    const dbRevision = decision.hasFindings ? "demo" : "";
+    const dbUpdatedAt = decision.hasFindings ? DEMO_DB_UPDATED_AT : "";
     const canCompare = Boolean(currentDigest && reportedDigest && platform);
-    const comparisonReady = decision.state === "complete" && canCompare;
+    const comparisonReady =
+      decision.state === "complete" &&
+      canCompare &&
+      Boolean(scannerVersion && scannerSchema && dbRevision && dbUpdatedAt);
     let comparisonMessage = "";
     if (comparisonReady) {
       comparisonMessage =
@@ -974,12 +989,14 @@ export class DemoApiState {
       state: decision.state,
       verdict: decision.verdict,
       scanner: "trivy",
-      scanner_version: decision.hasFindings ? "demo" : "",
-      scanner_schema: decision.hasFindings ? "trivy-json" : "",
+      scanner_version: scannerVersion,
+      scanner_schema: scannerSchema,
       scanned_at: decision.hasFindings ? DEMO_NOW : "",
-      db_revision: "",
-      db_updated_at: "",
+      db_revision: dbRevision,
+      db_updated_at: dbUpdatedAt,
       severity_counts: severityCounts,
+      advisory_counts: severityCounts,
+      advisory_counts_known: true,
       fixable_counts: fixableCounts,
       unfixed_count: 0,
       findings,
@@ -988,7 +1005,14 @@ export class DemoApiState {
         status: comparisonReady ? "unchanged" : "unknown",
         current_subject: comparisonReady
           ? currentSubject
-          : { requested_ref: "", reported_digest: "", manifest_digest: "", platform: "" },
+          : {
+              requested_ref: "",
+              reported_digest: "",
+              index_digest: "",
+              manifest_digest: "",
+              immutable_ref: "",
+              platform: "",
+            },
         fixed_findings: [],
         remaining_findings: comparisonReady ? findings : [],
         introduced_findings: [],

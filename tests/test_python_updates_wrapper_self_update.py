@@ -261,3 +261,18 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
             "Please restart the wudup container before running updates again.",
             stdout.getvalue(),
         )
+
+    def test_github_release_self_update_fails_when_image_variant_is_unknown(self) -> None:
+        for current_image in (
+            "",
+            f"ghcr.io/magrhino/wudup@sha256:{'a' * 64}",
+            f"sha256:{'b' * 64}",
+        ):
+            with self.subTest(current_image=current_image):
+                status, stdout, stderr = self._run_github_release_self_update(
+                    current_image
+                )
+
+                self.assertEqual(status, 1)
+                self.assertEqual(stdout.getvalue(), "")
+                self.assertIn("cannot preserve the image variant", stderr.getvalue())

@@ -11,6 +11,18 @@ import { pluralize } from "../../views/pending/utils";
 type TagType = "default" | "error" | "info" | "success" | "warning";
 type Severity = SecurityScanFinding["severity"];
 type SeverityFilter = Severity | "all";
+type PackageGroup = {
+  name: string;
+  findings: SecurityScanFinding[];
+  occurrenceCount: number;
+};
+type TargetGroup = {
+  name: string;
+  targetClass: string;
+  targetType: string;
+  packages: PackageGroup[];
+  occurrenceCount: number;
+};
 
 const props = defineProps<{
   scan: SecurityScanInfo;
@@ -27,6 +39,7 @@ const reportText = computed(() => securityScanMaintainerReport(props.scan));
 const reportAvailable = computed(() => Boolean(reportText.value));
 const currentDigest = computed(
   () =>
+    comparison.value.current_subject.immutable_ref ||
     comparison.value.current_subject.manifest_digest ||
     comparison.value.current_subject.reported_digest,
 );
@@ -73,6 +86,12 @@ const findingCount = computed(
     props.scan.findings.length ||
     severityItems.value.reduce((total, item) => total + item.count, 0),
 );
+const advisoryCount = computed(() =>
+  severityOrder.reduce(
+    (total, severity) => total + props.scan.advisory_counts[severity],
+    0,
+  ),
+);
 const severityFilterTotal = computed(() =>
   severityItems.value.reduce((total, item) => total + item.count, 0),
 );
@@ -91,9 +110,59 @@ const filteredFindings = computed(() =>
     ? props.scan.findings
     : props.scan.findings.filter((finding) => finding.severity === selectedSeverity.value),
 );
+function targetGroupKey(finding: SecurityScanFinding): string {
+  return `${finding.target || "Unknown target"}\0${finding.target_class}\0${finding.target_type}`;
+}
+
+function packageGroupKey(finding: SecurityScanFinding): string {
+  return `${targetGroupKey(finding)}\0${finding.package_name || "Unknown package"}`;
+}
+
+const groupOccurrenceCounts = computed(() => {
+  const targets = new Map<string, number>();
+  const packages = new Map<string, number>();
+  for (const finding of filteredFindings.value) {
+    const targetKey = targetGroupKey(finding);
+    const packageKey = packageGroupKey(finding);
+    targets.set(targetKey, (targets.get(targetKey) ?? 0) + 1);
+    packages.set(packageKey, (packages.get(packageKey) ?? 0) + 1);
+  }
+  return { packages, targets };
+});
 const pagedFindings = computed(() => {
   const start = (findingPage.value - 1) * findingPageSize;
   return filteredFindings.value.slice(start, start + findingPageSize);
+});
+const groupedPagedFindings = computed<TargetGroup[]>(() => {
+  const targets = new Map<string, TargetGroup>();
+  for (const finding of pagedFindings.value) {
+    const targetName = finding.target || "Unknown target";
+    const targetKey = targetGroupKey(finding);
+    let target = targets.get(targetKey);
+    if (!target) {
+      target = {
+        name: targetName,
+        targetClass: finding.target_class,
+        targetType: finding.target_type,
+        packages: [],
+        occurrenceCount: groupOccurrenceCounts.value.targets.get(targetKey) ?? 0,
+      };
+      targets.set(targetKey, target);
+    }
+    const packageName = finding.package_name || "Unknown package";
+    let packageGroup = target.packages.find((item) => item.name === packageName);
+    if (!packageGroup) {
+      packageGroup = {
+        name: packageName,
+        findings: [],
+        occurrenceCount:
+          groupOccurrenceCounts.value.packages.get(packageGroupKey(finding)) ?? 0,
+      };
+      target.packages.push(packageGroup);
+    }
+    packageGroup.findings.push(finding);
+  }
+  return [...targets.values()];
 });
 const findingPageCount = computed(() =>
   Math.max(1, Math.ceil(filteredFindings.value.length / findingPageSize)),
@@ -227,15 +296,33 @@ async function copyReport(): Promise<void> {
       </div>
       <dl v-if="comparisonDigestVisible" class="security-comparison-digests">
         <div>
-          <dt>Installed</dt>
+          <dt>Installed / running subject</dt>
           <dd class="wrap-anywhere" :title="currentDigest">
             {{ currentDigest || "Unknown" }}
           </dd>
         </div>
         <div>
-          <dt>Candidate</dt>
+          <dt>Configured reference</dt>
+          <dd class="wrap-anywhere" :title="scan.subject.requested_ref">
+            {{ scan.subject.requested_ref || "Unknown" }}
+          </dd>
+        </div>
+        <div>
+          <dt>Candidate index</dt>
+          <dd class="wrap-anywhere" :title="scan.subject.index_digest">
+            {{ scan.subject.index_digest || scan.subject.reported_digest || "Unknown" }}
+          </dd>
+        </div>
+        <div>
+          <dt>Platform manifest</dt>
           <dd class="wrap-anywhere" :title="candidateDigest">
             {{ candidateDigest || "Unknown" }}
+          </dd>
+        </div>
+        <div>
+          <dt>Exact Trivy subject</dt>
+          <dd class="wrap-anywhere" :title="scan.subject.immutable_ref">
+            {{ scan.subject.immutable_ref || "Unknown" }}
           </dd>
         </div>
         <div>
@@ -257,15 +344,34 @@ async function copyReport(): Promise<void> {
       <span class="security-count-note">
         {{ pluralize(fixableTotal, "fixable finding") }}
       </span>
+      <span class="security-count-note">
+        {{ pluralize(findingCount, "raw occurrence") }} ·
+        <template v-if="scan.advisory_counts_known">
+          {{ pluralize(advisoryCount, "unique advisory", "unique advisories") }}
+        </template>
+        <template v-else>Unique advisories unavailable</template>
+      </span>
       <span v-if="scan.unfixed_count" class="security-count-note">
         {{ pluralize(scan.unfixed_count, "unfixed") }}
       </span>
     </div>
 
-    <p v-if="scan.scanned_at" class="security-review-meta wrap-anywhere">
-      {{ scan.scanner || "Scanner" }} {{ scan.scanner_version }}
-      scanned {{ scan.scanned_at }}
-      <template v-if="scan.db_updated_at">with DB {{ scan.db_updated_at }}</template>
+    <p
+      v-if="
+        scan.scanned_at ||
+        scan.scanner ||
+        scan.scanner_version ||
+        scan.scanner_schema ||
+        scan.db_revision ||
+        scan.db_updated_at
+      "
+      class="security-review-meta wrap-anywhere"
+    >
+      Scanner {{ scan.scanner || "Unknown" }}; version
+      {{ scan.scanner_version || "Unknown" }}; schema
+      {{ scan.scanner_schema || "Unknown" }}; scanned
+      {{ scan.scanned_at || "Unknown" }}. DB revision {{ scan.db_revision || "Unknown" }};
+      updated {{ scan.db_updated_at || "Unknown" }}.
     </p>
 
     <p v-if="scan.error_message" class="security-review-message wrap-anywhere">
@@ -301,44 +407,66 @@ async function copyReport(): Promise<void> {
     </div>
 
     <div v-if="scan.findings.length" class="security-finding-list">
-      <article
-        v-for="finding in pagedFindings"
-        :key="`${finding.vulnerability_id}-${finding.package_name}`"
-        class="security-finding-row"
+      <section
+        v-for="target in groupedPagedFindings"
+        :key="`${target.name}-${target.targetClass}-${target.targetType}`"
+        class="security-target-group"
       >
-        <div class="security-finding-heading">
-          <strong class="wrap-anywhere">{{ findingTitle(finding) }}</strong>
-          <n-tag size="small" :type="severityType(finding.severity)">
-            {{ titleCase(finding.severity) }}
-          </n-tag>
-          <a
-            v-if="finding.primary_url"
-            class="text-link"
-            :href="finding.primary_url"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Advisory
-          </a>
+        <div class="security-target-heading">
+          <strong class="wrap-anywhere">{{ target.name }}</strong>
+          <n-tag v-if="target.targetType" size="small">{{ target.targetType }}</n-tag>
+          <n-tag v-if="target.targetClass" size="small">{{ target.targetClass }}</n-tag>
+          <span class="security-review-meta">
+            {{ pluralize(target.occurrenceCount, "occurrence") }}
+          </span>
         </div>
-        <p v-if="finding.title" class="security-finding-title wrap-anywhere">
-          {{ finding.title }}
-        </p>
-        <dl class="security-finding-meta">
-          <div>
-            <dt>Package</dt>
-            <dd class="wrap-anywhere">{{ finding.package_name || "Unknown" }}</dd>
+        <div
+          v-for="packageGroup in target.packages"
+          :key="packageGroup.name"
+          class="security-package-group"
+        >
+          <div class="security-package-heading">
+            <strong class="wrap-anywhere">{{ packageGroup.name }}</strong>
+            <span class="security-review-meta">
+              {{ pluralize(packageGroup.occurrenceCount, "advisory occurrence") }}
+            </span>
           </div>
-          <div>
-            <dt>Installed</dt>
-            <dd class="wrap-anywhere">{{ finding.installed_version || "Unknown" }}</dd>
-          </div>
-          <div>
-            <dt>Fixed</dt>
-            <dd class="wrap-anywhere">{{ finding.fixed_version || "Not published" }}</dd>
-          </div>
-        </dl>
-      </article>
+          <article
+            v-for="(finding, findingIndex) in packageGroup.findings"
+            :key="`${finding.vulnerability_id}-${finding.installed_version}-${findingIndex}`"
+            class="security-finding-row"
+          >
+            <div class="security-finding-heading">
+              <strong class="wrap-anywhere">{{ findingTitle(finding) }}</strong>
+              <n-tag size="small" :type="severityType(finding.severity)">
+                {{ titleCase(finding.severity) }}
+              </n-tag>
+              <a
+                v-if="finding.primary_url"
+                class="text-link"
+                :href="finding.primary_url"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Advisory
+              </a>
+            </div>
+            <p v-if="finding.title" class="security-finding-title wrap-anywhere">
+              {{ finding.title }}
+            </p>
+            <dl class="security-finding-meta">
+              <div>
+                <dt>Installed</dt>
+                <dd class="wrap-anywhere">{{ finding.installed_version || "Unknown" }}</dd>
+              </div>
+              <div>
+                <dt>Fixed</dt>
+                <dd class="wrap-anywhere">{{ finding.fixed_version || "Not published" }}</dd>
+              </div>
+            </dl>
+          </article>
+        </div>
+      </section>
     </div>
 
     <n-pagination
@@ -366,7 +494,9 @@ async function copyReport(): Promise<void> {
 .security-comparison-counts,
 .security-counts,
 .security-finding-controls,
-.security-finding-heading {
+.security-finding-heading,
+.security-target-heading,
+.security-package-heading {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -392,7 +522,7 @@ async function copyReport(): Promise<void> {
 
 .security-comparison-digests {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 6px 12px;
   margin: 0;
   color: var(--color-muted-text);
@@ -445,13 +575,35 @@ async function copyReport(): Promise<void> {
   gap: 8px;
 }
 
-.security-finding-row {
+.security-target-group {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   padding: 8px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 7px;
   background: var(--color-surface);
+}
+
+.security-package-group {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.security-target-heading,
+.security-package-heading {
+  justify-content: flex-start;
+}
+
+.security-finding-row {
+  display: grid;
+  gap: 6px;
+  padding: 6px 0 0;
+}
+
+.security-finding-row + .security-finding-row {
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .security-finding-title {
@@ -478,5 +630,11 @@ async function copyReport(): Promise<void> {
 .security-finding-meta dd {
   margin: 0;
   color: var(--color-ink);
+}
+
+@media (--wud-compact) {
+  .security-comparison-digests {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

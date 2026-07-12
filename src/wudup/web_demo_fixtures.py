@@ -1724,9 +1724,13 @@ def _seed_demo_security_scan_cache(conn) -> None:
         db_revision="demo",
         db_updated_at=DEMO_CREATED_AT,
         severity_counts={"high": 1},
+        advisory_counts={"high": 1},
         fixable_counts={"high": 1},
         findings=(
             SecurityScanFinding(
+                target="debian:12",
+                target_class="os-pkgs",
+                target_type="debian",
                 vulnerability_id="CVE-2026-0001",
                 package_name="demo-package",
                 installed_version="1.0.0",

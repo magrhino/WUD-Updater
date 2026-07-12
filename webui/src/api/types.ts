@@ -295,6 +295,9 @@ export interface SecurityScanSeverityCounts {
 }
 
 export interface SecurityScanFinding {
+  target: string;
+  target_class: string;
+  target_type: string;
   vulnerability_id: string;
   package_name: string;
   installed_version: string;
@@ -307,7 +310,9 @@ export interface SecurityScanFinding {
 export interface SecurityScanSubject {
   requested_ref: string;
   reported_digest: string;
+  index_digest: string;
   manifest_digest: string;
+  immutable_ref: string;
   platform: string;
 }
 
@@ -338,6 +343,8 @@ export interface SecurityScanInfo {
   db_revision: string;
   db_updated_at: string;
   severity_counts: SecurityScanSeverityCounts;
+  advisory_counts: SecurityScanSeverityCounts;
+  advisory_counts_known: boolean;
   fixable_counts: SecurityScanSeverityCounts;
   unfixed_count: number;
   findings: SecurityScanFinding[];
@@ -1403,12 +1410,15 @@ export interface SelfUpdateResponse {
 }
 
 export interface SelfUpdateApplyResponse {
-  status: "image_pulled";
+  status: "prepared_only" | "running_image_verified";
   audit_run_id: number;
   current_tag: string;
   latest_tag: string;
   target_image: string;
   container: string;
+  running_image_id: string;
+  prepared_image_id: string;
+  external_recreate_required: boolean;
 }
 
 export interface SelfUpdatePlanResponse {

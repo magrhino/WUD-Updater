@@ -247,6 +247,9 @@ function findingLine(finding: SecurityScanFinding): string {
   const fixed = finding.fixed_version || "not published";
   const details = [
     `${advisory} in ${pkg}`,
+    `target ${finding.target || "unknown"}`,
+    `class ${finding.target_class || "unknown"}`,
+    `type ${finding.target_type || "unknown"}`,
     `${titleCase(finding.severity)} severity`,
     `installed ${installed}`,
     `fixed ${fixed}`,
@@ -274,7 +277,10 @@ export function securityScanMaintainerReport(scan: SecurityScanInfo): string {
   const candidateDigest = scan.subject.manifest_digest || scan.subject.reported_digest;
   const scannerParts = [scan.scanner, scan.scanner_version].filter(Boolean);
   const scanner = scannerParts.length ? scannerParts.join(" ") : "unknown scanner";
-  const database = scan.db_revision || scan.db_updated_at || "unknown database";
+  const database = [
+    `revision ${scan.db_revision || "unknown"}`,
+    `updated ${scan.db_updated_at || "unknown"}`,
+  ].join("; ");
   const subject = scan.subject.requested_ref || `line ${scan.line_no}`;
   const lines = [
     `Security scan update report for ${subject}`,
@@ -282,8 +288,10 @@ export function securityScanMaintainerReport(scan: SecurityScanInfo): string {
     `Comparison: ${scan.comparison.message || scan.comparison.status}`,
     `Scanner: ${scanner}; schema ${scan.scanner_schema || "unknown"}; database ${database}`,
     `Platform: ${scan.subject.platform || "unknown"}`,
-    `Installed digest: ${digestForReport(currentDigest)}`,
-    `Candidate digest: ${digestForReport(candidateDigest)}`,
+    `Installed subject: ${digestForReport(scan.comparison.current_subject.immutable_ref || currentDigest)}`,
+    `Candidate index digest: ${digestForReport(scan.subject.index_digest || scan.subject.reported_digest)}`,
+    `Candidate platform digest: ${digestForReport(candidateDigest)}`,
+    `Exact Trivy subject: ${digestForReport(scan.subject.immutable_ref)}`,
   ];
 
   if (fixed.length) {

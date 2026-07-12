@@ -453,11 +453,16 @@ def _result_info(
         db_revision=result.db_revision,
         db_updated_at=result.db_updated_at,
         severity_counts=_counts_model(result.severity_counts),
+        advisory_counts=_counts_model(result.advisory_counts),
+        advisory_counts_known=result.state == "complete" and bool(result.advisory_counts),
         fixable_counts=_counts_model(result.fixable_counts),
         unfixed_count=result.unfixed_count,
         subject=_subject_model(subject),
         findings=[
             SecurityScanFinding(
+                target=finding.target,
+                target_class=finding.target_class,
+                target_type=finding.target_type,
                 vulnerability_id=finding.vulnerability_id,
                 package_name=finding.package_name,
                 installed_version=finding.installed_version,
@@ -478,7 +483,9 @@ def _subject_model(subject: ResolvedImageSubject) -> SecurityScanSubject:
     return SecurityScanSubject(
         requested_ref=subject.requested_ref,
         reported_digest=subject.reported_digest,
+        index_digest=subject.index_digest,
         manifest_digest=subject.manifest_digest,
+        immutable_ref=subject.immutable_ref,
         platform=subject.platform,
     )
 
@@ -618,17 +625,18 @@ def _comparison(
     ):
         return _unknown_comparison("Refresh scans to collect vulnerability rows.")
 
-    current_by_key = {_finding_key(finding): finding for finding in current.findings}
-    candidate_by_key = {_finding_key(finding): finding for finding in candidate.findings}
-    current_keys = set(current_by_key)
-    candidate_keys = set(candidate_by_key)
-    fixed = [current_by_key[key] for key in sorted(current_keys - candidate_keys)]
-    remaining = [
-        candidate_by_key[key] for key in sorted(current_keys & candidate_keys)
-    ]
-    introduced = [
-        candidate_by_key[key] for key in sorted(candidate_keys - current_keys)
-    ]
+    current_by_key = _findings_by_key(current.findings)
+    candidate_by_key = _findings_by_key(candidate.findings)
+    fixed: list[SecurityScanFinding] = []
+    remaining: list[SecurityScanFinding] = []
+    introduced: list[SecurityScanFinding] = []
+    for key in sorted(set(current_by_key) | set(candidate_by_key)):
+        current_rows = current_by_key.get(key, [])
+        candidate_rows = candidate_by_key.get(key, [])
+        shared_count = min(len(current_rows), len(candidate_rows))
+        remaining.extend(candidate_rows[:shared_count])
+        fixed.extend(current_rows[shared_count:])
+        introduced.extend(candidate_rows[shared_count:])
     status = _comparison_status(fixed, remaining, introduced)
     return SecurityScanComparison(
         status=status,  # type: ignore[arg-type]
@@ -650,8 +658,16 @@ def _comparison_mismatch_message(
 ) -> str:
     if current.scanner != candidate.scanner:
         return "Installed and candidate scans used different scanners."
+    if not current.scanner_version or not candidate.scanner_version:
+        return "Scanner version provenance is unavailable."
+    if current.scanner_version != candidate.scanner_version:
+        return "Installed and candidate scans used different scanner versions."
+    if not current.scanner_schema or not candidate.scanner_schema:
+        return "Scanner schema provenance is unavailable."
     if current.scanner_schema != candidate.scanner_schema:
         return "Installed and candidate scans used different scanner schemas."
+    if not _database_identity(current) or not _database_identity(candidate):
+        return "Vulnerability database provenance is unavailable."
     if _database_identity(current) != _database_identity(candidate):
         return "Installed and candidate scans used different vulnerability databases."
     if current.subject.platform != candidate.subject.platform:
@@ -659,8 +675,10 @@ def _comparison_mismatch_message(
     return ""
 
 
-def _database_identity(info: SecurityScanInfo) -> str:
-    return info.db_revision or info.db_updated_at
+def _database_identity(info: SecurityScanInfo) -> tuple[str, str] | None:
+    if not info.db_revision or not info.db_updated_at:
+        return None
+    return (info.db_revision, info.db_updated_at)
 
 
 def _comparison_status(
@@ -697,8 +715,23 @@ def _comparison_message(
     return "No reported findings changed between installed and candidate images."
 
 
-def _finding_key(finding: SecurityScanFinding) -> tuple[str, str]:
-    return finding.vulnerability_id, finding.package_name
+def _finding_key(finding: SecurityScanFinding) -> tuple[str, str, str, str, str]:
+    return (
+        finding.target,
+        finding.target_class,
+        finding.target_type,
+        finding.package_name,
+        finding.vulnerability_id,
+    )
+
+
+def _findings_by_key(
+    findings: Sequence[SecurityScanFinding],
+) -> dict[tuple[str, str, str, str, str], list[SecurityScanFinding]]:
+    grouped: dict[tuple[str, str, str, str, str], list[SecurityScanFinding]] = {}
+    for finding in findings:
+        grouped.setdefault(_finding_key(finding), []).append(finding)
+    return grouped
 
 
 def _with_comparison(
@@ -802,6 +835,9 @@ def _sanitize_scan_finding(
 ) -> SecurityScanFinding:
     return finding.model_copy(
         update={
+            "target": _sanitize_text(settings, finding.target),
+            "target_class": _sanitize_text(settings, finding.target_class),
+            "target_type": _sanitize_text(settings, finding.target_type),
             "vulnerability_id": _sanitize_text(settings, finding.vulnerability_id),
             "package_name": _sanitize_text(settings, finding.package_name),
             "installed_version": _sanitize_text(settings, finding.installed_version),

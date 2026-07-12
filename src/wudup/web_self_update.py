@@ -45,6 +45,7 @@ from .self_update import (
     DEFAULT_SELF_UPDATE_IMAGE,
     current_container_image,
     release_self_update_target,
+    self_update_image_variant_known,
 )
 from .compose_rewrite import (
     _backup_compose,
@@ -202,6 +203,12 @@ def api_apply_self_update(
                 status_code=500,
                 detail="could not inspect restart container",
             )
+        running_image_id = docker.try_container_image_id(status.restart_container)
+        if not running_image_id:
+            raise HTTPException(
+                status_code=500,
+                detail="could not inspect running container image identity",
+            )
 
         try:
             with open_db(settings.config.db_path) as conn:
@@ -246,21 +253,51 @@ def api_apply_self_update(
                     exc,
                 ),
             ) from exc
+        prepared_image_id = docker.image_id(status.target_image)
+        verified_running_image_id = docker.try_container_image_id(
+            status.restart_container
+        )
+        if not prepared_image_id or not verified_running_image_id:
+            _safe_update_self_update_audit(
+                settings,
+                audit_run_id,
+                status="failure",
+                error="could not verify self-update image identities after pull",
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="could not verify self-update image identities after pull",
+            )
+        running_image_verified = verified_running_image_id == prepared_image_id
+        audit_status: SelfUpdateAuditStatus = (
+            "running_image_verified" if running_image_verified else "image_prepared"
+        )
         _safe_update_self_update_audit(
             settings,
             audit_run_id,
-            status="image_pulled",
+            status=audit_status,
+            metadata_extra={
+                "running_image_id_before": running_image_id,
+                "running_image_id_after": verified_running_image_id,
+                "prepared_image_id": prepared_image_id,
+                "external_recreate_required": not running_image_verified,
+            },
         )
     finally:
         web_jobs._release_self_update(request.app.state)
 
     return SelfUpdateApplyResponse(
-        status="image_pulled",
+        status=(
+            "running_image_verified" if running_image_verified else "prepared_only"
+        ),
         audit_run_id=audit_run_id,
         current_tag=status.current_tag,
         latest_tag=status.latest_tag,
         target_image=status.target_image,
         container=status.restart_container,
+        running_image_id=verified_running_image_id,
+        prepared_image_id=prepared_image_id,
+        external_recreate_required=not running_image_verified,
     )
 
 
@@ -826,6 +863,22 @@ def _self_update_response(settings: WebSettings) -> SelfUpdateResponse:
             disabled_reason="release checks are disabled",
         )
 
+    if not self_update_image_variant_known(current_image):
+        return SelfUpdateResponse(
+            status="unavailable",
+            strategy="pull_image",
+            current_tag=local_tag,
+            latest_tag="",
+            current_image="",
+            target_image="",
+            restart_container=container,
+            disabled_reason=(
+                "current container image could not be inspected; self-update "
+                "cannot preserve the image variant"
+            ),
+            warnings=["current WUDup container image identity is unavailable"],
+        )
+
     latest_tag = fetch_latest_release_tag()
     if latest_tag is None:
         return SelfUpdateResponse(
@@ -884,7 +937,7 @@ def _self_update_response(settings: WebSettings) -> SelfUpdateResponse:
         release_notes_cap=SELF_UPDATE_RELEASE_NOTES_CAP,
         can_update=disabled_reason == "",
         disabled_reason=disabled_reason,
-        external_recreate_required=strategy == "prepare_tag_update",
+        external_recreate_required=True,
         warnings=warnings,
     )
 
@@ -937,7 +990,7 @@ def _demo_self_update_response(
         release_notes_cap=SELF_UPDATE_RELEASE_NOTES_CAP,
         can_update=disabled_reason == "",
         disabled_reason=disabled_reason,
-        external_recreate_required=False,
+        external_recreate_required=True,
     )
 
 

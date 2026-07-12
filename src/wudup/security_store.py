@@ -11,7 +11,7 @@ from dataclasses import asdict
 from .digest_verifier import ResolvedImageSubject
 from .platforms import platform_value
 from .security_scanner import SecurityScanResult
-from .security_severity import normalize_security_severity
+from .security_severity import SECURITY_SEVERITIES, normalize_security_severity
 from .security_subjects import PendingSecurityRequest, subject_id
 from .web_models import (
     SecurityScanFinding,
@@ -134,6 +134,7 @@ def upsert_scan_result(
         result.scanner_version,
         result.scanner_schema,
         result.db_revision,
+        result.db_updated_at,
     )
     with conn:
         conn.execute(
@@ -221,6 +222,8 @@ def row_to_scan_info(
     row: sqlite3.Row,
     request: PendingSecurityRequest,
 ) -> SecurityScanInfo:
+    findings = _findings(str(row["findings_json"]))
+    severity_counts = _counts(str(row["severity_counts_json"]))
     return SecurityScanInfo(
         line_no=request.line_no,
         state=str(row["state"]),  # type: ignore[arg-type]
@@ -231,10 +234,13 @@ def row_to_scan_info(
         scanned_at=str(row["updated_at"]),
         db_revision=str(row["db_revision"]),
         db_updated_at=str(row["db_updated_at"]),
-        severity_counts=_counts(str(row["severity_counts_json"])),
+        severity_counts=severity_counts,
+        advisory_counts=_advisory_counts(findings),
+        advisory_counts_known=bool(findings)
+        or not any(severity_counts.model_dump().values()),
         fixable_counts=_counts(str(row["fixable_counts_json"])),
         unfixed_count=_safe_int(row["unfixed_count"]),
-        findings=_findings(str(row["findings_json"])),
+        findings=findings,
         subject=_subject(row),
         warnings=_json_string_list(str(row["warnings_json"])),
         error_code=str(row["error_code"]),
@@ -278,6 +284,9 @@ def _findings(value: str) -> list[SecurityScanFinding]:
             continue
         findings.append(
             SecurityScanFinding(
+                target=str(item.get("target") or ""),
+                target_class=str(item.get("target_class") or ""),
+                target_type=str(item.get("target_type") or ""),
                 vulnerability_id=str(item.get("vulnerability_id") or ""),
                 package_name=str(item.get("package_name") or ""),
                 installed_version=str(item.get("installed_version") or ""),
@@ -290,11 +299,39 @@ def _findings(value: str) -> list[SecurityScanFinding]:
     return findings
 
 
+def _advisory_counts(
+    findings: list[SecurityScanFinding],
+) -> SecurityScanSeverityCounts:
+    severities: dict[str, str] = {}
+    for finding in findings:
+        if not finding.vulnerability_id:
+            continue
+        previous = severities.get(finding.vulnerability_id)
+        if previous is None or SECURITY_SEVERITIES.index(
+            finding.severity
+        ) < SECURITY_SEVERITIES.index(previous):
+            severities[finding.vulnerability_id] = finding.severity
+    counts: dict[str, int] = {}
+    for severity in severities.values():
+        counts[severity] = counts.get(severity, 0) + 1
+    return SecurityScanSeverityCounts(**counts)
+
+
 def _subject(row: sqlite3.Row) -> SecurityScanSubject:
+    registry = str(row["canonical_registry"])
+    repository = str(row["canonical_repository"])
+    manifest_digest = str(row["manifest_digest"])
+    immutable_ref = (
+        f"{registry}/{repository}@{manifest_digest}"
+        if registry and repository and manifest_digest
+        else ""
+    )
     return SecurityScanSubject(
         requested_ref=str(row["requested_ref"]),
         reported_digest=str(row["reported_digest"]),
-        manifest_digest=str(row["manifest_digest"]),
+        index_digest=str(row["index_digest"]),
+        manifest_digest=manifest_digest,
+        immutable_ref=immutable_ref,
         platform=str(row["platform"]),
     )
 

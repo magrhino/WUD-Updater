@@ -21,6 +21,7 @@ from .line_specs import LineSpecError, parse_line_spec
 from .naming import CONFIG_DIR_NAME, LEGACY_CONFIG_DIR_NAME, env_value
 from .self_update import (
     ReleaseSelfUpdate,
+    SelfUpdateInspectionError,
     github_release_self_update,
     self_update_display_numbers,
     self_update_enabled,
@@ -304,7 +305,10 @@ class UpdatesRunner:
                 return None
             return SelfUpdatePreflightResult(status=status)
 
-        release_update = github_release_self_update(self.environ)
+        try:
+            release_update = github_release_self_update(self.environ)
+        except SelfUpdateInspectionError as exc:
+            raise UpdatesError(str(exc)) from exc
         if release_update is None:
             return None
         status = self._run_github_release_self_update(release_update)
