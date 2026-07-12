@@ -861,8 +861,7 @@ def _notification_versions(
 ) -> tuple[str, str]:
     current_version = str(getattr(metadata, "local_tag", "") or "")
     target_version = str(getattr(metadata, "remote_tag", "") or "")
-    digest_update = str(getattr(metadata, "update_kind", "") or "") == "digest"
-    digest_update = digest_update or is_digest_target_line(target.target)
+    digest_update = _is_digest_update(target, metadata)
     if not current_version:
         current_version = image_tag(target.target.first) or target.target.tag_token
     if not target_version:
@@ -872,13 +871,7 @@ def _notification_versions(
             else target.target.desired_tag or note.release_tag
         )
     if (
-        (
-            target_version.lower() == "latest"
-            or (
-                current_version.lower() == "latest"
-                and target_version == "new digest"
-            )
-        )
+        _should_annotate_latest_release(current_version, target_version)
         and note.release_tag
         and note.release_tag.lower() != "latest"
     ):
@@ -888,6 +881,25 @@ def _notification_versions(
     if not target_version:
         target_version = "updated image"
     return current_version, target_version
+
+
+def _is_digest_update(
+    target: _NotificationTarget,
+    metadata: web_wud_api.WudApiContainer | None,
+) -> bool:
+    return (
+        str(getattr(metadata, "update_kind", "") or "") == "digest"
+        or is_digest_target_line(target.target)
+    )
+
+
+def _should_annotate_latest_release(
+    current_version: str,
+    target_version: str,
+) -> bool:
+    return target_version.lower() == "latest" or (
+        current_version.lower() == "latest" and target_version == "new digest"
+    )
 
 
 def _notification_digest_reason(
@@ -901,7 +913,6 @@ def _notification_digest_reason(
     semver_diff = str(getattr(metadata, "semver_diff", "") or "").lower()
     if not semver_diff:
         semver_diff = _semver_diff(current_version, target_version)
-    update_kind = str(getattr(metadata, "update_kind", "") or "")
     classification = getattr(note, "classification", None)
     change_type = str(getattr(classification, "change_type", "") or "")
     provider_prefix = "LSIO image update: " if note.provider == "lsio" else ""
@@ -924,21 +935,14 @@ def _notification_digest_reason(
         code, label = status_reasons[note.status]
         return "needs_review", code, f"{provider_prefix}{label}"
     lsio_reason = _lsio_digest_reason(note.provider, change_type)
-    if (
-        current_version.lower() == "latest"
-        or target_version.lower() == "latest"
-        or target_version.lower().startswith("latest (")
-    ):
-        if note.provider == "lsio":
-            if lsio_reason is not None:
-                code, label = lsio_reason
-                return "needs_review", code, f"{label} via mutable latest"
-            return (
-                "needs_review",
-                "lsio_latest",
-                "LSIO image update via mutable latest",
-            )
-        return "needs_review", "mutable_latest", "mutable latest tag"
+    mutable_latest_reason = _mutable_latest_digest_reason(
+        current_version,
+        target_version,
+        note.provider,
+        lsio_reason,
+    )
+    if mutable_latest_reason is not None:
+        return mutable_latest_reason
     if not _has_release_or_changelog_link(note.links):
         return (
             "needs_review",
@@ -953,9 +957,34 @@ def _notification_digest_reason(
         return "worth_noting", "minor_bump", "minor update with release notes"
     if semver_diff == "patch":
         return "routine", "patch_bump", "patch update with release notes"
-    if update_kind == "digest" or is_digest_target_line(target.target):
+    if _is_digest_update(target, metadata):
         return "routine", "routine_digest", "image digest update"
     return "routine", "routine_update", "update metadata available"
+
+
+def _mutable_latest_digest_reason(
+    current_version: str,
+    target_version: str,
+    provider: str,
+    lsio_reason: tuple[str, str] | None,
+) -> tuple[str, str, str] | None:
+    normalized_target = target_version.lower()
+    if (
+        current_version.lower() != "latest"
+        and normalized_target != "latest"
+        and not normalized_target.startswith("latest (")
+    ):
+        return None
+    if provider != "lsio":
+        return "needs_review", "mutable_latest", "mutable latest tag"
+    if lsio_reason is None:
+        return (
+            "needs_review",
+            "lsio_latest",
+            "LSIO image update via mutable latest",
+        )
+    code, label = lsio_reason
+    return "needs_review", code, f"{label} via mutable latest"
 
 
 def _lsio_digest_reason(provider: str, change_type: str) -> tuple[str, str] | None:
