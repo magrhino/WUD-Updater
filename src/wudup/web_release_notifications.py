@@ -1395,19 +1395,60 @@ def _post_discord_payload(webhook_url: str, payload: Mapping[str, object]) -> No
 
 
 def _test_discord_payload() -> dict[str, object]:
-    return {
-        "username": DISCORD_WEBHOOK_USERNAME,
-        "allowed_mentions": {"parse": []},
-        "embeds": [
-            {
-                "title": "WUDup test notification",
-                "description": (
-                    "Discord webhook delivery is configured correctly for WUDup."
+    items = [
+        ReleaseNotificationItem(
+            line_no=1,
+            image="ghcr.io/magrhino/wudup:latest",
+            service_key="system/wudup",
+            title="WUDup test notification",
+            description="Representative mutable-tag digest row.",
+            status="ready",
+            image_repo="magrhino/wudup",
+            upstream_repo="magrhino/wudup",
+            current_version="latest",
+            target_version="latest (release v1.2.3)",
+            category="needs_review",
+            reason_code="mutable_latest",
+            reason_label="mutable latest tag",
+            links=[
+                ReleaseNoteLink(
+                    label="GitHub release",
+                    url="https://github.com/magrhino/wudup/releases",
+                    kind="github_release",
+                )
+            ],
+        ),
+        ReleaseNotificationItem(
+            line_no=2,
+            image="lscr.io/linuxserver/jellyfin:latest",
+            service_key="media/jellyfin",
+            title="Jellyfin test notification",
+            description="Representative LSIO digest row.",
+            status="ready",
+            image_repo="linuxserver/docker-jellyfin",
+            upstream_repo="jellyfin/jellyfin",
+            current_version="latest",
+            target_version="latest (release v10.11.0)",
+            category="needs_review",
+            reason_code="lsio_latest",
+            reason_label="LSIO image update via mutable latest",
+            links=[
+                ReleaseNoteLink(
+                    label="LSIO release",
+                    url="https://github.com/linuxserver/docker-jellyfin/releases",
+                    kind="lsio_release",
                 ),
-                "color": DISCORD_COLOR,
-            }
-        ],
-    }
+                ReleaseNoteLink(
+                    label="Upstream release",
+                    url="https://github.com/jellyfin/jellyfin/releases",
+                    kind="github_release",
+                ),
+            ],
+        ),
+    ]
+    payload = _digest_payload_batches(items)[0]["payload"]
+    assert isinstance(payload, dict)
+    return payload
 
 
 def _safe_release_notification_exception_detail(

@@ -477,6 +477,11 @@ def test_digest_reason_priority_uses_deterministic_metadata() -> None:
         "lsio_upstream",
         "LSIO/upstream release via mutable latest",
     )
+    assert reason(
+        provider="lsio",
+        current_version="latest",
+        target_version="latest (release v2.0.0)",
+    )[:2] == ("needs_review", "lsio_latest")
     assert reason(links=[])[:2] == ("needs_review", "release_link_missing")
     assert reason(semver_diff="minor")[:2] == ("worth_noting", "minor_bump")
     assert reason(
@@ -813,7 +818,12 @@ def test_release_notification_test_webhook_posts_payload_and_audits(
     assert body["audit_run_id"]
     assert len(posted) == 1
     assert posted[0][0] == "https://discord.test/webhook-secret"
-    assert posted[0][1]["embeds"][0]["title"] == "WUDup test notification"
+    payload = posted[0][1]
+    assert payload["flags"] == notifications_module.DISCORD_SUPPRESS_EMBEDS_FLAG
+    assert "WUDup batch — 2 updates found" in payload["content"]
+    assert "latest (release v1.2.3)" in payload["content"]
+    assert "LSIO image update via mutable latest" in payload["content"]
+    assert "https://github.com/jellyfin/jellyfin/releases" in payload["content"]
     db_path = tmp_path / "state" / "wud.sqlite"
     with open_db(db_path) as conn:
         run = conn.execute(
