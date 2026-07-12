@@ -196,12 +196,14 @@ def refresh_release_notes(
     active_client = client or GitHubClient(token=environ.get("GITHUB_TOKEN", ""))
     timestamp = now or utc_timestamp()
     infos: list[ReleaseNoteInfo] = []
-    for context in release_note_contexts(
+    contexts = release_note_contexts(
         targets,
         environ,
         source_resolver=source_resolver,
         target_tag_resolver=target_tag_resolver,
-    ):
+    )
+    _prune_digest_cache(conn, contexts)
+    for context in contexts:
         cached = _cached_info(conn, context)
         legacy_classification_cache = (
             cached.status != "missing"
@@ -520,6 +522,40 @@ def _lsio_release_tag_from_links(raw: str) -> str:
     return ""
 
 
+def _prune_digest_cache(
+    conn: sqlite3.Connection,
+    contexts: Iterable[ReleaseNoteContext],
+) -> None:
+    active_digests: dict[tuple[str, str, str, str, str], set[str]] = {}
+    for context in contexts:
+        if context.target_digest:
+            identity = (
+                context.provider,
+                context.image_repo,
+                context.upstream_repo,
+                context.current_tag,
+                context.target_tag,
+            )
+            active_digests.setdefault(identity, set()).add(context.target_digest)
+
+    with conn:
+        for identity, digests in active_digests.items():
+            placeholders = ", ".join("?" for _digest in digests)
+            conn.execute(
+                f"""
+                DELETE FROM release_note_cache
+                WHERE provider = ?
+                  AND image_repo = ?
+                  AND upstream_repo = ?
+                  AND current_tag = ?
+                  AND target_tag = ?
+                  AND target_digest != ''
+                  AND target_digest NOT IN ({placeholders})
+                """,
+                (*identity, *sorted(digests)),
+            )
+
+
 def _upsert_cache(
     conn: sqlite3.Connection,
     context: ReleaseNoteContext,
@@ -536,26 +572,6 @@ def _upsert_cache(
         sort_keys=True,
     )
     with conn:
-        if context.target_digest:
-            conn.execute(
-                """
-                DELETE FROM release_note_cache
-                WHERE cache_key != ?
-                  AND provider = ?
-                  AND image_repo = ?
-                  AND upstream_repo = ?
-                  AND current_tag = ?
-                  AND target_tag = ?
-                """,
-                (
-                    context.cache_key,
-                    context.provider,
-                    context.image_repo,
-                    context.upstream_repo,
-                    context.current_tag,
-                    context.target_tag,
-                ),
-            )
         conn.execute(
             """
             INSERT INTO release_note_cache (
@@ -576,9 +592,10 @@ def _upsert_cache(
                 body,
                 created_at,
                 updated_at,
-                metadata_json
+                metadata_json,
+                target_digest
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(cache_key) DO UPDATE SET
                 provider = excluded.provider,
                 image_repo = excluded.image_repo,
@@ -595,7 +612,8 @@ def _upsert_cache(
                 error = excluded.error,
                 body = excluded.body,
                 updated_at = excluded.updated_at,
-                metadata_json = excluded.metadata_json
+                metadata_json = excluded.metadata_json,
+                target_digest = excluded.target_digest
             """,
             (
                 context.cache_key,
@@ -616,6 +634,7 @@ def _upsert_cache(
                 timestamp,
                 timestamp,
                 metadata_json,
+                context.target_digest,
             ),
         )
 

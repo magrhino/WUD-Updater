@@ -340,6 +340,57 @@ class ReleaseNotesTests(unittest.TestCase):
             ],
         )
 
+    def test_concurrent_latest_digests_do_not_evict_each_other(self) -> None:
+        calls: list[str] = []
+
+        def fetch_json(url: str) -> object:
+            calls.append(url)
+            return {
+                "tag_name": "v1.1.0",
+                "name": "v1.1.0",
+                "html_url": (
+                    "https://github.com/advplyr/audiobookshelf/releases/tag/v1.1.0"
+                ),
+                "body": "Routine update",
+                "published_at": "2026-07-12T12:00:00Z",
+            }
+
+        parsed = parse_wud_text(
+            f"advplyr/audiobookshelf:latest sha256={'a' * 64}\n"
+            f"advplyr/audiobookshelf:latest sha256={'b' * 64}\n"
+        )
+        refresh_kwargs = {
+            "client": GitHubClient(fetch_json=fetch_json),
+            "now": "2026-07-12T12:00:00+00:00",
+            "source_resolver": lambda _target: (
+                "https://github.com/advplyr/audiobookshelf"
+            ),
+            "target_tag_resolver": lambda _target: "latest",
+        }
+
+        with open_db(":memory:") as conn:
+            init_db(conn)
+            first_items = refresh_release_notes(
+                conn, parsed.targets, {}, **refresh_kwargs
+            )
+            second_items = refresh_release_notes(
+                conn, parsed.targets, {}, **refresh_kwargs
+            )
+            cached_digests = [
+                row[0]
+                for row in conn.execute(
+                    "SELECT target_digest FROM release_note_cache ORDER BY target_digest"
+                )
+            ]
+
+        self.assertEqual(len(first_items), 2)
+        self.assertEqual(len(second_items), 2)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(
+            cached_digests,
+            [f"sha256:{'a' * 64}", f"sha256:{'b' * 64}"],
+        )
+
     def test_lsio_release_metadata_includes_both_links(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             upstream_map = Path(tmp) / "upstreams.txt"
