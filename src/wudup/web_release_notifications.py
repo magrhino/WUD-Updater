@@ -1268,11 +1268,11 @@ def _digest_row(item: ReleaseNotificationItem) -> str:
     )
     selected_links: list[str] = []
     for link in _digest_links(item.links):
-        candidate = f"{row} — {' '.join([*selected_links, link])}"
+        candidate = f"{row} — {' | '.join([*selected_links, link])}"
         if len(candidate) > DISCORD_DIGEST_ROW_LIMIT:
             break
         selected_links.append(link)
-    return f"{row} — {' '.join(selected_links)}" if selected_links else row
+    return f"{row} — {' | '.join(selected_links)}" if selected_links else row
 
 
 def _digest_links(links: Sequence[ReleaseNoteLink]) -> list[str]:

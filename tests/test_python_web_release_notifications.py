@@ -608,6 +608,7 @@ def test_digest_row_selects_compact_release_links() -> None:
     assert "[release](https://example.test/release)" in row
     assert "[upstream](https://example.test/upstream)" in row
     assert "[changelog](https://example.test/changelog)" in row
+    assert "[release](https://example.test/release) | [upstream]" in row
 
 
 def test_release_notification_preview_degrades_when_wud_triggers_require_auth(
