@@ -898,11 +898,16 @@ def _notification_digest_reason(
     update_kind = str(getattr(metadata, "update_kind", "") or "")
     classification = getattr(note, "classification", None)
     change_type = str(getattr(classification, "change_type", "") or "")
+    provider_prefix = "LSIO image update: " if note.provider == "lsio" else ""
 
     if note.breaking:
-        return "needs_review", "breaking_change", "possible breaking change"
+        return (
+            "needs_review",
+            "breaking_change",
+            f"{provider_prefix}possible breaking change",
+        )
     if semver_diff == "major":
-        return "needs_review", "major_bump", "major version bump"
+        return "needs_review", "major_bump", f"{provider_prefix}major version bump"
     status_reasons = {
         "error": ("release_notes_error", "release-note lookup failed"),
         "unsupported": ("release_notes_unsupported", "release notes unsupported"),
@@ -911,9 +916,13 @@ def _notification_digest_reason(
     }
     if note.status in status_reasons:
         code, label = status_reasons[note.status]
-        return "needs_review", code, label
+        return "needs_review", code, f"{provider_prefix}{label}"
     lsio_reason = _lsio_digest_reason(note.provider, change_type)
-    if _mutable_latest(current_version, target_version):
+    if (
+        current_version.lower() == "latest"
+        or target_version.lower() == "latest"
+        or target_version.lower().startswith("latest (")
+    ):
         if note.provider == "lsio":
             if lsio_reason is not None:
                 code, label = lsio_reason
@@ -941,12 +950,6 @@ def _notification_digest_reason(
     if update_kind == "digest" or is_digest_target_line(target.target):
         return "routine", "routine_digest", "image digest update"
     return "routine", "routine_update", "update metadata available"
-
-
-def _mutable_latest(current_version: str, target_version: str) -> bool:
-    return current_version.lower() == "latest" or target_version.lower().startswith(
-        "latest ("
-    )
 
 
 def _lsio_digest_reason(provider: str, change_type: str) -> tuple[str, str] | None:

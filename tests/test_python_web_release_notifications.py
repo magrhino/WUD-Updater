@@ -458,12 +458,41 @@ def test_digest_reason_priority_uses_deterministic_metadata() -> None:
         "breaking_change",
         "possible breaking change",
     )
+    assert reason(provider="lsio", breaking=True, semver_diff="major") == (
+        "needs_review",
+        "breaking_change",
+        "LSIO image update: possible breaking change",
+    )
     assert reason(semver_diff="major")[:2] == ("needs_review", "major_bump")
+    assert reason(provider="lsio", semver_diff="major") == (
+        "needs_review",
+        "major_bump",
+        "LSIO image update: major version bump",
+    )
     assert reason(status="missing", semver_diff="minor")[:2] == (
         "needs_review",
         "release_notes_missing",
     )
+    for status, code, label in (
+        ("error", "release_notes_error", "release-note lookup failed"),
+        ("unsupported", "release_notes_unsupported", "release notes unsupported"),
+        ("missing", "release_notes_missing", "release notes unavailable"),
+        ("not_found", "release_notes_not_found", "matching release not found"),
+    ):
+        assert reason(provider="lsio", status=status, semver_diff="minor") == (
+            "needs_review",
+            code,
+            f"LSIO image update: {label}",
+        )
     assert reason(current_version="latest", semver_diff="minor")[:2] == (
+        "needs_review",
+        "mutable_latest",
+    )
+    assert reason(
+        current_version="1.0.0",
+        target_version="latest",
+        semver_diff="minor",
+    )[:2] == (
         "needs_review",
         "mutable_latest",
     )
