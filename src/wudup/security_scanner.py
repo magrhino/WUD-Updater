@@ -55,8 +55,6 @@ class TrivyScanner:
     ) -> None:
         self.config = config
         self.runner = runner or CommandRunner()
-        self._version: str | None = None
-        self._provenance: Mapping[str, Any] = {}
 
     def scan(self, subject: ResolvedImageSubject) -> SecurityScanResult:
         if subject.identity_status != "exact" or not subject.immutable_ref:
@@ -75,10 +73,11 @@ class TrivyScanner:
             check=False,
             timeout_seconds=float(self.config.timeout_seconds + 5),
         )
+        provenance = self.provenance()
         if not result.ok:
             return SecurityScanResult(
                 state="error",
-                scanner_version=self.version(),
+                scanner_version=str(provenance.get("Version") or ""),
                 error_code="scanner_failed",
                 error_message=(result.stderr or result.stdout).strip(),
             )
@@ -87,28 +86,26 @@ class TrivyScanner:
         except json.JSONDecodeError as exc:
             return SecurityScanResult(
                 state="error",
-                scanner_version=self.version(),
+                scanner_version=str(provenance.get("Version") or ""),
                 error_code="invalid_json",
                 error_message=str(exc),
             )
         if not isinstance(payload, Mapping):
             return SecurityScanResult(
                 state="error",
-                scanner_version=self.version(),
+                scanner_version=str(provenance.get("Version") or ""),
                 error_code="invalid_json",
                 error_message="scanner JSON was not an object",
             )
         return _result_from_trivy_payload(
             payload,
-            provenance=self.provenance(),
+            provenance=provenance,
         )
 
     def version(self) -> str:
         return str(self.provenance().get("Version") or "")
 
     def provenance(self) -> Mapping[str, Any]:
-        if self._version is not None:
-            return self._provenance
         args = [self.config.executable, "version", "--format", "json"]
         if self.config.cache_dir:
             args.extend(["--cache-dir", self.config.cache_dir])
@@ -117,9 +114,7 @@ class TrivyScanner:
             check=False,
             timeout_seconds=10,
         )
-        self._provenance = _parse_trivy_provenance(result.stdout) if result.ok else {}
-        self._version = str(self._provenance.get("Version") or "")
-        return self._provenance
+        return _parse_trivy_provenance(result.stdout) if result.ok else {}
 
     def _scan_args(self, subject: ResolvedImageSubject) -> list[str]:
         args = [
@@ -157,6 +152,41 @@ def _result_from_trivy_payload(
             error_code="invalid_json",
             error_message="scanner JSON did not include a Results array",
         )
+    severity_counts, advisory_counts, fixable_counts, unfixed_count, findings = (
+        _summarize_trivy_findings(payload)
+    )
+    total = sum(severity_counts.values())
+    db = _db_metadata(provenance) or _db_metadata(payload)
+    return SecurityScanResult(
+        state="complete",
+        verdict="findings" if total else "none_reported",
+        scanner_version=scanner_version,
+        scanner_schema=str(payload.get("SchemaVersion") or ""),
+        db_revision=str(db.get("Version") or db.get("version") or ""),
+        db_updated_at=str(
+            db.get("UpdatedAt")
+            or db.get("updated_at")
+            or db.get("DownloadedAt")
+            or db.get("downloaded_at")
+            or ""
+        ),
+        severity_counts=severity_counts,
+        advisory_counts=advisory_counts,
+        fixable_counts=fixable_counts,
+        unfixed_count=unfixed_count,
+        findings=findings,
+    )
+
+
+def _summarize_trivy_findings(
+    payload: Mapping[str, Any],
+) -> tuple[
+    dict[str, int],
+    dict[str, int],
+    dict[str, int],
+    int,
+    tuple[SecurityScanFinding, ...],
+]:
     severity_counts = _empty_counts()
     advisory_severities: dict[str, str] = {}
     fixable_counts = _empty_counts()
@@ -178,29 +208,15 @@ def _result_from_trivy_payload(
         else:
             unfixed_count += 1
         findings.append(_finding_from_vulnerability(result, vuln, severity))
-    total = sum(severity_counts.values())
     advisory_counts = _empty_counts()
     for severity in advisory_severities.values():
         advisory_counts[severity] += 1
-    db = _db_metadata(provenance) or _db_metadata(payload)
-    return SecurityScanResult(
-        state="complete",
-        verdict="findings" if total else "none_reported",
-        scanner_version=scanner_version,
-        scanner_schema=str(payload.get("SchemaVersion") or ""),
-        db_revision=str(db.get("Version") or db.get("version") or ""),
-        db_updated_at=str(
-            db.get("UpdatedAt")
-            or db.get("updated_at")
-            or db.get("DownloadedAt")
-            or db.get("downloaded_at")
-            or ""
-        ),
-        severity_counts=severity_counts,
-        advisory_counts=advisory_counts,
-        fixable_counts=fixable_counts,
-        unfixed_count=unfixed_count,
-        findings=tuple(findings),
+    return (
+        severity_counts,
+        advisory_counts,
+        fixable_counts,
+        unfixed_count,
+        tuple(findings),
     )
 
 

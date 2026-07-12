@@ -879,8 +879,8 @@ describe("pending helper modules", () => {
     });
 
     expect(wrapper.text()).toContain("Showing 1-10 of 12 findings");
-    expect(wrapper.text()).toContain("12 occurrences");
-    expect(wrapper.text()).toContain("12 advisory occurrences");
+    expect(wrapper.text()).toContain("Showing 10 of 12 occurrences");
+    expect(wrapper.text()).toContain("Showing 10 of 12 advisory occurrences");
     expect(wrapper.text()).toContain("CVE-2026-0001");
     expect(wrapper.text()).toContain("CVE-2026-0010");
     expect(wrapper.text()).not.toContain("CVE-2026-0011");
@@ -890,8 +890,8 @@ describe("pending helper modules", () => {
     await pageTwo?.trigger("click");
 
     expect(wrapper.text()).toContain("Showing 11-12 of 12 findings");
-    expect(wrapper.text()).toContain("12 occurrences");
-    expect(wrapper.text()).toContain("12 advisory occurrences");
+    expect(wrapper.text()).toContain("Showing 2 of 12 occurrences");
+    expect(wrapper.text()).toContain("Showing 2 of 12 advisory occurrences");
     expect(wrapper.text()).not.toContain("CVE-2026-0001");
     expect(wrapper.text()).toContain("CVE-2026-0011");
     expect(wrapper.text()).toContain("CVE-2026-0012");

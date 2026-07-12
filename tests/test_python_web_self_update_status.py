@@ -80,10 +80,21 @@ def test_self_update_get_reports_available_up_to_date_disabled_and_unavailable(
             {"WUD_WEB_DEV_NO_AUTH": "true"},
         ).get("/api/v1/self-update")
         assert unknown_variant.json()["status"] == "unavailable"
+        assert unknown_variant.json()["current_image"] == current_image
+        assert unknown_variant.json()["latest_tag"] == "v0.25.0"
         assert (
             "cannot preserve the image variant"
             in unknown_variant.json()["disabled_reason"]
         )
+
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "current_container_image", lambda _env: "")
+    current_without_image_identity = _client(
+        tmp_path,
+        {"WUD_WEB_DEV_NO_AUTH": "true"},
+    ).get("/api/v1/self-update")
+    assert current_without_image_identity.json()["status"] == "up_to_date"
+    assert current_without_image_identity.json()["current_image"] == ""
 
 
 def test_self_update_get_can_use_local_demo_fixture(tmp_path: Path) -> None:

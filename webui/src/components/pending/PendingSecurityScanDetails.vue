@@ -21,6 +21,7 @@ type TargetGroup = {
   targetClass: string;
   targetType: string;
   packages: PackageGroup[];
+  shownCount: number;
   occurrenceCount: number;
 };
 
@@ -145,10 +146,12 @@ const groupedPagedFindings = computed<TargetGroup[]>(() => {
         targetClass: finding.target_class,
         targetType: finding.target_type,
         packages: [],
+        shownCount: 0,
         occurrenceCount: groupOccurrenceCounts.value.targets.get(targetKey) ?? 0,
       };
       targets.set(targetKey, target);
     }
+    target.shownCount += 1;
     const packageName = finding.package_name || "Unknown package";
     let packageGroup = target.packages.find((item) => item.name === packageName);
     if (!packageGroup) {
@@ -222,6 +225,15 @@ function severityType(severity: Severity): TagType {
 
 function titleCase(value: string): string {
   return value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : "Unknown";
+}
+
+function shownOccurrenceSummary(
+  shown: number,
+  total: number,
+  singular: string,
+): string {
+  const totalLabel = pluralize(total, singular);
+  return shown === total ? totalLabel : `Showing ${shown} of ${totalLabel}`;
 }
 
 function findingTitle(finding: SecurityScanFinding): string {
@@ -417,7 +429,7 @@ async function copyReport(): Promise<void> {
           <n-tag v-if="target.targetType" size="small">{{ target.targetType }}</n-tag>
           <n-tag v-if="target.targetClass" size="small">{{ target.targetClass }}</n-tag>
           <span class="security-review-meta">
-            {{ pluralize(target.occurrenceCount, "occurrence") }}
+            {{ shownOccurrenceSummary(target.shownCount, target.occurrenceCount, "occurrence") }}
           </span>
         </div>
         <div
@@ -428,7 +440,11 @@ async function copyReport(): Promise<void> {
           <div class="security-package-heading">
             <strong class="wrap-anywhere">{{ packageGroup.name }}</strong>
             <span class="security-review-meta">
-              {{ pluralize(packageGroup.occurrenceCount, "advisory occurrence") }}
+              {{ shownOccurrenceSummary(
+                packageGroup.findings.length,
+                packageGroup.occurrenceCount,
+                "advisory occurrence",
+              ) }}
             </span>
           </div>
           <article

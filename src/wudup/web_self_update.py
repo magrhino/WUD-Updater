@@ -186,102 +186,15 @@ def api_apply_self_update(
             )
         if _self_update_confirmation_stale(payload, status):
             raise HTTPException(status_code=409, detail="self-update target is stale")
-        docker = DockerCli(runner=CommandRunner(env=settings.command_env))
-        try:
-            container_id = docker.container_id(status.restart_container)
-        except CommandError as exc:
-            raise HTTPException(
-                status_code=500,
-                detail=_safe_exception_detail(
-                    settings,
-                    "could not inspect restart container",
-                    exc,
-                ),
-            ) from exc
-        if not container_id:
-            raise HTTPException(
-                status_code=500,
-                detail="could not inspect restart container",
-            )
-        running_image_id = docker.try_container_image_id(status.restart_container)
-        if not running_image_id:
-            raise HTTPException(
-                status_code=500,
-                detail="could not inspect running container image identity",
-            )
-
-        try:
-            with open_db(settings.config.db_path) as conn:
-                init_db(conn)
-                with _immediate_transaction(conn):
-                    audit_run_id = _insert_self_update_audit(
-                        conn,
-                        settings,
-                        request,
-                        status=status,
-                    )
-        except (OSError, sqlite3.Error, DatabaseError) as exc:
-            raise HTTPException(
-                status_code=500,
-                detail=_safe_exception_detail(
-                    settings,
-                    "could not record self-update audit",
-                    exc,
-                ),
-            ) from exc
-        try:
-            docker.pull_image(status.target_image)
-        except CommandError as exc:
-            detail = exc.result.stderr.strip() or str(exc)
-            LOGGER.error(
-                "WebUI self-update image pull failed for %s -> %s: %s",
-                status.target_image,
-                status.restart_container,
-                _redact_sensitive_text(settings, detail),
-            )
-            _safe_update_self_update_audit(
-                settings,
-                audit_run_id,
-                status="failure",
-                error=_redact_sensitive_text(settings, detail),
-            )
-            raise HTTPException(
-                status_code=500,
-                detail=_safe_exception_detail(
-                    settings,
-                    "could not pull self-update image",
-                    exc,
-                ),
-            ) from exc
-        prepared_image_id = docker.image_id(status.target_image)
-        verified_running_image_id = docker.try_container_image_id(
-            status.restart_container
-        )
-        if not prepared_image_id or not verified_running_image_id:
-            _safe_update_self_update_audit(
-                settings,
-                audit_run_id,
-                status="failure",
-                error="could not verify self-update image identities after pull",
-            )
-            raise HTTPException(
-                status_code=500,
-                detail="could not verify self-update image identities after pull",
-            )
-        running_image_verified = verified_running_image_id == prepared_image_id
-        audit_status: SelfUpdateAuditStatus = (
-            "running_image_verified" if running_image_verified else "image_prepared"
-        )
-        _safe_update_self_update_audit(
-            settings,
+        (
             audit_run_id,
-            status=audit_status,
-            metadata_extra={
-                "running_image_id_before": running_image_id,
-                "running_image_id_after": verified_running_image_id,
-                "prepared_image_id": prepared_image_id,
-                "external_recreate_required": not running_image_verified,
-            },
+            verified_running_image_id,
+            prepared_image_id,
+            running_image_verified,
+        ) = _apply_self_update_pull(
+            settings,
+            request,
+            status,
         )
     finally:
         web_jobs._release_self_update(request.app.state)
@@ -299,6 +212,122 @@ def api_apply_self_update(
         prepared_image_id=prepared_image_id,
         external_recreate_required=not running_image_verified,
     )
+
+
+def _apply_self_update_pull(
+    settings: WebSettings,
+    request: Request,
+    status: SelfUpdateResponse,
+) -> tuple[int, str, str, bool]:
+    docker = DockerCli(runner=CommandRunner(env=settings.command_env))
+    try:
+        container_id = docker.container_id(status.restart_container)
+    except CommandError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not inspect restart container",
+                exc,
+            ),
+        ) from exc
+    if not container_id:
+        raise HTTPException(
+            status_code=500,
+            detail="could not inspect restart container",
+        )
+    running_image_id = docker.try_container_image_id(status.restart_container)
+    if not running_image_id:
+        raise HTTPException(
+            status_code=500,
+            detail="could not inspect running container image identity",
+        )
+
+    audit_run_id = _record_self_update_audit(settings, request, status)
+    try:
+        docker.pull_image(status.target_image)
+    except CommandError as exc:
+        detail = exc.result.stderr.strip() or str(exc)
+        LOGGER.error(
+            "WebUI self-update image pull failed for %s -> %s: %s",
+            status.target_image,
+            status.restart_container,
+            _redact_sensitive_text(settings, detail),
+        )
+        _safe_update_self_update_audit(
+            settings,
+            audit_run_id,
+            status="failure",
+            error=_redact_sensitive_text(settings, detail),
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not pull self-update image",
+                exc,
+            ),
+        ) from exc
+    prepared_image_id = docker.image_id(status.target_image)
+    verified_running_image_id = docker.try_container_image_id(status.restart_container)
+    if not prepared_image_id or not verified_running_image_id:
+        _safe_update_self_update_audit(
+            settings,
+            audit_run_id,
+            status="failure",
+            error="could not verify self-update image identities after pull",
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="could not verify self-update image identities after pull",
+        )
+    running_image_verified = verified_running_image_id == prepared_image_id
+    audit_status: SelfUpdateAuditStatus = (
+        "running_image_verified" if running_image_verified else "image_prepared"
+    )
+    _safe_update_self_update_audit(
+        settings,
+        audit_run_id,
+        status=audit_status,
+        metadata_extra={
+            "running_image_id_before": running_image_id,
+            "running_image_id_after": verified_running_image_id,
+            "prepared_image_id": prepared_image_id,
+            "external_recreate_required": not running_image_verified,
+        },
+    )
+    return (
+        audit_run_id,
+        verified_running_image_id,
+        prepared_image_id,
+        running_image_verified,
+    )
+
+
+def _record_self_update_audit(
+    settings: WebSettings,
+    request: Request,
+    status: SelfUpdateResponse,
+) -> int:
+    try:
+        with open_db(settings.config.db_path) as conn:
+            init_db(conn)
+            with _immediate_transaction(conn):
+                return _insert_self_update_audit(
+                    conn,
+                    settings,
+                    request,
+                    status=status,
+                )
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not record self-update audit",
+                exc,
+            ),
+        ) from exc
 
 
 def api_prepare_self_update(
@@ -863,22 +892,6 @@ def _self_update_response(settings: WebSettings) -> SelfUpdateResponse:
             disabled_reason="release checks are disabled",
         )
 
-    if not self_update_image_variant_known(current_image):
-        return SelfUpdateResponse(
-            status="unavailable",
-            strategy="pull_image",
-            current_tag=local_tag,
-            latest_tag="",
-            current_image="",
-            target_image="",
-            restart_container=container,
-            disabled_reason=(
-                "current container image could not be inspected; self-update "
-                "cannot preserve the image variant"
-            ),
-            warnings=["current WUDup container image identity is unavailable"],
-        )
-
     latest_tag = fetch_latest_release_tag()
     if latest_tag is None:
         return SelfUpdateResponse(
@@ -902,6 +915,22 @@ def _self_update_response(settings: WebSettings) -> SelfUpdateResponse:
             current_image=current_image,
             target_image="",
             restart_container=container,
+        )
+
+    if not self_update_image_variant_known(current_image):
+        return SelfUpdateResponse(
+            status="unavailable",
+            strategy="pull_image",
+            current_tag=local_tag,
+            latest_tag=latest_tag,
+            current_image=current_image,
+            target_image="",
+            restart_container=container,
+            disabled_reason=(
+                "current container image could not be inspected; self-update "
+                "cannot preserve the image variant"
+            ),
+            warnings=["current WUDup container image identity is unavailable"],
         )
 
     target_spec = release_self_update_target(current_image, local_tag, latest_tag)

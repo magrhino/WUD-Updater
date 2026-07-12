@@ -5,11 +5,9 @@ variant="${1:-}"
 case "$variant" in
   default)
     suffix=""
-    target_args=()
     ;;
   trivy)
     suffix="-trivy"
-    target_args=(--target wudup-trivy)
     ;;
   *)
     printf 'Usage: %s default|trivy\n' "$0" >&2
@@ -37,11 +35,13 @@ tag_args=(-t "$staging_ref")
 build_image() {
   local platform="$1"
   local output_arg="$2"
+  local docker_args=(buildx build --platform "$platform")
   shift 2
+  if [[ "$variant" == "trivy" ]]; then
+    docker_args+=(--target wudup-trivy)
+  fi
 
-  docker buildx build \
-    --platform "$platform" \
-    "${target_args[@]}" \
+  docker "${docker_args[@]}" \
     "$@" \
     "${label_args[@]}" \
     "${build_args[@]}" \
@@ -97,7 +97,7 @@ for platform in $expected_platforms; do
   docker run --rm --platform "$platform" "$immutable_ref" sh -ec '
     packages="libgnutls30 libssl3 openssl libgcrypt20"
     dpkg-query -W $packages
-    apt-get update >/dev/null
+    apt-get -o Acquire::Retries=3 update >/dev/null
     upgrades="$(apt-get -s upgrade)"
     for package in $packages; do
       if printf "%s\n" "$upgrades" | grep -Eq "^Inst ${package}(:[^ ]+)? "; then

@@ -29,7 +29,7 @@ elif [[ "$*" == "buildx imagetools inspect "* ]]; then
 elif [[ "$*" == "image inspect --format "* ]]; then
   printf '{"org.opencontainers.image.version":"%s","org.opencontainers.image.revision":"%s"}\n' "$RELEASE_TAG" "$RELEASE_SHA"
 elif [[ "$*" == *"trivy version --format json"* ]]; then
-  printf '{"Version":"0.71.2"}\n'
+  printf '{"Version":"%s"}\n' "$EXPECTED_TRIVY_VERSION"
 fi
 FAKE_DOCKER
 chmod +x "$TEST_TMP/docker"
@@ -49,6 +49,12 @@ export BUILDX_CACHE_FROM="type=gha,scope=test"
 export BUILDX_CACHE_TO="type=gha,scope=test,mode=max"
 
 cd "$REPO_ROOT"
+EXPECTED_TRIVY_VERSION="$(sed -n 's/^FROM aquasec\/trivy:\([^@ ]*\).*/\1/p' Dockerfile)"
+export EXPECTED_TRIVY_VERSION
+if [[ -z "$EXPECTED_TRIVY_VERSION" ]]; then
+  printf 'could not derive the Trivy version from Dockerfile\n' >&2
+  exit 1
+fi
 bash .github/scripts/publish-release-image.sh trivy
 
 grep -Fq -- "--build-arg APT_REFRESH=workflow-123-attempt-1" "$FAKE_DOCKER_LOG"
@@ -58,6 +64,7 @@ grep -Fq -- "pull --platform linux/arm64 ${staging_ref}@sha256:" "$FAKE_DOCKER_L
 grep -Fq -- "buildx imagetools inspect --raw ${staging_ref}@sha256:" "$FAKE_DOCKER_LOG"
 grep -Fq -- "run --rm --platform linux/amd64" "$FAKE_DOCKER_LOG"
 grep -Fq -- "run --rm --platform linux/arm64" "$FAKE_DOCKER_LOG"
+grep -Fq -- "Acquire::Retries=3 update" "$FAKE_DOCKER_LOG"
 grep -Fq -- "buildx imagetools create --tag ghcr.io/magrhino/wudup:v1.2.3-trivy ${staging_ref}@sha256:" "$FAKE_DOCKER_LOG"
 
 push_line="$(grep -n -m1 -- '--push' "$FAKE_DOCKER_LOG" | cut -d: -f1)"
@@ -86,6 +93,17 @@ bash .github/scripts/publish-release-image.sh trivy
 grep -Fq -- "--build-arg APT_REFRESH=workflow-123-attempt-2" "$FAKE_DOCKER_LOG"
 if grep -Fq -- "--build-arg APT_REFRESH=workflow-123-attempt-1" "$FAKE_DOCKER_LOG"; then
   printf 'release retry reused the previous apt freshness token\n' >&2
+  exit 1
+fi
+
+: > "$FAKE_DOCKER_LOG"
+bash .github/scripts/publish-release-image.sh default
+default_staging_ref="ghcr.io/magrhino/wudup:staging-${RELEASE_SHA}"
+grep -Fq -- "pull --platform linux/amd64 ${default_staging_ref}@sha256:" "$FAKE_DOCKER_LOG"
+grep -Fq -- "pull --platform linux/arm64 ${default_staging_ref}@sha256:" "$FAKE_DOCKER_LOG"
+grep -Fq -- "buildx imagetools create --tag ghcr.io/magrhino/wudup:v1.2.3 ${default_staging_ref}@sha256:" "$FAKE_DOCKER_LOG"
+if grep -Fq -- "--target wudup-trivy" "$FAKE_DOCKER_LOG"; then
+  printf 'default release image unexpectedly used the Trivy target\n' >&2
   exit 1
 fi
 

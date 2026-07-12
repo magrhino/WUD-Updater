@@ -934,55 +934,23 @@ export class DemoApiState {
     const decision = this.securityScanDecision(reportedDigest, platform, firstExact);
     const severityCounts = this.securityScanSeverityCounts(decision.hasFindings);
     const fixableCounts = this.securityScanSeverityCounts(decision.hasFindings);
-    const findings = decision.hasFindings
-      ? [
-          {
-            target: "debian:12",
-            target_class: "os-pkgs",
-            target_type: "debian",
-            vulnerability_id: "CVE-2026-0001",
-            package_name: "demo-package",
-            installed_version: "1.0.0",
-            fixed_version: "1.0.1",
-            severity: "high" as const,
-            title: "Demo vulnerability for candidate advisory review",
-            primary_url: "https://avd.aquasec.com/nvd/cve-2026-0001",
-          },
-        ]
-      : [];
-    const subject = {
-      requested_ref: item.image,
-      reported_digest: reportedDigest,
-      index_digest: reportedDigest,
-      manifest_digest: reportedDigest,
-      immutable_ref: reportedDigest ? `${item.image.split("@")[0]}@${reportedDigest}` : "",
-      platform,
-    };
+    const findings = this.demoSecurityScanFindings(decision.hasFindings);
+    const subject = this.demoSecurityScanSubject(item, reportedDigest, platform);
     const currentDigest = normalizeSecurityDigest(item.wud_metadata?.local_digest ?? "");
-    const currentSubject = {
-      requested_ref: item.image,
-      reported_digest: currentDigest,
-      index_digest: currentDigest,
-      manifest_digest: currentDigest,
-      immutable_ref: currentDigest ? `${item.image.split("@")[0]}@${currentDigest}` : "",
-      platform,
-    };
+    const currentSubject = this.demoSecurityScanSubject(item, currentDigest, platform);
     const scannerVersion = decision.hasFindings ? "demo" : "";
     const scannerSchema = decision.hasFindings ? "trivy-json" : "";
     const dbRevision = decision.hasFindings ? "demo" : "";
     const dbUpdatedAt = decision.hasFindings ? DEMO_DB_UPDATED_AT : "";
-    const canCompare = Boolean(currentDigest && reportedDigest && platform);
-    const comparisonReady =
-      decision.state === "complete" &&
-      canCompare &&
-      Boolean(scannerVersion && scannerSchema && dbRevision && dbUpdatedAt);
-    let comparisonMessage = "";
-    if (comparisonReady) {
-      comparisonMessage =
-        "Demo comparison: installed and candidate findings are unchanged.";
-    } else if (decision.state === "complete") {
-      comparisonMessage = "Installed digest is unavailable in the demo fixture.";
-    }
+    const comparison = this.demoSecurityScanComparison(
+      decision,
+      currentDigest,
+      reportedDigest,
+      platform,
+      currentSubject,
+      findings,
+      Boolean(scannerVersion && scannerSchema && dbRevision && dbUpdatedAt),
+    );
 
     return {
       line_no: item.line_no,
@@ -1001,29 +969,88 @@ export class DemoApiState {
       unfixed_count: 0,
       findings,
       subject,
-      comparison: {
-        status: comparisonReady ? "unchanged" : "unknown",
-        current_subject: comparisonReady
-          ? currentSubject
-          : {
-              requested_ref: "",
-              reported_digest: "",
-              index_digest: "",
-              manifest_digest: "",
-              immutable_ref: "",
-              platform: "",
-            },
-        fixed_findings: [],
-        remaining_findings: comparisonReady ? findings : [],
-        introduced_findings: [],
-        message: comparisonMessage,
-      },
+      comparison,
       warnings:
         decision.hasFindings
           ? ["Demo finding for candidate and installed-digest comparison display."]
           : [],
       error_code: "",
       error_message: "",
+    };
+  }
+
+  private demoSecurityScanFindings(
+    hasFindings: boolean,
+  ): SecurityScanInfo["findings"] {
+    if (!hasFindings) {
+      return [];
+    }
+    return [
+      {
+        target: "debian:12",
+        target_class: "os-pkgs",
+        target_type: "debian",
+        vulnerability_id: "CVE-2026-0001",
+        package_name: "demo-package",
+        installed_version: "1.0.0",
+        fixed_version: "1.0.1",
+        severity: "high",
+        title: "Demo vulnerability for candidate advisory review",
+        primary_url: "https://avd.aquasec.com/nvd/cve-2026-0001",
+      },
+    ];
+  }
+
+  private demoSecurityScanSubject(
+    item: PendingItem,
+    digest: string,
+    platform: string,
+  ): SecurityScanInfo["subject"] {
+    return {
+      requested_ref: item.image,
+      reported_digest: digest,
+      index_digest: digest,
+      manifest_digest: digest,
+      immutable_ref: digest ? `${item.image.split("@")[0]}@${digest}` : "",
+      platform,
+    };
+  }
+
+  private demoSecurityScanComparison(
+    decision: DemoSecurityScanDecision,
+    currentDigest: string,
+    reportedDigest: string,
+    platform: string,
+    currentSubject: SecurityScanInfo["subject"],
+    findings: SecurityScanInfo["findings"],
+    provenanceKnown: boolean,
+  ): SecurityScanInfo["comparison"] {
+    const comparisonReady =
+      decision.state === "complete"
+      && Boolean(currentDigest && reportedDigest && platform)
+      && provenanceKnown;
+    let message = "";
+    if (comparisonReady) {
+      message = "Demo comparison: installed and candidate findings are unchanged.";
+    } else if (decision.state === "complete") {
+      message = "Installed digest is unavailable in the demo fixture.";
+    }
+    return {
+      status: comparisonReady ? "unchanged" : "unknown",
+      current_subject: comparisonReady
+        ? currentSubject
+        : {
+            requested_ref: "",
+            reported_digest: "",
+            index_digest: "",
+            manifest_digest: "",
+            immutable_ref: "",
+            platform: "",
+          },
+      fixed_findings: [],
+      remaining_findings: comparisonReady ? findings : [],
+      introduced_findings: [],
+      message,
     };
   }
 

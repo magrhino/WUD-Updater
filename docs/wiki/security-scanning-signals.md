@@ -28,8 +28,8 @@ Each scan subject must identify the exact image being evaluated:
 - identity status and warnings.
 
 Cache identity is the canonical repository, platform manifest digest, platform,
-scanner version, schema version, and vulnerability database revision. Tags are
-display metadata, not cache identity.
+scanner version, schema version, and vulnerability database revision and updated
+timestamp. Tags are display metadata, not cache identity.
 
 Platform priority is:
 

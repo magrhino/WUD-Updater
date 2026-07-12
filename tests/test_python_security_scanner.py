@@ -173,6 +173,54 @@ class SecurityScannerTests(unittest.TestCase):
         self.assertEqual(result.error_code, "invalid_json")
         self.assertEqual(result.scanner_version, "0.50.0")
 
+    def test_trivy_refreshes_provenance_for_each_scan(self) -> None:
+        class ChangingProvenanceRunner(FakeRunner):
+            def __init__(self) -> None:
+                super().__init__(json.dumps({"SchemaVersion": 2, "Results": []}))
+                self.version_call_count = 0
+
+            def capture(self, args, *, check=True, timeout_seconds=None):
+                normalized = tuple(args)
+                if normalized[:2] != ("trivy", "version"):
+                    return super().capture(
+                        args,
+                        check=check,
+                        timeout_seconds=timeout_seconds,
+                    )
+                self.calls.append((normalized, timeout_seconds))
+                self.version_call_count += 1
+                return CommandResult(
+                    args=normalized,
+                    cwd=None,
+                    returncode=0,
+                    stdout=json.dumps(
+                        {
+                            "Version": "0.50.0",
+                            "VulnerabilityDB": {
+                                "Version": str(self.version_call_count),
+                                "UpdatedAt": (
+                                    f"2026-06-{25 + self.version_call_count:02d}T00:00:00Z"
+                                ),
+                            },
+                        }
+                    ),
+                )
+
+        runner = ChangingProvenanceRunner()
+        scanner = TrivyScanner(
+            SecurityScanConfig(enabled=True),
+            runner=runner,  # type: ignore[arg-type]
+        )
+
+        first = scanner.scan(_exact_subject())
+        second = scanner.scan(_exact_subject())
+
+        self.assertEqual(first.db_revision, "1")
+        self.assertEqual(first.db_updated_at, "2026-06-26T00:00:00Z")
+        self.assertEqual(second.db_revision, "2")
+        self.assertEqual(second.db_updated_at, "2026-06-27T00:00:00Z")
+        self.assertEqual(runner.version_call_count, 2)
+
     def test_trivy_missing_results_array_returns_error_result(self) -> None:
         scanner = TrivyScanner(
             SecurityScanConfig(enabled=True),
