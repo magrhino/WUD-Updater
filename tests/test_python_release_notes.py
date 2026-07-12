@@ -286,6 +286,56 @@ class ReleaseNotesTests(unittest.TestCase):
             ["https://api.github.com/repos/advplyr/audiobookshelf/releases/latest"],
         )
 
+    def test_latest_digest_change_refreshes_release_within_cache_ttl(self) -> None:
+        calls: list[str] = []
+        release_tags = iter(("v1.0.0", "v1.1.0"))
+
+        def fetch_json(url: str) -> object:
+            calls.append(url)
+            release_tag = next(release_tags)
+            return {
+                "tag_name": release_tag,
+                "name": release_tag,
+                "html_url": (
+                    "https://github.com/advplyr/audiobookshelf/releases/tag/"
+                    f"{release_tag}"
+                ),
+                "body": "Routine update",
+                "published_at": "2026-07-12T12:00:00Z",
+            }
+
+        first = parse_wud_text(
+            f"advplyr/audiobookshelf:latest sha256={'a' * 64}\n"
+        )
+        second = parse_wud_text(
+            f"advplyr/audiobookshelf:latest sha256={'b' * 64}\n"
+        )
+        refresh_kwargs = {
+            "client": GitHubClient(fetch_json=fetch_json),
+            "now": "2026-07-12T12:00:00+00:00",
+            "source_resolver": lambda _target: (
+                "https://github.com/advplyr/audiobookshelf"
+            ),
+            "target_tag_resolver": lambda _target: "latest",
+        }
+
+        with open_db(":memory:") as conn:
+            init_db(conn)
+            first_items = refresh_release_notes(conn, first.targets, {}, **refresh_kwargs)
+            second_items = refresh_release_notes(
+                conn, second.targets, {}, **refresh_kwargs
+            )
+
+        self.assertEqual(first_items[0].release_tag, "v1.0.0")
+        self.assertEqual(second_items[0].release_tag, "v1.1.0")
+        self.assertEqual(
+            calls,
+            [
+                "https://api.github.com/repos/advplyr/audiobookshelf/releases/latest",
+                "https://api.github.com/repos/advplyr/audiobookshelf/releases/latest",
+            ],
+        )
+
     def test_lsio_release_metadata_includes_both_links(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             upstream_map = Path(tmp) / "upstreams.txt"

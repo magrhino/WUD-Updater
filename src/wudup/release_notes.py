@@ -401,6 +401,8 @@ def _context(
         "current_tag": current_tag,
         "target_tag": target_tag,
     }
+    if target.digest:
+        key_payload["target_digest"] = target.digest
     cache_key = hashlib.sha256(
         json.dumps(key_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()

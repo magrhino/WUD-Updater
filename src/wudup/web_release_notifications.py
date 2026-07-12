@@ -937,7 +937,7 @@ def _notification_digest_reason(
         return (
             "needs_review",
             "release_link_missing",
-            "release or changelog link unavailable",
+            f"{provider_prefix}release or changelog link unavailable",
         )
     if lsio_reason is not None:
         return "worth_noting", *lsio_reason

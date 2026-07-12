@@ -511,7 +511,16 @@ def test_digest_reason_priority_uses_deterministic_metadata() -> None:
         current_version="latest",
         target_version="latest (release v2.0.0)",
     )[:2] == ("needs_review", "lsio_latest")
-    assert reason(links=[])[:2] == ("needs_review", "release_link_missing")
+    assert reason(links=[]) == (
+        "needs_review",
+        "release_link_missing",
+        "release or changelog link unavailable",
+    )
+    assert reason(provider="lsio", links=[]) == (
+        "needs_review",
+        "release_link_missing",
+        "LSIO image update: release or changelog link unavailable",
+    )
     assert reason(semver_diff="minor")[:2] == ("worth_noting", "minor_bump")
     assert reason(
         provider="lsio",
