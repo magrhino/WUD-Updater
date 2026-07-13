@@ -197,6 +197,7 @@ const emit = defineEmits<{
             <n-radio-group
               :value="retagChoice(item, choices, targetTags)"
               size="small"
+              role="radiogroup"
               :aria-label="`Retag choice for ${item.service_key}`"
               :aria-describedby="
                 retagChoiceDisabledReason(item, targetTags, mutationDisabled, mutationNotice)

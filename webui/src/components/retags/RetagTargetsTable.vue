@@ -133,6 +133,7 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
           {
             value: retagChoice(row, props.choices, props.targetTags),
             size: "small",
+            role: "radiogroup",
             "aria-label": `Retag choice for ${row.service_key}`,
             "aria-describedby": disabledReason ? descriptionId : undefined,
             onUpdateValue: (value: string) =>
