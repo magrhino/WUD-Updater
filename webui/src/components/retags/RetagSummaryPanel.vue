@@ -136,20 +136,18 @@ function runningSelectionTitle(count: number, filtered: boolean): string {
         Bulk actions add running services to the current selection; not-running and unknown choices stay unchanged.
         Select a not-running or unknown row individually to include it. Applying a not-running service will create or recreate and start it; an unknown service may be created or recreated and started.
       </span>
-      <span
+      <output
         v-if="runningEligibleCount === 0"
         class="retag-bulk-status"
-        role="status"
       >
         No running retag candidates are available. Select stopped candidates individually.
-      </span>
-      <span
+      </output>
+      <output
         v-else-if="filteredRunningEligibleCount === 0"
         class="retag-bulk-status"
-        role="status"
       >
         The current results contain no running retag candidates.
-      </span>
+      </output>
     </div>
   </section>
 </template>

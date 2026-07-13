@@ -122,12 +122,12 @@ export function compareRetagTargets(
 
 function retagTargetSortRank(item: RetagTargetItem): number {
   const availabilityRank = item.retag_available ? 0 : 3;
-  const runtimeRank =
-    item.runtime_state === "running"
-      ? 0
-      : item.runtime_state === "not-running"
-        ? 1
-        : 2;
+  let runtimeRank = 2;
+  if (item.runtime_state === "running") {
+    runtimeRank = 0;
+  } else if (item.runtime_state === "not-running") {
+    runtimeRank = 1;
+  }
   return availabilityRank + runtimeRank;
 }
 

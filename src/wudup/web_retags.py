@@ -912,6 +912,14 @@ def _retag_target_records(
                 service_image.image,
                 service_key_ambiguous=service_key_ambiguous,
             )
+            runtime_state: RetagRuntimeState = "unknown"
+            if running_service_keys is not None:
+                runtime_state = (
+                    "running"
+                    if _retag_compose_service_key(stack, service_image.service)
+                    in running_service_keys
+                    else "not-running"
+                )
             records.append(
                 _retag_target_record(
                     stack,
@@ -919,14 +927,7 @@ def _retag_target_records(
                     target_id,
                     known,
                     active_github_latest_by_target_id.get(target_id),
-                    runtime_state=(
-                        "unknown"
-                        if running_service_keys is None
-                        else "running"
-                        if _retag_compose_service_key(stack, service_image.service)
-                        in running_service_keys
-                        else "not-running"
-                    ),
+                    runtime_state=runtime_state,
                     service_key_ambiguous=service_key_ambiguous,
                     github_latest_fallback=github_latest_fallback,
                 )
