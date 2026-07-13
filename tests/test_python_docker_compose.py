@@ -306,6 +306,10 @@ class ComposeCliTests(FakeDockerCase):
                 ServiceImage(service="db", image="repo/db:latest"),
             ),
         )
+        self.assertEqual(
+            self.call_commands(),
+            ["compose -f docker-compose.yml config --format json"],
+        )
 
     def test_discover_stacks_skips_configured_single_component_ignore(self) -> None:
         stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
@@ -380,7 +384,7 @@ class ComposeCliTests(FakeDockerCase):
         self.assertEqual(stacks[0].project_directory, project_base / "stack")
         self.assertIn(
             f"compose --project-directory {project_base / 'stack'} "
-            "-f docker-compose.yml config --images",
+            "-f docker-compose.yml config --format json",
             self.call_commands(),
         )
 
