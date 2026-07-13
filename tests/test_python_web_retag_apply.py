@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from threading import Event
 
 import pytest
 
@@ -137,8 +138,11 @@ def test_retag_apply_rejects_stale_manual_target_change(
         headers=headers,
     )
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == "retag plan is stale"
+    assert response.status_code == 202
+    job = _wait_apply_job(fixture.client, response.json()["job_id"])
+    assert job["status"] == "failure"
+    assert job["error"] == "retag apply failed: retag plan is stale"
+    assert job["progress"][-1]["phase"] == "preflight"
 
 
 def test_retag_apply_rejects_stale_plan(tmp_path: Path) -> None:
@@ -169,8 +173,63 @@ def test_retag_apply_rejects_stale_plan(tmp_path: Path) -> None:
         headers=headers,
     )
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == "retag plan is stale"
+    assert response.status_code == 202
+    job = _wait_apply_job(client, response.json()["job_id"])
+    assert job["status"] == "failure"
+    assert job["error"] == "retag apply failed: retag plan is stale"
+    assert job["progress"][-1]["phase"] == "preflight"
+
+
+def test_retag_apply_returns_job_before_slow_revalidation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={"WUD_WEB_MUTATIONS_ENABLED": "true"},
+    )
+    headers = _csrf_headers(fixture.client)
+    plan = _create_retag_plan(fixture.client, headers)
+    original_build = web_retags_module._build_current_retag_plan
+    started = Event()
+    release = Event()
+
+    def slow_build(*args: object, **kwargs: object) -> RetagPlanBuild:
+        started.set()
+        assert release.wait(timeout=2)
+        return original_build(*args, **kwargs)
+
+    monkeypatch.setattr(
+        web_retags_module,
+        "_build_current_retag_plan",
+        slow_build,
+    )
+    response = fixture.client.post(
+        "/api/v1/retag-plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "choices": [_switch_choice()],
+            "confirmation": "apply-retags",
+        },
+        headers=headers,
+    )
+
+    try:
+        assert response.status_code == 202
+        assert started.wait(timeout=1)
+        visible = fixture.client.get(
+            f"/api/v1/jobs/{response.json()['job_id']}"
+        ).json()
+        assert visible["status"] == "running"
+        progress = visible["progress"][-1]
+        assert progress["phase"] == "preflight"
+        assert progress["status"] == "running"
+        assert progress["message"] == "Revalidating the selected retag plan."
+    finally:
+        release.set()
+
+    job = _wait_apply_job(fixture.client, response.json()["job_id"])
+    assert job["status"] == "success"
 
 
 def test_retag_apply_cleans_up_job_when_executor_submit_fails(

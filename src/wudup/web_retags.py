@@ -266,25 +266,7 @@ def api_apply_retag_plan(
     active_error = web_jobs._active_mutation_error(request)
     if active_error:
         raise HTTPException(status_code=409, detail=active_error)
-
-    wud_lock = web_jobs._acquire_apply_wud_lock(settings)
-    try:
-        build = _build_current_retag_plan(
-            settings,
-            RetagPlanRequest(
-                choices=payload.choices,
-                github_latest_fallback=payload.github_latest_fallback,
-            ),
-        )
-        plan = build.response
-        if not secrets.compare_digest(plan.plan_id, payload.plan_id):
-            raise HTTPException(status_code=409, detail="retag plan is stale")
-        if not plan.can_apply or not build.updates:
-            raise HTTPException(status_code=409, detail="retag plan is not ready to apply")
-        return _submit_retag_apply_job(request, settings, build, wud_lock)
-    except Exception:
-        wud_lock.close()
-        raise
+    return _submit_retag_apply_job(request, settings, payload)
 
 
 def retag_targets_response(
@@ -1269,8 +1251,7 @@ def _retag_update_identity(item: _RetagPlanUpdate) -> str:
 def _submit_retag_apply_job(
     request: Request,
     settings: WebSettings,
-    build: _RetagPlanBuild,
-    wud_lock: object,
+    payload: RetagApplyRequest,
 ) -> ApplyJobResponse:
     state = request.app.state
     apply_condition: Condition = state.web_apply_condition
@@ -1292,11 +1273,10 @@ def _submit_retag_apply_job(
             executor.submit(
                 _run_retag_apply_job,
                 settings,
-                build,
+                payload,
                 jobs,
                 apply_condition,
                 job.id,
-                wud_lock,
             )
         except Exception:
             del jobs[job.id]
@@ -1307,11 +1287,10 @@ def _submit_retag_apply_job(
 
 def _run_retag_apply_job(
     settings: WebSettings,
-    build: _RetagPlanBuild,
+    payload: RetagApplyRequest,
     jobs: dict[str, WebApplyJob],
     apply_condition: Condition,
     job_id: str,
-    wud_lock: object,
 ) -> None:
     web_jobs._update_apply_job(
         jobs,
@@ -1321,8 +1300,45 @@ def _run_retag_apply_job(
         started_at=utc_timestamp(),
     )
     run_id: int | None = None
+    build: _RetagPlanBuild | None = None
+    wud_lock: object | None = None
+    preflight = True
     successful_updates: tuple[_RetagPlanUpdate, ...] = ()
+    web_jobs._append_apply_job_progress(
+        jobs,
+        apply_condition,
+        job_id,
+        UpdaterProgressEvent(
+            phase="preflight",
+            status="running",
+            message="Revalidating the selected retag plan.",
+        ),
+    )
     try:
+        wud_lock = web_jobs._acquire_apply_wud_lock(settings)
+        build = _build_current_retag_plan(
+            settings,
+            RetagPlanRequest(
+                choices=payload.choices,
+                github_latest_fallback=payload.github_latest_fallback,
+            ),
+        )
+        plan = build.response
+        if not secrets.compare_digest(plan.plan_id, payload.plan_id):
+            raise RuntimeError("retag plan is stale")
+        if not plan.can_apply or not build.updates:
+            raise RuntimeError("retag plan is not ready to apply")
+        web_jobs._append_apply_job_progress(
+            jobs,
+            apply_condition,
+            job_id,
+            UpdaterProgressEvent(
+                phase="preflight",
+                status="success",
+                message="Selected retag plan revalidated.",
+            ),
+        )
+        preflight = False
         run_id = _insert_retag_audit_run(settings, build, status="running")
         successful_updates = _apply_retag_updates(
             settings,
@@ -1359,7 +1375,7 @@ def _run_retag_apply_job(
             apply_condition,
             job_id,
             UpdaterProgressEvent(
-                phase="completion",
+                phase="preflight" if preflight else "completion",
                 status="failure",
                 message=safe_error,
             ),
@@ -1373,7 +1389,7 @@ def _run_retag_apply_job(
             finished_at=utc_timestamp(),
             error=safe_error,
         )
-        if run_id is not None:
+        if run_id is not None and build is not None:
             _finish_retag_audit_run(
                 settings,
                 run_id,
@@ -1383,7 +1399,7 @@ def _run_retag_apply_job(
                 successful_updates=successful_updates,
             )
     finally:
-        close = getattr(wud_lock, "close", None)
+        close = getattr(wud_lock, "close", None) if wud_lock is not None else None
         if close is not None:
             close()
 

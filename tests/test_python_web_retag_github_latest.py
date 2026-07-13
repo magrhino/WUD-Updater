@@ -18,6 +18,7 @@ from tests.web_test_helpers import (
     _fake_docker_calls,
     _fake_docker_env,
     _make_fake_stack,
+    _wait_apply_job,
 )
 from wudup import web_retags as web_retags_module
 from wudup.compose import ComposeStack, ServiceImage
@@ -522,8 +523,11 @@ def test_retag_apply_rejects_plan_when_fallback_flag_changes(
         headers=headers,
     )
 
-    assert stale.status_code == 409
-    assert stale.json()["detail"] == "retag plan is stale"
+    assert stale.status_code == 202
+    job = _wait_apply_job(client, stale.json()["job_id"])
+    assert job["status"] == "failure"
+    assert job["error"] == "retag apply failed: retag plan is stale"
+    assert job["progress"][-1]["phase"] == "preflight"
 
 
 def test_retag_github_latest_fallback_uses_v_stripped_docker_tag(
