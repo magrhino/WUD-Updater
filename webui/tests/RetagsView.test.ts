@@ -374,7 +374,7 @@ describe("RetagsView", () => {
     expect(wrapper.text()).toContain("Review retag preview");
     expect(wrapper.text()).toContain("retag preview is already running");
     expect(wrapper.text()).not.toContain(
-      "Refreshing retag candidates and building a preview.",
+      "Building a preview from the selected candidates.",
     );
     const applyButton = wrapper
       .findAll("button")
