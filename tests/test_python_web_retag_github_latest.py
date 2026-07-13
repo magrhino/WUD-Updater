@@ -18,6 +18,7 @@ from tests.web_test_helpers import (
     _fake_docker_calls,
     _fake_docker_env,
     _make_fake_stack,
+    _wait_apply_job,
 )
 from wudup import web_retags as web_retags_module
 from wudup.compose import ComposeStack, ServiceImage
@@ -246,63 +247,6 @@ def test_retag_github_latest_fallback_keys_duplicate_services_by_target_id(
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
-def test_retag_github_latest_fallback_labels_duplicate_services_by_target_id(
-    tmp_path: Path,
-) -> None:
-    first_dir = tmp_path / "docker" / "one" / "stack"
-    second_dir = tmp_path / "docker" / "two" / "stack"
-    stacks = [
-        ComposeStack(
-            index=1,
-            directory=first_dir,
-            file="docker-compose.yml",
-            name="stack",
-            images=("ghcr.io/acme/app:latest",),
-            service_images=(
-                ServiceImage("app", "ghcr.io/acme/app:latest"),
-            ),
-        ),
-        ComposeStack(
-            index=2,
-            directory=second_dir,
-            file="docker-compose.yml",
-            name="stack",
-            images=("ghcr.io/acme/worker:latest",),
-            service_images=(
-                ServiceImage("app", "ghcr.io/acme/worker:latest"),
-            ),
-        ),
-        ComposeStack(
-            index=3,
-            directory=tmp_path / "docker" / "solo",
-            file="docker-compose.yml",
-            name="solo",
-            images=("ghcr.io/acme/solo:latest",),
-            service_images=(
-                ServiceImage("app", "ghcr.io/acme/solo:latest"),
-            ),
-        ),
-    ]
-
-    labels = web_retags_module._github_latest_fallback_target_labels(stacks, {})
-    first_target_id = web_retags_module._retag_target_id(
-        stacks[0],
-        stacks[0].service_images[0],
-    )
-    second_target_id = web_retags_module._retag_target_id(
-        stacks[1],
-        stacks[1].service_images[0],
-    )
-    solo_target_id = web_retags_module._retag_target_id(
-        stacks[2],
-        stacks[2].service_images[0],
-    )
-
-    assert labels[first_target_id] == f"stack/app ({first_target_id})"
-    assert labels[second_target_id] == f"stack/app ({second_target_id})"
-    assert labels[solo_target_id] == "solo/app"
-
-
 def test_retag_github_latest_fallback_requires_matching_cache_info_count(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -351,7 +295,7 @@ def test_retag_github_latest_fallback_requires_matching_cache_info_count(
         )
 
 
-def test_retag_preview_refreshes_github_latest_before_building_plan(
+def test_retag_preview_uses_cached_selected_github_latest_candidate(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -382,27 +326,57 @@ def test_retag_preview_refreshes_github_latest_before_building_plan(
         digest=digest,
     )
 
+    headers = _csrf_headers(client)
+    refreshed = client.post(
+        "/api/v1/retag-targets/github-latest/refresh",
+        headers=headers,
+    )
+    assert refreshed.status_code == 200
+
+    def fail_refresh(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("preview must not refresh GitHub candidates")
+
+    monkeypatch.setattr(web_retags_module, "refresh_release_notes", fail_refresh)
+    resolved_images: list[str] = []
+
+    class CountingDigestVerifier:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def resolve_tag_digest(self, image: str) -> DigestResolveResult:
+            resolved_images.append(image)
+            return DigestResolveResult(
+                ok=True,
+                status="resolved",
+                reason="tag-digest-resolved",
+                digest=digest,
+                source="test",
+            )
+
+    monkeypatch.setattr(web_retags_module, "DigestVerifier", CountingDigestVerifier)
+    (fake_root / "calls.log").write_text("", encoding="utf-8")
+
     missing_csrf = client.post(
         "/api/v1/retag-plans/preview",
         json={
-            "choices": [_switch_choice()],
+            "choices": [{**_switch_choice(), "target_tag": "v1.2.3"}],
             "github_latest_fallback": True,
         },
     )
     started = client.post(
         "/api/v1/retag-plans/preview",
         json={
-            "choices": [_switch_choice()],
+            "choices": [{**_switch_choice(), "target_tag": "v1.2.3"}],
             "github_latest_fallback": True,
         },
-        headers=_csrf_headers(client),
+        headers=headers,
     )
     assert started.status_code == 202
     job = _wait_retag_preview_job(client, started.json()["preview_job_id"])
 
     assert missing_csrf.status_code == 403
     assert job["status"] == "success"
-    assert [event["phase"] for event in job["progress"]] == ["refresh", "refresh", "preview"]
+    assert [event["phase"] for event in job["progress"]] == ["preview", "preview"]
     plan = job["plan"]
     assert plan["status"] == "ready"
     assert plan["can_apply"] is True
@@ -410,10 +384,13 @@ def test_retag_preview_refreshes_github_latest_before_building_plan(
     assert update["resolved_tag"] == "v1.2.3"
     assert update["planned_digest"] == digest
     assert update["final_image"] == f"ghcr.io/acme/app@{digest}"
-    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+    assert resolved_images == ["ghcr.io/acme/app:v1.2.3"]
+    calls = _fake_docker_calls(fake_root)
+    assert calls.count("config --format json") == 1
+    _assert_pending_grouping_did_not_mutate(calls)
 
 
-def test_retag_preview_reuses_fresh_cached_github_latest_candidate(
+def test_retag_preview_keeps_selected_tag_after_cached_candidate_changes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -464,10 +441,17 @@ def test_retag_preview_reuses_fresh_cached_github_latest_candidate(
         },
     )
 
+    refreshed = client.post(
+        "/api/v1/retag-targets/github-latest/refresh",
+        headers=headers,
+    )
+    assert refreshed.status_code == 200
+    assert refreshed.json()["items"][0]["proposed_tag"] == "v1.1.0"
+
     started = client.post(
         "/api/v1/retag-plans/preview",
         json={
-            "choices": [_switch_choice()],
+            "choices": [{**_switch_choice(), "target_tag": "v1.0.0"}],
             "github_latest_fallback": True,
         },
         headers=headers,
@@ -479,21 +463,9 @@ def test_retag_preview_reuses_fresh_cached_github_latest_candidate(
     plan = job["plan"]
     assert plan["status"] == "ready"
     assert plan["can_apply"] is True
-    assert not any(
-        "tag v1.0.0 -> v1.1.0" in warning for warning in plan["warnings"]
-    )
     update = plan["stacks"][0]["digest_pin_updates"][0]
     assert update["resolved_tag"] == "v1.0.0"
     assert update["planned_digest"] == old_digest
-
-    refreshed = client.post(
-        "/api/v1/retag-targets/github-latest/refresh",
-        headers=headers,
-    )
-    assert refreshed.status_code == 200
-    item = refreshed.json()["items"][0]
-    assert item["proposed_tag"] == "v1.1.0"
-    assert item["final_image"] == f"ghcr.io/acme/app@{new_digest}"
 
 
 def test_retag_apply_rejects_plan_when_fallback_flag_changes(
@@ -551,8 +523,11 @@ def test_retag_apply_rejects_plan_when_fallback_flag_changes(
         headers=headers,
     )
 
-    assert stale.status_code == 409
-    assert stale.json()["detail"] == "retag plan is stale"
+    assert stale.status_code == 202
+    job = _wait_apply_job(client, stale.json()["job_id"])
+    assert job["status"] == "failure"
+    assert job["error"] == "retag apply failed: retag plan is stale"
+    assert job["progress"][-1]["phase"] == "preflight"
 
 
 def test_retag_github_latest_fallback_uses_v_stripped_docker_tag(

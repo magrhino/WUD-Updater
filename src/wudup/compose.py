@@ -250,32 +250,28 @@ class ComposeCli:
             )
             required = directory.name in required_names
             try:
-                images = tuple(
-                    self.config_images(
-                        directory,
-                        file_name,
-                        project_directory=project_directory,
-                    )
+                service_images = self.service_image_pairs(
+                    directory,
+                    file_name,
+                    project_directory=project_directory,
                 )
-                service_images = (
-                    self.service_image_pairs(
-                        directory,
-                        file_name,
-                        project_directory=project_directory,
-                    )
-                    if required
-                    else self.try_service_image_pairs(
-                        directory,
-                        file_name,
-                        project_directory=project_directory,
-                    )
-                )
+                images = tuple(sorted({item.image for item in service_images}))
             except (CommandError, ValueError) as exc:
                 if required:
                     raise ComposeDiscoveryError(
                         "Could not inspect a required Compose stack."
                     ) from exc
-                continue
+                try:
+                    images = tuple(
+                        self.config_images(
+                            directory,
+                            file_name,
+                            project_directory=project_directory,
+                        )
+                    )
+                except CommandError:
+                    continue
+                service_images = ()
             stacks.append(
                 ComposeStack(
                     index=len(stacks) + 1,

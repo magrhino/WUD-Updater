@@ -81,6 +81,11 @@ const filterOptions = [
 
 const retagApplyJobProgressPhases: ApplyJobProgressPhase[] = [
   {
+    key: "preflight",
+    label: "Revalidate",
+    waitingMessage: "Waiting to revalidate the selected retag plan.",
+  },
+  {
     key: "compose-digest-pin",
     label: "Write Compose",
     waitingMessage: "Waiting to write retag Compose metadata.",

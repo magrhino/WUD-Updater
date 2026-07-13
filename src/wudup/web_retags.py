@@ -266,25 +266,7 @@ def api_apply_retag_plan(
     active_error = web_jobs._active_mutation_error(request)
     if active_error:
         raise HTTPException(status_code=409, detail=active_error)
-
-    wud_lock = web_jobs._acquire_apply_wud_lock(settings)
-    try:
-        build = _build_refreshed_retag_plan(
-            settings,
-            RetagPlanRequest(
-                choices=payload.choices,
-                github_latest_fallback=payload.github_latest_fallback,
-            ),
-        )
-        plan = build.response
-        if not secrets.compare_digest(plan.plan_id, payload.plan_id):
-            raise HTTPException(status_code=409, detail="retag plan is stale")
-        if not plan.can_apply or not build.updates:
-            raise HTTPException(status_code=409, detail="retag plan is not ready to apply")
-        return _submit_retag_apply_job(request, settings, build, wud_lock)
-    except Exception:
-        wud_lock.close()
-        raise
+    return _submit_retag_apply_job(request, settings, payload)
 
 
 def retag_targets_response(
@@ -317,19 +299,12 @@ def _run_retag_plan_preview_job(
     _append_retag_preview_progress(
         state,
         job_id,
-        phase="refresh",
+        phase="preview",
         status="running",
-        message="Refreshing GitHub latest retag candidates.",
+        message="Building the retag preview from the selected candidates.",
     )
     try:
-        build = _build_refreshed_retag_plan(settings, payload)
-        _append_retag_preview_progress(
-            state,
-            job_id,
-            phase="refresh",
-            status="success",
-            message="Retag candidate metadata refreshed.",
-        )
+        build = _build_current_retag_plan(settings, payload)
         _append_retag_preview_progress(
             state,
             job_id,
@@ -361,47 +336,11 @@ def _run_retag_plan_preview_job(
         )
 
 
-def _build_refreshed_retag_plan(
+def _build_current_retag_plan(
     settings: WebSettings,
     payload: RetagPlanRequest,
 ) -> _RetagPlanBuild:
-    github_latest_by_target_id: dict[str, _RetagGitHubLatestFallback] | None = None
-    warnings: tuple[str, ...] = ()
-    if payload.github_latest_fallback:
-        (
-            github_latest_by_target_id,
-            warnings,
-        ) = _refresh_retag_github_latest_for_preview(settings)
-    return build_retag_plan(
-        settings,
-        payload,
-        github_latest_by_target_id=github_latest_by_target_id,
-        extra_warnings=warnings,
-    )
-
-
-def _refresh_retag_github_latest_for_preview(
-    settings: WebSettings,
-) -> tuple[dict[str, _RetagGitHubLatestFallback], tuple[str, ...]]:
-    stacks_or_response = _discover_retag_stacks(settings)
-    if isinstance(stacks_or_response, RetagTargetsResponse):
-        return {}, ()
-    known_by_service = web_database.known_digest_state_by_service(settings)
-    labels = _github_latest_fallback_target_labels(stacks_or_response, known_by_service)
-    before = _cached_github_latest_fallback_by_target(
-        settings,
-        stacks_or_response,
-        known_by_service,
-    )
-    response = _refresh_retag_github_latest_candidates(settings, force=False)
-    if response is not None:
-        return before, ()
-    after = _cached_github_latest_fallback_by_target(
-        settings,
-        stacks_or_response,
-        known_by_service,
-    )
-    return after, _github_latest_drift_warnings(before, after, labels)
+    return build_retag_plan(settings, payload)
 
 
 def _store_retag_preview_job(state: Any, job: _RetagPreviewJob) -> None:
@@ -501,58 +440,6 @@ def _retag_preview_job_response(
         warnings=list(job.warnings),
         error=job.error,
         progress=list(job.progress),
-    )
-
-
-def _github_latest_drift_warnings(
-    before: Mapping[str, _RetagGitHubLatestFallback],
-    after: Mapping[str, _RetagGitHubLatestFallback],
-    labels: Mapping[str, str] | None = None,
-) -> tuple[str, ...]:
-    warnings: list[str] = []
-    for target_id in sorted(set(before) | set(after)):
-        old = before.get(target_id)
-        new = after.get(target_id)
-        label = target_id if labels is None else labels.get(target_id, target_id)
-        old_signature = _github_latest_candidate_signature(old)
-        new_signature = _github_latest_candidate_signature(new)
-        if old_signature == new_signature or not any(old_signature):
-            continue
-        if not any(new_signature):
-            warnings.append(
-                f"{label} GitHub latest candidate changed after refresh: "
-                "the previously cached candidate is no longer available."
-            )
-            continue
-        old_tag, old_digest, old_final = old_signature
-        new_tag, new_digest, new_final = new_signature
-        changes: list[str] = []
-        if old_tag != new_tag:
-            changes.append(f"tag {old_tag or 'unknown'} -> {new_tag or 'unknown'}")
-        if old_digest != new_digest:
-            changes.append(
-                f"digest {old_digest or 'unknown'} -> {new_digest or 'unknown'}"
-            )
-        if old_final != new_final and not changes:
-            changes.append("final image changed")
-        warnings.append(
-            f"{label} GitHub latest candidate changed after refresh: "
-            + ", ".join(changes)
-            + "."
-        )
-    return tuple(warnings)
-
-
-def _github_latest_candidate_signature(
-    candidate: _RetagGitHubLatestFallback | None,
-) -> tuple[str, str, str]:
-    if candidate is None:
-        return ("", "", "")
-    provenance = candidate.provenance
-    return (
-        candidate.proposed_tag or ("" if provenance is None else provenance.resolved_tag),
-        "" if provenance is None else provenance.target_digest,
-        "" if provenance is None else provenance.final_image,
     )
 
 
@@ -688,12 +575,13 @@ def _retag_plan_update_for_choice(
                 message=f"{service_key} manual retag target cannot be empty.",
                 hint="Enter a concrete Docker tag from the release or repository page.",
             )
-        return _manual_retag_plan_update_for_choice(
-            settings,
-            service_key,
-            record,
-            target_tag=manual_tag,
-        )
+        if provenance is None or manual_tag != item.proposed_tag:
+            return _manual_retag_plan_update_for_choice(
+                settings,
+                service_key,
+                record,
+                target_tag=manual_tag,
+            )
     if not item.retag_available or provenance is None:
         return None, RetagPlanIssue(
             severity="error",
@@ -995,22 +883,6 @@ def _cached_github_latest_fallback_by_target(
             info,
         )
     return result
-
-
-def _github_latest_fallback_target_labels(
-    stacks: Sequence[ComposeStack],
-    known_by_service: Mapping[str, web_database.KnownDigestState],
-) -> dict[str, str]:
-    rows = _github_latest_fallback_targets(stacks, known_by_service)
-    service_counts = Counter(row.service_key for row in rows)
-    return {
-        row.target_id: (
-            row.service_key
-            if service_counts[row.service_key] == 1
-            else f"{row.service_key} ({row.target_id})"
-        )
-        for row in rows
-    }
 
 
 def _github_latest_fallback_targets(
@@ -1379,8 +1251,7 @@ def _retag_update_identity(item: _RetagPlanUpdate) -> str:
 def _submit_retag_apply_job(
     request: Request,
     settings: WebSettings,
-    build: _RetagPlanBuild,
-    wud_lock: object,
+    payload: RetagApplyRequest,
 ) -> ApplyJobResponse:
     state = request.app.state
     apply_condition: Condition = state.web_apply_condition
@@ -1402,11 +1273,10 @@ def _submit_retag_apply_job(
             executor.submit(
                 _run_retag_apply_job,
                 settings,
-                build,
+                payload,
                 jobs,
                 apply_condition,
                 job.id,
-                wud_lock,
             )
         except Exception:
             del jobs[job.id]
@@ -1417,11 +1287,10 @@ def _submit_retag_apply_job(
 
 def _run_retag_apply_job(
     settings: WebSettings,
-    build: _RetagPlanBuild,
+    payload: RetagApplyRequest,
     jobs: dict[str, WebApplyJob],
     apply_condition: Condition,
     job_id: str,
-    wud_lock: object,
 ) -> None:
     web_jobs._update_apply_job(
         jobs,
@@ -1431,8 +1300,45 @@ def _run_retag_apply_job(
         started_at=utc_timestamp(),
     )
     run_id: int | None = None
+    build: _RetagPlanBuild | None = None
+    wud_lock: object | None = None
+    preflight = True
     successful_updates: tuple[_RetagPlanUpdate, ...] = ()
+    web_jobs._append_apply_job_progress(
+        jobs,
+        apply_condition,
+        job_id,
+        UpdaterProgressEvent(
+            phase="preflight",
+            status="running",
+            message="Revalidating the selected retag plan.",
+        ),
+    )
     try:
+        wud_lock = web_jobs._acquire_apply_wud_lock(settings)
+        build = _build_current_retag_plan(
+            settings,
+            RetagPlanRequest(
+                choices=payload.choices,
+                github_latest_fallback=payload.github_latest_fallback,
+            ),
+        )
+        plan = build.response
+        if not secrets.compare_digest(plan.plan_id, payload.plan_id):
+            raise RuntimeError("retag plan is stale")
+        if not plan.can_apply or not build.updates:
+            raise RuntimeError("retag plan is not ready to apply")
+        web_jobs._append_apply_job_progress(
+            jobs,
+            apply_condition,
+            job_id,
+            UpdaterProgressEvent(
+                phase="preflight",
+                status="success",
+                message="Selected retag plan revalidated.",
+            ),
+        )
+        preflight = False
         run_id = _insert_retag_audit_run(settings, build, status="running")
         successful_updates = _apply_retag_updates(
             settings,
@@ -1469,7 +1375,7 @@ def _run_retag_apply_job(
             apply_condition,
             job_id,
             UpdaterProgressEvent(
-                phase="completion",
+                phase="preflight" if preflight else "completion",
                 status="failure",
                 message=safe_error,
             ),
@@ -1483,7 +1389,7 @@ def _run_retag_apply_job(
             finished_at=utc_timestamp(),
             error=safe_error,
         )
-        if run_id is not None:
+        if run_id is not None and build is not None:
             _finish_retag_audit_run(
                 settings,
                 run_id,
@@ -1493,7 +1399,7 @@ def _run_retag_apply_job(
                 successful_updates=successful_updates,
             )
     finally:
-        close = getattr(wud_lock, "close", None)
+        close = getattr(wud_lock, "close", None) if wud_lock is not None else None
         if close is not None:
             close()
 

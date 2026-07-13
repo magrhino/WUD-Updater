@@ -120,9 +120,21 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
         runner = self.make_runner(allow_tag_updates=True)
         stdout = StringIO()
         stderr = StringIO()
+        unmapped = ComposeStack(
+            index=1,
+            directory=stack_dir,
+            file="docker-compose.yml",
+            name="app",
+            images=("repo/app:1.0",),
+            service_images=(),
+        )
 
         with (
-            mock.patch.object(runner.compose, "try_service_image_pairs", return_value=()),
+            mock.patch.object(
+                runner.compose,
+                "discover_stacks",
+                return_value=[unmapped],
+            ),
             redirect_stdout(stdout),
             redirect_stderr(stderr),
         ):

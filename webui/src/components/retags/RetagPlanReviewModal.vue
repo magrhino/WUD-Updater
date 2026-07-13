@@ -104,7 +104,7 @@ const summary = computed(() => {
     return props.previewJob.error || "Retag preview failed.";
   }
   if (!props.plan) {
-    return "Refreshing retag candidates and building a preview.";
+    return "Building a preview from the selected candidates.";
   }
   if (props.plan.status === "blocked") {
     return `${pluralize(props.plan.issues.length, "issue")} must be resolved before applying.`;

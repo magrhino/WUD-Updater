@@ -306,6 +306,31 @@ class ComposeCliTests(FakeDockerCase):
                 ServiceImage(service="db", image="repo/db:latest"),
             ),
         )
+        self.assertEqual(
+            self.call_commands(),
+            ["compose -f docker-compose.yml config --format json"],
+        )
+
+    def test_discover_stacks_falls_back_to_images_when_json_is_unavailable(
+        self,
+    ) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+
+        with mock.patch.object(
+            self.compose,
+            "config_json",
+            side_effect=ValueError("JSON output is unavailable"),
+        ):
+            stacks = self.compose.discover_stacks(self.base)
+
+        self.assertEqual(len(stacks), 1)
+        self.assertEqual(stacks[0].directory, stack)
+        self.assertEqual(stacks[0].images, ("repo/app:latest",))
+        self.assertEqual(stacks[0].service_images, ())
+        self.assertEqual(
+            self.call_commands(),
+            ["compose -f docker-compose.yml config --images"],
+        )
 
     def test_discover_stacks_skips_configured_single_component_ignore(self) -> None:
         stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
@@ -380,7 +405,7 @@ class ComposeCliTests(FakeDockerCase):
         self.assertEqual(stacks[0].project_directory, project_base / "stack")
         self.assertIn(
             f"compose --project-directory {project_base / 'stack'} "
-            "-f docker-compose.yml config --images",
+            "-f docker-compose.yml config --format json",
             self.call_commands(),
         )
 
