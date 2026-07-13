@@ -839,6 +839,7 @@ export function retagTarget(
     candidate_warning: "",
     candidate_link_label: "",
     candidate_link_url: "",
+    runtime_state: "running",
     retag_available: true,
     retag_reason: "eligible",
     choices: ["keep-current", "switch-to-concrete"],

@@ -173,6 +173,66 @@ def test_retag_apply_rejects_stale_plan(tmp_path: Path) -> None:
     assert response.json()["detail"] == "retag plan is stale"
 
 
+@pytest.mark.parametrize("runtime_state", ["not-running", "unknown"])
+def test_retag_apply_rejects_runtime_drift_without_start_approval(
+    tmp_path: Path,
+    runtime_state: str,
+) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    headers = _csrf_headers(fixture.client)
+    plan = _create_retag_plan(fixture.client, headers)
+    if runtime_state == "not-running":
+        (fixture.fake_root / "compose-runtime.tsv").write_text("", encoding="utf-8")
+    else:
+        (fixture.fake_root / "ps_fail").touch()
+
+    response = _apply_retag_plan(fixture.client, headers, plan)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "retag plan is stale"
+    calls = _fake_docker_calls(fixture.fake_root)
+    assert "compose -f docker-compose.yml pull app" not in calls
+    assert "compose -f docker-compose.yml up" not in calls
+
+
+def test_retag_apply_allows_explicit_inactive_start_approval(tmp_path: Path) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+        },
+    )
+    (fixture.fake_root / "compose-runtime.tsv").write_text("", encoding="utf-8")
+    headers = _csrf_headers(fixture.client)
+    choice = {**_switch_choice(), "allow_start": True}
+    plan = _create_retag_plan(fixture.client, headers, choices=[choice])
+
+    response = _apply_retag_plan(
+        fixture.client,
+        headers,
+        plan,
+        choices=[choice],
+    )
+
+    assert plan["status"] == "ready"
+    assert response.status_code == 202
+    job = _wait_apply_job(fixture.client, response.json()["job_id"])
+    assert job["status"] == "success"
+    calls = _fake_docker_calls(fixture.fake_root)
+    assert "compose -f docker-compose.yml pull app" in calls
+    assert (
+        "compose -f docker-compose.yml up -d --remove-orphans "
+        "--force-recreate --no-deps app"
+    ) in calls
+
+
 def test_retag_apply_cleans_up_job_when_executor_submit_fails(
     tmp_path: Path,
 ) -> None:

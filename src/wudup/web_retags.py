@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import secrets
 import shutil
@@ -81,6 +82,7 @@ from .web_models import (
     RetagPlanRequest,
     RetagPlanResponse,
     RetagPreviewJobResponse,
+    RetagRuntimeState,
     RetagTargetItem,
     RetagTargetsResponse,
     WebApplyJob,
@@ -120,6 +122,12 @@ _GHCR_GITHUB_REPO_RE = re.compile(
     r"(?P<owner>[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)/"
     r"(?P<repo>[A-Za-z0-9._-]{1,100})$",
     re.ASCII,
+)
+_RETAG_COMPOSE_RUNTIME_FORMAT = (
+    '{{.Label "com.docker.compose.project.working_dir"}}\t'
+    '{{.Label "com.docker.compose.project.config_files"}}\t'
+    '{{.Label "com.docker.compose.service"}}\t'
+    '{{.Label "com.docker.compose.oneoff"}}'
 )
 
 
@@ -642,11 +650,15 @@ def _selected_retag_plan_updates(
             continue
         record = records_by_target_id[target_id]
         service_key = record.item.service_key
+        if record.item.runtime_state != "running" and not choice.allow_start:
+            issues.append(_retag_runtime_consent_issue(record.item))
+            continue
         update, issue = _retag_plan_update_for_choice(
             settings,
             service_key,
             record,
             target_tag=choice.target_tag,
+            allow_start=choice.allow_start,
         )
         if issue is not None:
             issues.append(issue)
@@ -676,6 +688,7 @@ def _retag_plan_update_for_choice(
     record: _RetagTargetRecord,
     *,
     target_tag: str | None = None,
+    allow_start: bool = False,
 ) -> tuple[_RetagPlanUpdate | None, RetagPlanIssue | None]:
     item = record.item
     provenance = record.provenance
@@ -693,6 +706,7 @@ def _retag_plan_update_for_choice(
             service_key,
             record,
             target_tag=manual_tag,
+            allow_start=allow_start,
         )
     if not item.retag_available or provenance is None:
         return None, RetagPlanIssue(
@@ -731,6 +745,8 @@ def _retag_plan_update_for_choice(
             stack=record.stack,
             update=update,
             provenance=provenance,
+            runtime_state=item.runtime_state,
+            allow_start=allow_start,
             known_image_service_key_ambiguous=record.service_key_ambiguous,
         ),
         None,
@@ -743,6 +759,7 @@ def _manual_retag_plan_update_for_choice(
     record: _RetagTargetRecord,
     *,
     target_tag: str,
+    allow_start: bool = False,
 ) -> tuple[_RetagPlanUpdate | None, RetagPlanIssue | None]:
     item = record.item
     if target_tag == "latest":
@@ -808,6 +825,8 @@ def _manual_retag_plan_update_for_choice(
             stack=record.stack,
             update=update,
             provenance=provenance,
+            runtime_state=item.runtime_state,
+            allow_start=allow_start,
             known_image_service_key_ambiguous=record.service_key_ambiguous,
         ),
         None,
@@ -829,6 +848,31 @@ def _manual_retag_issue(
         stack=item.stack,
         service=item.service,
         hint=hint,
+    )
+
+
+def _retag_runtime_consent_issue(item: RetagTargetItem) -> RetagPlanIssue:
+    if item.runtime_state == "not-running":
+        message = (
+            f"{item.service_key} is not running; applying this retag would start it."
+        )
+    else:
+        message = (
+            f"{item.service_key} runtime state is unknown; applying this retag may "
+            "start it."
+        )
+    return RetagPlanIssue(
+        severity="error",
+        code="retag-start-not-approved",
+        message=message,
+        service_key=item.service_key,
+        stack=item.stack,
+        service=item.service,
+        hint=(
+            "Refresh retag targets, then select this service individually to approve "
+            "starting it."
+        ),
+        details={"runtime_state": item.runtime_state},
     )
 
 
@@ -856,6 +900,7 @@ def _retag_target_records(
     else:
         active_github_latest_by_target_id = {}
     records: list[_RetagTargetRecord] = []
+    running_service_keys = _running_retag_compose_service_keys(settings)
     for stack in stacks:
         for service_image in stack.service_images:
             service_key = _retag_service_key(stack.name, service_image.service)
@@ -873,12 +918,65 @@ def _retag_target_records(
                     target_id,
                     known,
                     active_github_latest_by_target_id.get(target_id),
+                    runtime_state=(
+                        "unknown"
+                        if running_service_keys is None
+                        else "running"
+                        if _retag_compose_service_key(stack, service_image.service)
+                        in running_service_keys
+                        else "not-running"
+                    ),
                     service_key_ambiguous=service_key_ambiguous,
                     github_latest_fallback=github_latest_fallback,
                 )
             )
 
     return tuple(records)
+
+
+def _running_retag_compose_service_keys(
+    settings: WebSettings,
+) -> set[tuple[Path, str]] | None:
+    docker = DockerCli(runner=_command_runner(settings))
+    try:
+        rows = docker.ps_format(_RETAG_COMPOSE_RUNTIME_FORMAT)
+    except CommandError:
+        return None
+
+    keys: set[tuple[Path, str]] = set()
+    for row in rows:
+        fields = row.split("\t", 3)
+        if len(fields) != 4:
+            continue
+        working_dir, config_files, service, oneoff = fields
+        if oneoff.strip().casefold() == "true":
+            continue
+        service = service.strip()
+        if not service:
+            continue
+        for value in config_files.split(","):
+            value = value.strip()
+            if not value:
+                continue
+            config_path = Path(value)
+            if not config_path.is_absolute():
+                if not working_dir:
+                    continue
+                config_path = Path(working_dir) / config_path
+            keys.add((_normalized_retag_compose_path(config_path), service))
+    return keys
+
+
+def _retag_compose_service_key(
+    stack: ComposeStack,
+    service: str,
+) -> tuple[Path, str]:
+    project_directory = stack.project_directory or stack.directory
+    return (_normalized_retag_compose_path(project_directory / stack.file), service)
+
+
+def _normalized_retag_compose_path(path: Path) -> Path:
+    return Path(os.path.normpath(path))
 
 
 def _discover_retag_stacks(
@@ -1221,6 +1319,7 @@ def _retag_target_record(
     known: web_database.KnownDigestState | None,
     github_latest: _RetagGitHubLatestFallback | None,
     *,
+    runtime_state: RetagRuntimeState,
     service_key_ambiguous: bool,
     github_latest_fallback: bool,
 ) -> _RetagTargetRecord:
@@ -1249,6 +1348,7 @@ def _retag_target_record(
         github_latest=github_latest,
         github_latest_fallback=github_latest_fallback,
         allow_source_image_match=github_latest_provenance,
+        runtime_state=runtime_state,
     )
     return _RetagTargetRecord(
         item=item,
@@ -1355,6 +1455,8 @@ def _retag_update_with_label_rewrites(
         stack=item.stack,
         update=item.update,
         provenance=item.provenance,
+        runtime_state=item.runtime_state,
+        allow_start=item.allow_start,
         known_image_service_key_ambiguous=item.known_image_service_key_ambiguous,
         label_rewrites=tuple(
             RetagPlanLabelRewrite(
@@ -2086,6 +2188,7 @@ def _retag_target_item(
     github_latest: _RetagGitHubLatestFallback | None,
     github_latest_fallback: bool,
     allow_source_image_match: bool,
+    runtime_state: RetagRuntimeState,
 ) -> RetagTargetItem:
     label_value = _label_value(service_image.labels, WUD_TAG_INCLUDE_LABEL)
     tracking_tag, tracking_tag_source = _tracking_tag(
@@ -2146,6 +2249,7 @@ def _retag_target_item(
         candidate_warning=candidate_warning,
         candidate_link_label=candidate_link_label,
         candidate_link_url=candidate_link_url,
+        runtime_state=runtime_state,
         retag_available=retag_available,
         retag_reason=retag_reason,
         choices=choices,

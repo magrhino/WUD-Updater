@@ -227,6 +227,140 @@ def test_retag_targets_endpoint_includes_service_without_pending_line(
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
+def test_retag_targets_endpoint_reports_running_and_not_running_services(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "live",
+        [("app", "repo/live@sha256:live", "cid-live")],
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "archive",
+        [("app", "repo/archive@sha256:archive", None)],
+    )
+    for stack in ("live", "archive"):
+        image = f"repo/{stack}@sha256:{stack}"
+        _seed_known_image(
+            tmp_path,
+            service_key=f"{stack}/app",
+            image=image,
+            source_image=f"repo/{stack}:latest",
+            resolved_tag="2.0",
+            watch_tag="latest",
+            target_digest=f"sha256:{stack}",
+            final_image=image,
+        )
+
+    response = client.get("/api/v1/retag-targets")
+
+    assert response.status_code == 200
+    items = {item["stack"]: item for item in response.json()["items"]}
+    assert items["live"]["runtime_state"] == "running"
+    assert items["archive"]["runtime_state"] == "not-running"
+    for item in items.values():
+        assert item["retag_available"] is True
+        assert item["choices"] == ["keep-current", "switch-to-concrete"]
+    calls = _fake_docker_calls(fake_root)
+    assert calls.count(
+        'ps --format {{.Label "com.docker.compose.project.working_dir"}}\t'
+        '{{.Label "com.docker.compose.project.config_files"}}\t'
+        '{{.Label "com.docker.compose.service"}}\t'
+        '{{.Label "com.docker.compose.oneoff"}}'
+    ) == 1
+    assert "compose -f docker-compose.yml ps" not in calls
+    _assert_pending_grouping_did_not_mutate(calls)
+
+
+def test_retag_targets_endpoint_reports_unknown_when_runtime_probe_fails(
+    tmp_path: Path,
+) -> None:
+    fixture = _make_retag_fixture(tmp_path)
+    (fixture.fake_root / "ps_fail").touch()
+
+    response = fixture.client.get("/api/v1/retag-targets")
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["runtime_state"] == "unknown"
+    assert item["retag_available"] is True
+    assert item["choices"] == ["keep-current", "switch-to-concrete"]
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fixture.fake_root))
+
+
+def test_retag_targets_ignores_compose_run_one_off_containers(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", None)],
+    )
+    (fake_root / "compose-runtime.tsv").write_text(
+        f"{compose_dir}\t{compose_dir / 'docker-compose.yml'}\tapp\tTrue\n",
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/v1/retag-targets")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["runtime_state"] == "not-running"
+
+
+def test_retag_targets_matches_relative_config_from_host_project_directory(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    host_base = tmp_path / "host-docker"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "HOST_DOCKER_BASE": str(host_base),
+            **fake_env,
+        },
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app@sha256:old", "cid-app")],
+    )
+    host_stack = host_base / "stack"
+    host_stack.mkdir(parents=True)
+    (host_stack / "docker-compose.yml").write_text(
+        (compose_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (fake_root / "compose-runtime.tsv").write_text(
+        f"{host_stack}\tcompose.override.yml, docker-compose.yml\tapp\tFalse\n",
+        encoding="utf-8",
+    )
+    _seed_known_image(
+        tmp_path,
+        service_key="stack/app",
+        image="repo/app@sha256:old",
+        source_image="repo/app:latest",
+        resolved_tag="2.0",
+        watch_tag="latest",
+        target_digest="sha256:old",
+        final_image="repo/app@sha256:old",
+    )
+
+    response = client.get("/api/v1/retag-targets")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["runtime_state"] == "running"
+
+
 def test_retag_preview_rejects_second_active_job(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -383,6 +517,78 @@ def test_retag_plan_rejects_keep_current_target_tag(tmp_path: Path) -> None:
     assert response.status_code == 422
     assert "target_tag is only allowed" in str(response.json()["detail"])
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fixture.fake_root))
+
+
+def test_retag_plan_rejects_keep_current_start_approval(tmp_path: Path) -> None:
+    fixture = _make_retag_fixture(tmp_path)
+
+    response = fixture.client.post(
+        "/api/v1/retag-plans",
+        json={
+            "choices": [
+                {
+                    "service_key": "stack/app",
+                    "choice": "keep-current",
+                    "allow_start": True,
+                }
+            ]
+        },
+        headers=_csrf_headers(fixture.client),
+    )
+
+    assert response.status_code == 422
+    assert "allow_start is only allowed" in str(response.json()["detail"])
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fixture.fake_root))
+
+
+@pytest.mark.parametrize("runtime_state", ["not-running", "unknown"])
+def test_retag_plan_requires_start_approval_for_inactive_runtime(
+    tmp_path: Path,
+    runtime_state: str,
+) -> None:
+    fixture = _make_retag_fixture(tmp_path)
+    initial = fixture.client.get("/api/v1/retag-targets")
+
+    assert initial.status_code == 200
+    assert initial.json()["items"][0]["runtime_state"] == "running"
+
+    if runtime_state == "not-running":
+        (fixture.fake_root / "compose-runtime.tsv").write_text("", encoding="utf-8")
+    else:
+        (fixture.fake_root / "ps_fail").touch()
+    headers = _csrf_headers(fixture.client)
+
+    blocked = fixture.client.post(
+        "/api/v1/retag-plans",
+        json={"choices": [_switch_choice()]},
+        headers=headers,
+    )
+    approved = fixture.client.post(
+        "/api/v1/retag-plans",
+        json={
+            "choices": [
+                {
+                    **_switch_choice(),
+                    "allow_start": True,
+                }
+            ]
+        },
+        headers=headers,
+    )
+
+    assert blocked.status_code == 200
+    blocked_plan = blocked.json()
+    assert blocked_plan["status"] == "blocked"
+    assert blocked_plan["can_apply"] is False
+    assert blocked_plan["issues"][0]["code"] == "retag-start-not-approved"
+    assert blocked_plan["issues"][0]["details"] == {
+        "runtime_state": runtime_state
+    }
+    assert approved.status_code == 200
+    approved_plan = approved.json()
+    assert approved_plan["status"] == "ready"
+    assert approved_plan["can_apply"] is True
+    assert approved_plan["plan_id"] != blocked_plan["plan_id"]
 
 
 def test_retag_plan_manual_target_allows_non_latest_service(

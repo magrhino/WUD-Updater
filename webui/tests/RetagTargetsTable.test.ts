@@ -53,6 +53,28 @@ describe("RetagTargetsTable", () => {
     expect(wrapper.emitted("retag-only")).toEqual([[item]]);
   });
 
+  it("keeps a not-running service selectable with a visible start warning", () => {
+    const item = retagTarget({ runtime_state: "not-running" });
+    const wrapper = mountTable({ rows: [item] });
+
+    expect(wrapper.text()).toContain("Not running");
+    expect(wrapper.text()).toContain(
+      "Applying will create or recreate and start this service",
+    );
+    const retagOnlyButton = wrapper.get(
+      'button[aria-label="Retag only media/app"]',
+    );
+    expect(retagOnlyButton.attributes("disabled")).toBeUndefined();
+    expect(retagOnlyButton.attributes("title")).toContain(
+      "will create or recreate and start this service",
+    );
+    const switchInput = wrapper.get('input[value="switch-to-concrete"]');
+    expect(switchInput.attributes("disabled")).toBeUndefined();
+    expect(switchInput.attributes("title")).toContain(
+      "will create or recreate and start this service",
+    );
+  });
+
   it("disables retag selection when a manual target tag is invalid", () => {
     const item = retagTarget({
       service_key: "media/radarr",

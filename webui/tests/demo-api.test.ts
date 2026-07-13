@@ -84,7 +84,17 @@ describe("demo web API", () => {
     });
     await expect(api.releaseNotes()).resolves.toMatchObject({ count: 7 });
     await expect(api.updateTargets()).resolves.toMatchObject({ count: 4 });
-    await expect(api.retagTargets()).resolves.toMatchObject({ count: 4 });
+    const retagTargets = await api.retagTargets();
+    expect(retagTargets).toMatchObject({ count: 4 });
+    expect(retagTargets.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          service_key: "media/wudup",
+          retag_available: true,
+          runtime_state: "not-running",
+        }),
+      ]),
+    );
     const securityScans = await api.securityScans();
     const findingScan = securityScans.items.find((item) => item.verdict === "findings");
     expect(findingScan).toMatchObject({

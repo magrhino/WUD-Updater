@@ -46,6 +46,8 @@ describe("RetagTargetsMobileList", () => {
     expect(wrapper.text()).toContain("media/app");
     expect(wrapper.text()).toContain("media / app");
     expect(wrapper.text()).toContain("repo/app:latest");
+    expect(wrapper.text()).toContain("Running");
+    expect(wrapper.text()).toContain("Matching Compose container is running");
     expect(wrapper.text()).toContain("latest (label)");
     expect(wrapper.text()).toContain("latest -> 1.1");
     expect(wrapper.text()).toContain("GitHub release");
@@ -87,6 +89,28 @@ describe("RetagTargetsMobileList", () => {
     expect(wrapper.emitted("choice-update")).toEqual([
       [item, "switch-to-concrete"],
     ]);
+  });
+
+  it("keeps an unknown-runtime service selectable with a visible warning", () => {
+    const item = retagTarget({ runtime_state: "unknown" });
+    const wrapper = mountMobileList({ rows: [item] });
+
+    expect(wrapper.text()).toContain("Unknown");
+    expect(wrapper.text()).toContain(
+      "Applying may create or recreate and start this service",
+    );
+    const retagOnlyButton = wrapper.get(
+      'button[aria-label="Retag only media/app"]',
+    );
+    expect(retagOnlyButton.attributes("disabled")).toBeUndefined();
+    expect(retagOnlyButton.attributes("title")).toContain(
+      "may create or recreate and start this service",
+    );
+    const switchInput = wrapper.get('input[value="switch-to-concrete"]');
+    expect(switchInput.attributes("disabled")).toBeUndefined();
+    expect(switchInput.attributes("title")).toContain(
+      "may create or recreate and start this service",
+    );
   });
 
   it("keeps read-only and unavailable rows from switching", () => {

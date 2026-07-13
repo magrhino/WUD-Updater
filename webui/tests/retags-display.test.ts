@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   candidateLabel,
+  compareRetagTargets,
   composeLocation,
   currentTagLabel,
   digestPinSummary,
@@ -14,6 +15,9 @@ import {
   retagPlanContextLabel,
   retagPlanSourceFile,
   searchableText,
+  runtimeStateDetail,
+  runtimeStateLabel,
+  runtimeStateTagType,
   trackingLabel,
   trackingSourceLabel,
   trackingTagType,
@@ -54,6 +58,62 @@ describe("retag display helpers", () => {
     expect(composeLocation(stale)).toBe("/docker/media");
     expect(searchableText(stale)).toContain("stale provenance");
     expect(searchableText(stale)).toContain("could not resolve");
+  });
+
+  it("labels and sorts runtime state for operator review", () => {
+    const runningReady = retagTarget({
+      service_key: "zeta/ready",
+      stack: "zeta",
+      service: "ready",
+    });
+    const runningAttention = retagTarget({
+      service_key: "alpha/attention",
+      stack: "alpha",
+      service: "attention",
+      retag_available: false,
+    });
+    const notRunningReady = retagTarget({
+      service_key: "beta/ready",
+      stack: "beta",
+      service: "ready",
+      runtime_state: "not-running",
+    });
+    const notRunningAttention = retagTarget({
+      service_key: "alpha/stopped",
+      stack: "alpha",
+      service: "stopped",
+      runtime_state: "not-running",
+      retag_available: false,
+    });
+    const unknown = retagTarget({
+      service_key: "aardvark/unknown",
+      stack: "aardvark",
+      service: "unknown",
+      runtime_state: "unknown",
+    });
+
+    expect(runtimeStateLabel(runningReady)).toBe("Running");
+    expect(runtimeStateTagType(runningReady)).toBe("success");
+    expect(runtimeStateLabel(notRunningReady)).toBe("Not running");
+    expect(runtimeStateTagType(notRunningReady)).toBe("warning");
+    expect(runtimeStateDetail(notRunningReady)).toContain(
+      "will create or recreate and start",
+    );
+    expect(runtimeStateLabel(unknown)).toBe("Unknown");
+    expect(runtimeStateTagType(unknown)).toBe("default");
+    expect(searchableText(unknown)).toContain("unknown runtime state");
+
+    expect(
+      [unknown, notRunningAttention, runningAttention, notRunningReady, runningReady]
+        .sort(compareRetagTargets)
+        .map((item) => item.service_key),
+    ).toEqual([
+      "zeta/ready",
+      "alpha/attention",
+      "beta/ready",
+      "alpha/stopped",
+      "aardvark/unknown",
+    ]);
   });
 
   it("summarizes retag plans and digest-pin changes", () => {

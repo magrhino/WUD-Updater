@@ -24,6 +24,7 @@ const props = defineProps<{
   plan: RetagPlanResponse | null;
   impactLabel: string;
   mutationNotice: string;
+  runtimeWarning: string;
   applyDisabled: boolean;
   loading: boolean;
   applyJobActive: boolean;
@@ -61,7 +62,8 @@ function closeModal(): void {
           <p class="eyebrow">Confirm retag apply</p>
           <h2 id="retag-confirm-title">Apply selected retags</h2>
           <p class="preflight-summary-text">
-            Review the selected Compose metadata changes before starting the retag apply job.
+            Applying rewrites Compose image metadata, pulls images, and recreates selected services.
+            Review these changes before starting the retag apply job.
           </p>
           <p v-if="impactLabel" class="preflight-impact-text">
             {{ impactLabel }}
@@ -78,6 +80,14 @@ function closeModal(): void {
         :show-icon="false"
       >
         {{ mutationNotice }}
+      </n-alert>
+
+      <n-alert
+        v-if="runtimeWarning"
+        type="warning"
+        :show-icon="false"
+      >
+        {{ runtimeWarning }}
       </n-alert>
 
       <n-grid

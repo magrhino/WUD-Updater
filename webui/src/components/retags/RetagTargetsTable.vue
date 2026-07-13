@@ -34,6 +34,9 @@ import {
   currentTagLabel,
   reasonLabel,
   reasonTagType,
+  runtimeStateDetail,
+  runtimeStateLabel,
+  runtimeStateTagType,
   trackingLabel,
   trackingSourceLabel,
   trackingTagType,
@@ -63,6 +66,19 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
       h("div", { class: "retag-table-cell retag-service-cell" }, [
         h("strong", row.service_key),
         h("span", `${row.stack} / ${row.service}`),
+        h(
+          NTag,
+          {
+            size: "small",
+            type: runtimeStateTagType(row),
+            bordered: false,
+            title: runtimeStateDetail(row),
+          },
+          { default: () => runtimeStateLabel(row) },
+        ),
+        row.runtime_state === "running"
+          ? null
+          : h("span", { class: "retag-runtime-detail" }, runtimeStateDetail(row)),
       ]),
   },
   {

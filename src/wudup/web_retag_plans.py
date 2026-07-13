@@ -16,10 +16,11 @@ from .web_models import (
     RetagPlanLabelRewrite,
     RetagPlanResponse,
     RetagPlanStack,
+    RetagRuntimeState,
 )
 
 
-RETAG_PLAN_VERSION = 1
+RETAG_PLAN_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,8 @@ class RetagPlanUpdate:
     stack: ComposeStack
     update: DigestPinUpdate
     provenance: DigestTagProvenance
+    runtime_state: RetagRuntimeState = "unknown"
+    allow_start: bool = False
     known_image_service_key_ambiguous: bool = False
     label_rewrites: tuple[RetagPlanLabelRewrite, ...] = ()
 
@@ -147,6 +150,8 @@ def retag_plan_id(
                 "final_image": item.update.final_image,
                 "label_value": item.update.label_value,
                 "provenance": asdict(item.provenance),
+                "runtime_state": item.runtime_state,
+                "allow_start": item.allow_start,
             }
             for item in sorted(
                 updates,

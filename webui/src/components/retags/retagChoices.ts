@@ -3,14 +3,17 @@ import {
   canChooseRetagTarget,
   canEnableRetagTargetChoice,
   normalizeRetagChoice,
+  retagRuntimeChoiceWarning,
   retagTargetTagValidationError,
 } from "../../utils/retagChoices";
 
 export {
   canChooseRetagTarget,
+  canBulkEnableRetagTargetChoice,
   canEnableRetagTargetChoice,
   canSwitchToConcrete,
   retagChoice,
+  retagRuntimeChoiceWarning,
   retagTargetIdentity,
   retagTargetTagValidationError,
   retagTargetTagValue,
@@ -67,9 +70,10 @@ export function retagTargetChoiceTitle(
   if (targetError) {
     return targetError;
   }
-  return canChooseTarget
-    ? mutationNotice
-    : "Enter a target tag before retagging.";
+  if (!canChooseTarget) {
+    return "Enter a target tag before retagging.";
+  }
+  return mutationNotice || retagRuntimeChoiceWarning(item);
 }
 
 export function retagOnlyActionTitle(
@@ -86,7 +90,9 @@ export function retagOnlyActionTitle(
   if (retagOnlyActionDisabled(item, targetTags, mutationDisabled)) {
     return targetChoiceTitle || "Retagging is disabled.";
   }
-  return `Select only ${item.service_key} for retag preview.`;
+  return (
+    targetChoiceTitle || `Select only ${item.service_key} for retag preview.`
+  );
 }
 
 export function emitRetagOnly(

@@ -56,6 +56,7 @@ export type {
   // Retag targets
   RetagTargetsStatus,
   RetagTargetChoice,
+  RetagRuntimeState,
   RetagTargetItem,
   RetagTargetsResponse,
   RetagPlanStatus,

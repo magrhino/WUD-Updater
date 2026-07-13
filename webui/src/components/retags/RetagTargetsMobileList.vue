@@ -22,6 +22,9 @@ import {
   composeLocation,
   reasonLabel,
   reasonTagType,
+  runtimeStateDetail,
+  runtimeStateLabel,
+  runtimeStateTagType,
   trackingLabel,
 } from "../../views/retags/display";
 
@@ -82,6 +85,19 @@ const emit = defineEmits<{
           <dt>Image</dt>
           <dd>
             <code class="wrap-anywhere">{{ item.image }}</code>
+          </dd>
+        </div>
+        <div>
+          <dt>Runtime</dt>
+          <dd class="retag-runtime-review">
+            <n-tag
+              size="small"
+              :type="runtimeStateTagType(item)"
+              :bordered="false"
+            >
+              {{ runtimeStateLabel(item) }}
+            </n-tag>
+            <span>{{ runtimeStateDetail(item) }}</span>
           </dd>
         </div>
         <div>
@@ -217,6 +233,12 @@ const emit = defineEmits<{
 .retag-source-link {
   width: fit-content;
   font-size: 0.84rem;
+}
+
+.retag-runtime-review {
+  align-items: flex-start;
+  display: grid;
+  gap: 4px;
 }
 
 .retag-target-field {

@@ -410,6 +410,9 @@ export const useUpdatesStore = defineStore("updates", () => {
           request.target_id = targetId;
         }
         if (choice === "switch-to-concrete") {
+          if (item.runtime_state !== "running") {
+            request.allow_start = true;
+          }
           const tag = retagTargetTagValue(item, retagTargetTags.value).trim();
           if (tag && (!item.retag_available || tag !== item.proposed_tag)) {
             request.target_tag = tag;
