@@ -262,7 +262,17 @@ class ComposeCli:
                     raise ComposeDiscoveryError(
                         "Could not inspect a required Compose stack."
                     ) from exc
-                continue
+                try:
+                    images = tuple(
+                        self.config_images(
+                            directory,
+                            file_name,
+                            project_directory=project_directory,
+                        )
+                    )
+                except CommandError:
+                    continue
+                service_images = ()
             stacks.append(
                 ComposeStack(
                     index=len(stacks) + 1,
