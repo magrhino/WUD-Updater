@@ -756,6 +756,58 @@ describe("RetagsView", () => {
     expect(disabledApplyButton?.attributes("disabled")).toBeDefined();
   });
 
+  it("shows stale apply errors in the confirmation and rebuilds the preview", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse();
+    updates.retagPlan = retagPlanResponse();
+    vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    vi.spyOn(updates, "applyRetagPlan").mockImplementation(async () => {
+      updates.error = "409: retag plan is stale";
+      throw new Error(updates.error);
+    });
+    const createRetagPlan = vi
+      .spyOn(updates, "createRetagPlan")
+      .mockImplementation(async () => {
+        const plan = retagPlanResponse({ plan_id: "rebuilt-retag-plan" });
+        updates.retagPlan = plan;
+        return plan;
+      });
+
+    const wrapper = mountWithApp(RetagsView, { pinia });
+    await flushPromises();
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Apply selected retags"))
+      ?.trigger("click");
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Confirm and apply"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const confirmation = wrapper.get(".retag-confirm-modal");
+    const applyError = confirmation.get('[role="alert"]');
+    expect(applyError.text()).toContain(
+      "Service state changed since this preview. Rebuild the preview before applying.",
+    );
+    expect(applyError.attributes("tabindex")).toBe("-1");
+
+    await confirmation
+      .findAll("button")
+      .find((button) => button.text().includes("Rebuild preview"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(createRetagPlan).toHaveBeenCalledTimes(1);
+    expect(wrapper.find(".retag-confirm-modal").exists()).toBe(false);
+    expect(wrapper.text()).toContain("Review retag preview");
+  });
+
   it("keeps duplicate service apply snapshot rows keyed by target id", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const pinia = createPinia();

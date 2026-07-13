@@ -76,6 +76,7 @@ const applyJobPanelRef = ref<PendingApplyJobPanelRef | null>(null);
 const showRetagApplyJobPanel = ref(false);
 const showRetagConfirmModal = ref(false);
 const showRetagPreviewModal = ref(false);
+const retagApplyError = ref("");
 const isDemoMode =
   import.meta.env.MODE === "demo" ||
   import.meta.env.VITE_WUD_DEMO_MODE === "true";
@@ -463,6 +464,7 @@ function openRetagApplyConfirm(): void {
   if (applyDisabled.value) {
     return;
   }
+  retagApplyError.value = "";
   showRetagConfirmModal.value = true;
 }
 
@@ -470,6 +472,7 @@ function openRetagApplyConfirmFromPreview(): void {
   if (applyDisabled.value) {
     return;
   }
+  retagApplyError.value = "";
   showRetagPreviewModal.value = false;
   showRetagConfirmModal.value = true;
 }
@@ -479,8 +482,12 @@ async function confirmRetagApply(): Promise<void> {
     return;
   }
   const snapshot = createRetagApplyJobSnapshot();
-  const job = await updates.applyRetagPlan().catch(() => undefined);
-  if (!job) {
+  retagApplyError.value = "";
+  let job;
+  try {
+    job = await updates.applyRetagPlan();
+  } catch {
+    retagApplyError.value = retagApplyErrorMessage(updates.error);
     return;
   }
   applyJobSnapshot.value = snapshot;
@@ -488,6 +495,20 @@ async function confirmRetagApply(): Promise<void> {
   showRetagConfirmModal.value = false;
   subscribeApplyJob(job.job_id);
   await focusApplyJobPanel();
+}
+
+async function rebuildRetagPreview(): Promise<void> {
+  retagApplyError.value = "";
+  showRetagConfirmModal.value = false;
+  showRetagPreviewModal.value = true;
+  await updates.createRetagPlan().catch(() => undefined);
+}
+
+function retagApplyErrorMessage(error: string): string {
+  if (error.toLowerCase().includes("plan is stale")) {
+    return "Service state changed since this preview. Rebuild the preview before applying.";
+  }
+  return error || "The retag apply job could not be started.";
 }
 
 function createRetagApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
@@ -586,10 +607,12 @@ onMounted(() => {
       :impact-label="retagConfirmImpactLabel"
       :mutation-notice="retagMutationNotice"
       :runtime-warning="selectedRuntimeWarning"
+      :apply-error="retagApplyError"
       :apply-disabled="applyDisabled"
       :loading="updates.loading"
       :apply-job-active="applyJobActive"
       @confirm="confirmRetagApply"
+      @rebuild-preview="rebuildRetagPreview"
     />
 
     <RetagPlanReviewModal
