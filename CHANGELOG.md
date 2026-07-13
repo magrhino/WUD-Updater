@@ -4,6 +4,18 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.56.1](https://github.com/magrhino/wudup/compare/v0.56.0...v0.56.1) (2026-07-13)
+
+
+### Bug Fixes
+
+* **security-scans:** preserve target identity and verify image freshness ([#524](https://github.com/magrhino/wudup/issues/524)) ([651ee55](https://github.com/magrhino/wudup/commit/651ee551bc05841a98455fbed93ea6af57bf672e))
+
+
+### Performance Improvements
+
+* **retags:** reduce preview and apply latency ([#530](https://github.com/magrhino/wudup/issues/530)) ([3b31b65](https://github.com/magrhino/wudup/commit/3b31b65cc9e5163f92ecffaee0de29cbb5124211))
+
 ## [0.56.0](https://github.com/magrhino/wudup/compare/v0.55.1...v0.56.0) (2026-07-12)
 
 
