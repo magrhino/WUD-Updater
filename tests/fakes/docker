@@ -97,7 +97,7 @@ compose_services_from_file(){
 }
 
 compose_config_json_from_file(){
-  local file="$1" output
+  local file="$1" output project_name
   [[ -f "$file" ]] || return 1
   output="$(awk '
     function esc(value) {
@@ -246,7 +246,18 @@ compose_config_json_from_file(){
       }
     }
   ' "$file")" || return 1
-  printf '{"name":"%s","services":{%s}}\n' "${COMPOSE_PROJECT_NAME:-$(basename "$PWD")}" "$output"
+  project_name="${COMPOSE_PROJECT_NAME:-}"
+  if [[ -z "$project_name" ]]; then
+    project_name="$(awk '
+      /^name:[[:space:]]*/ {
+        sub(/^name:[[:space:]]*/, "")
+        gsub(/^["\047]|["\047]$/, "")
+        print
+        exit
+      }
+    ' "$file")"
+  fi
+  printf '{"name":"%s","services":{%s}}\n' "${project_name:-$(basename "$PWD")}" "$output"
 }
 
 service_images(){

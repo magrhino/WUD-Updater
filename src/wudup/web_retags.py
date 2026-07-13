@@ -937,14 +937,14 @@ def _retag_target_records(
 
 def _running_retag_compose_service_keys(
     settings: WebSettings,
-) -> set[tuple[Path, str, str]] | None:
+) -> set[tuple[frozenset[Path], str, str]] | None:
     docker = DockerCli(runner=_command_runner(settings))
     try:
         rows = docker.ps_format(_RETAG_COMPOSE_RUNTIME_FORMAT)
     except CommandError:
         return None
 
-    keys: set[tuple[Path, str, str]] = set()
+    keys: set[tuple[frozenset[Path], str, str]] = set()
     for row in rows:
         fields = row.split("\t", 4)
         if len(fields) != 5:
@@ -955,28 +955,37 @@ def _running_retag_compose_service_keys(
         service = service.strip()
         if not service:
             continue
-        for value in config_files.split(","):
-            value = value.strip()
-            if not value:
-                continue
-            config_path = Path(value)
-            if not config_path.is_absolute():
-                if not working_dir:
-                    continue
-                config_path = Path(working_dir) / config_path
-            keys.add(
-                (_normalized_retag_compose_path(config_path), project.strip(), service)
-            )
+        config_paths = _retag_runtime_config_paths(working_dir, config_files)
+        if config_paths is not None:
+            keys.add((config_paths, project.strip(), service))
     return keys
+
+
+def _retag_runtime_config_paths(
+    working_dir: str,
+    config_files: str,
+) -> frozenset[Path] | None:
+    paths: set[Path] = set()
+    for value in config_files.split(","):
+        value = value.strip()
+        if not value:
+            continue
+        path = Path(value)
+        if not path.is_absolute():
+            if not working_dir:
+                return None
+            path = Path(working_dir) / path
+        paths.add(_normalized_retag_compose_path(path))
+    return frozenset(paths) if paths else None
 
 
 def _retag_compose_service_key(
     stack: ComposeStack,
     service: str,
-) -> tuple[Path, str, str]:
+) -> tuple[frozenset[Path], str, str]:
     project_directory = stack.project_directory or stack.directory
     return (
-        _normalized_retag_compose_path(project_directory / stack.file),
+        frozenset({_normalized_retag_compose_path(project_directory / stack.file)}),
         stack.project_name,
         service,
     )
@@ -1633,6 +1642,7 @@ def _apply_retag_updates(
         )
         backup: Path | None = None
         try:
+            _revalidate_retag_runtime_before_apply(settings, stack_updates)
             _progress(
                 jobs,
                 apply_condition,
@@ -1728,6 +1738,23 @@ def _apply_retag_updates(
                 backup = None
             raise _RetagApplyFailed(str(exc), successful_updates) from exc
     return tuple(successful_updates)
+
+
+def _revalidate_retag_runtime_before_apply(
+    settings: WebSettings,
+    updates: Sequence[_RetagPlanUpdate],
+) -> None:
+    running_service_keys = _running_retag_compose_service_keys(settings)
+    if running_service_keys is None:
+        raise RuntimeError("retag runtime state could not be revalidated")
+    for item in updates:
+        if item.allow_start:
+            continue
+        service = _retag_update_service(item)
+        if _retag_compose_service_key(item.stack, service) not in running_service_keys:
+            raise RuntimeError(
+                f"{item.service_key} is no longer running in the expected Compose project"
+            )
 
 
 def _recreate_retag_services(

@@ -342,7 +342,7 @@ def test_retag_targets_matches_relative_config_from_host_project_directory(
         encoding="utf-8",
     )
     (fake_root / "compose-runtime.tsv").write_text(
-        f"{host_stack}\tcompose.override.yml, docker-compose.yml\tstack\tapp\tFalse\n",
+        f"{host_stack}\tdocker-compose.yml\tstack\tapp\tFalse\n",
         encoding="utf-8",
     )
     _seed_known_image(
@@ -360,6 +360,23 @@ def test_retag_targets_matches_relative_config_from_host_project_directory(
 
     assert response.status_code == 200
     assert response.json()["items"][0]["runtime_state"] == "running"
+
+
+def test_retag_targets_does_not_match_a_multi_file_compose_project(
+    tmp_path: Path,
+) -> None:
+    fixture = _make_retag_fixture(tmp_path)
+    compose_dir = tmp_path / "docker" / "stack"
+    (fixture.fake_root / "compose-runtime.tsv").write_text(
+        f"{compose_dir}\t{compose_dir / 'docker-compose.yml'},"
+        f"{compose_dir / 'compose.override.yml'}\tstack\tapp\tFalse\n",
+        encoding="utf-8",
+    )
+
+    response = fixture.client.get("/api/v1/retag-targets")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["runtime_state"] == "not-running"
 
 
 def test_retag_targets_does_not_match_a_custom_compose_project(
@@ -388,6 +405,26 @@ def test_retag_targets_matches_the_configured_compose_project(
     compose_dir = tmp_path / "docker" / "stack"
     (fixture.fake_root / "compose-runtime.tsv").write_text(
         f"{compose_dir}\t{compose_dir / 'docker-compose.yml'}\tcustom\tapp\tFalse\n",
+        encoding="utf-8",
+    )
+
+    response = fixture.client.get("/api/v1/retag-targets")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["runtime_state"] == "running"
+
+
+def test_retag_targets_matches_the_compose_file_project_name(
+    tmp_path: Path,
+) -> None:
+    fixture = _make_retag_fixture(tmp_path)
+    compose_file = fixture.compose_dir / "docker-compose.yml"
+    compose_file.write_text(
+        f"name: custom\n{compose_file.read_text(encoding='utf-8')}",
+        encoding="utf-8",
+    )
+    (fixture.fake_root / "compose-runtime.tsv").write_text(
+        f"{fixture.compose_dir}\t{compose_file}\tcustom\tapp\tFalse\n",
         encoding="utf-8",
     )
 
