@@ -10,7 +10,9 @@ candidate fixes, keeps, or introduces reported findings.
 Scan results are advisory metadata only. They must not gate updates,
 automatically snooze updates, bypass snoozes, or imply that an image is safe.
 Delta comparisons are only shown when the current image and candidate were
-scanned with the same scanner, database revision, schema, and platform.
+scanned with the same scanner version, database revision, schema, and platform.
+Missing scanner or vulnerability-database provenance makes the comparison
+unknown.
 
 ## Subject Identity
 
@@ -26,8 +28,8 @@ Each scan subject must identify the exact image being evaluated:
 - identity status and warnings.
 
 Cache identity is the canonical repository, platform manifest digest, platform,
-scanner version, schema version, and vulnerability database revision. Tags are
-display metadata, not cache identity.
+scanner version, schema version, and vulnerability database revision and updated
+timestamp. Tags are display metadata, not cache identity.
 
 Platform priority is:
 
@@ -86,12 +88,18 @@ The API is cache-first:
 Results are joined by immutable subject identity and current pending source, not
 line number alone. `SecurityScanInfo.subject` describes the candidate subject.
 `SecurityScanInfo.comparison` describes the installed subject, delta status, and
-fixed, remaining, and introduced findings. The UI must label results as
+fixed, remaining, and introduced findings. Every finding preserves Trivy's
+`Target`, `Class`, and `Type`; comparison keys include that target identity so
+the same package/advisory in separate image targets remains separate. The UI
+groups rows by target, package, and advisory and labels raw occurrences
+separately from unique advisory counts. The UI must label results as
 scanner/database-specific advisory metadata. Clean wording should say "No
 vulnerabilities reported by Trivy using database as of ..." rather than "safe."
 
-Show scan age, database age, exact platform, exact digest, severity counts,
-fixable counts, unfixed count, and warnings. Treat stale, partial,
+Show scan age, scanner/database provenance, configured reference, candidate
+index and platform digests, exact immutable Trivy subject, installed identity,
+exact platform, raw severity counts, unique advisory counts, fixable counts,
+unfixed count, and warnings. Treat stale, partial,
 auth-required, error, unsupported, and offline states as unknown.
 
 ## Validation Expectations

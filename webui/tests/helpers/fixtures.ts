@@ -379,7 +379,7 @@ export function selfUpdateResponse(
     release_notes_cap: 10,
     can_update: true,
     disabled_reason: "",
-    external_recreate_required: false,
+    external_recreate_required: true,
     warnings: [],
     ...overrides,
   };
@@ -389,12 +389,15 @@ export function selfUpdateApplyResponse(
   overrides: Partial<SelfUpdateApplyResponse> = {},
 ): SelfUpdateApplyResponse {
   return {
-    status: "image_pulled",
+    status: "prepared_only",
     audit_run_id: 77,
     current_tag: "v0.24.2",
     latest_tag: "v0.25.0",
     target_image: "ghcr.io/magrhino/wudup:latest",
     container: "wudup",
+    running_image_id: "sha256:running-old",
+    prepared_image_id: "sha256:prepared-new",
+    external_recreate_required: true,
     ...overrides,
   };
 }
@@ -675,6 +678,8 @@ export function securityScanInfo(
     scanned_at: "",
     db_revision: "",
     db_updated_at: "",
+    advisory_counts: { ...severityCounts },
+    advisory_counts_known: true,
     fixable_counts: {
       critical: 0,
       high: 0,
@@ -687,7 +692,9 @@ export function securityScanInfo(
     subject: {
       requested_ref: "repo/app:2.0",
       reported_digest: "sha256:candidate",
+      index_digest: "sha256:candidate",
       manifest_digest: "sha256:candidate-child",
+      immutable_ref: "repo/app@sha256:candidate-child",
       platform: "linux/amd64",
     },
     comparison: {
@@ -695,7 +702,9 @@ export function securityScanInfo(
       current_subject: {
         requested_ref: "",
         reported_digest: "",
+        index_digest: "",
         manifest_digest: "",
+        immutable_ref: "",
         platform: "",
       },
       fixed_findings: [],

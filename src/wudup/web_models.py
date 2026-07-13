@@ -249,7 +249,12 @@ SelfUpdateStrategy = Literal["pull_image", "prepare_tag_update"]
 
 ReleaseNoteChangeType = Literal["upstream_update", "image_rebuild", "unknown"]
 
-SelfUpdateAuditStatus = Literal["image_pulled", "tag_prepared", "failure"]
+SelfUpdateAuditStatus = Literal[
+    "image_prepared",
+    "running_image_verified",
+    "tag_prepared",
+    "failure",
+]
 
 SettingsEntrySource = Literal["configured", "default", "derived", "request"]
 
@@ -1189,6 +1194,9 @@ class SecurityScanSeverityCounts(BaseModel):
 
 
 class SecurityScanFinding(BaseModel):
+    target: str = ""
+    target_class: str = ""
+    target_type: str = ""
     vulnerability_id: str = ""
     package_name: str = ""
     installed_version: str = ""
@@ -1201,7 +1209,9 @@ class SecurityScanFinding(BaseModel):
 class SecurityScanSubject(BaseModel):
     requested_ref: str = ""
     reported_digest: str = ""
+    index_digest: str = ""
     manifest_digest: str = ""
+    immutable_ref: str = ""
     platform: str = ""
 
 
@@ -1227,6 +1237,10 @@ class SecurityScanInfo(BaseModel):
     severity_counts: SecurityScanSeverityCounts = Field(
         default_factory=SecurityScanSeverityCounts
     )
+    advisory_counts: SecurityScanSeverityCounts = Field(
+        default_factory=SecurityScanSeverityCounts
+    )
+    advisory_counts_known: bool = False
     fixable_counts: SecurityScanSeverityCounts = Field(
         default_factory=SecurityScanSeverityCounts
     )
@@ -1812,12 +1826,15 @@ class SelfUpdatePrepareRequest(BaseModel):
     restart_container: str
 
 class SelfUpdateApplyResponse(BaseModel):
-    status: Literal["image_pulled"]
+    status: Literal["prepared_only", "running_image_verified"]
     audit_run_id: int
     current_tag: str
     latest_tag: str
     target_image: str
     container: str
+    running_image_id: str
+    prepared_image_id: str
+    external_recreate_required: bool
 
 class SelfUpdatePrepareResponse(BaseModel):
     status: Literal["tag_prepared"]

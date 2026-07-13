@@ -13,6 +13,11 @@ def test_self_update_get_reports_available_up_to_date_disabled_and_unavailable(
     monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
     monkeypatch.setattr(
         self_update_module,
+        "current_container_image",
+        lambda _env: "ghcr.io/magrhino/wudup:v0.24.2-trivy",
+    )
+    monkeypatch.setattr(
+        self_update_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )
@@ -30,7 +35,8 @@ def test_self_update_get_reports_available_up_to_date_disabled_and_unavailable(
     assert body["status"] == "available"
     assert body["current_tag"] == "v0.24.2"
     assert body["latest_tag"] == "v0.25.0"
-    assert body["target_image"] == "ghcr.io/magrhino/wudup:v0.25.0"
+    assert body["target_image"] == "ghcr.io/magrhino/wudup:v0.25.0-trivy"
+    assert body["external_recreate_required"] is True
     assert body["can_update"] is False
     assert "Read-only mode" in body["disabled_reason"]
 
@@ -57,6 +63,38 @@ def test_self_update_get_reports_available_up_to_date_disabled_and_unavailable(
     ).get("/api/v1/self-update")
     assert unavailable.json()["status"] == "unavailable"
     assert unavailable.json()["warnings"]
+
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    for current_image in (
+        "",
+        f"ghcr.io/magrhino/wudup@sha256:{'a' * 64}",
+        f"sha256:{'b' * 64}",
+    ):
+        monkeypatch.setattr(
+            self_update_module,
+            "current_container_image",
+            lambda _env, image=current_image: image,
+        )
+        unknown_variant = _client(
+            tmp_path,
+            {"WUD_WEB_DEV_NO_AUTH": "true"},
+        ).get("/api/v1/self-update")
+        assert unknown_variant.json()["status"] == "unavailable"
+        assert unknown_variant.json()["current_image"] == current_image
+        assert unknown_variant.json()["latest_tag"] == "v0.25.0"
+        assert (
+            "cannot preserve the image variant"
+            in unknown_variant.json()["disabled_reason"]
+        )
+
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "current_container_image", lambda _env: "")
+    current_without_image_identity = _client(
+        tmp_path,
+        {"WUD_WEB_DEV_NO_AUTH": "true"},
+    ).get("/api/v1/self-update")
+    assert current_without_image_identity.json()["status"] == "up_to_date"
+    assert current_without_image_identity.json()["current_image"] == ""
 
 
 def test_self_update_get_can_use_local_demo_fixture(tmp_path: Path) -> None:

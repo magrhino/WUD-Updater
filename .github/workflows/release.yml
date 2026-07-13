@@ -216,6 +216,7 @@ jobs:
           VERSION: ${{ needs.validate-tag.outputs.version }}
           MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
           RELEASE_SHA: ${{ steps.release-commit.outputs.sha }}
+          APT_REFRESH: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
 
@@ -297,6 +298,7 @@ jobs:
           VERSION: ${{ needs.validate-tag.outputs.version }}
           MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
           RELEASE_SHA: ${{ steps.release-commit.outputs.sha }}
+          APT_REFRESH: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
 

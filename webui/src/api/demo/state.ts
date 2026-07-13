@@ -57,6 +57,7 @@ import {
 
 const fixtures: DemoGeneratedFixtures = generatedFixtures;
 const DEMO_NOW = "2026-05-31T00:00:00.000Z";
+const DEMO_DB_UPDATED_AT = "2026-05-28T12:00:00+00:00";
 const TAG_VALUE_PATTERN = /^\w[\w.-]{0,127}$/;
 const EMPTY_SECURITY_COUNTS: SecurityScanSeverityCounts = {
   critical: 0,
@@ -933,73 +934,123 @@ export class DemoApiState {
     const decision = this.securityScanDecision(reportedDigest, platform, firstExact);
     const severityCounts = this.securityScanSeverityCounts(decision.hasFindings);
     const fixableCounts = this.securityScanSeverityCounts(decision.hasFindings);
-    const findings = decision.hasFindings
-      ? [
-          {
-            vulnerability_id: "CVE-2026-0001",
-            package_name: "demo-package",
-            installed_version: "1.0.0",
-            fixed_version: "1.0.1",
-            severity: "high" as const,
-            title: "Demo vulnerability for candidate advisory review",
-            primary_url: "https://avd.aquasec.com/nvd/cve-2026-0001",
-          },
-        ]
-      : [];
-    const subject = {
-      requested_ref: item.image,
-      reported_digest: reportedDigest,
-      manifest_digest: reportedDigest,
-      platform,
-    };
+    const findings = this.demoSecurityScanFindings(decision.hasFindings);
+    const subject = this.demoSecurityScanSubject(item, reportedDigest, platform);
     const currentDigest = normalizeSecurityDigest(item.wud_metadata?.local_digest ?? "");
-    const currentSubject = {
-      requested_ref: item.image,
-      reported_digest: currentDigest,
-      manifest_digest: currentDigest,
+    const currentSubject = this.demoSecurityScanSubject(item, currentDigest, platform);
+    const scannerVersion = decision.hasFindings ? "demo" : "";
+    const scannerSchema = decision.hasFindings ? "trivy-json" : "";
+    const dbRevision = decision.hasFindings ? "demo" : "";
+    const dbUpdatedAt = decision.hasFindings ? DEMO_DB_UPDATED_AT : "";
+    const comparison = this.demoSecurityScanComparison(
+      decision,
+      currentDigest,
+      reportedDigest,
       platform,
-    };
-    const canCompare = Boolean(currentDigest && reportedDigest && platform);
-    const comparisonReady = decision.state === "complete" && canCompare;
-    let comparisonMessage = "";
-    if (comparisonReady) {
-      comparisonMessage =
-        "Demo comparison: installed and candidate findings are unchanged.";
-    } else if (decision.state === "complete") {
-      comparisonMessage = "Installed digest is unavailable in the demo fixture.";
-    }
+      currentSubject,
+      findings,
+      Boolean(scannerVersion && scannerSchema && dbRevision && dbUpdatedAt),
+    );
 
     return {
       line_no: item.line_no,
       state: decision.state,
       verdict: decision.verdict,
       scanner: "trivy",
-      scanner_version: decision.hasFindings ? "demo" : "",
-      scanner_schema: decision.hasFindings ? "trivy-json" : "",
+      scanner_version: scannerVersion,
+      scanner_schema: scannerSchema,
       scanned_at: decision.hasFindings ? DEMO_NOW : "",
-      db_revision: "",
-      db_updated_at: "",
+      db_revision: dbRevision,
+      db_updated_at: dbUpdatedAt,
       severity_counts: severityCounts,
+      advisory_counts: severityCounts,
+      advisory_counts_known: true,
       fixable_counts: fixableCounts,
       unfixed_count: 0,
       findings,
       subject,
-      comparison: {
-        status: comparisonReady ? "unchanged" : "unknown",
-        current_subject: comparisonReady
-          ? currentSubject
-          : { requested_ref: "", reported_digest: "", manifest_digest: "", platform: "" },
-        fixed_findings: [],
-        remaining_findings: comparisonReady ? findings : [],
-        introduced_findings: [],
-        message: comparisonMessage,
-      },
+      comparison,
       warnings:
         decision.hasFindings
           ? ["Demo finding for candidate and installed-digest comparison display."]
           : [],
       error_code: "",
       error_message: "",
+    };
+  }
+
+  private demoSecurityScanFindings(
+    hasFindings: boolean,
+  ): SecurityScanInfo["findings"] {
+    if (!hasFindings) {
+      return [];
+    }
+    return [
+      {
+        target: "debian:12",
+        target_class: "os-pkgs",
+        target_type: "debian",
+        vulnerability_id: "CVE-2026-0001",
+        package_name: "demo-package",
+        installed_version: "1.0.0",
+        fixed_version: "1.0.1",
+        severity: "high",
+        title: "Demo vulnerability for candidate advisory review",
+        primary_url: "https://avd.aquasec.com/nvd/cve-2026-0001",
+      },
+    ];
+  }
+
+  private demoSecurityScanSubject(
+    item: PendingItem,
+    digest: string,
+    platform: string,
+  ): SecurityScanInfo["subject"] {
+    return {
+      requested_ref: item.image,
+      reported_digest: digest,
+      index_digest: digest,
+      manifest_digest: digest,
+      immutable_ref: digest ? `${item.image.split("@")[0]}@${digest}` : "",
+      platform,
+    };
+  }
+
+  private demoSecurityScanComparison(
+    decision: DemoSecurityScanDecision,
+    currentDigest: string,
+    reportedDigest: string,
+    platform: string,
+    currentSubject: SecurityScanInfo["subject"],
+    findings: SecurityScanInfo["findings"],
+    provenanceKnown: boolean,
+  ): SecurityScanInfo["comparison"] {
+    const comparisonReady =
+      decision.state === "complete"
+      && Boolean(currentDigest && reportedDigest && platform)
+      && provenanceKnown;
+    let message = "";
+    if (comparisonReady) {
+      message = "Demo comparison: installed and candidate findings are unchanged.";
+    } else if (decision.state === "complete") {
+      message = "Installed digest is unavailable in the demo fixture.";
+    }
+    return {
+      status: comparisonReady ? "unchanged" : "unknown",
+      current_subject: comparisonReady
+        ? currentSubject
+        : {
+            requested_ref: "",
+            reported_digest: "",
+            index_digest: "",
+            manifest_digest: "",
+            immutable_ref: "",
+            platform: "",
+          },
+      fixed_findings: [],
+      remaining_findings: comparisonReady ? findings : [],
+      introduced_findings: [],
+      message,
     };
   }
 

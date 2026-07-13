@@ -26,12 +26,20 @@ class FakeRunner:
         del check
         normalized = tuple(args)
         self.calls.append((normalized, timeout_seconds))
-        if normalized == ("trivy", "--version"):
+        if len(normalized) >= 2 and normalized[:2] == ("trivy", "version"):
             return CommandResult(
                 args=normalized,
                 cwd=None,
                 returncode=0,
-                stdout="Version: 0.50.0\n",
+                stdout=json.dumps(
+                    {
+                        "Version": "0.50.0",
+                        "VulnerabilityDB": {
+                            "Version": "2",
+                            "UpdatedAt": "2026-06-26T00:00:00Z",
+                        },
+                    }
+                ),
             )
         return CommandResult(
             args=normalized,
@@ -51,11 +59,14 @@ class SecurityScannerTests(unittest.TestCase):
         payload = {
             "SchemaVersion": 2,
             "VulnerabilityDB": {
-                "Version": "2026-06-26",
+                "Version": "2",
                 "UpdatedAt": "2026-06-26T00:00:00Z",
             },
             "Results": [
                 {
+                    "Target": "debian:12",
+                    "Class": "os-pkgs",
+                    "Type": "debian",
                     "Vulnerabilities": [
                         {"Severity": "HIGH", "FixedVersion": "1.2.3"},
                         {
@@ -71,6 +82,11 @@ class SecurityScannerTests(unittest.TestCase):
                             "PkgName": "ignored-url",
                             "PrimaryURL": "javascript:alert(1)",
                             "Severity": "LOW",
+                            "VulnerabilityID": "CVE-2026-0002",
+                        },
+                        {
+                            "PkgName": "duplicate-higher-severity",
+                            "Severity": "CRITICAL",
                             "VulnerabilityID": "CVE-2026-0002",
                         },
                     ],
@@ -94,13 +110,22 @@ class SecurityScannerTests(unittest.TestCase):
         self.assertEqual(result.verdict, "findings")
         self.assertEqual(result.scanner_version, "0.50.0")
         self.assertEqual(result.scanner_schema, "2")
-        self.assertEqual(result.db_revision, "2026-06-26")
+        self.assertEqual(result.db_revision, "2")
+        self.assertEqual(result.db_updated_at, "2026-06-26T00:00:00Z")
         self.assertEqual(result.severity_counts["high"], 1)
         self.assertEqual(result.severity_counts["medium"], 1)
         self.assertEqual(result.severity_counts["low"], 1)
+        self.assertEqual(result.severity_counts["critical"], 1)
+        self.assertEqual(result.advisory_counts["high"], 0)
+        self.assertEqual(result.advisory_counts["medium"], 1)
+        self.assertEqual(result.advisory_counts["low"], 0)
+        self.assertEqual(result.advisory_counts["critical"], 1)
         self.assertEqual(result.fixable_counts["high"], 1)
-        self.assertEqual(result.unfixed_count, 2)
+        self.assertEqual(result.unfixed_count, 3)
         self.assertEqual(result.findings[1].vulnerability_id, "CVE-2026-0001")
+        self.assertEqual(result.findings[1].target, "debian:12")
+        self.assertEqual(result.findings[1].target_class, "os-pkgs")
+        self.assertEqual(result.findings[1].target_type, "debian")
         self.assertEqual(result.findings[1].package_name, "openssl")
         self.assertEqual(result.findings[1].installed_version, "2.0.0")
         self.assertEqual(result.findings[1].fixed_version, "")
@@ -147,6 +172,54 @@ class SecurityScannerTests(unittest.TestCase):
         self.assertEqual(result.state, "error")
         self.assertEqual(result.error_code, "invalid_json")
         self.assertEqual(result.scanner_version, "0.50.0")
+
+    def test_trivy_refreshes_provenance_for_each_scan(self) -> None:
+        class ChangingProvenanceRunner(FakeRunner):
+            def __init__(self) -> None:
+                super().__init__(json.dumps({"SchemaVersion": 2, "Results": []}))
+                self.version_call_count = 0
+
+            def capture(self, args, *, check=True, timeout_seconds=None):
+                normalized = tuple(args)
+                if normalized[:2] != ("trivy", "version"):
+                    return super().capture(
+                        args,
+                        check=check,
+                        timeout_seconds=timeout_seconds,
+                    )
+                self.calls.append((normalized, timeout_seconds))
+                self.version_call_count += 1
+                return CommandResult(
+                    args=normalized,
+                    cwd=None,
+                    returncode=0,
+                    stdout=json.dumps(
+                        {
+                            "Version": "0.50.0",
+                            "VulnerabilityDB": {
+                                "Version": str(self.version_call_count),
+                                "UpdatedAt": (
+                                    f"2026-06-{25 + self.version_call_count:02d}T00:00:00Z"
+                                ),
+                            },
+                        }
+                    ),
+                )
+
+        runner = ChangingProvenanceRunner()
+        scanner = TrivyScanner(
+            SecurityScanConfig(enabled=True),
+            runner=runner,  # type: ignore[arg-type]
+        )
+
+        first = scanner.scan(_exact_subject())
+        second = scanner.scan(_exact_subject())
+
+        self.assertEqual(first.db_revision, "1")
+        self.assertEqual(first.db_updated_at, "2026-06-26T00:00:00Z")
+        self.assertEqual(second.db_revision, "2")
+        self.assertEqual(second.db_updated_at, "2026-06-27T00:00:00Z")
+        self.assertEqual(runner.version_call_count, 2)
 
     def test_trivy_missing_results_array_returns_error_result(self) -> None:
         scanner = TrivyScanner(

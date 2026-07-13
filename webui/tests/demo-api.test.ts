@@ -85,6 +85,22 @@ describe("demo web API", () => {
     await expect(api.releaseNotes()).resolves.toMatchObject({ count: 7 });
     await expect(api.updateTargets()).resolves.toMatchObject({ count: 4 });
     await expect(api.retagTargets()).resolves.toMatchObject({ count: 4 });
+    const securityScans = await api.securityScans();
+    const findingScan = securityScans.items.find((item) => item.verdict === "findings");
+    expect(findingScan).toMatchObject({
+      scanner_version: "demo",
+      scanner_schema: "trivy-json",
+      db_revision: "demo",
+      db_updated_at: "2026-05-28T12:00:00+00:00",
+      comparison: { status: "unchanged" },
+      findings: [
+        expect.objectContaining({
+          target: "debian:12",
+          target_class: "os-pkgs",
+          target_type: "debian",
+        }),
+      ],
+    });
     await expect(api.runs()).resolves.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 6 })]),
     );

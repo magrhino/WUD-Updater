@@ -1548,7 +1548,7 @@ describe("updates store", () => {
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
     expect(response.container).toBe("wudup");
     expect(updates.selfUpdateMessage).toBe(
-      "Image pulled. Recreate the WUDup container to run the new version. Tagged deployments are recommended for predictable updates.",
+      "Image prepared, but the running container still uses the previous image. Recreate the WUDup container to run the new version.",
     );
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update");
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({

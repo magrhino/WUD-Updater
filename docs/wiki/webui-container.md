@@ -174,6 +174,14 @@ WebUI's plan-first apply flow. Keep the Docker socket or socket proxy, stack
 root, WUD output file, logs, and SQLite database mounted as intended before
 enabling mutation mode.
 
+WebUI self-update pulls prepare an image but do not treat `docker restart` as
+adoption. The response verifies the running container image ID after the pull
+and reports `prepared_only` until an external Compose recreate moves the
+container onto the prepared image. If the current container image reference
+cannot be inspected with enough tag context to preserve its variant,
+self-update fails closed so a `-trivy` image cannot be silently replaced by the
+default image.
+
 Runtime configuration comes from command-line overrides, then environment, then
 code defaults. SQLite-backed managed preferences are limited to allowlisted
 non-secret WebUI preferences such as theme, onboarding state, and managed

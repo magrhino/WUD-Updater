@@ -41,6 +41,7 @@ LEGACY_SELF_UPDATE_REPOS = frozenset(
 )
 FALSE_VALUES = frozenset({"0", "false", "no", "off"})
 _SEMVER_IMAGE_TAG_RE = re.compile(r"^v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+].*)?$")
+_BARE_IMAGE_ID_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,10 @@ class ReleaseSelfUpdate:
     local_tag: str
     latest_tag: str
     target: str
+
+
+class SelfUpdateInspectionError(RuntimeError):
+    """Raised when the running image variant cannot be determined safely."""
 
 
 def self_update_enabled(
@@ -94,15 +99,31 @@ def github_release_self_update(
         return None
     latest_tag = latest_tag or ""
 
+    current_image = current_container_image(env)
+    if not self_update_image_variant_known(current_image):
+        raise SelfUpdateInspectionError(
+            "Could not inspect the running WUDup container image; "
+            "self-update cannot preserve the image variant."
+        )
     return ReleaseSelfUpdate(
         local_tag=local_tag,
         latest_tag=latest_tag,
         target=release_self_update_target(
-            current_container_image(env),
+            current_image,
             local_tag,
             latest_tag,
         ),
     )
+
+
+def self_update_image_variant_known(current_image: str) -> bool:
+    """Return whether an inspected image reference preserves its variant tag."""
+
+    if not current_image or _BARE_IMAGE_ID_RE.fullmatch(current_image):
+        return False
+    if "@sha256:" in current_image and not _image_reference_tag(current_image):
+        return False
+    return True
 
 
 def release_self_update_target(
@@ -169,7 +190,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("Usage: python -m wudup.self_update github-target", file=sys.stderr)
         return 2
 
-    update = github_release_self_update()
+    try:
+        update = github_release_self_update()
+    except SelfUpdateInspectionError as exc:
+        print(exc, file=sys.stderr)
+        return 1
     if update is not None:
         print(update.target)
     return 0

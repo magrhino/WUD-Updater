@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from threading import Event, Lock, Thread
 from types import SimpleNamespace
@@ -28,7 +28,11 @@ from wudup.security_subjects import (
     PendingSecurityRequest,
 )
 from wudup import web_jobs, web_security
-from wudup.web_models import WebApplyJob
+from wudup.web_models import (
+    SecurityScanFinding as SecurityScanFindingModel,
+    SecurityScanInfo,
+    WebApplyJob,
+)
 from wudup.web_pending_sources import PendingSourceResult
 from wudup.wud_file import parse_wud_text
 
@@ -512,6 +516,7 @@ def test_security_scan_refresh_scans_caches_and_reads_back_result(
     assert item["state"] == "complete"
     assert item["verdict"] == "findings"
     assert item["severity_counts"]["high"] == 1
+    assert item["advisory_counts_known"] is True
     assert item["findings"][0]["vulnerability_id"] == "CVE-2026-0001"
     assert item["findings"][0]["package_name"] == "openssl"
     assert item["findings"][0]["primary_url"] == FakeScanner.primary_url
@@ -524,6 +529,15 @@ def test_security_scan_refresh_scans_caches_and_reads_back_result(
     assert cached_item["state"] == "complete"
     assert cached_item["verdict"] == "findings"
     assert cached_item["severity_counts"]["high"] == 1
+    assert cached_item["advisory_counts"]["high"] == 1
+    assert cached_item["advisory_counts_known"] is True
+    assert cached_item["subject"]["index_digest"] == f"sha256:{VALID_DIGEST}"
+    assert cached_item["subject"]["immutable_ref"] == (
+        "ghcr.io/acme/app@sha256:child"
+    )
+    assert cached_item["findings"][0]["target"] == "debian:12"
+    assert cached_item["findings"][0]["target_class"] == "os-pkgs"
+    assert cached_item["findings"][0]["target_type"] == "debian"
     assert cached_item["findings"][0]["vulnerability_id"] == "CVE-2026-0001"
     assert cached_item["findings"][0]["package_name"] == "openssl"
     assert cached_item["findings"][0]["primary_url"] == FakeScanner.primary_url
@@ -611,6 +625,79 @@ def test_security_scan_refresh_compares_installed_and_candidate_findings(
     assert len(cached_comparison["fixed_findings"]) == 1
     assert len(cached_comparison["remaining_findings"]) == 1
     assert len(cached_comparison["introduced_findings"]) == 1
+
+
+def test_security_scan_comparison_preserves_duplicate_target_occurrences() -> None:
+    installed = _comparison_info(
+        [_scan_finding("CVE-2026-0001", "openssl", "1.0", target="debian:12")]
+    )
+    candidate = _comparison_info(
+        [
+            _scan_finding("CVE-2026-0001", "openssl", "1.0", target="debian:12"),
+            _scan_finding(
+                "CVE-2026-0001",
+                "openssl",
+                "1.0",
+                target="usr/local/lib/python3.14/site-packages",
+                target_class="lang-pkgs",
+                target_type="python-pkg",
+            ),
+        ]
+    )
+
+    comparison = web_security._comparison(installed, candidate)
+
+    assert comparison.status == "worse"
+    assert len(comparison.remaining_findings) == 1
+    assert len(comparison.introduced_findings) == 1
+    assert comparison.introduced_findings[0].target_type == "python-pkg"
+
+
+def test_security_scan_comparison_requires_scanner_and_database_provenance() -> None:
+    finding = _scan_finding("CVE-2026-0001", "openssl", "1.0")
+
+    missing_scanner = web_security._comparison(
+        _comparison_info([finding], scanner_version=""),
+        _comparison_info([finding]),
+    )
+    missing_schema = web_security._comparison(
+        _comparison_info([finding], scanner_schema=""),
+        _comparison_info([finding], scanner_schema=""),
+    )
+    missing_database = web_security._comparison(
+        _comparison_info([finding], db_revision=""),
+        _comparison_info([finding]),
+    )
+    missing_database_timestamp = web_security._comparison(
+        _comparison_info([finding], db_updated_at=""),
+        _comparison_info([finding]),
+    )
+
+    assert missing_scanner.status == "unknown"
+    assert missing_scanner.message == "Scanner version provenance is unavailable."
+    assert missing_schema.status == "unknown"
+    assert missing_schema.message == "Scanner schema provenance is unavailable."
+    assert missing_database.status == "unknown"
+    assert missing_database.message == "Vulnerability database provenance is unavailable."
+    assert missing_database_timestamp.status == "unknown"
+    assert (
+        missing_database_timestamp.message
+        == "Vulnerability database provenance is unavailable."
+    )
+
+
+def test_security_scan_comparison_distinguishes_database_refreshes() -> None:
+    finding = _scan_finding("CVE-2026-0001", "openssl", "1.0")
+
+    comparison = web_security._comparison(
+        _comparison_info([finding], db_revision="2", db_updated_at="2026-06-26T00:00:00Z"),
+        _comparison_info([finding], db_revision="2", db_updated_at="2026-06-27T00:00:00Z"),
+    )
+
+    assert comparison.status == "unknown"
+    assert comparison.message == (
+        "Installed and candidate scans used different vulnerability databases."
+    )
 
 
 def test_security_scan_refresh_reuses_current_scan_within_job(
@@ -1112,6 +1199,78 @@ def test_security_scan_cache_round_trips_vulnerability_findings() -> None:
     assert cached.findings[0].severity == "critical"
     assert cached.findings[0].title == "demo vulnerability"
     assert cached.findings[0].primary_url == "https://avd.aquasec.com/nvd/cve-2026-0001"
+    assert cached.advisory_counts_known is True
+
+
+def test_security_scan_cache_uses_maximum_advisory_severity() -> None:
+    request = _single_security_request()
+    result = SecurityScanResult(
+        state="complete",
+        verdict="findings",
+        severity_counts={"critical": 1, "low": 1},
+        findings=(
+            SecurityScanFinding(vulnerability_id="CVE-2026-0001", severity="low"),
+            SecurityScanFinding(
+                vulnerability_id="CVE-2026-0001", severity="critical"
+            ),
+        ),
+    )
+    with db_connection(":memory:") as conn:
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        upsert_scan_result(
+            conn, request, _exact_subject(), result, timestamp=utc_timestamp()
+        )
+        cached = cached_scan_by_request(conn, request)
+
+    assert cached is not None
+    assert cached.advisory_counts.low == 0
+    assert cached.advisory_counts.critical == 1
+
+
+def test_security_scan_cache_marks_summary_only_advisory_counts_unknown() -> None:
+    request = _single_security_request()
+    result = SecurityScanResult(
+        state="complete",
+        verdict="findings",
+        severity_counts={"high": 2},
+    )
+    with db_connection(":memory:") as conn:
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        upsert_scan_result(
+            conn, request, _exact_subject(), result, timestamp=utc_timestamp()
+        )
+        cached = cached_scan_by_request(conn, request)
+
+    assert cached is not None
+    assert cached.advisory_counts.high == 0
+    assert cached.advisory_counts_known is False
+
+
+def test_security_scan_cache_identity_includes_database_updated_at() -> None:
+    request = _single_security_request()
+    subject = _exact_subject()
+    with db_connection(":memory:") as conn:
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        for updated_at in ("2026-06-26T00:00:00Z", "2026-06-27T00:00:00Z"):
+            upsert_scan_result(
+                conn,
+                request,
+                subject,
+                SecurityScanResult(
+                    state="complete",
+                    scanner_version="0.71.2",
+                    scanner_schema="2",
+                    db_revision="2",
+                    db_updated_at=updated_at,
+                ),
+                timestamp="2026-06-27T01:00:00Z",
+            )
+        rows = conn.execute("SELECT cache_key FROM security_scan_cache").fetchall()
+
+    assert len(rows) == 2
 
 
 def test_security_scan_cache_platform_fallback_rejects_ambiguous_platforms() -> None:
@@ -1363,10 +1522,16 @@ class FakeScanner:
             verdict="findings",
             scanner_version="fake-trivy",
             scanner_schema="2",
+            db_revision="2",
+            db_updated_at="2026-06-26T00:00:00Z",
             severity_counts={"high": 1},
+            advisory_counts={"high": 1},
             fixable_counts={"high": 1},
             findings=(
                 SecurityScanFinding(
+                    target="debian:12",
+                    target_class="os-pkgs",
+                    target_type="debian",
                     vulnerability_id="CVE-2026-0001",
                     package_name="openssl",
                     installed_version="1.0.0",
@@ -1452,8 +1617,10 @@ class ComparisonScanner:
             verdict="findings",
             scanner_version="fake-trivy",
             scanner_schema="2",
-            db_revision="test-db",
+            db_revision="2",
+            db_updated_at="2026-06-26T00:00:00Z",
             severity_counts={"high": len(findings)},
+            advisory_counts={"high": len(findings)},
             fixable_counts={"high": len(findings)},
             findings=findings,
         )
@@ -1463,14 +1630,42 @@ def _scan_finding(
     vulnerability_id: str,
     package_name: str,
     installed_version: str,
+    *,
+    target: str = "debian:12",
+    target_class: str = "os-pkgs",
+    target_type: str = "debian",
 ) -> SecurityScanFinding:
     return SecurityScanFinding(
+        target=target,
+        target_class=target_class,
+        target_type=target_type,
         vulnerability_id=vulnerability_id,
         package_name=package_name,
         installed_version=installed_version,
         fixed_version="9.9.9",
         severity="high",
         title=f"{package_name} vulnerability",
+    )
+
+
+def _comparison_info(
+    findings: list[SecurityScanFinding],
+    *,
+    scanner_version: str = "fake-trivy",
+    scanner_schema: str = "2",
+    db_revision: str = "test-db",
+    db_updated_at: str = "2026-06-26T00:00:00Z",
+) -> SecurityScanInfo:
+    return SecurityScanInfo(
+        line_no=1,
+        state="complete",
+        verdict="findings",
+        scanner="trivy",
+        scanner_version=scanner_version,
+        scanner_schema=scanner_schema,
+        db_revision=db_revision,
+        db_updated_at=db_updated_at,
+        findings=[SecurityScanFindingModel(**asdict(finding)) for finding in findings],
     )
 
 

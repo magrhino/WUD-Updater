@@ -747,8 +747,9 @@ export const useUpdatesStore = defineStore("updates", () => {
         } else {
           const csrfToken = await auth.ensureCsrf();
           response = await webApi.applySelfUpdate(csrfToken, selfUpdate.value);
-          selfUpdateMessage.value =
-            "Image pulled. Recreate the WUDup container to run the new version. Tagged deployments are recommended for predictable updates.";
+          selfUpdateMessage.value = response.external_recreate_required
+            ? "Image prepared, but the running container still uses the previous image. Recreate the WUDup container to run the new version."
+            : "Running container image identity matches the prepared update.";
         }
         try {
           selfUpdate.value = await webApi.selfUpdate();

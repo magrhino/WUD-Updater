@@ -12,6 +12,7 @@ from tests.web_test_helpers import (
     _self_update_payload,
     _fake_docker_env,
     _fake_docker_calls,
+    _write_fake_image_after_pull,
 )
 
 def test_self_update_endpoint_rejects_stale_confirmation(
@@ -82,6 +83,16 @@ def test_self_update_endpoint_pulls_image_and_audits(
         "/wudup|running|healthy|0|0\n",
         encoding="utf-8",
     )
+    (fake_root / "containers" / "wudup.image-id").write_text(
+        "sha256:running-old\n",
+        encoding="utf-8",
+    )
+    _write_fake_image_after_pull(
+        fake_root,
+        "ghcr.io/magrhino/wudup:latest",
+        "sha256:prepared-new\n",
+        "sha256:new-digest",
+    )
 
     response = client.post(
         "/api/v1/self-update",
@@ -91,9 +102,12 @@ def test_self_update_endpoint_pulls_image_and_audits(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "image_pulled"
+    assert body["status"] == "prepared_only"
     assert body["target_image"] == "ghcr.io/magrhino/wudup:latest"
     assert body["container"] == "wudup"
+    assert body["running_image_id"] == "sha256:running-old"
+    assert body["prepared_image_id"] == "sha256:prepared-new"
+    assert body["external_recreate_required"] is True
     calls = _fake_docker_calls(fake_root)
     assert "pull ghcr.io/magrhino/wudup:latest" in calls
     assert "restart --time 10 wudup" not in calls
@@ -109,14 +123,18 @@ def test_self_update_endpoint_pulls_image_and_audits(
             (body["audit_run_id"],),
         ).fetchone()
     assert row["mode"] == "web-self-update"
-    assert row["status"] == "image_pulled"
+    assert row["status"] == "image_prepared"
     assert row["finished_at"]
-    assert event["status"] == "image_pulled"
+    assert event["status"] == "image_prepared"
     metadata = json.loads(row["metadata_json"])
     assert metadata["operation"] == "self_update"
     assert metadata["current_tag"] == "v0.24.2"
     assert metadata["latest_tag"] == "v0.25.0"
-    assert metadata["status"] == "image_pulled"
+    assert metadata["status"] == "image_prepared"
+    assert metadata["running_image_id_before"] == "sha256:running-old"
+    assert metadata["running_image_id_after"] == "sha256:running-old"
+    assert metadata["prepared_image_id"] == "sha256:prepared-new"
+    assert metadata["external_recreate_required"] is True
     assert metadata["target"] == {
         "container": "wudup",
         "image": "ghcr.io/magrhino/wudup:latest",
@@ -203,6 +221,10 @@ def test_self_update_endpoint_marks_audit_failed_when_pull_fails(
     )
     (fake_root / "containers" / "wudup.summary").write_text(
         "/wudup|running|healthy|0|0\n",
+        encoding="utf-8",
+    )
+    (fake_root / "containers" / "wudup.image-id").write_text(
+        "sha256:running-old\n",
         encoding="utf-8",
     )
 
