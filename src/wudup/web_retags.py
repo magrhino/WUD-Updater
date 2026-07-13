@@ -982,11 +982,13 @@ def _retag_runtime_config_paths(
 def _retag_compose_service_key(
     stack: ComposeStack,
     service: str,
+    *,
+    project_name: str | None = None,
 ) -> tuple[frozenset[Path], str, str]:
     project_directory = stack.project_directory or stack.directory
     return (
         frozenset({_normalized_retag_compose_path(project_directory / stack.file)}),
-        stack.project_name,
+        stack.project_name if project_name is None else project_name,
         service,
     )
 
@@ -1642,7 +1644,7 @@ def _apply_retag_updates(
         )
         backup: Path | None = None
         try:
-            _revalidate_retag_runtime_before_apply(settings, stack_updates)
+            _revalidate_retag_runtime_before_apply(settings, compose, stack_updates)
             _progress(
                 jobs,
                 apply_condition,
@@ -1742,8 +1744,19 @@ def _apply_retag_updates(
 
 def _revalidate_retag_runtime_before_apply(
     settings: WebSettings,
+    compose: ComposeCli,
     updates: Sequence[_RetagPlanUpdate],
 ) -> None:
+    if not updates:
+        return
+    stack = updates[0].stack
+    project_name = compose.try_config_project_name(
+        stack.directory,
+        stack.file,
+        project_directory=stack.project_directory,
+    )
+    if not project_name:
+        raise RuntimeError("retag Compose project could not be revalidated")
     running_service_keys = _running_retag_compose_service_keys(settings)
     if running_service_keys is None:
         raise RuntimeError("retag runtime state could not be revalidated")
@@ -1751,7 +1764,14 @@ def _revalidate_retag_runtime_before_apply(
         if item.allow_start:
             continue
         service = _retag_update_service(item)
-        if _retag_compose_service_key(item.stack, service) not in running_service_keys:
+        if (
+            _retag_compose_service_key(
+                item.stack,
+                service,
+                project_name=project_name,
+            )
+            not in running_service_keys
+        ):
             raise RuntimeError(
                 f"{item.service_key} is no longer running in the expected Compose project"
             )

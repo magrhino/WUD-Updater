@@ -33,6 +33,20 @@ from wudup.web_models import RetagPlanResponse, WebApplyJob
 from wudup.web_retag_plans import RetagPlanBuild, RetagPlanUpdate
 
 
+class _DeferredExecutor:
+    def __init__(self) -> None:
+        self.call: tuple[object, tuple[object, ...]] | None = None
+
+    def submit(self, function: object, *args: object) -> None:
+        self.call = (function, args)
+
+    def run(self) -> None:
+        assert self.call is not None
+        function, args = self.call
+        assert callable(function)
+        function(*args)
+
+
 def test_retag_plan_and_apply_rewrites_pulls_recreates_and_audits(
     tmp_path: Path,
 ) -> None:
@@ -246,20 +260,7 @@ def test_retag_apply_worker_rechecks_runtime_before_mutation(tmp_path: Path) -> 
     plan = _create_retag_plan(fixture.client, headers)
     before = (fixture.compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
 
-    class DeferredExecutor:
-        def __init__(self) -> None:
-            self.call: tuple[object, tuple[object, ...]] | None = None
-
-        def submit(self, function: object, *args: object) -> None:
-            self.call = (function, args)
-
-        def run(self) -> None:
-            assert self.call is not None
-            function, args = self.call
-            assert callable(function)
-            function(*args)
-
-    executor = DeferredExecutor()
+    executor = _DeferredExecutor()
     fixture.client.app.state.web_apply_executor = executor
     response = _apply_retag_plan(fixture.client, headers, plan)
     (fixture.fake_root / "compose-runtime.tsv").write_text("", encoding="utf-8")
@@ -273,6 +274,41 @@ def test_retag_apply_worker_rechecks_runtime_before_mutation(tmp_path: Path) -> 
     assert (fixture.compose_dir / "docker-compose.yml").read_text(
         encoding="utf-8"
     ) == before
+    calls = _fake_docker_calls(fixture.fake_root)
+    assert "compose -f docker-compose.yml pull app" not in calls
+
+
+def test_retag_apply_worker_rechecks_effective_project_before_mutation(
+    tmp_path: Path,
+) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+        },
+    )
+    headers = _csrf_headers(fixture.client)
+    plan = _create_retag_plan(fixture.client, headers)
+
+    executor = _DeferredExecutor()
+    fixture.client.app.state.web_apply_executor = executor
+    response = _apply_retag_plan(fixture.client, headers, plan)
+    compose_file = fixture.compose_dir / "docker-compose.yml"
+    compose_file.write_text(
+        f"name: replacement\n{compose_file.read_text(encoding='utf-8')}",
+        encoding="utf-8",
+    )
+    queued_content = compose_file.read_text(encoding="utf-8")
+
+    executor.run()
+
+    assert response.status_code == 202
+    job = _wait_apply_job(fixture.client, response.json()["job_id"])
+    assert job["status"] == "failure"
+    assert "no longer running" in job["error"]
+    assert compose_file.read_text(encoding="utf-8") == queued_content
     calls = _fake_docker_calls(fixture.fake_root)
     assert "compose -f docker-compose.yml pull app" not in calls
 
