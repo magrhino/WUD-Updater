@@ -396,7 +396,7 @@ export const useUpdatesStore = defineStore("updates", () => {
             request.allow_start = true;
           }
           const tag = retagTargetTagValue(item, retagTargetTags.value).trim();
-          if (tag && (!item.retag_available || tag !== item.proposed_tag)) {
+          if (tag) {
             request.target_tag = tag;
           }
         }

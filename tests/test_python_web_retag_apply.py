@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from threading import Event
 
 import pytest
 
@@ -28,23 +29,10 @@ from wudup import web_retags as web_retags_module
 from wudup.compose import ComposeStack, ServiceImage
 from wudup.db import open_db
 from wudup.digest_provenance import DigestTagProvenance
+from wudup.locks import DirectoryLock
 from wudup.updater_digest_pin import digest_pin_update_from_values
 from wudup.web_models import RetagPlanResponse, WebApplyJob
 from wudup.web_retag_plans import RetagPlanBuild, RetagPlanUpdate
-
-
-class _DeferredExecutor:
-    def __init__(self) -> None:
-        self.call: tuple[object, tuple[object, ...]] | None = None
-
-    def submit(self, function: object, *args: object) -> None:
-        self.call = (function, args)
-
-    def run(self) -> None:
-        assert self.call is not None
-        function, args = self.call
-        assert callable(function)
-        function(*args)
 
 
 def test_retag_plan_and_apply_rewrites_pulls_recreates_and_audits(
@@ -151,8 +139,11 @@ def test_retag_apply_rejects_stale_manual_target_change(
         headers=headers,
     )
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == "retag plan is stale"
+    assert response.status_code == 202
+    job = _wait_apply_job(fixture.client, response.json()["job_id"])
+    assert job["status"] == "failure"
+    assert job["error"] == "retag apply failed: retag plan is stale"
+    assert job["progress"][-1]["phase"] == "preflight"
 
 
 def test_retag_apply_rejects_stale_plan(tmp_path: Path) -> None:
@@ -183,8 +174,108 @@ def test_retag_apply_rejects_stale_plan(tmp_path: Path) -> None:
         headers=headers,
     )
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == "retag plan is stale"
+    assert response.status_code == 202
+    job = _wait_apply_job(client, response.json()["job_id"])
+    assert job["status"] == "failure"
+    assert job["error"] == "retag apply failed: retag plan is stale"
+    assert job["progress"][-1]["phase"] == "preflight"
+
+
+def test_retag_apply_returns_job_before_slow_revalidation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={"WUD_WEB_MUTATIONS_ENABLED": "true"},
+    )
+    headers = _csrf_headers(fixture.client)
+    plan = _create_retag_plan(fixture.client, headers)
+    original_build = web_retags_module._build_current_retag_plan
+    started = Event()
+    release = Event()
+
+    def slow_build(*args: object, **kwargs: object) -> RetagPlanBuild:
+        started.set()
+        assert release.wait(timeout=2)
+        return original_build(*args, **kwargs)
+
+    monkeypatch.setattr(
+        web_retags_module,
+        "_build_current_retag_plan",
+        slow_build,
+    )
+    response = fixture.client.post(
+        "/api/v1/retag-plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "choices": [_switch_choice()],
+            "confirmation": "apply-retags",
+        },
+        headers=headers,
+    )
+
+    try:
+        assert response.status_code == 202
+        assert started.wait(timeout=1)
+        visible = fixture.client.get(
+            f"/api/v1/jobs/{response.json()['job_id']}"
+        ).json()
+        assert visible["status"] == "running"
+        progress = visible["progress"][-1]
+        assert progress["phase"] == "preflight"
+        assert progress["status"] == "running"
+        assert progress["message"] == "Revalidating the selected retag plan."
+    finally:
+        release.set()
+
+    job = _wait_apply_job(fixture.client, response.json()["job_id"])
+    assert job["status"] == "success"
+
+
+def test_retag_apply_reports_existing_wud_lock_as_failed_preflight(
+    tmp_path: Path,
+) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_LOCK_TIMEOUT": "0",
+        },
+    )
+    headers = _csrf_headers(fixture.client)
+    plan = _create_retag_plan(fixture.client, headers)
+    compose_file = fixture.compose_dir / "docker-compose.yml"
+    compose_before = compose_file.read_text(encoding="utf-8")
+    calls_before = _fake_docker_calls(fixture.fake_root)
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        audit_count_before = conn.execute(
+            "SELECT COUNT(*) FROM update_runs"
+        ).fetchone()[0]
+
+    external_lock = DirectoryLock(
+        tmp_path / "state" / "images.todo",
+        timeout_seconds=0,
+    )
+    external_lock.acquire()
+    try:
+        response = _apply_retag_plan(fixture.client, headers, plan)
+        assert response.status_code == 202
+        job = _wait_apply_job(fixture.client, response.json()["job_id"])
+    finally:
+        external_lock.close()
+
+    assert job["status"] == "failure"
+    assert "WUD file is locked" in job["error"]
+    assert job["progress"][-1]["phase"] == "preflight"
+    assert job["progress"][-1]["status"] == "failure"
+    assert compose_file.read_text(encoding="utf-8") == compose_before
+    assert _fake_docker_calls(fixture.fake_root) == calls_before
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        audit_count_after = conn.execute(
+            "SELECT COUNT(*) FROM update_runs"
+        ).fetchone()[0]
+    assert audit_count_after == audit_count_before
 
 
 @pytest.mark.parametrize("runtime_state", ["not-running", "unknown"])
@@ -207,8 +298,10 @@ def test_retag_apply_rejects_runtime_drift_without_start_approval(
 
     response = _apply_retag_plan(fixture.client, headers, plan)
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == "retag plan is stale"
+    assert response.status_code == 202
+    job = _wait_apply_job(fixture.client, response.json()["job_id"])
+    assert job["status"] == "failure"
+    assert job["error"] == "retag apply failed: retag plan is stale"
     calls = _fake_docker_calls(fixture.fake_root)
     assert "compose -f docker-compose.yml pull app" not in calls
     assert "compose -f docker-compose.yml up" not in calls
@@ -247,7 +340,10 @@ def test_retag_apply_allows_explicit_inactive_start_approval(tmp_path: Path) -> 
     ) in calls
 
 
-def test_retag_apply_worker_rechecks_runtime_before_mutation(tmp_path: Path) -> None:
+def test_retag_apply_worker_rechecks_runtime_before_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     fixture = _make_retag_fixture(
         tmp_path,
         env={
@@ -259,13 +355,21 @@ def test_retag_apply_worker_rechecks_runtime_before_mutation(tmp_path: Path) -> 
     headers = _csrf_headers(fixture.client)
     plan = _create_retag_plan(fixture.client, headers)
     before = (fixture.compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    original_apply = web_retags_module._apply_retag_updates
 
-    executor = _DeferredExecutor()
-    fixture.client.app.state.web_apply_executor = executor
+    def apply_after_runtime_stops(
+        *args: object,
+        **kwargs: object,
+    ) -> tuple[RetagPlanUpdate, ...]:
+        (fixture.fake_root / "compose-runtime.tsv").write_text("", encoding="utf-8")
+        return original_apply(*args, **kwargs)
+
+    monkeypatch.setattr(
+        web_retags_module,
+        "_apply_retag_updates",
+        apply_after_runtime_stops,
+    )
     response = _apply_retag_plan(fixture.client, headers, plan)
-    (fixture.fake_root / "compose-runtime.tsv").write_text("", encoding="utf-8")
-
-    executor.run()
 
     assert response.status_code == 202
     job = _wait_apply_job(fixture.client, response.json()["job_id"])
@@ -280,6 +384,7 @@ def test_retag_apply_worker_rechecks_runtime_before_mutation(tmp_path: Path) -> 
 
 def test_retag_apply_worker_rechecks_effective_project_before_mutation(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fixture = _make_retag_fixture(
         tmp_path,
@@ -291,30 +396,38 @@ def test_retag_apply_worker_rechecks_effective_project_before_mutation(
     )
     headers = _csrf_headers(fixture.client)
     plan = _create_retag_plan(fixture.client, headers)
-
-    executor = _DeferredExecutor()
-    fixture.client.app.state.web_apply_executor = executor
-    response = _apply_retag_plan(fixture.client, headers, plan)
     compose_file = fixture.compose_dir / "docker-compose.yml"
-    compose_file.write_text(
-        f"name: replacement\n{compose_file.read_text(encoding='utf-8')}",
-        encoding="utf-8",
+    changed_content = (
+        f"name: replacement\n{compose_file.read_text(encoding='utf-8')}"
     )
-    queued_content = compose_file.read_text(encoding="utf-8")
+    original_apply = web_retags_module._apply_retag_updates
 
-    executor.run()
+    def apply_after_project_changes(
+        *args: object,
+        **kwargs: object,
+    ) -> tuple[RetagPlanUpdate, ...]:
+        compose_file.write_text(changed_content, encoding="utf-8")
+        return original_apply(*args, **kwargs)
+
+    monkeypatch.setattr(
+        web_retags_module,
+        "_apply_retag_updates",
+        apply_after_project_changes,
+    )
+    response = _apply_retag_plan(fixture.client, headers, plan)
 
     assert response.status_code == 202
     job = _wait_apply_job(fixture.client, response.json()["job_id"])
     assert job["status"] == "failure"
     assert "Compose project changed" in job["error"]
-    assert compose_file.read_text(encoding="utf-8") == queued_content
+    assert compose_file.read_text(encoding="utf-8") == changed_content
     calls = _fake_docker_calls(fixture.fake_root)
     assert "compose -f docker-compose.yml pull app" not in calls
 
 
-def test_retag_apply_start_approval_does_not_follow_queued_project_change(
+def test_retag_apply_start_approval_does_not_bypass_project_revalidation(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fixture = _make_retag_fixture(
         tmp_path,
@@ -328,28 +441,36 @@ def test_retag_apply_start_approval_does_not_follow_queued_project_change(
     choice = {**_switch_choice(), "allow_start": True}
     headers = _csrf_headers(fixture.client)
     plan = _create_retag_plan(fixture.client, headers, choices=[choice])
-    executor = _DeferredExecutor()
-    fixture.client.app.state.web_apply_executor = executor
+    compose_file = fixture.compose_dir / "docker-compose.yml"
+    changed_content = (
+        f"name: replacement\n{compose_file.read_text(encoding='utf-8')}"
+    )
+    original_apply = web_retags_module._apply_retag_updates
+
+    def apply_after_project_changes(
+        *args: object,
+        **kwargs: object,
+    ) -> tuple[RetagPlanUpdate, ...]:
+        compose_file.write_text(changed_content, encoding="utf-8")
+        return original_apply(*args, **kwargs)
+
+    monkeypatch.setattr(
+        web_retags_module,
+        "_apply_retag_updates",
+        apply_after_project_changes,
+    )
     response = _apply_retag_plan(
         fixture.client,
         headers,
         plan,
         choices=[choice],
     )
-    compose_file = fixture.compose_dir / "docker-compose.yml"
-    compose_file.write_text(
-        f"name: replacement\n{compose_file.read_text(encoding='utf-8')}",
-        encoding="utf-8",
-    )
-    queued_content = compose_file.read_text(encoding="utf-8")
-
-    executor.run()
 
     assert response.status_code == 202
     job = _wait_apply_job(fixture.client, response.json()["job_id"])
     assert job["status"] == "failure"
     assert "Compose project changed" in job["error"]
-    assert compose_file.read_text(encoding="utf-8") == queued_content
+    assert compose_file.read_text(encoding="utf-8") == changed_content
     calls = _fake_docker_calls(fixture.fake_root)
     assert "compose -f docker-compose.yml pull app" not in calls
 

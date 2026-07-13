@@ -237,11 +237,9 @@ class ComposeCli:
                 file,
                 project_directory=project_directory,
             )
-            parsed = json.loads(result.stdout)
         except (CommandError, ValueError):
             return ""
-        name = parsed.get("name") if isinstance(parsed, dict) else None
-        return name.strip() if isinstance(name, str) else ""
+        return _project_name_from_config_json(result.stdout)
 
     def discover_stacks(
         self,
@@ -269,33 +267,32 @@ class ComposeCli:
                 project_base_path,
             )
             required = directory.name in required_names
+            project_name = ""
             try:
-                images = tuple(
-                    self.config_images(
-                        directory,
-                        file_name,
-                        project_directory=project_directory,
-                    )
+                config = self.config_json(
+                    directory,
+                    file_name,
+                    project_directory=project_directory,
                 )
-                service_images = (
-                    self.service_image_pairs(
-                        directory,
-                        file_name,
-                        project_directory=project_directory,
-                    )
-                    if required
-                    else self.try_service_image_pairs(
-                        directory,
-                        file_name,
-                        project_directory=project_directory,
-                    )
-                )
+                service_images = _service_image_pairs_from_config_json(config.stdout)
+                project_name = _project_name_from_config_json(config.stdout)
+                images = tuple(sorted({item.image for item in service_images}))
             except (CommandError, ValueError) as exc:
                 if required:
                     raise ComposeDiscoveryError(
                         "Could not inspect a required Compose stack."
                     ) from exc
-                continue
+                try:
+                    images = tuple(
+                        self.config_images(
+                            directory,
+                            file_name,
+                            project_directory=project_directory,
+                        )
+                    )
+                except CommandError:
+                    continue
+                service_images = ()
             stacks.append(
                 ComposeStack(
                     index=len(stacks) + 1,
@@ -305,11 +302,7 @@ class ComposeCli:
                     images=images,
                     service_images=service_images,
                     project_directory=project_directory,
-                    project_name=self.try_config_project_name(
-                        directory,
-                        file_name,
-                        project_directory=project_directory,
-                    ),
+                    project_name=project_name,
                 )
             )
         if not stacks:
@@ -773,6 +766,12 @@ def _service_image_pairs_from_config_json(config_json: str) -> tuple[ServiceImag
                 )
             )
     return tuple(sorted(pairs, key=lambda pair: (pair.service, pair.image)))
+
+
+def _project_name_from_config_json(config_json: str) -> str:
+    parsed = json.loads(config_json)
+    name = parsed.get("name") if isinstance(parsed, dict) else None
+    return name.strip() if isinstance(name, str) else ""
 
 
 def _service_platform(value: object) -> ImagePlatform | None:
