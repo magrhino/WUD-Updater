@@ -24,9 +24,12 @@ import {
   retagChoice,
   retagActionDisabled,
   retagActionTitle,
+  retagChoiceDescriptionId,
+  retagChoiceDisabledReason,
   retagTargetIdentity,
   retagTargetChoiceTitle,
   retagTargetTagValidationError,
+  retagTargetTagErrorId,
   retagTargetTagValue,
 } from "./retagChoices";
 import {
@@ -85,6 +88,13 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
     key: "choices",
     minWidth: 190,
     render: (row) => {
+      const disabledReason = retagChoiceDisabledReason(
+        row,
+        props.targetTags,
+        props.mutationDisabled,
+        props.mutationNotice,
+      );
+      const descriptionId = retagChoiceDescriptionId(row);
       return h("div", { class: "retag-choice-cell retag-choice-action-cell" }, [
         canShowRetagAction(row, props.targetTags)
           ? h(
@@ -106,6 +116,7 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
                   props.mutationNotice,
                 ),
                 "aria-label": `Retag ${row.service_key}`,
+                "aria-describedby": disabledReason ? descriptionId : undefined,
                 onClick: () =>
                   emitRetagAction(
                     emit,
@@ -123,6 +134,7 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
             value: retagChoice(row, props.choices, props.targetTags),
             size: "small",
             "aria-label": `Retag choice for ${row.service_key}`,
+            "aria-describedby": disabledReason ? descriptionId : undefined,
             onUpdateValue: (value: string) =>
               emitRetagChoice(emit, row, value, props.targetTags),
           },
@@ -151,6 +163,13 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
             ],
           },
         ),
+        disabledReason
+          ? h(
+              "span",
+              { id: descriptionId, class: "retag-choice-help" },
+              disabledReason,
+            )
+          : null,
         canSwitchToConcrete(row)
           ? h(
               NTag,
@@ -232,6 +251,7 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
         retagChoice(row, props.choices, props.targetTags) === "switch-to-concrete"
           ? retagTargetTagValidationError(row, props.targetTags)
           : "";
+      const errorId = retagTargetTagErrorId(row);
       return h("div", { class: "retag-table-cell retag-target-tag-cell" }, [
         h(NInput, {
           value: retagTargetTagValue(row, props.targetTags),
@@ -243,11 +263,15 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
           title: error || undefined,
           inputProps: {
             "aria-label": `Target tag for ${row.service_key}`,
+            "aria-invalid": error ? "true" : "false",
+            "aria-describedby": error ? errorId : undefined,
           },
           onUpdateValue: (value: string) =>
             emit("target-tag-update", row, value),
         }),
-        error ? h("span", { class: "retag-input-error" }, error) : null,
+        error
+          ? h("span", { id: errorId, class: "retag-input-error" }, error)
+          : null,
       ]);
     },
   },
@@ -308,6 +332,12 @@ function rowKey(row: RetagTargetItem): string {
 
 .retag-input-error {
   color: var(--color-warning-fg);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.retag-choice-help {
+  color: var(--color-muted-text);
   font-size: 0.78rem;
   line-height: 1.35;
 }

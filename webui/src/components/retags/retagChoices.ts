@@ -4,6 +4,7 @@ import {
   canEnableRetagTargetChoice,
   normalizeRetagChoice,
   retagRuntimeChoiceWarning,
+  retagTargetIdentity,
   retagTargetTagValidationError,
 } from "../../utils/retagChoices";
 
@@ -88,6 +89,29 @@ export function retagActionTitle(
   return (
     targetChoiceTitle || `Add ${item.service_key} to the retag preview.`
   );
+}
+
+export function retagChoiceDisabledReason(
+  item: RetagTargetItem,
+  targetTags: Record<string, string>,
+  mutationDisabled: boolean,
+  mutationNotice: string,
+): string {
+  return retagActionDisabled(item, targetTags, mutationDisabled)
+    ? retagTargetChoiceTitle(item, targetTags, mutationNotice)
+    : "";
+}
+
+export function retagChoiceDescriptionId(item: RetagTargetItem): string {
+  return retagAccessibleId("choice-help", item);
+}
+
+export function retagTargetTagErrorId(item: RetagTargetItem): string {
+  return retagAccessibleId("target-error", item);
+}
+
+function retagAccessibleId(prefix: string, item: RetagTargetItem): string {
+  return `retag-${prefix}-${retagTargetIdentity(item).replace(/\s+/g, "-")}`;
 }
 
 export function emitRetagAction(

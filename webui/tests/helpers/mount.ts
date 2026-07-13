@@ -391,7 +391,7 @@ export const naiveStubs: Record<string, Component> = {
           );
         },
       });
-      return () => h("div", { role: "radiogroup" }, [slots.default?.()]);
+      return () => h("div", { ...attrs, role: "radiogroup" }, [slots.default?.()]);
     },
   },
   NSelect: {

@@ -274,6 +274,12 @@ describe("RetagsView", () => {
     expect(previewButton?.attributes("disabled")).toBeDefined();
     expect(wrapper.text()).toContain("Select at least one service to preview.");
     expect(wrapper.find(".retag-summary-strip").text()).toContain("0 running now");
+    expect(wrapper.get(".retag-selected-count").attributes("aria-live")).toBe(
+      "polite",
+    );
+    expect(wrapper.text()).toContain(
+      "No running retag candidates are available. Select stopped candidates individually.",
+    );
     await previewButton?.trigger("click");
     expect(createRetagPlan).not.toHaveBeenCalled();
   });

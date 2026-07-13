@@ -47,6 +47,9 @@ describe("RetagTargetsTable", () => {
     expect(retagOnlyButton.attributes("title")).toBe(
       "Add media/app to the retag preview.",
     );
+    expect(wrapper.get('[role="radiogroup"]').attributes("aria-label")).toBe(
+      "Retag choice for media/app",
+    );
 
     await retagOnlyButton.trigger("click");
 
@@ -111,5 +114,20 @@ describe("RetagTargetsTable", () => {
     expect(retagOnlyButton.attributes("disabled")).toBeDefined();
     expect(retagOnlyButton.attributes("title")).toContain("invalid target tag");
     expect(wrapper.text()).toContain("media/radarr has an invalid target tag");
+    const targetInput = wrapper.get(
+      'input[aria-label="Target tag for media/radarr"]',
+    );
+    expect(targetInput.attributes("aria-invalid")).toBe("true");
+    const errorId = targetInput.attributes("aria-describedby");
+    expect(errorId).toBeTruthy();
+    expect(wrapper.get(`[id="${errorId}"]`).text()).toContain(
+      "media/radarr has an invalid target tag",
+    );
+    const choiceGroup = wrapper.get('[role="radiogroup"]');
+    const choiceHelpId = choiceGroup.attributes("aria-describedby");
+    expect(choiceHelpId).toBeTruthy();
+    expect(wrapper.get(`[id="${choiceHelpId}"]`).text()).toContain(
+      "media/radarr has an invalid target tag",
+    );
   });
 });

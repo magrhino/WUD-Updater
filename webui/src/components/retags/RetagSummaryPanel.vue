@@ -88,7 +88,7 @@ function runningSelectionTitle(count: number, filtered: boolean): string {
         <span>Needs attention</span>
         <strong class="wrap-anywhere">{{ attentionCount }}</strong>
       </div>
-      <div>
+      <div class="retag-selected-count" aria-live="polite" aria-atomic="true">
         <span>Selected retags</span>
         <strong class="wrap-anywhere">{{ selectedSwitchCount }}</strong>
       </div>
@@ -135,6 +135,20 @@ function runningSelectionTitle(count: number, filtered: boolean): string {
         Targets are discovered Compose services; standalone <code>docker run</code> containers are not included.
         Bulk actions add running services to the current selection; not-running and unknown choices stay unchanged.
         Select a not-running or unknown row individually to include it. Applying a not-running service will create or recreate and start it; an unknown service may be created or recreated and started.
+      </span>
+      <span
+        v-if="runningEligibleCount === 0"
+        class="retag-bulk-status"
+        role="status"
+      >
+        No running retag candidates are available. Select stopped candidates individually.
+      </span>
+      <span
+        v-else-if="filteredRunningEligibleCount === 0"
+        class="retag-bulk-status"
+        role="status"
+      >
+        The current results contain no running retag candidates.
       </span>
     </div>
   </section>
@@ -218,6 +232,13 @@ function runningSelectionTitle(count: number, filtered: boolean): string {
 .retag-bulk-help {
   flex-basis: 100%;
   color: var(--color-muted-text);
+  font-size: var(--text-metadata-size);
+  line-height: 1.4;
+}
+
+.retag-bulk-status {
+  flex-basis: 100%;
+  color: var(--color-text-secondary);
   font-size: var(--text-metadata-size);
   line-height: 1.4;
 }
