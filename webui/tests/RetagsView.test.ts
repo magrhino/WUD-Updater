@@ -642,6 +642,7 @@ describe("RetagsView", () => {
     expect(openJobStream).toHaveBeenCalledWith("retag-job");
     expect(wrapper.text()).toContain("Applying 1 retag");
     expect(wrapper.text()).toContain("Waiting for the updater job to start.");
+    expect(wrapper.text()).toContain("Revalidate");
     expect(wrapper.text()).toContain("repo/app:latest -> repo/app@sha256:abc123");
     expect(wrapper.text()).toContain("wud.tag.include");
     const disabledApplyButton = wrapper
