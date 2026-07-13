@@ -1757,6 +1757,8 @@ def _revalidate_retag_runtime_before_apply(
     )
     if not project_name:
         raise RuntimeError("retag Compose project could not be revalidated")
+    if project_name != stack.project_name:
+        raise RuntimeError("retag Compose project changed before apply")
     running_service_keys = _running_retag_compose_service_keys(settings)
     if running_service_keys is None:
         raise RuntimeError("retag runtime state could not be revalidated")

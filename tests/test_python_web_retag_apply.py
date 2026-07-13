@@ -307,7 +307,48 @@ def test_retag_apply_worker_rechecks_effective_project_before_mutation(
     assert response.status_code == 202
     job = _wait_apply_job(fixture.client, response.json()["job_id"])
     assert job["status"] == "failure"
-    assert "no longer running" in job["error"]
+    assert "Compose project changed" in job["error"]
+    assert compose_file.read_text(encoding="utf-8") == queued_content
+    calls = _fake_docker_calls(fixture.fake_root)
+    assert "compose -f docker-compose.yml pull app" not in calls
+
+
+def test_retag_apply_start_approval_does_not_follow_queued_project_change(
+    tmp_path: Path,
+) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+        },
+    )
+    (fixture.fake_root / "compose-runtime.tsv").write_text("", encoding="utf-8")
+    choice = {**_switch_choice(), "allow_start": True}
+    headers = _csrf_headers(fixture.client)
+    plan = _create_retag_plan(fixture.client, headers, choices=[choice])
+    executor = _DeferredExecutor()
+    fixture.client.app.state.web_apply_executor = executor
+    response = _apply_retag_plan(
+        fixture.client,
+        headers,
+        plan,
+        choices=[choice],
+    )
+    compose_file = fixture.compose_dir / "docker-compose.yml"
+    compose_file.write_text(
+        f"name: replacement\n{compose_file.read_text(encoding='utf-8')}",
+        encoding="utf-8",
+    )
+    queued_content = compose_file.read_text(encoding="utf-8")
+
+    executor.run()
+
+    assert response.status_code == 202
+    job = _wait_apply_job(fixture.client, response.json()["job_id"])
+    assert job["status"] == "failure"
+    assert "Compose project changed" in job["error"]
     assert compose_file.read_text(encoding="utf-8") == queued_content
     calls = _fake_docker_calls(fixture.fake_root)
     assert "compose -f docker-compose.yml pull app" not in calls
