@@ -17,13 +17,13 @@ import {
 } from "../../utils/digestProvenance";
 import {
   canEnableRetagTargetChoice,
-  canShowRetagOnlyAction,
+  canShowRetagAction,
   canSwitchToConcrete,
   emitRetagChoice,
-  emitRetagOnly,
+  emitRetagAction,
   retagChoice,
-  retagOnlyActionDisabled,
-  retagOnlyActionTitle,
+  retagActionDisabled,
+  retagActionTitle,
   retagTargetIdentity,
   retagTargetChoiceTitle,
   retagTargetTagValidationError,
@@ -53,7 +53,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   "choice-update": [item: RetagTargetItem, choice: RetagTargetChoice];
-  "retag-only": [item: RetagTargetItem];
   "target-tag-update": [item: RetagTargetItem, tag: string];
 }>();
 
@@ -87,7 +86,7 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
     minWidth: 190,
     render: (row) => {
       return h("div", { class: "retag-choice-cell retag-choice-action-cell" }, [
-        canShowRetagOnlyAction(row, props.targetTags)
+        canShowRetagAction(row, props.targetTags)
           ? h(
               NButton,
               {
@@ -95,20 +94,20 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
                 size: "small",
                 secondary: true,
                 type: "primary",
-                disabled: retagOnlyActionDisabled(
+                disabled: retagActionDisabled(
                   row,
                   props.targetTags,
                   props.mutationDisabled,
                 ),
-                title: retagOnlyActionTitle(
+                title: retagActionTitle(
                   row,
                   props.targetTags,
                   props.mutationDisabled,
                   props.mutationNotice,
                 ),
-                "aria-label": `Retag only ${row.service_key}`,
+                "aria-label": `Retag ${row.service_key}`,
                 onClick: () =>
-                  emitRetagOnly(
+                  emitRetagAction(
                     emit,
                     row,
                     props.targetTags,

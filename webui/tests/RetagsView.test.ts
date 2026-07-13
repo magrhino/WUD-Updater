@@ -231,7 +231,6 @@ describe("RetagsView", () => {
     updates.setRetagChoice(radarrTarget.target_id, "switch-to-concrete");
     vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
     const setRetagChoice = vi.spyOn(updates, "setRetagChoice");
-    const setRetagOnlyChoice = vi.spyOn(updates, "setRetagOnlyChoice");
     const createRetagPlan = vi.spyOn(updates, "createRetagPlan").mockResolvedValue(
       retagPlanResponse(),
     );
@@ -240,14 +239,15 @@ describe("RetagsView", () => {
     await flushPromises();
 
     await wrapper
-      .get('button[aria-label="Retag only media/radarr"]')
+      .get('button[aria-label="Retag media/radarr"]')
       .trigger("click");
     await flushPromises();
 
-    expect(setRetagChoice).not.toHaveBeenCalled();
-    expect(setRetagOnlyChoice).toHaveBeenCalledTimes(1);
-    expect(setRetagOnlyChoice).toHaveBeenCalledWith(radarrTarget.target_id);
-    expect(updates.retagChoices[appTarget.target_id]).toBe("keep-current");
+    expect(setRetagChoice).toHaveBeenCalledWith(
+      radarrTarget.target_id,
+      "switch-to-concrete",
+    );
+    expect(updates.retagChoices[appTarget.target_id]).toBe("switch-to-concrete");
     expect(updates.retagChoices[radarrTarget.target_id]).toBe("switch-to-concrete");
     expect(createRetagPlan).not.toHaveBeenCalled();
     expect(wrapper.text()).not.toContain("Review retag preview");
@@ -278,7 +278,7 @@ describe("RetagsView", () => {
     expect(createRetagPlan).not.toHaveBeenCalled();
   });
 
-  it("bulk selects only running eligible rows and replaces hidden choices", async () => {
+  it("bulk adds running eligible rows without replacing hidden choices", async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const auth = useAuthStore();
@@ -326,6 +326,7 @@ describe("RetagsView", () => {
       }),
     ];
     updates.retagTargets = retagTargetsResponse(retagItems);
+    updates.resetRetagChoices();
     updates.setRetagChoice(retagItems[2].target_id, "switch-to-concrete");
     updates.setRetagChoice(retagItems[3].target_id, "switch-to-concrete");
     updates.retagPlan = retagPlanResponse();
@@ -345,45 +346,45 @@ describe("RetagsView", () => {
     expect(wrapper.text()).toContain(
       "Targets are discovered Compose services; standalone docker run containers are not included.",
     );
-    expect(buttonByText("Select running candidates")?.attributes("title")).toContain(
-      "Not-running and unknown services stay on Keep",
+    expect(buttonByText("Add running candidates")?.attributes("title")).toContain(
+      "Not-running and unknown choices stay unchanged",
     );
 
     await wrapper
       .find('input[aria-label="Search retag targets"]')
       .setValue("postgres");
-    await buttonByText("Select running in results")?.trigger("click");
+    await buttonByText("Add running in results")?.trigger("click");
     await flushPromises();
 
     expect(updates.retagPlan).toBeNull();
     expect(updates.retagChoices).toMatchObject({
       [retagItems[0].target_id]: "keep-current",
       [retagItems[1].target_id]: "switch-to-concrete",
-      [retagItems[2].target_id]: "keep-current",
-      [retagItems[3].target_id]: "keep-current",
+      [retagItems[2].target_id]: "switch-to-concrete",
+      [retagItems[3].target_id]: "switch-to-concrete",
       [retagItems[4].target_id]: "keep-current",
     });
     expect(wrapper.find(".retag-summary-strip").text()).toContain(
-      "Selected retags1",
+      "Selected retags3",
     );
     expect(createRetagPlan).not.toHaveBeenCalled();
     expect(applyRetagPlan).not.toHaveBeenCalled();
 
     updates.retagPlan = retagPlanResponse();
     await wrapper.find('input[aria-label="Search retag targets"]').setValue("");
-    await buttonByText("Select running candidates")?.trigger("click");
+    await buttonByText("Add running candidates")?.trigger("click");
     await flushPromises();
 
     expect(updates.retagPlan).toBeNull();
     expect(updates.retagChoices).toMatchObject({
       [retagItems[0].target_id]: "switch-to-concrete",
       [retagItems[1].target_id]: "switch-to-concrete",
-      [retagItems[2].target_id]: "keep-current",
-      [retagItems[3].target_id]: "keep-current",
+      [retagItems[2].target_id]: "switch-to-concrete",
+      [retagItems[3].target_id]: "switch-to-concrete",
       [retagItems[4].target_id]: "keep-current",
     });
     expect(wrapper.find(".retag-summary-strip").text()).toContain(
-      "Selected retags2",
+      "Selected retags4",
     );
 
     await buttonByText("Clear selection")?.trigger("click");
@@ -676,10 +677,10 @@ describe("RetagsView", () => {
       .find((button) => button.text().includes("Apply selected retags"));
     const retagAllButton = wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Select running candidates"));
+      .find((button) => button.text().includes("Add running candidates"));
     const retagFilteredButton = wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Select running in results"));
+      .find((button) => button.text().includes("Add running in results"));
     const keepAllButton = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Clear selection"));

@@ -152,7 +152,7 @@ test("static demo renders retag review fixtures", async ({ page }) => {
     serviceRow.getByRole("radio", { name: "Retag" }),
   ).toBeEnabled();
   await serviceRow
-    .getByRole("button", { name: "Retag only media/wudup" })
+    .getByRole("button", { name: "Retag media/wudup" })
     .click();
   await expect(
     page.getByRole("button", { name: "Preview retag changes" }),
@@ -206,7 +206,7 @@ test("static demo mobile layout stays within the viewport", async ({ page }) => 
   await page.goto(demoRoute("/#/retags"));
   await expect(page.getByRole("heading", { name: "Retags", level: 1 })).toBeVisible();
   await expectTouchTargetHeight(page, "Preview retag changes");
-  await expectTouchTargetHeight(page, "Retag only media/wudup");
+  await expectTouchTargetHeight(page, "Retag media/wudup");
   const retagChoiceGroup = page.locator(".retag-card .n-radio-group").first();
   const retagChoiceButtons = retagChoiceGroup.locator(".n-radio-button");
   await expect(retagChoiceGroup).toBeVisible();

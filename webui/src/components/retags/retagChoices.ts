@@ -25,11 +25,6 @@ export type RetagChoiceEmitter = (
   choice: RetagTargetChoice,
 ) => void;
 
-export type RetagOnlyEmitter = (
-  event: "retag-only",
-  item: RetagTargetItem,
-) => void;
-
 export function emitRetagChoice(
   emit: RetagChoiceEmitter,
   item: RetagTargetItem,
@@ -43,14 +38,14 @@ export function emitRetagChoice(
   emit("choice-update", item, eligibleChoice);
 }
 
-export function canShowRetagOnlyAction(
+export function canShowRetagAction(
   item: RetagTargetItem,
   targetTags: Record<string, string>,
 ): boolean {
   return canChooseRetagTarget(item, targetTags);
 }
 
-export function retagOnlyActionDisabled(
+export function retagActionDisabled(
   item: RetagTargetItem,
   targetTags: Record<string, string>,
   mutationDisabled: boolean,
@@ -76,7 +71,7 @@ export function retagTargetChoiceTitle(
   return mutationNotice || retagRuntimeChoiceWarning(item);
 }
 
-export function retagOnlyActionTitle(
+export function retagActionTitle(
   item: RetagTargetItem,
   targetTags: Record<string, string>,
   mutationDisabled: boolean,
@@ -87,22 +82,22 @@ export function retagOnlyActionTitle(
     targetTags,
     mutationNotice,
   );
-  if (retagOnlyActionDisabled(item, targetTags, mutationDisabled)) {
+  if (retagActionDisabled(item, targetTags, mutationDisabled)) {
     return targetChoiceTitle || "Retagging is disabled.";
   }
   return (
-    targetChoiceTitle || `Select only ${item.service_key} for retag preview.`
+    targetChoiceTitle || `Add ${item.service_key} to the retag preview.`
   );
 }
 
-export function emitRetagOnly(
-  emit: RetagOnlyEmitter,
+export function emitRetagAction(
+  emit: RetagChoiceEmitter,
   item: RetagTargetItem,
   targetTags: Record<string, string>,
   mutationDisabled: boolean,
 ): void {
-  if (retagOnlyActionDisabled(item, targetTags, mutationDisabled)) {
+  if (retagActionDisabled(item, targetTags, mutationDisabled)) {
     return;
   }
-  emit("retag-only", item);
+  emit("choice-update", item, "switch-to-concrete");
 }

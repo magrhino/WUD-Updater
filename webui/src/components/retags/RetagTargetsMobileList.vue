@@ -5,13 +5,13 @@ import type { RetagTargetChoice, RetagTargetItem } from "../../api/client";
 import { displayDigest } from "../../utils/digestProvenance";
 import {
   canEnableRetagTargetChoice,
-  canShowRetagOnlyAction,
+  canShowRetagAction,
   canSwitchToConcrete,
   emitRetagChoice,
-  emitRetagOnly,
+  emitRetagAction,
   retagChoice,
-  retagOnlyActionDisabled,
-  retagOnlyActionTitle,
+  retagActionDisabled,
+  retagActionTitle,
   retagTargetChoiceTitle,
   retagTargetIdentity,
   retagTargetTagValidationError,
@@ -38,7 +38,6 @@ defineProps<{
 
 const emit = defineEmits<{
   "choice-update": [item: RetagTargetItem, choice: RetagTargetChoice];
-  "retag-only": [item: RetagTargetItem];
   "target-tag-update": [item: RetagTargetItem, tag: string];
 }>();
 </script>
@@ -64,7 +63,7 @@ const emit = defineEmits<{
         </n-tag>
       </div>
       <div
-        v-if="canShowRetagOnlyAction(item, targetTags)"
+        v-if="canShowRetagAction(item, targetTags)"
         class="retag-card-primary-action"
       >
         <n-button
@@ -72,10 +71,10 @@ const emit = defineEmits<{
           size="small"
           secondary
           type="primary"
-          :disabled="retagOnlyActionDisabled(item, targetTags, mutationDisabled)"
-          :title="retagOnlyActionTitle(item, targetTags, mutationDisabled, mutationNotice)"
-          :aria-label="`Retag only ${item.service_key}`"
-          @click="emitRetagOnly(emit, item, targetTags, mutationDisabled)"
+          :disabled="retagActionDisabled(item, targetTags, mutationDisabled)"
+          :title="retagActionTitle(item, targetTags, mutationDisabled, mutationNotice)"
+          :aria-label="`Retag ${item.service_key}`"
+          @click="emitRetagAction(emit, item, targetTags, mutationDisabled)"
         >
           Retag this service
         </n-button>

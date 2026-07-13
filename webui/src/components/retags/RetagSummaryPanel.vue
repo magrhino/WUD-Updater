@@ -36,7 +36,7 @@ function runningSelectionTitle(count: number, filtered: boolean): string {
       : "No running eligible Compose services to select.";
   }
   const scope = filtered ? " in the current results" : "";
-  return `Replace the current selection with ${count} running eligible Compose ${count === 1 ? "service" : "services"}${scope}. Not-running and unknown services stay on Keep.`;
+  return `Add ${count} running eligible Compose ${count === 1 ? "service" : "services"}${scope} to the current selection. Not-running and unknown choices stay unchanged.`;
 }
 </script>
 
@@ -109,7 +109,7 @@ function runningSelectionTitle(count: number, filtered: boolean): string {
         :title="runningSelectionTitle(runningEligibleCount, false)"
         @click="$emit('retag-all')"
       >
-        Select running candidates
+        Add running candidates
       </n-button>
       <n-button
         size="small"
@@ -117,7 +117,7 @@ function runningSelectionTitle(count: number, filtered: boolean): string {
         :title="runningSelectionTitle(filteredRunningEligibleCount, true)"
         @click="$emit('retag-filtered')"
       >
-        Select running in results
+        Add running in results
       </n-button>
       <n-button
         size="small"
@@ -133,7 +133,7 @@ function runningSelectionTitle(count: number, filtered: boolean): string {
       </n-button>
       <span class="retag-bulk-help">
         Targets are discovered Compose services; standalone <code>docker run</code> containers are not included.
-        Bulk selection replaces the current selection and includes only running services.
+        Bulk actions add running services to the current selection; not-running and unknown choices stay unchanged.
         Select a not-running or unknown row individually to include it. Applying a not-running service will create or recreate and start it; an unknown service may be created or recreated and started.
       </span>
     </div>

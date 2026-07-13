@@ -35,22 +35,24 @@ function mountTable({
 }
 
 describe("RetagTargetsTable", () => {
-  it("renders a per-row retag action and emits retag-only", async () => {
+  it("renders a per-row retag action and emits an additive choice", async () => {
     const item = retagTarget();
     const wrapper = mountTable({ rows: [item] });
 
     const retagOnlyButton = wrapper.get(
-      'button[aria-label="Retag only media/app"]',
+      'button[aria-label="Retag media/app"]',
     );
     expect(retagOnlyButton.text()).toBe("Retag this service");
     expect(retagOnlyButton.attributes("disabled")).toBeUndefined();
     expect(retagOnlyButton.attributes("title")).toBe(
-      "Select only media/app for retag preview.",
+      "Add media/app to the retag preview.",
     );
 
     await retagOnlyButton.trigger("click");
 
-    expect(wrapper.emitted("retag-only")).toEqual([[item]]);
+    expect(wrapper.emitted("choice-update")).toEqual([
+      [item, "switch-to-concrete"],
+    ]);
   });
 
   it("keeps a not-running service selectable with a visible start warning", () => {
@@ -62,7 +64,7 @@ describe("RetagTargetsTable", () => {
       "Applying will create or recreate and start this service",
     );
     const retagOnlyButton = wrapper.get(
-      'button[aria-label="Retag only media/app"]',
+      'button[aria-label="Retag media/app"]',
     );
     expect(retagOnlyButton.attributes("disabled")).toBeUndefined();
     expect(retagOnlyButton.attributes("title")).toContain(
@@ -104,7 +106,7 @@ describe("RetagTargetsTable", () => {
     expect(switchInput.attributes("disabled")).toBeDefined();
     expect(switchInput.attributes("title")).toContain("invalid target tag");
     const retagOnlyButton = wrapper.get(
-      'button[aria-label="Retag only media/radarr"]',
+      'button[aria-label="Retag media/radarr"]',
     );
     expect(retagOnlyButton.attributes("disabled")).toBeDefined();
     expect(retagOnlyButton.attributes("title")).toContain("invalid target tag");

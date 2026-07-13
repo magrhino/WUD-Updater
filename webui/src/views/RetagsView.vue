@@ -405,10 +405,6 @@ function onRetagChoiceUpdate(
   updates.setRetagChoice(retagTargetIdentity(item), choice);
 }
 
-function onRetagOnly(item: RetagTargetItem): void {
-  updates.setRetagOnlyChoice(retagTargetIdentity(item));
-}
-
 function onRetagTargetTagUpdate(item: RetagTargetItem, tag: string): void {
   updates.setRetagTargetTag(retagTargetIdentity(item), tag);
 }
@@ -417,18 +413,17 @@ function retagAllEligible(): void {
   if (retagAllDisabled.value) {
     return;
   }
-  replaceRetagSelection(runningEligibleRows.value);
+  addRetagSelection(runningEligibleRows.value);
 }
 
 function retagFilteredEligible(): void {
   if (retagFilteredDisabled.value) {
     return;
   }
-  replaceRetagSelection(filteredRunningEligibleRows.value);
+  addRetagSelection(filteredRunningEligibleRows.value);
 }
 
-function replaceRetagSelection(items: RetagTargetItem[]): void {
-  updates.setRetagChoicesForItems(rows.value, "keep-current");
+function addRetagSelection(items: RetagTargetItem[]): void {
   updates.setRetagChoicesForItems(items, "switch-to-concrete");
 }
 
@@ -781,7 +776,6 @@ onMounted(() => {
         :mutation-disabled="retagChoiceDisabled"
         :mutation-notice="retagMutationNotice"
         @choice-update="onRetagChoiceUpdate"
-        @retag-only="onRetagOnly"
         @target-tag-update="onRetagTargetTagUpdate"
       />
 
@@ -793,7 +787,6 @@ onMounted(() => {
         :mutation-disabled="retagChoiceDisabled"
         :mutation-notice="retagMutationNotice"
         @choice-update="onRetagChoiceUpdate"
-        @retag-only="onRetagOnly"
         @target-tag-update="onRetagTargetTagUpdate"
       />
     </template>

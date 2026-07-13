@@ -74,19 +74,22 @@ describe("RetagTargetsMobileList", () => {
     ).toBe("1.1");
 
     const retagOnlyButton = wrapper.get(
-      'button[aria-label="Retag only media/app"]',
+      'button[aria-label="Retag media/app"]',
     );
     expect(retagOnlyButton.text()).toBe("Retag this service");
     expect(retagOnlyButton.attributes("disabled")).toBeUndefined();
     expect(retagOnlyButton.attributes("title")).toBe(
-      "Select only media/app for retag preview.",
+      "Add media/app to the retag preview.",
     );
     await retagOnlyButton.trigger("click");
-    expect(wrapper.emitted("retag-only")).toEqual([[item]]);
+    expect(wrapper.emitted("choice-update")).toEqual([
+      [item, "switch-to-concrete"],
+    ]);
 
     await switchInput.setValue();
 
     expect(wrapper.emitted("choice-update")).toEqual([
+      [item, "switch-to-concrete"],
       [item, "switch-to-concrete"],
     ]);
   });
@@ -100,7 +103,7 @@ describe("RetagTargetsMobileList", () => {
       "Applying may create or recreate and start this service",
     );
     const retagOnlyButton = wrapper.get(
-      'button[aria-label="Retag only media/app"]',
+      'button[aria-label="Retag media/app"]',
     );
     expect(retagOnlyButton.attributes("disabled")).toBeUndefined();
     expect(retagOnlyButton.attributes("title")).toContain(
@@ -159,7 +162,6 @@ describe("RetagTargetsMobileList", () => {
       "Read-only mode keeps retag switch/apply disabled.",
     );
     expect(wrapper.emitted("choice-update")).toBeUndefined();
-    expect(wrapper.emitted("retag-only")).toBeUndefined();
   });
 
   it("enables manual fallback rows after a target tag is supplied", async () => {
@@ -228,7 +230,7 @@ describe("RetagTargetsMobileList", () => {
     expect(switchInput.attributes("disabled")).toBeDefined();
     expect(switchInput.attributes("title")).toContain("invalid target tag");
     const retagOnlyButton = wrapper.get(
-      'button[aria-label="Retag only media/radarr"]',
+      'button[aria-label="Retag media/radarr"]',
     );
     expect(retagOnlyButton.attributes("disabled")).toBeDefined();
     expect(retagOnlyButton.attributes("title")).toContain("invalid target tag");
