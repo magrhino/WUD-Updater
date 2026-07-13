@@ -76,6 +76,7 @@ describe("RetagsView", () => {
     expect(text).toContain("Retag review");
     expect(text).toContain("Total services");
     expect(text).toContain("Retag candidates");
+    expect(wrapper.find(".retag-summary-strip").text()).toContain("1 running now");
     expect(text).toContain("Needs attention");
     expect(text).toContain("compose warning");
     expect(text).toContain("media/app");
@@ -250,6 +251,31 @@ describe("RetagsView", () => {
     expect(updates.retagChoices[radarrTarget.target_id]).toBe("switch-to-concrete");
     expect(createRetagPlan).not.toHaveBeenCalled();
     expect(wrapper.text()).not.toContain("Review retag preview");
+  });
+
+  it("requires a selected service before previewing", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse([
+      retagTarget({ runtime_state: "not-running" }),
+    ]);
+    vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    const createRetagPlan = vi.spyOn(updates, "createRetagPlan");
+
+    const wrapper = mountWithApp(RetagsView, { pinia });
+    await flushPromises();
+
+    const previewButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview retag changes"));
+    expect(previewButton?.attributes("disabled")).toBeDefined();
+    expect(wrapper.text()).toContain("Select at least one service to preview.");
+    expect(wrapper.find(".retag-summary-strip").text()).toContain("0 running now");
+    await previewButton?.trigger("click");
+    expect(createRetagPlan).not.toHaveBeenCalled();
   });
 
   it("bulk selects only running eligible rows and replaces hidden choices", async () => {
@@ -460,6 +486,10 @@ describe("RetagsView", () => {
     auth.session = authSession({ mutations_enabled: true });
     const updates = useUpdatesStore();
     updates.retagTargets = retagTargetsResponse();
+    updates.setRetagChoice(
+      updates.retagTargets.items[0].target_id,
+      "switch-to-concrete",
+    );
     vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
     vi.spyOn(updates, "createRetagPlan").mockImplementation(async () => {
       updates.error = "retag preview is already running";
@@ -515,6 +545,9 @@ describe("RetagsView", () => {
           project_directory: "/docker/media-staging",
         }),
       ]);
+      for (const item of updates.retagTargets.items) {
+        updates.setRetagChoice(item.target_id, "switch-to-concrete");
+      }
       vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
       vi.spyOn(updates, "createRetagPlan").mockImplementation(async () => {
         updates.error = previewError;
@@ -998,10 +1031,10 @@ describe("RetagsView", () => {
 
     expect(visibleServices()).toEqual([
       "zeta/running-ready",
-      "alpha/running-attention",
       "zeta/stopped-ready",
-      "alpha/stopped-attention",
       "aardvark/unknown",
+      "alpha/running-attention",
+      "alpha/stopped-attention",
     ]);
 
     await wrapper

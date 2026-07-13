@@ -121,11 +121,14 @@ export function compareRetagTargets(
 }
 
 function retagTargetSortRank(item: RetagTargetItem): number {
-  if (item.runtime_state !== "running" && item.runtime_state !== "not-running") {
-    return 4;
-  }
-  const runtimeRank = item.runtime_state === "running" ? 0 : 2;
-  return runtimeRank + (item.retag_available ? 0 : 1);
+  const availabilityRank = item.retag_available ? 0 : 3;
+  const runtimeRank =
+    item.runtime_state === "running"
+      ? 0
+      : item.runtime_state === "not-running"
+        ? 1
+        : 2;
+  return availabilityRank + runtimeRank;
 }
 
 export function searchableText(item: RetagTargetItem): string {

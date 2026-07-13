@@ -68,6 +68,9 @@ function runningSelectionTitle(count: number, filtered: boolean): string {
         </n-button>
         <span v-if="mutationNotice">{{ mutationNotice }}</span>
         <span v-else-if="validationError">{{ validationError }}</span>
+        <span v-else-if="selectedSwitchCount === 0">
+          Select at least one service to preview.
+        </span>
       </div>
     </div>
 
@@ -79,6 +82,7 @@ function runningSelectionTitle(count: number, filtered: boolean): string {
       <div>
         <span>Retag candidates</span>
         <strong class="wrap-anywhere">{{ availableCount }}</strong>
+        <small>{{ runningEligibleCount }} running now</small>
       </div>
       <div>
         <span>Needs attention</span>
@@ -190,6 +194,12 @@ function runningSelectionTitle(count: number, filtered: boolean): string {
   color: var(--color-muted-text);
   font-size: 0.78rem;
   font-weight: 700;
+}
+
+.retag-summary-strip small {
+  color: var(--color-muted-text);
+  font-size: var(--text-metadata-size);
+  line-height: 1.3;
 }
 
 .retag-summary-strip strong {

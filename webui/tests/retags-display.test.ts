@@ -109,10 +109,10 @@ describe("retag display helpers", () => {
         .map((item) => item.service_key),
     ).toEqual([
       "zeta/ready",
-      "alpha/attention",
       "beta/ready",
-      "alpha/stopped",
       "aardvark/unknown",
+      "alpha/attention",
+      "alpha/stopped",
     ]);
   });
 

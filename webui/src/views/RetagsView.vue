@@ -230,6 +230,7 @@ const previewDisabled = computed(
     applyJobActive.value ||
     unavailable.value ||
     Boolean(retagTargetTagError.value) ||
+    selectedSwitchCount.value === 0 ||
     rows.value.length === 0,
 );
 const applyDisabled = computed(
