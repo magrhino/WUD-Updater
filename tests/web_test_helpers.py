@@ -561,7 +561,8 @@ def _make_fake_stack(
         )
         with (fake_root / "compose-runtime.tsv").open("a", encoding="utf-8") as file:
             file.write(
-                f"{directory}\t{directory / 'docker-compose.yml'}\t{service}\tFalse\n"
+                f"{directory}\t{directory / 'docker-compose.yml'}\t"
+                f"{directory.name}\t{service}\tFalse\n"
             )
 
     (directory / "docker-compose.yml").write_text(

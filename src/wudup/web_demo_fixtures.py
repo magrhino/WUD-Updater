@@ -1778,7 +1778,8 @@ def _write_demo_stacks(docker_base: Path, fake_docker_root: Path) -> None:
         _write_compose_file(stack_dir / "docker-compose.yml", stack_name, services)
         _write_fake_stack_state(fake_docker_root, stack_name, services, containers)
         compose_runtime.extend(
-            f"{stack_dir}\t{stack_dir / 'docker-compose.yml'}\t{service}\tFalse\n"
+            f"{stack_dir}\t{stack_dir / 'docker-compose.yml'}\t"
+            f"{stack_name}\t{service}\tFalse\n"
             for service, image in services
             if image != DEMO_WUDUP_LATEST_IMAGE
         )

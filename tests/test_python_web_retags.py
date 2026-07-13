@@ -270,6 +270,7 @@ def test_retag_targets_endpoint_reports_running_and_not_running_services(
     assert calls.count(
         'ps --format {{.Label "com.docker.compose.project.working_dir"}}\t'
         '{{.Label "com.docker.compose.project.config_files"}}\t'
+        '{{.Label "com.docker.compose.project"}}\t'
         '{{.Label "com.docker.compose.service"}}\t'
         '{{.Label "com.docker.compose.oneoff"}}'
     ) == 1
@@ -305,7 +306,7 @@ def test_retag_targets_ignores_compose_run_one_off_containers(
         [("app", "repo/app:latest", None)],
     )
     (fake_root / "compose-runtime.tsv").write_text(
-        f"{compose_dir}\t{compose_dir / 'docker-compose.yml'}\tapp\tTrue\n",
+        f"{compose_dir}\t{compose_dir / 'docker-compose.yml'}\tstack\tapp\tTrue\n",
         encoding="utf-8",
     )
 
@@ -341,7 +342,7 @@ def test_retag_targets_matches_relative_config_from_host_project_directory(
         encoding="utf-8",
     )
     (fake_root / "compose-runtime.tsv").write_text(
-        f"{host_stack}\tcompose.override.yml, docker-compose.yml\tapp\tFalse\n",
+        f"{host_stack}\tcompose.override.yml, docker-compose.yml\tstack\tapp\tFalse\n",
         encoding="utf-8",
     )
     _seed_known_image(
@@ -356,6 +357,41 @@ def test_retag_targets_matches_relative_config_from_host_project_directory(
     )
 
     response = client.get("/api/v1/retag-targets")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["runtime_state"] == "running"
+
+
+def test_retag_targets_does_not_match_a_custom_compose_project(
+    tmp_path: Path,
+) -> None:
+    fixture = _make_retag_fixture(tmp_path)
+    compose_dir = tmp_path / "docker" / "stack"
+    (fixture.fake_root / "compose-runtime.tsv").write_text(
+        f"{compose_dir}\t{compose_dir / 'docker-compose.yml'}\tcustom\tapp\tFalse\n",
+        encoding="utf-8",
+    )
+
+    response = fixture.client.get("/api/v1/retag-targets")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["runtime_state"] == "not-running"
+
+
+def test_retag_targets_matches_the_configured_compose_project(
+    tmp_path: Path,
+) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={"COMPOSE_PROJECT_NAME": "custom"},
+    )
+    compose_dir = tmp_path / "docker" / "stack"
+    (fixture.fake_root / "compose-runtime.tsv").write_text(
+        f"{compose_dir}\t{compose_dir / 'docker-compose.yml'}\tcustom\tapp\tFalse\n",
+        encoding="utf-8",
+    )
+
+    response = fixture.client.get("/api/v1/retag-targets")
 
     assert response.status_code == 200
     assert response.json()["items"][0]["runtime_state"] == "running"

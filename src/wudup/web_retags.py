@@ -126,6 +126,7 @@ _GHCR_GITHUB_REPO_RE = re.compile(
 _RETAG_COMPOSE_RUNTIME_FORMAT = (
     '{{.Label "com.docker.compose.project.working_dir"}}\t'
     '{{.Label "com.docker.compose.project.config_files"}}\t'
+    '{{.Label "com.docker.compose.project"}}\t'
     '{{.Label "com.docker.compose.service"}}\t'
     '{{.Label "com.docker.compose.oneoff"}}'
 )
@@ -936,19 +937,19 @@ def _retag_target_records(
 
 def _running_retag_compose_service_keys(
     settings: WebSettings,
-) -> set[tuple[Path, str]] | None:
+) -> set[tuple[Path, str, str]] | None:
     docker = DockerCli(runner=_command_runner(settings))
     try:
         rows = docker.ps_format(_RETAG_COMPOSE_RUNTIME_FORMAT)
     except CommandError:
         return None
 
-    keys: set[tuple[Path, str]] = set()
+    keys: set[tuple[Path, str, str]] = set()
     for row in rows:
-        fields = row.split("\t", 3)
-        if len(fields) != 4:
+        fields = row.split("\t", 4)
+        if len(fields) != 5:
             continue
-        working_dir, config_files, service, oneoff = fields
+        working_dir, config_files, project, service, oneoff = fields
         if oneoff.strip().casefold() == "true":
             continue
         service = service.strip()
@@ -963,16 +964,22 @@ def _running_retag_compose_service_keys(
                 if not working_dir:
                     continue
                 config_path = Path(working_dir) / config_path
-            keys.add((_normalized_retag_compose_path(config_path), service))
+            keys.add(
+                (_normalized_retag_compose_path(config_path), project.strip(), service)
+            )
     return keys
 
 
 def _retag_compose_service_key(
     stack: ComposeStack,
     service: str,
-) -> tuple[Path, str]:
+) -> tuple[Path, str, str]:
     project_directory = stack.project_directory or stack.directory
-    return (_normalized_retag_compose_path(project_directory / stack.file), service)
+    return (
+        _normalized_retag_compose_path(project_directory / stack.file),
+        stack.project_name,
+        service,
+    )
 
 
 def _normalized_retag_compose_path(path: Path) -> Path:

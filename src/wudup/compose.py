@@ -60,6 +60,7 @@ class ComposeStack:
     images: tuple[str, ...]
     service_images: tuple[ServiceImage, ...]
     project_directory: Path | None = None
+    project_name: str = ""
 
 
 class ComposeCli:
@@ -223,6 +224,25 @@ class ComposeCli:
             check=True,
         )
 
+    def try_config_project_name(
+        self,
+        directory: str | Path,
+        file: str,
+        *,
+        project_directory: str | Path | None = None,
+    ) -> str:
+        try:
+            result = self.config_json(
+                directory,
+                file,
+                project_directory=project_directory,
+            )
+            parsed = json.loads(result.stdout)
+        except (CommandError, ValueError):
+            return ""
+        name = parsed.get("name") if isinstance(parsed, dict) else None
+        return name.strip() if isinstance(name, str) else ""
+
     def discover_stacks(
         self,
         docker_base: str | Path,
@@ -285,6 +305,11 @@ class ComposeCli:
                     images=images,
                     service_images=service_images,
                     project_directory=project_directory,
+                    project_name=self.try_config_project_name(
+                        directory,
+                        file_name,
+                        project_directory=project_directory,
+                    ),
                 )
             )
         if not stacks:

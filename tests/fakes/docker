@@ -246,7 +246,7 @@ compose_config_json_from_file(){
       }
     }
   ' "$file")" || return 1
-  printf '{"services":{%s}}\n' "$output"
+  printf '{"name":"%s","services":{%s}}\n' "${COMPOSE_PROJECT_NAME:-$(basename "$PWD")}" "$output"
 }
 
 service_images(){
