@@ -423,6 +423,7 @@ export interface UpdateTargetsResponse {
 
 export type RetagTargetsStatus = "ready" | "unavailable";
 export type RetagTargetChoice = "keep-current" | "switch-to-concrete";
+export type RetagRuntimeState = "running" | "not-running" | "unknown";
 
 export interface RetagTargetItem {
   target_id?: string;
@@ -440,6 +441,7 @@ export interface RetagTargetItem {
   candidate_warning: string;
   candidate_link_label: string;
   candidate_link_url: string;
+  runtime_state: RetagRuntimeState;
   retag_available: boolean;
   retag_reason: string;
   choices: RetagTargetChoice[];
@@ -465,6 +467,7 @@ export interface RetagChoiceRequest {
   target_id?: string;
   choice: RetagTargetChoice;
   target_tag?: string;
+  allow_start?: boolean;
 }
 
 export interface RetagPlanOptions {

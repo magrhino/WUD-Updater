@@ -1276,6 +1276,9 @@ export class DemoApiState {
       if (choice === "switch-to-concrete" && targetTag) {
         normalized.target_tag = targetTag;
       }
+      if (choice === "switch-to-concrete" && requested?.allow_start) {
+        normalized.allow_start = true;
+      }
       return normalized;
     });
   }

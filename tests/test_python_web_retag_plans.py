@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from wudup.compose import ComposeStack
@@ -53,6 +54,23 @@ def test_retag_plan_helpers_render_ordered_stacks_and_stable_ids(
         plan,
         updates=(alpha, bravo),
         compose_hashes={"alpha": "1", "bravo": "2"},
+    )
+
+    running = replace(alpha, runtime_state="running")
+    running_plan_id = retag_plan_id(
+        plan,
+        updates=(running,),
+        compose_hashes={"alpha": "1"},
+    )
+    assert running_plan_id != retag_plan_id(
+        plan,
+        updates=(replace(running, runtime_state="not-running"),),
+        compose_hashes={"alpha": "1"},
+    )
+    assert running_plan_id != retag_plan_id(
+        plan,
+        updates=(replace(running, allow_start=True),),
+        compose_hashes={"alpha": "1"},
     )
 
 

@@ -511,6 +511,7 @@ def _fake_docker_env(tmp_path: Path) -> tuple[dict[str, str], Path]:
     ):
         path.mkdir(parents=True, exist_ok=True)
     (fake_root / "containers.tsv").write_text("", encoding="utf-8")
+    (fake_root / "compose-runtime.tsv").write_text("", encoding="utf-8")
     (fake_root / "calls.log").write_text("", encoding="utf-8")
     repo_root = Path(__file__).resolve().parents[1]
     return (
@@ -558,6 +559,11 @@ def _make_fake_stack(
             f"/{cid}|running|healthy|0|0\n",
             encoding="utf-8",
         )
+        with (fake_root / "compose-runtime.tsv").open("a", encoding="utf-8") as file:
+            file.write(
+                f"{directory}\t{directory / 'docker-compose.yml'}\t"
+                f"{directory.name}\t{service}\tFalse\n"
+            )
 
     (directory / "docker-compose.yml").write_text(
         "".join(compose_lines),

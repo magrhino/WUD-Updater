@@ -64,6 +64,26 @@ export function canEnableRetagTargetChoice(
   );
 }
 
+export function canBulkEnableRetagTargetChoice(
+  item: RetagTargetItem,
+  targetTags: Record<string, string>,
+): boolean {
+  return (
+    item.runtime_state === "running" &&
+    canEnableRetagTargetChoice(item, targetTags)
+  );
+}
+
+export function retagRuntimeChoiceWarning(item: RetagTargetItem): string {
+  if (item.runtime_state === "not-running") {
+    return "No running Compose container was found. Applying will create or recreate and start this service.";
+  }
+  if (item.runtime_state !== "running") {
+    return "Runtime state could not be verified. Applying may create or recreate and start this service.";
+  }
+  return "";
+}
+
 export function normalizeRetagChoice(
   item: RetagTargetItem,
   choice: string | undefined,

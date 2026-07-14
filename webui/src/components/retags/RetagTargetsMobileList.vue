@@ -5,16 +5,19 @@ import type { RetagTargetChoice, RetagTargetItem } from "../../api/client";
 import { displayDigest } from "../../utils/digestProvenance";
 import {
   canEnableRetagTargetChoice,
-  canShowRetagOnlyAction,
+  canShowRetagAction,
   canSwitchToConcrete,
   emitRetagChoice,
-  emitRetagOnly,
+  emitRetagAction,
   retagChoice,
-  retagOnlyActionDisabled,
-  retagOnlyActionTitle,
+  retagActionDisabled,
+  retagActionTitle,
+  retagChoiceDescriptionId,
+  retagChoiceDisabledReason,
   retagTargetChoiceTitle,
   retagTargetIdentity,
   retagTargetTagValidationError,
+  retagTargetTagErrorId,
   retagTargetTagValue,
 } from "./retagChoices";
 import {
@@ -22,6 +25,9 @@ import {
   composeLocation,
   reasonLabel,
   reasonTagType,
+  runtimeStateDetail,
+  runtimeStateLabel,
+  runtimeStateTagType,
   trackingLabel,
 } from "../../views/retags/display";
 
@@ -35,7 +41,6 @@ defineProps<{
 
 const emit = defineEmits<{
   "choice-update": [item: RetagTargetItem, choice: RetagTargetChoice];
-  "retag-only": [item: RetagTargetItem];
   "target-tag-update": [item: RetagTargetItem, tag: string];
 }>();
 </script>
@@ -61,7 +66,7 @@ const emit = defineEmits<{
         </n-tag>
       </div>
       <div
-        v-if="canShowRetagOnlyAction(item, targetTags)"
+        v-if="canShowRetagAction(item, targetTags)"
         class="retag-card-primary-action"
       >
         <n-button
@@ -69,10 +74,15 @@ const emit = defineEmits<{
           size="small"
           secondary
           type="primary"
-          :disabled="retagOnlyActionDisabled(item, targetTags, mutationDisabled)"
-          :title="retagOnlyActionTitle(item, targetTags, mutationDisabled, mutationNotice)"
-          :aria-label="`Retag only ${item.service_key}`"
-          @click="emitRetagOnly(emit, item, targetTags, mutationDisabled)"
+          :disabled="retagActionDisabled(item, targetTags, mutationDisabled)"
+          :title="retagActionTitle(item, targetTags, mutationDisabled, mutationNotice)"
+          :aria-label="`Retag ${item.service_key}`"
+          :aria-describedby="
+            retagChoiceDisabledReason(item, targetTags, mutationDisabled, mutationNotice)
+              ? retagChoiceDescriptionId(item)
+              : undefined
+          "
+          @click="emitRetagAction(emit, item, targetTags, mutationDisabled)"
         >
           Retag this service
         </n-button>
@@ -82,6 +92,19 @@ const emit = defineEmits<{
           <dt>Image</dt>
           <dd>
             <code class="wrap-anywhere">{{ item.image }}</code>
+          </dd>
+        </div>
+        <div>
+          <dt>Runtime</dt>
+          <dd class="retag-runtime-review">
+            <n-tag
+              size="small"
+              :type="runtimeStateTagType(item)"
+              :bordered="false"
+            >
+              {{ runtimeStateLabel(item) }}
+            </n-tag>
+            <span>{{ runtimeStateDetail(item) }}</span>
           </dd>
         </div>
         <div>
@@ -137,6 +160,16 @@ const emit = defineEmits<{
               "
               :input-props="{
                 'aria-label': `Target tag for ${item.service_key}`,
+                'aria-invalid':
+                  retagChoice(item, choices, targetTags) === 'switch-to-concrete' &&
+                  retagTargetTagValidationError(item, targetTags)
+                    ? 'true'
+                    : 'false',
+                'aria-describedby':
+                  retagChoice(item, choices, targetTags) === 'switch-to-concrete' &&
+                  retagTargetTagValidationError(item, targetTags)
+                    ? retagTargetTagErrorId(item)
+                    : undefined,
               }"
               @update:value="emit('target-tag-update', item, String($event))"
             />
@@ -146,6 +179,7 @@ const emit = defineEmits<{
                 retagTargetTagValidationError(item, targetTags)
               "
               class="retag-input-error"
+              :id="retagTargetTagErrorId(item)"
             >
               {{ retagTargetTagValidationError(item, targetTags) }}
             </span>
@@ -163,6 +197,13 @@ const emit = defineEmits<{
             <n-radio-group
               :value="retagChoice(item, choices, targetTags)"
               size="small"
+              role="radiogroup"
+              :aria-label="`Retag choice for ${item.service_key}`"
+              :aria-describedby="
+                retagChoiceDisabledReason(item, targetTags, mutationDisabled, mutationNotice)
+                  ? retagChoiceDescriptionId(item)
+                  : undefined
+              "
               @update:value="emitRetagChoice(emit, item, String($event), targetTags)"
             >
               <n-radio-button value="keep-current">Keep</n-radio-button>
@@ -174,6 +215,13 @@ const emit = defineEmits<{
                 Retag
               </n-radio-button>
             </n-radio-group>
+            <span
+              v-if="retagChoiceDisabledReason(item, targetTags, mutationDisabled, mutationNotice)"
+              :id="retagChoiceDescriptionId(item)"
+              class="retag-choice-help"
+            >
+              {{ retagChoiceDisabledReason(item, targetTags, mutationDisabled, mutationNotice) }}
+            </span>
             <n-tag
               v-if="canSwitchToConcrete(item)"
               size="small"
@@ -219,6 +267,12 @@ const emit = defineEmits<{
   font-size: 0.84rem;
 }
 
+.retag-runtime-review {
+  align-items: flex-start;
+  display: grid;
+  gap: 4px;
+}
+
 .retag-target-field {
   align-items: stretch;
   display: grid;
@@ -227,6 +281,12 @@ const emit = defineEmits<{
 
 .retag-input-error {
   color: var(--color-warning-fg);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.retag-choice-help {
+  color: var(--color-muted-text);
   font-size: 0.78rem;
   line-height: 1.35;
 }

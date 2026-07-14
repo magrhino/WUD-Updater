@@ -46,6 +46,8 @@ describe("RetagTargetsMobileList", () => {
     expect(wrapper.text()).toContain("media/app");
     expect(wrapper.text()).toContain("media / app");
     expect(wrapper.text()).toContain("repo/app:latest");
+    expect(wrapper.text()).toContain("Running");
+    expect(wrapper.text()).toContain("Matching Compose container is running");
     expect(wrapper.text()).toContain("latest (label)");
     expect(wrapper.text()).toContain("latest -> 1.1");
     expect(wrapper.text()).toContain("GitHub release");
@@ -72,21 +74,49 @@ describe("RetagTargetsMobileList", () => {
     ).toBe("1.1");
 
     const retagOnlyButton = wrapper.get(
-      'button[aria-label="Retag only media/app"]',
+      'button[aria-label="Retag media/app"]',
     );
     expect(retagOnlyButton.text()).toBe("Retag this service");
     expect(retagOnlyButton.attributes("disabled")).toBeUndefined();
     expect(retagOnlyButton.attributes("title")).toBe(
-      "Select only media/app for retag preview.",
+      "Add media/app to the retag preview.",
+    );
+    expect(wrapper.get('[role="radiogroup"]').attributes("aria-label")).toBe(
+      "Retag choice for media/app",
     );
     await retagOnlyButton.trigger("click");
-    expect(wrapper.emitted("retag-only")).toEqual([[item]]);
+    expect(wrapper.emitted("choice-update")).toEqual([
+      [item, "switch-to-concrete"],
+    ]);
 
     await switchInput.setValue();
 
     expect(wrapper.emitted("choice-update")).toEqual([
       [item, "switch-to-concrete"],
+      [item, "switch-to-concrete"],
     ]);
+  });
+
+  it("keeps an unknown-runtime service selectable with a visible warning", () => {
+    const item = retagTarget({ runtime_state: "unknown" });
+    const wrapper = mountMobileList({ rows: [item] });
+
+    expect(wrapper.text()).toContain("Unknown");
+    expect(wrapper.text()).toContain(
+      "Applying may create or recreate and start this service",
+    );
+    const retagOnlyButton = wrapper.get(
+      'button[aria-label="Retag media/app"]',
+    );
+    expect(retagOnlyButton.attributes("disabled")).toBeUndefined();
+    expect(retagOnlyButton.attributes("title")).toContain(
+      "may create or recreate and start this service",
+    );
+    const switchInput = wrapper.get('input[value="switch-to-concrete"]');
+    expect(switchInput.attributes("disabled")).toBeUndefined();
+    expect(switchInput.attributes("title")).toContain(
+      "may create or recreate and start this service",
+    );
   });
 
   it("keeps read-only and unavailable rows from switching", () => {
@@ -134,8 +164,10 @@ describe("RetagTargetsMobileList", () => {
     expect(retagOnlyButtons[0].attributes("title")).toBe(
       "Read-only mode keeps retag switch/apply disabled.",
     );
+    expect(wrapper.text()).toContain(
+      "Read-only mode keeps retag switch/apply disabled.",
+    );
     expect(wrapper.emitted("choice-update")).toBeUndefined();
-    expect(wrapper.emitted("retag-only")).toBeUndefined();
   });
 
   it("enables manual fallback rows after a target tag is supplied", async () => {
@@ -204,10 +236,25 @@ describe("RetagTargetsMobileList", () => {
     expect(switchInput.attributes("disabled")).toBeDefined();
     expect(switchInput.attributes("title")).toContain("invalid target tag");
     const retagOnlyButton = wrapper.get(
-      'button[aria-label="Retag only media/radarr"]',
+      'button[aria-label="Retag media/radarr"]',
     );
     expect(retagOnlyButton.attributes("disabled")).toBeDefined();
     expect(retagOnlyButton.attributes("title")).toContain("invalid target tag");
     expect(wrapper.text()).toContain("media/radarr has an invalid target tag");
+    const targetInput = wrapper.get(
+      'input[aria-label="Target tag for media/radarr"]',
+    );
+    expect(targetInput.attributes("aria-invalid")).toBe("true");
+    const errorId = targetInput.attributes("aria-describedby");
+    expect(errorId).toBeTruthy();
+    expect(wrapper.get(`[id="${errorId}"]`).text()).toContain(
+      "media/radarr has an invalid target tag",
+    );
+    const choiceGroup = wrapper.get('[role="radiogroup"]');
+    const choiceHelpId = choiceGroup.attributes("aria-describedby");
+    expect(choiceHelpId).toBeTruthy();
+    expect(wrapper.get(`[id="${choiceHelpId}"]`).text()).toContain(
+      "media/radarr has an invalid target tag",
+    );
   });
 });

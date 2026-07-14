@@ -3,14 +3,18 @@ import {
   canChooseRetagTarget,
   canEnableRetagTargetChoice,
   normalizeRetagChoice,
+  retagRuntimeChoiceWarning,
+  retagTargetIdentity,
   retagTargetTagValidationError,
 } from "../../utils/retagChoices";
 
 export {
   canChooseRetagTarget,
+  canBulkEnableRetagTargetChoice,
   canEnableRetagTargetChoice,
   canSwitchToConcrete,
   retagChoice,
+  retagRuntimeChoiceWarning,
   retagTargetIdentity,
   retagTargetTagValidationError,
   retagTargetTagValue,
@@ -20,11 +24,6 @@ export type RetagChoiceEmitter = (
   event: "choice-update",
   item: RetagTargetItem,
   choice: RetagTargetChoice,
-) => void;
-
-export type RetagOnlyEmitter = (
-  event: "retag-only",
-  item: RetagTargetItem,
 ) => void;
 
 export function emitRetagChoice(
@@ -40,14 +39,14 @@ export function emitRetagChoice(
   emit("choice-update", item, eligibleChoice);
 }
 
-export function canShowRetagOnlyAction(
+export function canShowRetagAction(
   item: RetagTargetItem,
   targetTags: Record<string, string>,
 ): boolean {
   return canChooseRetagTarget(item, targetTags);
 }
 
-export function retagOnlyActionDisabled(
+export function retagActionDisabled(
   item: RetagTargetItem,
   targetTags: Record<string, string>,
   mutationDisabled: boolean,
@@ -67,12 +66,13 @@ export function retagTargetChoiceTitle(
   if (targetError) {
     return targetError;
   }
-  return canChooseTarget
-    ? mutationNotice
-    : "Enter a target tag before retagging.";
+  if (!canChooseTarget) {
+    return "Enter a target tag before retagging.";
+  }
+  return mutationNotice || retagRuntimeChoiceWarning(item);
 }
 
-export function retagOnlyActionTitle(
+export function retagActionTitle(
   item: RetagTargetItem,
   targetTags: Record<string, string>,
   mutationDisabled: boolean,
@@ -83,20 +83,45 @@ export function retagOnlyActionTitle(
     targetTags,
     mutationNotice,
   );
-  if (retagOnlyActionDisabled(item, targetTags, mutationDisabled)) {
+  if (retagActionDisabled(item, targetTags, mutationDisabled)) {
     return targetChoiceTitle || "Retagging is disabled.";
   }
-  return `Select only ${item.service_key} for retag preview.`;
+  return (
+    targetChoiceTitle || `Add ${item.service_key} to the retag preview.`
+  );
 }
 
-export function emitRetagOnly(
-  emit: RetagOnlyEmitter,
+export function retagChoiceDisabledReason(
+  item: RetagTargetItem,
+  targetTags: Record<string, string>,
+  mutationDisabled: boolean,
+  mutationNotice: string,
+): string {
+  return retagActionDisabled(item, targetTags, mutationDisabled)
+    ? retagTargetChoiceTitle(item, targetTags, mutationNotice)
+    : "";
+}
+
+export function retagChoiceDescriptionId(item: RetagTargetItem): string {
+  return retagAccessibleId("choice-help", item);
+}
+
+export function retagTargetTagErrorId(item: RetagTargetItem): string {
+  return retagAccessibleId("target-error", item);
+}
+
+function retagAccessibleId(prefix: string, item: RetagTargetItem): string {
+  return `retag-${prefix}-${retagTargetIdentity(item).replace(/\s+/g, "-")}`;
+}
+
+export function emitRetagAction(
+  emit: RetagChoiceEmitter,
   item: RetagTargetItem,
   targetTags: Record<string, string>,
   mutationDisabled: boolean,
 ): void {
-  if (retagOnlyActionDisabled(item, targetTags, mutationDisabled)) {
+  if (retagActionDisabled(item, targetTags, mutationDisabled)) {
     return;
   }
-  emit("retag-only", item);
+  emit("choice-update", item, "switch-to-concrete");
 }

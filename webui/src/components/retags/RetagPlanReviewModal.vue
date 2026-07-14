@@ -35,6 +35,7 @@ const props = defineProps<{
   previewJob: RetagPreviewJobResponse | null;
   impactLabel: string;
   mutationNotice: string;
+  runtimeWarning: string;
   previewError: string;
   duplicateServiceConflicts: RetagDuplicateServiceConflict[];
   applyDisabled: boolean;
@@ -162,6 +163,14 @@ const uniqueWarnings = computed(() => [...new Set(warnings.value)]);
       :show-icon="false"
     >
       {{ mutationNotice }}
+    </n-alert>
+
+    <n-alert
+      v-if="runtimeWarning"
+      type="warning"
+      :show-icon="false"
+    >
+      {{ runtimeWarning }}
     </n-alert>
 
     <n-alert

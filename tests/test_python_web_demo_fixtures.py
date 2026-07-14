@@ -17,6 +17,12 @@ def test_static_demo_fixture_generation_matches_read_only_contract() -> None:
     assert data["planCases"] == []
     assert data["removalCases"] == []
     assert data["retagCases"] == []
+    assert any(
+        item["service_key"] == "media/wudup"
+        and item["retag_available"] is True
+        and item["runtime_state"] == "not-running"
+        for item in data["retagTargets"]["items"]
+    )
     assert data["runs"]["rollbackPlans"]
     assert set(data["runs"]["rollbackPlans"]) == {
         str(run["id"]) for run in data["runs"]["summaries"]

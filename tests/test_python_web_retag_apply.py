@@ -278,6 +278,203 @@ def test_retag_apply_reports_existing_wud_lock_as_failed_preflight(
     assert audit_count_after == audit_count_before
 
 
+@pytest.mark.parametrize("runtime_state", ["not-running", "unknown"])
+def test_retag_apply_rejects_runtime_drift_without_start_approval(
+    tmp_path: Path,
+    runtime_state: str,
+) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    headers = _csrf_headers(fixture.client)
+    plan = _create_retag_plan(fixture.client, headers)
+    if runtime_state == "not-running":
+        (fixture.fake_root / "compose-runtime.tsv").write_text("", encoding="utf-8")
+    else:
+        (fixture.fake_root / "ps_fail").touch()
+
+    response = _apply_retag_plan(fixture.client, headers, plan)
+
+    assert response.status_code == 202
+    job = _wait_apply_job(fixture.client, response.json()["job_id"])
+    assert job["status"] == "failure"
+    assert job["error"] == "retag apply failed: retag plan is stale"
+    calls = _fake_docker_calls(fixture.fake_root)
+    assert "compose -f docker-compose.yml pull app" not in calls
+    assert "compose -f docker-compose.yml up" not in calls
+
+
+def test_retag_apply_allows_explicit_inactive_start_approval(tmp_path: Path) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+        },
+    )
+    (fixture.fake_root / "compose-runtime.tsv").write_text("", encoding="utf-8")
+    headers = _csrf_headers(fixture.client)
+    choice = {**_switch_choice(), "allow_start": True}
+    plan = _create_retag_plan(fixture.client, headers, choices=[choice])
+
+    response = _apply_retag_plan(
+        fixture.client,
+        headers,
+        plan,
+        choices=[choice],
+    )
+
+    assert plan["status"] == "ready"
+    assert response.status_code == 202
+    job = _wait_apply_job(fixture.client, response.json()["job_id"])
+    assert job["status"] == "success"
+    calls = _fake_docker_calls(fixture.fake_root)
+    assert "compose -f docker-compose.yml pull app" in calls
+    assert (
+        "compose -f docker-compose.yml up -d --remove-orphans "
+        "--force-recreate --no-deps app"
+    ) in calls
+
+
+def test_retag_apply_worker_rechecks_runtime_before_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+        },
+    )
+    headers = _csrf_headers(fixture.client)
+    plan = _create_retag_plan(fixture.client, headers)
+    before = (fixture.compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    original_apply = web_retags_module._apply_retag_updates
+
+    def apply_after_runtime_stops(
+        *args: object,
+        **kwargs: object,
+    ) -> tuple[RetagPlanUpdate, ...]:
+        (fixture.fake_root / "compose-runtime.tsv").write_text("", encoding="utf-8")
+        return original_apply(*args, **kwargs)
+
+    monkeypatch.setattr(
+        web_retags_module,
+        "_apply_retag_updates",
+        apply_after_runtime_stops,
+    )
+    response = _apply_retag_plan(fixture.client, headers, plan)
+
+    assert response.status_code == 202
+    job = _wait_apply_job(fixture.client, response.json()["job_id"])
+    assert job["status"] == "failure"
+    assert "no longer running" in job["error"]
+    assert (fixture.compose_dir / "docker-compose.yml").read_text(
+        encoding="utf-8"
+    ) == before
+    calls = _fake_docker_calls(fixture.fake_root)
+    assert "compose -f docker-compose.yml pull app" not in calls
+
+
+def test_retag_apply_worker_rechecks_effective_project_before_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+        },
+    )
+    headers = _csrf_headers(fixture.client)
+    plan = _create_retag_plan(fixture.client, headers)
+    compose_file = fixture.compose_dir / "docker-compose.yml"
+    changed_content = (
+        f"name: replacement\n{compose_file.read_text(encoding='utf-8')}"
+    )
+    original_apply = web_retags_module._apply_retag_updates
+
+    def apply_after_project_changes(
+        *args: object,
+        **kwargs: object,
+    ) -> tuple[RetagPlanUpdate, ...]:
+        compose_file.write_text(changed_content, encoding="utf-8")
+        return original_apply(*args, **kwargs)
+
+    monkeypatch.setattr(
+        web_retags_module,
+        "_apply_retag_updates",
+        apply_after_project_changes,
+    )
+    response = _apply_retag_plan(fixture.client, headers, plan)
+
+    assert response.status_code == 202
+    job = _wait_apply_job(fixture.client, response.json()["job_id"])
+    assert job["status"] == "failure"
+    assert "Compose project changed" in job["error"]
+    assert compose_file.read_text(encoding="utf-8") == changed_content
+    calls = _fake_docker_calls(fixture.fake_root)
+    assert "compose -f docker-compose.yml pull app" not in calls
+
+
+def test_retag_apply_start_approval_does_not_bypass_project_revalidation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+        },
+    )
+    (fixture.fake_root / "compose-runtime.tsv").write_text("", encoding="utf-8")
+    choice = {**_switch_choice(), "allow_start": True}
+    headers = _csrf_headers(fixture.client)
+    plan = _create_retag_plan(fixture.client, headers, choices=[choice])
+    compose_file = fixture.compose_dir / "docker-compose.yml"
+    changed_content = (
+        f"name: replacement\n{compose_file.read_text(encoding='utf-8')}"
+    )
+    original_apply = web_retags_module._apply_retag_updates
+
+    def apply_after_project_changes(
+        *args: object,
+        **kwargs: object,
+    ) -> tuple[RetagPlanUpdate, ...]:
+        compose_file.write_text(changed_content, encoding="utf-8")
+        return original_apply(*args, **kwargs)
+
+    monkeypatch.setattr(
+        web_retags_module,
+        "_apply_retag_updates",
+        apply_after_project_changes,
+    )
+    response = _apply_retag_plan(
+        fixture.client,
+        headers,
+        plan,
+        choices=[choice],
+    )
+
+    assert response.status_code == 202
+    job = _wait_apply_job(fixture.client, response.json()["job_id"])
+    assert job["status"] == "failure"
+    assert "Compose project changed" in job["error"]
+    assert compose_file.read_text(encoding="utf-8") == changed_content
+    calls = _fake_docker_calls(fixture.fake_root)
+    assert "compose -f docker-compose.yml pull app" not in calls
+
+
 def test_retag_apply_cleans_up_job_when_executor_submit_fails(
     tmp_path: Path,
 ) -> None:

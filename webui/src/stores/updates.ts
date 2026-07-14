@@ -357,24 +357,6 @@ export const useUpdatesStore = defineStore("updates", () => {
     retagPreviewPoller.reset();
   }
 
-  function setRetagOnlyChoice(targetKey: string): void {
-    const selectedItem = findRetagTarget(targetKey);
-    const selectedTargetId = selectedItem
-      ? retagTargetIdentity(selectedItem)
-      : targetKey;
-    const nextChoices = { ...retagChoices.value };
-    for (const item of retagTargets.value?.items ?? []) {
-      const targetId = retagTargetIdentity(item);
-      nextChoices[targetId] =
-        targetId === selectedTargetId
-          ? normalizeRetagChoice(item, "switch-to-concrete", retagTargetTags.value)
-          : "keep-current";
-    }
-    retagChoices.value = nextChoices;
-    retagPlan.value = null;
-    retagPreviewPoller.reset();
-  }
-
   function setRetagTargetTag(targetKey: string, tag: string): void {
     const item = findRetagTarget(targetKey);
     const choiceKey = item ? retagTargetIdentity(item) : targetKey;
@@ -410,6 +392,9 @@ export const useUpdatesStore = defineStore("updates", () => {
           request.target_id = targetId;
         }
         if (choice === "switch-to-concrete") {
+          if (item.runtime_state !== "running") {
+            request.allow_start = true;
+          }
           const tag = retagTargetTagValue(item, retagTargetTags.value).trim();
           if (tag) {
             request.target_tag = tag;
@@ -1162,7 +1147,6 @@ export const useUpdatesStore = defineStore("updates", () => {
     resetRetagChoices,
     setRetagChoice,
     setRetagChoicesForItems,
-    setRetagOnlyChoice,
     setRetagTargetTag,
     retagChoiceRequests,
     createRetagPlan,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import secrets
 import shutil
@@ -81,6 +82,7 @@ from .web_models import (
     RetagPlanRequest,
     RetagPlanResponse,
     RetagPreviewJobResponse,
+    RetagRuntimeState,
     RetagTargetItem,
     RetagTargetsResponse,
     WebApplyJob,
@@ -120,6 +122,13 @@ _GHCR_GITHUB_REPO_RE = re.compile(
     r"(?P<owner>[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)/"
     r"(?P<repo>[A-Za-z0-9._-]{1,100})$",
     re.ASCII,
+)
+_RETAG_COMPOSE_RUNTIME_FORMAT = (
+    '{{.Label "com.docker.compose.project.working_dir"}}\t'
+    '{{.Label "com.docker.compose.project.config_files"}}\t'
+    '{{.Label "com.docker.compose.project"}}\t'
+    '{{.Label "com.docker.compose.service"}}\t'
+    '{{.Label "com.docker.compose.oneoff"}}'
 )
 
 
@@ -529,11 +538,15 @@ def _selected_retag_plan_updates(
             continue
         record = records_by_target_id[target_id]
         service_key = record.item.service_key
+        if record.item.runtime_state != "running" and not choice.allow_start:
+            issues.append(_retag_runtime_consent_issue(record.item))
+            continue
         update, issue = _retag_plan_update_for_choice(
             settings,
             service_key,
             record,
             target_tag=choice.target_tag,
+            allow_start=choice.allow_start,
         )
         if issue is not None:
             issues.append(issue)
@@ -563,6 +576,7 @@ def _retag_plan_update_for_choice(
     record: _RetagTargetRecord,
     *,
     target_tag: str | None = None,
+    allow_start: bool = False,
 ) -> tuple[_RetagPlanUpdate | None, RetagPlanIssue | None]:
     item = record.item
     provenance = record.provenance
@@ -581,6 +595,7 @@ def _retag_plan_update_for_choice(
                 service_key,
                 record,
                 target_tag=manual_tag,
+                allow_start=allow_start,
             )
     if not item.retag_available or provenance is None:
         return None, RetagPlanIssue(
@@ -619,6 +634,8 @@ def _retag_plan_update_for_choice(
             stack=record.stack,
             update=update,
             provenance=provenance,
+            runtime_state=item.runtime_state,
+            allow_start=allow_start,
             known_image_service_key_ambiguous=record.service_key_ambiguous,
         ),
         None,
@@ -631,6 +648,7 @@ def _manual_retag_plan_update_for_choice(
     record: _RetagTargetRecord,
     *,
     target_tag: str,
+    allow_start: bool = False,
 ) -> tuple[_RetagPlanUpdate | None, RetagPlanIssue | None]:
     item = record.item
     if target_tag == "latest":
@@ -696,6 +714,8 @@ def _manual_retag_plan_update_for_choice(
             stack=record.stack,
             update=update,
             provenance=provenance,
+            runtime_state=item.runtime_state,
+            allow_start=allow_start,
             known_image_service_key_ambiguous=record.service_key_ambiguous,
         ),
         None,
@@ -717,6 +737,31 @@ def _manual_retag_issue(
         stack=item.stack,
         service=item.service,
         hint=hint,
+    )
+
+
+def _retag_runtime_consent_issue(item: RetagTargetItem) -> RetagPlanIssue:
+    if item.runtime_state == "not-running":
+        message = (
+            f"{item.service_key} is not running; applying this retag would start it."
+        )
+    else:
+        message = (
+            f"{item.service_key} runtime state is unknown; applying this retag may "
+            "start it."
+        )
+    return RetagPlanIssue(
+        severity="error",
+        code="retag-start-not-approved",
+        message=message,
+        service_key=item.service_key,
+        stack=item.stack,
+        service=item.service,
+        hint=(
+            "Refresh retag targets, then select this service individually to approve "
+            "starting it."
+        ),
+        details={"runtime_state": item.runtime_state},
     )
 
 
@@ -744,6 +789,7 @@ def _retag_target_records(
     else:
         active_github_latest_by_target_id = {}
     records: list[_RetagTargetRecord] = []
+    running_service_keys = _running_retag_compose_service_keys(settings)
     for stack in stacks:
         for service_image in stack.service_images:
             service_key = _retag_service_key(stack.name, service_image.service)
@@ -754,6 +800,14 @@ def _retag_target_records(
                 service_image.image,
                 service_key_ambiguous=service_key_ambiguous,
             )
+            runtime_state: RetagRuntimeState = "unknown"
+            if running_service_keys is not None:
+                runtime_state = (
+                    "running"
+                    if _retag_compose_service_key(stack, service_image.service)
+                    in running_service_keys
+                    else "not-running"
+                )
             records.append(
                 _retag_target_record(
                     stack,
@@ -761,12 +815,75 @@ def _retag_target_records(
                     target_id,
                     known,
                     active_github_latest_by_target_id.get(target_id),
+                    runtime_state=runtime_state,
                     service_key_ambiguous=service_key_ambiguous,
                     github_latest_fallback=github_latest_fallback,
                 )
             )
 
     return tuple(records)
+
+
+def _running_retag_compose_service_keys(
+    settings: WebSettings,
+) -> set[tuple[frozenset[Path], str, str]] | None:
+    docker = DockerCli(runner=_command_runner(settings))
+    try:
+        rows = docker.ps_format(_RETAG_COMPOSE_RUNTIME_FORMAT)
+    except CommandError:
+        return None
+
+    keys: set[tuple[frozenset[Path], str, str]] = set()
+    for row in rows:
+        fields = row.split("\t", 4)
+        if len(fields) != 5:
+            continue
+        working_dir, config_files, project, service, oneoff = fields
+        if oneoff.strip().casefold() == "true":
+            continue
+        service = service.strip()
+        if not service:
+            continue
+        config_paths = _retag_runtime_config_paths(working_dir, config_files)
+        if config_paths is not None:
+            keys.add((config_paths, project.strip(), service))
+    return keys
+
+
+def _retag_runtime_config_paths(
+    working_dir: str,
+    config_files: str,
+) -> frozenset[Path] | None:
+    paths: set[Path] = set()
+    for value in config_files.split(","):
+        value = value.strip()
+        if not value:
+            continue
+        path = Path(value)
+        if not path.is_absolute():
+            if not working_dir:
+                return None
+            path = Path(working_dir) / path
+        paths.add(_normalized_retag_compose_path(path))
+    return frozenset(paths) if paths else None
+
+
+def _retag_compose_service_key(
+    stack: ComposeStack,
+    service: str,
+    *,
+    project_name: str | None = None,
+) -> tuple[frozenset[Path], str, str]:
+    project_directory = stack.project_directory or stack.directory
+    return (
+        frozenset({_normalized_retag_compose_path(project_directory / stack.file)}),
+        stack.project_name if project_name is None else project_name,
+        service,
+    )
+
+
+def _normalized_retag_compose_path(path: Path) -> Path:
+    return Path(os.path.normpath(path))
 
 
 def _discover_retag_stacks(
@@ -1093,6 +1210,7 @@ def _retag_target_record(
     known: web_database.KnownDigestState | None,
     github_latest: _RetagGitHubLatestFallback | None,
     *,
+    runtime_state: RetagRuntimeState,
     service_key_ambiguous: bool,
     github_latest_fallback: bool,
 ) -> _RetagTargetRecord:
@@ -1121,6 +1239,7 @@ def _retag_target_record(
         github_latest=github_latest,
         github_latest_fallback=github_latest_fallback,
         allow_source_image_match=github_latest_provenance,
+        runtime_state=runtime_state,
     )
     return _RetagTargetRecord(
         item=item,
@@ -1227,6 +1346,8 @@ def _retag_update_with_label_rewrites(
         stack=item.stack,
         update=item.update,
         provenance=item.provenance,
+        runtime_state=item.runtime_state,
+        allow_start=item.allow_start,
         known_image_service_key_ambiguous=item.known_image_service_key_ambiguous,
         label_rewrites=tuple(
             RetagPlanLabelRewrite(
@@ -1430,6 +1551,7 @@ def _apply_retag_updates(
         )
         backup: Path | None = None
         try:
+            _revalidate_retag_runtime_before_apply(settings, compose, stack_updates)
             _progress(
                 jobs,
                 apply_condition,
@@ -1525,6 +1647,43 @@ def _apply_retag_updates(
                 backup = None
             raise _RetagApplyFailed(str(exc), successful_updates) from exc
     return tuple(successful_updates)
+
+
+def _revalidate_retag_runtime_before_apply(
+    settings: WebSettings,
+    compose: ComposeCli,
+    updates: Sequence[_RetagPlanUpdate],
+) -> None:
+    if not updates:
+        return
+    stack = updates[0].stack
+    project_name = compose.try_config_project_name(
+        stack.directory,
+        stack.file,
+        project_directory=stack.project_directory,
+    )
+    if not project_name:
+        raise RuntimeError("retag Compose project could not be revalidated")
+    if project_name != stack.project_name:
+        raise RuntimeError("retag Compose project changed before apply")
+    running_service_keys = _running_retag_compose_service_keys(settings)
+    if running_service_keys is None:
+        raise RuntimeError("retag runtime state could not be revalidated")
+    for item in updates:
+        if item.allow_start:
+            continue
+        service = _retag_update_service(item)
+        if (
+            _retag_compose_service_key(
+                item.stack,
+                service,
+                project_name=project_name,
+            )
+            not in running_service_keys
+        ):
+            raise RuntimeError(
+                f"{item.service_key} is no longer running in the expected Compose project"
+            )
 
 
 def _recreate_retag_services(
@@ -1992,6 +2151,7 @@ def _retag_target_item(
     github_latest: _RetagGitHubLatestFallback | None,
     github_latest_fallback: bool,
     allow_source_image_match: bool,
+    runtime_state: RetagRuntimeState,
 ) -> RetagTargetItem:
     label_value = _label_value(service_image.labels, WUD_TAG_INCLUDE_LABEL)
     tracking_tag, tracking_tag_source = _tracking_tag(
@@ -2052,6 +2212,7 @@ def _retag_target_item(
         candidate_warning=candidate_warning,
         candidate_link_label=candidate_link_label,
         candidate_link_url=candidate_link_url,
+        runtime_state=runtime_state,
         retag_available=retag_available,
         retag_reason=retag_reason,
         choices=choices,

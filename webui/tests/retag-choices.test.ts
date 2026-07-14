@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  canBulkEnableRetagTargetChoice,
   canChooseRetagTarget,
   canEnableRetagTargetChoice,
   emitRetagChoice,
   retagChoice,
+  retagRuntimeChoiceWarning,
   retagTargetIdentity,
   retagTargetTagValidationError,
   retagTargetTagValue,
@@ -148,6 +150,30 @@ describe("retag choice helpers", () => {
     expect(canEnableRetagTargetChoice(item, targetTags)).toBe(false);
     expect(retagTargetTagValidationError(item, targetTags)).toContain(
       "invalid target tag",
+    );
+  });
+
+  it("limits bulk selection to running targets without disabling explicit choices", () => {
+    const running = retagTarget();
+    const notRunning = retagTarget({
+      service_key: "archive/app",
+      runtime_state: "not-running",
+    });
+    const unknown = retagTarget({
+      service_key: "unknown/app",
+      runtime_state: "unknown",
+    });
+
+    expect(canBulkEnableRetagTargetChoice(running, {})).toBe(true);
+    expect(canEnableRetagTargetChoice(notRunning, {})).toBe(true);
+    expect(canBulkEnableRetagTargetChoice(notRunning, {})).toBe(false);
+    expect(canEnableRetagTargetChoice(unknown, {})).toBe(true);
+    expect(canBulkEnableRetagTargetChoice(unknown, {})).toBe(false);
+    expect(retagRuntimeChoiceWarning(notRunning)).toContain(
+      "will create or recreate and start this service",
+    );
+    expect(retagRuntimeChoiceWarning(unknown)).toContain(
+      "may create or recreate and start this service",
     );
   });
 

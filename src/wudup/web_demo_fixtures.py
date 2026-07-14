@@ -1768,6 +1768,7 @@ def _write_demo_stacks(docker_base: Path, fake_docker_root: Path) -> None:
         directory.mkdir(parents=True, exist_ok=True)
 
     containers: list[str] = []
+    compose_runtime: list[str] = []
     for stack in DEMO_STACKS:
         stack_name = str(stack["name"])
         services = tuple(stack["services"])
@@ -1776,6 +1777,12 @@ def _write_demo_stacks(docker_base: Path, fake_docker_root: Path) -> None:
         (stack_dir / ".fake-docker-id").write_text(f"{stack_name}\n", encoding="utf-8")
         _write_compose_file(stack_dir / "docker-compose.yml", stack_name, services)
         _write_fake_stack_state(fake_docker_root, stack_name, services, containers)
+        compose_runtime.extend(
+            f"{stack_dir}\t{stack_dir / 'docker-compose.yml'}\t"
+            f"{stack_name}\t{service}\tFalse\n"
+            for service, image in services
+            if image != DEMO_WUDUP_LATEST_IMAGE
+        )
 
     for container_id, labels in DEMO_CONTAINER_LABELS.items():
         _write_fake_container_labels(fake_docker_root, container_id, labels)
@@ -1803,6 +1810,10 @@ def _write_demo_stacks(docker_base: Path, fake_docker_root: Path) -> None:
 
     (fake_docker_root / "containers.tsv").write_text(
         "".join(containers),
+        encoding="utf-8",
+    )
+    (fake_docker_root / "compose-runtime.tsv").write_text(
+        "".join(compose_runtime),
         encoding="utf-8",
     )
     (fake_docker_root / "calls.log").write_text("", encoding="utf-8")

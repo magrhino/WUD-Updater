@@ -138,6 +138,7 @@ __all__ = (
     "RetagPlanStack",
     "RetagPlanStatus",
     "RetagPreviewJobResponse",
+    "RetagRuntimeState",
     "RunDetail",
     "RunEventRecord",
     "RunLogResponse",
@@ -654,6 +655,8 @@ RetagTargetsStatus = Literal["ready", "unavailable"]
 
 RetagPlanStatus = Literal["ready", "empty", "blocked", "unavailable"]
 
+RetagRuntimeState = Literal["running", "not-running", "unknown"]
+
 class RetagTargetItem(BaseModel):
     target_id: str
     service_key: str
@@ -670,6 +673,7 @@ class RetagTargetItem(BaseModel):
     candidate_warning: str = ""
     candidate_link_label: str = ""
     candidate_link_url: str = ""
+    runtime_state: RetagRuntimeState = "unknown"
     retag_available: bool
     retag_reason: str
     choices: list[str] = Field(default_factory=list)
@@ -691,12 +695,17 @@ class RetagChoiceRequest(BaseModel):
     target_id: str | None = Field(default=None, min_length=1, max_length=128)
     choice: Literal["keep-current", "switch-to-concrete"]
     target_tag: str | None = Field(default=None, max_length=128)
+    allow_start: bool = False
 
     @model_validator(mode="after")
     def target_tag_requires_switch_choice(self) -> "RetagChoiceRequest":
         if self.choice == "keep-current" and self.target_tag is not None:
             raise ValueError(
                 "target_tag is only allowed when choice is switch-to-concrete"
+            )
+        if self.choice == "keep-current" and self.allow_start:
+            raise ValueError(
+                "allow_start is only allowed when choice is switch-to-concrete"
             )
         return self
 

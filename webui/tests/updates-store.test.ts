@@ -1068,6 +1068,51 @@ describe("updates store", () => {
     ]);
   });
 
+  it("approves starts only for selected inactive retag targets", () => {
+    const updates = useUpdatesStore();
+    const retagItems = [
+      retagTarget({ service_key: "media/running", service: "running" }),
+      retagTarget({
+        service_key: "media/stopped",
+        service: "stopped",
+        runtime_state: "not-running",
+      }),
+      retagTarget({
+        service_key: "media/unknown",
+        service: "unknown",
+        runtime_state: "unknown",
+      }),
+    ];
+    updates.retagTargets = retagTargetsResponse(retagItems);
+    updates.resetRetagChoices();
+    for (const item of retagItems) {
+      updates.setRetagChoice(item.target_id, "switch-to-concrete");
+    }
+
+    expect(updates.retagChoiceRequests()).toEqual([
+      {
+        service_key: "media/running",
+        target_id: retagItems[0].target_id,
+        choice: "switch-to-concrete",
+        target_tag: "1.1",
+      },
+      {
+        service_key: "media/stopped",
+        target_id: retagItems[1].target_id,
+        choice: "switch-to-concrete",
+        allow_start: true,
+        target_tag: "1.1",
+      },
+      {
+        service_key: "media/unknown",
+        target_id: retagItems[2].target_id,
+        choice: "switch-to-concrete",
+        allow_start: true,
+        target_tag: "1.1",
+      },
+    ]);
+  });
+
   it("loads cached retag GitHub latest fallback candidates", async () => {
     const fetchMock = mockFetch(retagTargetsResponse([
       retagTarget({

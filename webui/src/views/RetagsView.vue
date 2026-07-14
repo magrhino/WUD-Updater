@@ -9,7 +9,11 @@ import {
   NSwitch,
 } from "naive-ui";
 
-import type { RetagTargetChoice, RetagTargetItem } from "../api/client";
+import type {
+  RetagRuntimeState,
+  RetagTargetChoice,
+  RetagTargetItem,
+} from "../api/client";
 import { useRouteRefresh } from "../components/app/routeRefresh";
 import PendingApplyJobPanel from "../components/pending/PendingApplyJobPanel.vue";
 import RetagConfirmModal from "../components/retags/RetagConfirmModal.vue";
@@ -21,12 +25,13 @@ import { useDataCardsBreakpoint } from "../responsive";
 import { useAuthStore } from "../stores/auth";
 import { useUpdatesStore } from "../stores/updates";
 import {
-  canEnableRetagTargetChoice,
+  canBulkEnableRetagTargetChoice,
   retagChoice as selectedRetagChoice,
   retagTargetIdentity,
   retagTargetTagValidationError,
 } from "../utils/retagChoices";
 import {
+  compareRetagTargets,
   digestPinSummary,
   labelRewriteSummary,
   composeLocation,
@@ -43,6 +48,7 @@ import {
 } from "./pending/usePendingApplyJob";
 
 type RetagFilter = "all" | "available" | "attention";
+type RetagRuntimeFilter = "all" | RetagRuntimeState;
 type RetagDuplicateServiceTarget = {
   key: string;
   label: string;
@@ -65,18 +71,26 @@ const auth = useAuthStore();
 const isMobile = useDataCardsBreakpoint();
 const searchQuery = ref("");
 const statusFilter = ref<RetagFilter>("all");
+const runtimeFilter = ref<RetagRuntimeFilter>("all");
 const applyJobPanelRef = ref<PendingApplyJobPanelRef | null>(null);
 const showRetagApplyJobPanel = ref(false);
 const showRetagConfirmModal = ref(false);
 const showRetagPreviewModal = ref(false);
+const retagApplyError = ref("");
 const isDemoMode =
   import.meta.env.MODE === "demo" ||
   import.meta.env.VITE_WUD_DEMO_MODE === "true";
 
 const filterOptions = [
-  { label: "All services", value: "all" },
+  { label: "All review states", value: "all" },
   { label: "Retag available", value: "available" },
   { label: "Needs attention", value: "attention" },
+];
+const runtimeFilterOptions = [
+  { label: "All Compose services", value: "all" },
+  { label: "Running", value: "running" },
+  { label: "Not running", value: "not-running" },
+  { label: "Unknown", value: "unknown" },
 ];
 
 const retagApplyJobProgressPhases: ApplyJobProgressPhase[] = [
@@ -165,6 +179,28 @@ const selectedSwitchCount = computed(
       (item) => retagChoice(item) === "switch-to-concrete",
     ).length,
 );
+const selectedNotRunningRows = computed(() =>
+  rows.value.filter(
+    (item) =>
+      item.runtime_state === "not-running" &&
+      retagChoice(item) === "switch-to-concrete",
+  ),
+);
+const selectedUnknownRows = computed(() =>
+  rows.value.filter(
+    (item) =>
+      item.runtime_state === "unknown" &&
+      retagChoice(item) === "switch-to-concrete",
+  ),
+);
+const selectedRuntimeWarning = computed(() =>
+  [
+    runtimeSelectionWarning(selectedNotRunningRows.value, "not-running"),
+    runtimeSelectionWarning(selectedUnknownRows.value, "unknown"),
+  ]
+    .filter(Boolean)
+    .join(" "),
+);
 const retagTargetTagError = computed(() => {
   for (const item of rows.value) {
     if (retagChoice(item) !== "switch-to-concrete") {
@@ -199,6 +235,7 @@ const previewDisabled = computed(
     applyJobActive.value ||
     unavailable.value ||
     Boolean(retagTargetTagError.value) ||
+    selectedSwitchCount.value === 0 ||
     rows.value.length === 0,
 );
 const applyDisabled = computed(
@@ -269,27 +306,35 @@ const initialLoadFailed = computed(
 );
 const filteredRows = computed(() => {
   const query = searchQuery.value.trim().toLowerCase();
-  return rows.value.filter((item) => {
-    if (statusFilter.value === "available" && !item.retag_available) {
-      return false;
-    }
-    if (statusFilter.value === "attention" && item.retag_available) {
-      return false;
-    }
-    if (!query) {
-      return true;
-    }
-    return searchableText(item).includes(query);
-  });
+  return rows.value
+    .filter((item) => {
+      if (statusFilter.value === "available" && !item.retag_available) {
+        return false;
+      }
+      if (statusFilter.value === "attention" && item.retag_available) {
+        return false;
+      }
+      if (
+        runtimeFilter.value !== "all" &&
+        item.runtime_state !== runtimeFilter.value
+      ) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      return searchableText(item).includes(query);
+    })
+    .sort(compareRetagTargets);
 });
-const eligibleRows = computed(() =>
+const runningEligibleRows = computed(() =>
   rows.value.filter((item) =>
-    canEnableRetagTargetChoice(item, updates.retagTargetTags),
+    canBulkEnableRetagTargetChoice(item, updates.retagTargetTags),
   ),
 );
-const filteredEligibleRows = computed(() =>
+const filteredRunningEligibleRows = computed(() =>
   filteredRows.value.filter((item) =>
-    canEnableRetagTargetChoice(item, updates.retagTargetTags),
+    canBulkEnableRetagTargetChoice(item, updates.retagTargetTags),
   ),
 );
 const bulkSelectionDisabled = computed(
@@ -300,10 +345,12 @@ const bulkSelectionDisabled = computed(
     unavailable.value,
 );
 const retagAllDisabled = computed(
-  () => bulkSelectionDisabled.value || eligibleRows.value.length === 0,
+  () => bulkSelectionDisabled.value || runningEligibleRows.value.length === 0,
 );
 const retagFilteredDisabled = computed(
-  () => bulkSelectionDisabled.value || filteredEligibleRows.value.length === 0,
+  () =>
+    bulkSelectionDisabled.value ||
+    filteredRunningEligibleRows.value.length === 0,
 );
 const keepAllDisabled = computed(
   () => bulkSelectionDisabled.value || selectedSwitchCount.value === 0,
@@ -315,6 +362,29 @@ function retagChoice(item: RetagTargetItem): RetagTargetChoice {
     updates.retagChoices,
     updates.retagTargetTags,
   );
+}
+
+function runtimeSelectionWarning(
+  items: RetagTargetItem[],
+  runtimeState: Exclude<RetagRuntimeState, "running">,
+): string {
+  if (!items.length) {
+    return "";
+  }
+  const count = items.length;
+  const services = selectedServiceList(items);
+  if (runtimeState === "not-running") {
+    return `${pluralize(count, "selected Compose service")} (${services}) ${count === 1 ? "is" : "are"} not running. Apply will create or recreate and start ${count === 1 ? "it" : "them"}.`;
+  }
+  return `${pluralize(count, "selected Compose service")} (${services}) ${count === 1 ? "has" : "have"} unknown runtime state. Apply may create or recreate and start ${count === 1 ? "it" : "them"}.`;
+}
+
+function selectedServiceList(items: RetagTargetItem[]): string {
+  const labels = items.slice(0, 3).map((item) => item.service_key);
+  if (items.length > labels.length) {
+    labels.push(`+${items.length - labels.length} more`);
+  }
+  return labels.join(", ");
 }
 
 function duplicateServiceKeysFromError(error: string): string[] {
@@ -340,10 +410,6 @@ function onRetagChoiceUpdate(
   updates.setRetagChoice(retagTargetIdentity(item), choice);
 }
 
-function onRetagOnly(item: RetagTargetItem): void {
-  updates.setRetagOnlyChoice(retagTargetIdentity(item));
-}
-
 function onRetagTargetTagUpdate(item: RetagTargetItem, tag: string): void {
   updates.setRetagTargetTag(retagTargetIdentity(item), tag);
 }
@@ -352,14 +418,18 @@ function retagAllEligible(): void {
   if (retagAllDisabled.value) {
     return;
   }
-  updates.setRetagChoicesForItems(rows.value, "switch-to-concrete");
+  addRetagSelection(runningEligibleRows.value);
 }
 
 function retagFilteredEligible(): void {
   if (retagFilteredDisabled.value) {
     return;
   }
-  updates.setRetagChoicesForItems(filteredRows.value, "switch-to-concrete");
+  addRetagSelection(filteredRunningEligibleRows.value);
+}
+
+function addRetagSelection(items: RetagTargetItem[]): void {
+  updates.setRetagChoicesForItems(items, "switch-to-concrete");
 }
 
 function keepAllRetags(): void {
@@ -395,6 +465,7 @@ function openRetagApplyConfirm(): void {
   if (applyDisabled.value) {
     return;
   }
+  retagApplyError.value = "";
   showRetagConfirmModal.value = true;
 }
 
@@ -402,6 +473,7 @@ function openRetagApplyConfirmFromPreview(): void {
   if (applyDisabled.value) {
     return;
   }
+  retagApplyError.value = "";
   showRetagPreviewModal.value = false;
   showRetagConfirmModal.value = true;
 }
@@ -411,8 +483,12 @@ async function confirmRetagApply(): Promise<void> {
     return;
   }
   const snapshot = createRetagApplyJobSnapshot();
-  const job = await updates.applyRetagPlan().catch(() => undefined);
-  if (!job) {
+  retagApplyError.value = "";
+  let job;
+  try {
+    job = await updates.applyRetagPlan();
+  } catch {
+    retagApplyError.value = retagApplyErrorMessage(updates.error);
     return;
   }
   applyJobSnapshot.value = snapshot;
@@ -420,6 +496,20 @@ async function confirmRetagApply(): Promise<void> {
   showRetagConfirmModal.value = false;
   subscribeApplyJob(job.job_id);
   await focusApplyJobPanel();
+}
+
+async function rebuildRetagPreview(): Promise<void> {
+  retagApplyError.value = "";
+  showRetagConfirmModal.value = false;
+  showRetagPreviewModal.value = true;
+  await updates.createRetagPlan().catch(() => undefined);
+}
+
+function retagApplyErrorMessage(error: string): string {
+  if (error.toLowerCase().includes("plan is stale")) {
+    return "Service state changed since this preview. Rebuild the preview before applying.";
+  }
+  return error || "The retag apply job could not be started.";
 }
 
 function createRetagApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
@@ -517,10 +607,13 @@ onMounted(() => {
       :plan="updates.retagPlan"
       :impact-label="retagConfirmImpactLabel"
       :mutation-notice="retagMutationNotice"
+      :runtime-warning="selectedRuntimeWarning"
+      :apply-error="retagApplyError"
       :apply-disabled="applyDisabled"
       :loading="updates.loading"
       :apply-job-active="applyJobActive"
       @confirm="confirmRetagApply"
+      @rebuild-preview="rebuildRetagPreview"
     />
 
     <RetagPlanReviewModal
@@ -531,6 +624,7 @@ onMounted(() => {
       :duplicate-service-conflicts="retagDuplicateServiceConflicts"
       :impact-label="retagConfirmImpactLabel"
       :mutation-notice="retagMutationNotice"
+      :runtime-warning="selectedRuntimeWarning"
       :apply-disabled="applyDisabled"
       :loading="updates.loading"
       :apply-job-active="applyJobActive"
@@ -543,8 +637,8 @@ onMounted(() => {
       :available-count="availableCount"
       :attention-count="attentionCount"
       :selected-switch-count="selectedSwitchCount"
-      :retag-all-eligible-count="eligibleRows.length"
-      :retag-filtered-eligible-count="filteredEligibleRows.length"
+      :running-eligible-count="runningEligibleRows.length"
+      :filtered-running-eligible-count="filteredRunningEligibleRows.length"
       :preview-disabled="previewDisabled"
       :apply-disabled="applyDisabled"
       :retag-all-disabled="retagAllDisabled"
@@ -554,6 +648,7 @@ onMounted(() => {
       :apply-job-active="applyJobActive"
       :has-retag-plan="updates.retagPlan !== null"
       :mutation-notice="retagMutationNotice"
+      :runtime-warning="selectedRuntimeWarning"
       :validation-error="retagTargetTagError"
       @retag-all="retagAllEligible"
       @retag-filtered="retagFilteredEligible"
@@ -579,6 +674,12 @@ onMounted(() => {
           class="filter-control"
           :options="filterOptions"
           aria-label="Retag status filter"
+        />
+        <n-select
+          v-model:value="runtimeFilter"
+          class="filter-control"
+          :options="runtimeFilterOptions"
+          aria-label="Retag runtime filter"
         />
         <div class="retag-fallback-controls">
           <label class="retag-fallback-toggle" for="github-latest-fallback-switch">
@@ -668,7 +769,7 @@ onMounted(() => {
       >
         <Info :size="24" aria-hidden="true" />
         <strong>No matches</strong>
-        <span>Adjust the search text or status filter.</span>
+        <span>Adjust the search text or filters.</span>
       </output>
 
       <RetagTargetsTable
@@ -680,7 +781,6 @@ onMounted(() => {
         :mutation-disabled="retagChoiceDisabled"
         :mutation-notice="retagMutationNotice"
         @choice-update="onRetagChoiceUpdate"
-        @retag-only="onRetagOnly"
         @target-tag-update="onRetagTargetTagUpdate"
       />
 
@@ -692,7 +792,6 @@ onMounted(() => {
         :mutation-disabled="retagChoiceDisabled"
         :mutation-notice="retagMutationNotice"
         @choice-update="onRetagChoiceUpdate"
-        @retag-only="onRetagOnly"
         @target-tag-update="onRetagTargetTagUpdate"
       />
     </template>

@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { NButton } from "naive-ui";
+import { NAlert, NButton } from "naive-ui";
 
 defineProps<{
   totalCount: number;
   availableCount: number;
   attentionCount: number;
   selectedSwitchCount: number;
-  retagAllEligibleCount: number;
-  retagFilteredEligibleCount: number;
+  runningEligibleCount: number;
+  filteredRunningEligibleCount: number;
   previewDisabled: boolean;
   applyDisabled: boolean;
   retagAllDisabled: boolean;
@@ -17,6 +17,7 @@ defineProps<{
   applyJobActive: boolean;
   hasRetagPlan: boolean;
   mutationNotice: string;
+  runtimeWarning: string;
   validationError: string;
 }>();
 
@@ -27,6 +28,16 @@ defineEmits<{
   preview: [];
   apply: [];
 }>();
+
+function runningSelectionTitle(count: number, filtered: boolean): string {
+  if (!count) {
+    return filtered
+      ? "No running eligible Compose services in the current results."
+      : "No running eligible Compose services to select.";
+  }
+  const scope = filtered ? " in the current results" : "";
+  return `Add ${count} running eligible Compose ${count === 1 ? "service" : "services"}${scope} to the current selection. Not-running and unknown choices stay unchanged.`;
+}
 </script>
 
 <template>
@@ -57,6 +68,9 @@ defineEmits<{
         </n-button>
         <span v-if="mutationNotice">{{ mutationNotice }}</span>
         <span v-else-if="validationError">{{ validationError }}</span>
+        <span v-else-if="selectedSwitchCount === 0">
+          Select at least one service to preview.
+        </span>
       </div>
     </div>
 
@@ -68,49 +82,72 @@ defineEmits<{
       <div>
         <span>Retag candidates</span>
         <strong class="wrap-anywhere">{{ availableCount }}</strong>
+        <small>{{ runningEligibleCount }} running now</small>
       </div>
       <div>
         <span>Needs attention</span>
         <strong class="wrap-anywhere">{{ attentionCount }}</strong>
       </div>
-      <div>
-        <span>Selected switches</span>
+      <div class="retag-selected-count" aria-live="polite" aria-atomic="true">
+        <span>Selected retags</span>
         <strong class="wrap-anywhere">{{ selectedSwitchCount }}</strong>
       </div>
     </div>
+
+    <n-alert
+      v-if="runtimeWarning"
+      type="warning"
+      :show-icon="false"
+    >
+      {{ runtimeWarning }}
+    </n-alert>
 
     <div class="retag-bulk-actions" aria-label="Bulk retag selection">
       <n-button
         size="small"
         :disabled="retagAllDisabled"
-        :title="
-          retagAllEligibleCount
-            ? `${retagAllEligibleCount} eligible service(s)`
-            : 'No eligible services to retag'
-        "
+        :title="runningSelectionTitle(runningEligibleCount, false)"
         @click="$emit('retag-all')"
       >
-        Retag all eligible
+        Add running candidates
       </n-button>
       <n-button
         size="small"
         :disabled="retagFilteredDisabled"
-        :title="
-          retagFilteredEligibleCount
-            ? `${retagFilteredEligibleCount} filtered eligible service(s)`
-            : 'No filtered eligible services to retag'
-        "
+        :title="runningSelectionTitle(filteredRunningEligibleCount, true)"
         @click="$emit('retag-filtered')"
       >
-        Retag filtered eligible
+        Add running in results
       </n-button>
       <n-button
         size="small"
         :disabled="keepAllDisabled"
+        :title="
+          keepAllDisabled
+            ? 'No selected retags to clear.'
+            : 'Set every Compose service to Keep and clear the current selection.'
+        "
         @click="$emit('keep-all')"
       >
-        Keep all
+        Clear selection
       </n-button>
+      <span class="retag-bulk-help">
+        Targets are discovered Compose services; standalone <code>docker run</code> containers are not included.
+        Bulk actions add running services to the current selection; not-running and unknown choices stay unchanged.
+        Select a not-running or unknown row individually to include it. Applying a not-running service will create or recreate and start it; an unknown service may be created or recreated and started.
+      </span>
+      <output
+        v-if="runningEligibleCount === 0"
+        class="retag-bulk-status"
+      >
+        No running retag candidates are available. Select stopped candidates individually.
+      </output>
+      <output
+        v-else-if="filteredRunningEligibleCount === 0"
+        class="retag-bulk-status"
+      >
+        The current results contain no running retag candidates.
+      </output>
     </div>
   </section>
 </template>
@@ -171,6 +208,12 @@ defineEmits<{
   font-weight: 700;
 }
 
+.retag-summary-strip small {
+  color: var(--color-muted-text);
+  font-size: var(--text-metadata-size);
+  line-height: 1.3;
+}
+
 .retag-summary-strip strong {
   color: var(--color-ink);
   font-size: var(--text-body-size);
@@ -180,7 +223,22 @@ defineEmits<{
 .retag-bulk-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+}
+
+.retag-bulk-help {
+  flex-basis: 100%;
+  color: var(--color-muted-text);
+  font-size: var(--text-metadata-size);
+  line-height: 1.4;
+}
+
+.retag-bulk-status {
+  flex-basis: 100%;
+  color: var(--color-text-secondary);
+  font-size: var(--text-metadata-size);
+  line-height: 1.4;
 }
 
 @media (--wud-app-shell) {

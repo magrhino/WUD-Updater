@@ -3,6 +3,7 @@ import type {
   RetagPlanResponse,
   RetagTargetItem,
 } from "../../api/client";
+import { retagRuntimeChoiceWarning } from "../../utils/retagChoices";
 
 export type TagType = "default" | "success" | "warning" | "error" | "info";
 
@@ -80,6 +81,56 @@ export function composeLocation(item: RetagTargetItem): string {
   return [item.directory, item.compose_file].filter(Boolean).join("/");
 }
 
+export function runtimeStateLabel(item: RetagTargetItem): string {
+  if (item.runtime_state === "running") {
+    return "Running";
+  }
+  if (item.runtime_state === "not-running") {
+    return "Not running";
+  }
+  return "Unknown";
+}
+
+export function runtimeStateDetail(item: RetagTargetItem): string {
+  return item.runtime_state === "running"
+    ? "Matching Compose container is running."
+    : retagRuntimeChoiceWarning(item);
+}
+
+export function runtimeStateTagType(item: RetagTargetItem): TagType {
+  if (item.runtime_state === "running") {
+    return "success";
+  }
+  if (item.runtime_state === "not-running") {
+    return "warning";
+  }
+  return "default";
+}
+
+export function compareRetagTargets(
+  left: RetagTargetItem,
+  right: RetagTargetItem,
+): number {
+  return (
+    retagTargetSortRank(left) - retagTargetSortRank(right) ||
+    left.stack.localeCompare(right.stack) ||
+    left.service.localeCompare(right.service) ||
+    left.service_key.localeCompare(right.service_key) ||
+    (left.target_id ?? "").localeCompare(right.target_id ?? "")
+  );
+}
+
+function retagTargetSortRank(item: RetagTargetItem): number {
+  const availabilityRank = item.retag_available ? 0 : 3;
+  let runtimeRank = 2;
+  if (item.runtime_state === "running") {
+    runtimeRank = 0;
+  } else if (item.runtime_state === "not-running") {
+    runtimeRank = 1;
+  }
+  return availabilityRank + runtimeRank;
+}
+
 export function searchableText(item: RetagTargetItem): string {
   return [
     item.service_key,
@@ -95,6 +146,9 @@ export function searchableText(item: RetagTargetItem): string {
     item.candidate_warning,
     item.candidate_link_label,
     item.candidate_link_url,
+    item.runtime_state,
+    runtimeStateLabel(item),
+    runtimeStateDetail(item),
     item.retag_reason,
     reasonLabel(item.retag_reason),
     reasonDetail(item.retag_reason),

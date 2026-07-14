@@ -60,6 +60,7 @@ class ComposeStack:
     images: tuple[str, ...]
     service_images: tuple[ServiceImage, ...]
     project_directory: Path | None = None
+    project_name: str = ""
 
 
 class ComposeCli:
@@ -223,6 +224,23 @@ class ComposeCli:
             check=True,
         )
 
+    def try_config_project_name(
+        self,
+        directory: str | Path,
+        file: str,
+        *,
+        project_directory: str | Path | None = None,
+    ) -> str:
+        try:
+            result = self.config_json(
+                directory,
+                file,
+                project_directory=project_directory,
+            )
+            return _project_name_from_config_json(result.stdout)
+        except (CommandError, ValueError):
+            return ""
+
     def discover_stacks(
         self,
         docker_base: str | Path,
@@ -249,12 +267,15 @@ class ComposeCli:
                 project_base_path,
             )
             required = directory.name in required_names
+            project_name = ""
             try:
-                service_images = self.service_image_pairs(
+                config = self.config_json(
                     directory,
                     file_name,
                     project_directory=project_directory,
                 )
+                service_images = _service_image_pairs_from_config_json(config.stdout)
+                project_name = _project_name_from_config_json(config.stdout)
                 images = tuple(sorted({item.image for item in service_images}))
             except (CommandError, ValueError) as exc:
                 if required:
@@ -281,6 +302,7 @@ class ComposeCli:
                     images=images,
                     service_images=service_images,
                     project_directory=project_directory,
+                    project_name=project_name,
                 )
             )
         if not stacks:
@@ -744,6 +766,12 @@ def _service_image_pairs_from_config_json(config_json: str) -> tuple[ServiceImag
                 )
             )
     return tuple(sorted(pairs, key=lambda pair: (pair.service, pair.image)))
+
+
+def _project_name_from_config_json(config_json: str) -> str:
+    parsed = json.loads(config_json)
+    name = parsed.get("name") if isinstance(parsed, dict) else None
+    return name.strip() if isinstance(name, str) else ""
 
 
 def _service_platform(value: object) -> ImagePlatform | None:

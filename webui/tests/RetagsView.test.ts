@@ -76,6 +76,7 @@ describe("RetagsView", () => {
     expect(text).toContain("Retag review");
     expect(text).toContain("Total services");
     expect(text).toContain("Retag candidates");
+    expect(wrapper.find(".retag-summary-strip").text()).toContain("1 running now");
     expect(text).toContain("Needs attention");
     expect(text).toContain("compose warning");
     expect(text).toContain("media/app");
@@ -230,7 +231,6 @@ describe("RetagsView", () => {
     updates.setRetagChoice(radarrTarget.target_id, "switch-to-concrete");
     vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
     const setRetagChoice = vi.spyOn(updates, "setRetagChoice");
-    const setRetagOnlyChoice = vi.spyOn(updates, "setRetagOnlyChoice");
     const createRetagPlan = vi.spyOn(updates, "createRetagPlan").mockResolvedValue(
       retagPlanResponse(),
     );
@@ -239,20 +239,52 @@ describe("RetagsView", () => {
     await flushPromises();
 
     await wrapper
-      .get('button[aria-label="Retag only media/radarr"]')
+      .get('button[aria-label="Retag media/radarr"]')
       .trigger("click");
     await flushPromises();
 
-    expect(setRetagChoice).not.toHaveBeenCalled();
-    expect(setRetagOnlyChoice).toHaveBeenCalledTimes(1);
-    expect(setRetagOnlyChoice).toHaveBeenCalledWith(radarrTarget.target_id);
-    expect(updates.retagChoices[appTarget.target_id]).toBe("keep-current");
+    expect(setRetagChoice).toHaveBeenCalledWith(
+      radarrTarget.target_id,
+      "switch-to-concrete",
+    );
+    expect(updates.retagChoices[appTarget.target_id]).toBe("switch-to-concrete");
     expect(updates.retagChoices[radarrTarget.target_id]).toBe("switch-to-concrete");
     expect(createRetagPlan).not.toHaveBeenCalled();
     expect(wrapper.text()).not.toContain("Review retag preview");
   });
 
-  it("bulk selects all eligible, filtered eligible, and keep-all retag choices", async () => {
+  it("requires a selected service before previewing", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse([
+      retagTarget({ runtime_state: "not-running" }),
+    ]);
+    vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    const createRetagPlan = vi.spyOn(updates, "createRetagPlan");
+
+    const wrapper = mountWithApp(RetagsView, { pinia });
+    await flushPromises();
+
+    const previewButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview retag changes"));
+    expect(previewButton?.attributes("disabled")).toBeDefined();
+    expect(wrapper.text()).toContain("Select at least one service to preview.");
+    expect(wrapper.find(".retag-summary-strip").text()).toContain("0 running now");
+    expect(wrapper.get(".retag-selected-count").attributes("aria-live")).toBe(
+      "polite",
+    );
+    expect(wrapper.text()).toContain(
+      "No running retag candidates are available. Select stopped candidates individually.",
+    );
+    await previewButton?.trigger("click");
+    expect(createRetagPlan).not.toHaveBeenCalled();
+  });
+
+  it("bulk adds running eligible rows without replacing hidden choices", async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const auth = useAuthStore();
@@ -272,6 +304,18 @@ describe("RetagsView", () => {
         final_image: "postgres@sha256:feed",
       }),
       retagTarget({
+        service_key: "archive/legacy",
+        stack: "archive",
+        service: "legacy",
+        runtime_state: "not-running",
+      }),
+      retagTarget({
+        service_key: "archive/unknown",
+        stack: "archive",
+        service: "unknown",
+        runtime_state: "unknown",
+      }),
+      retagTarget({
         service_key: "media/radarr",
         service: "radarr",
         image: "repo/radarr:5.21.1",
@@ -288,6 +332,9 @@ describe("RetagsView", () => {
       }),
     ];
     updates.retagTargets = retagTargetsResponse(retagItems);
+    updates.resetRetagChoices();
+    updates.setRetagChoice(retagItems[2].target_id, "switch-to-concrete");
+    updates.setRetagChoice(retagItems[3].target_id, "switch-to-concrete");
     updates.retagPlan = retagPlanResponse();
     vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
     const createRetagPlan = vi.spyOn(updates, "createRetagPlan").mockResolvedValue(
@@ -302,51 +349,141 @@ describe("RetagsView", () => {
     const buttonByText = (text: string) =>
       wrapper.findAll("button").find((button) => button.text().includes(text));
 
+    expect(wrapper.text()).toContain(
+      "Targets are discovered Compose services; standalone docker run containers are not included.",
+    );
+    expect(buttonByText("Add running candidates")?.attributes("title")).toContain(
+      "Not-running and unknown choices stay unchanged",
+    );
+
     await wrapper
       .find('input[aria-label="Search retag targets"]')
       .setValue("postgres");
-    await buttonByText("Retag filtered eligible")?.trigger("click");
+    await buttonByText("Add running in results")?.trigger("click");
     await flushPromises();
 
     expect(updates.retagPlan).toBeNull();
     expect(updates.retagChoices).toMatchObject({
+      [retagItems[0].target_id]: "keep-current",
       [retagItems[1].target_id]: "switch-to-concrete",
+      [retagItems[2].target_id]: "switch-to-concrete",
+      [retagItems[3].target_id]: "switch-to-concrete",
+      [retagItems[4].target_id]: "keep-current",
     });
-    expect(updates.retagChoices[retagItems[0].target_id]).toBeUndefined();
     expect(wrapper.find(".retag-summary-strip").text()).toContain(
-      "Selected switches1",
+      "Selected retags3",
     );
     expect(createRetagPlan).not.toHaveBeenCalled();
     expect(applyRetagPlan).not.toHaveBeenCalled();
 
     updates.retagPlan = retagPlanResponse();
     await wrapper.find('input[aria-label="Search retag targets"]').setValue("");
-    await buttonByText("Retag all eligible")?.trigger("click");
+    await buttonByText("Add running candidates")?.trigger("click");
     await flushPromises();
 
     expect(updates.retagPlan).toBeNull();
     expect(updates.retagChoices).toMatchObject({
       [retagItems[0].target_id]: "switch-to-concrete",
       [retagItems[1].target_id]: "switch-to-concrete",
-      [retagItems[2].target_id]: "keep-current",
+      [retagItems[2].target_id]: "switch-to-concrete",
+      [retagItems[3].target_id]: "switch-to-concrete",
+      [retagItems[4].target_id]: "keep-current",
     });
     expect(wrapper.find(".retag-summary-strip").text()).toContain(
-      "Selected switches2",
+      "Selected retags4",
     );
 
-    await buttonByText("Keep all")?.trigger("click");
+    await buttonByText("Clear selection")?.trigger("click");
     await flushPromises();
 
     expect(updates.retagChoices).toMatchObject({
       [retagItems[0].target_id]: "keep-current",
       [retagItems[1].target_id]: "keep-current",
       [retagItems[2].target_id]: "keep-current",
+      [retagItems[3].target_id]: "keep-current",
+      [retagItems[4].target_id]: "keep-current",
     });
     expect(wrapper.find(".retag-summary-strip").text()).toContain(
-      "Selected switches0",
+      "Selected retags0",
     );
     expect(createRetagPlan).not.toHaveBeenCalled();
     expect(applyRetagPlan).not.toHaveBeenCalled();
+  });
+
+  it("carries explicit non-running warnings through preview and confirmation", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const updates = useUpdatesStore();
+    const retagItems = [
+      retagTarget({
+        service_key: "archive/legacy",
+        stack: "archive",
+        service: "legacy",
+        runtime_state: "not-running",
+      }),
+      retagTarget({
+        service_key: "archive/unknown",
+        stack: "archive",
+        service: "unknown",
+        runtime_state: "unknown",
+      }),
+    ];
+    updates.retagTargets = retagTargetsResponse(retagItems);
+    vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    vi.spyOn(updates, "createRetagPlan").mockImplementation(async () => {
+      const plan = retagPlanResponse({ selected_count: 2, keep_current_count: 0 });
+      updates.retagPlan = plan;
+      return plan;
+    });
+
+    const wrapper = mountWithApp(RetagsView, { pinia });
+    await flushPromises();
+
+    const switchControls = wrapper.findAll('input[value="switch-to-concrete"]');
+    expect(switchControls).toHaveLength(2);
+    await switchControls[0].setValue();
+    await switchControls[1].setValue();
+    await flushPromises();
+
+    const summary = wrapper.get(".retag-summary-panel");
+    expect(summary.text()).toContain(
+      "archive/legacy) is not running. Apply will create or recreate and start it.",
+    );
+    expect(summary.text()).toContain(
+      "archive/unknown) has unknown runtime state. Apply may create or recreate and start it.",
+    );
+
+    await summary
+      .findAll("button")
+      .find((button) => button.text().includes("Preview retag changes"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const preview = wrapper.get(".preflight-modal");
+    expect(preview.text()).toContain(
+      "archive/legacy) is not running. Apply will create or recreate and start it.",
+    );
+    expect(preview.text()).toContain(
+      "archive/unknown) has unknown runtime state. Apply may create or recreate and start it.",
+    );
+    await preview
+      .findAll("button")
+      .find((button) => button.text().includes("Apply selected retags"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const confirmation = wrapper.get(".retag-confirm-modal");
+    expect(confirmation.text()).toContain(
+      "Applying rewrites Compose image metadata, pulls images, and recreates selected services.",
+    );
+    expect(confirmation.text()).toContain(
+      "archive/legacy) is not running. Apply will create or recreate and start it.",
+    );
+    expect(confirmation.text()).toContain(
+      "archive/unknown) has unknown runtime state. Apply may create or recreate and start it.",
+    );
   });
 
   it("shows preview start failures in the review modal", async () => {
@@ -356,6 +493,10 @@ describe("RetagsView", () => {
     auth.session = authSession({ mutations_enabled: true });
     const updates = useUpdatesStore();
     updates.retagTargets = retagTargetsResponse();
+    updates.setRetagChoice(
+      updates.retagTargets.items[0].target_id,
+      "switch-to-concrete",
+    );
     vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
     vi.spyOn(updates, "createRetagPlan").mockImplementation(async () => {
       updates.error = "retag preview is already running";
@@ -411,6 +552,9 @@ describe("RetagsView", () => {
           project_directory: "/docker/media-staging",
         }),
       ]);
+      for (const item of updates.retagTargets.items) {
+        updates.setRetagChoice(item.target_id, "switch-to-concrete");
+      }
       vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
       vi.spyOn(updates, "createRetagPlan").mockImplementation(async () => {
         updates.error = previewError;
@@ -539,13 +683,13 @@ describe("RetagsView", () => {
       .find((button) => button.text().includes("Apply selected retags"));
     const retagAllButton = wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Retag all eligible"));
+      .find((button) => button.text().includes("Add running candidates"));
     const retagFilteredButton = wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Retag filtered eligible"));
+      .find((button) => button.text().includes("Add running in results"));
     const keepAllButton = wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Keep all"));
+      .find((button) => button.text().includes("Clear selection"));
     const refreshButton = wrapper.get(
       'button[aria-label="Refresh GitHub latest candidates"]',
     );
@@ -625,7 +769,9 @@ describe("RetagsView", () => {
     expect(applyRetagPlan).not.toHaveBeenCalled();
     expect(wrapper.find("dialog").exists()).toBe(true);
     expect(wrapper.text()).toContain("Confirm retag apply");
-    expect(wrapper.text()).toContain("Review the selected Compose metadata changes");
+    expect(wrapper.text()).toContain(
+      "Applying rewrites Compose image metadata, pulls images, and recreates selected services.",
+    );
     expect(wrapper.text()).toContain("1 service in media");
     expect(wrapper.text()).toContain("media/app");
     expect(wrapper.text()).toContain("repo/app:latest -> repo/app@sha256:abc123");
@@ -649,6 +795,58 @@ describe("RetagsView", () => {
       .findAll("button")
       .find((button) => button.text().includes("Apply selected retags"));
     expect(disabledApplyButton?.attributes("disabled")).toBeDefined();
+  });
+
+  it("shows stale apply errors in the confirmation and rebuilds the preview", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse();
+    updates.retagPlan = retagPlanResponse();
+    vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    vi.spyOn(updates, "applyRetagPlan").mockImplementation(async () => {
+      updates.error = "409: retag plan is stale";
+      throw new Error(updates.error);
+    });
+    const createRetagPlan = vi
+      .spyOn(updates, "createRetagPlan")
+      .mockImplementation(async () => {
+        const plan = retagPlanResponse({ plan_id: "rebuilt-retag-plan" });
+        updates.retagPlan = plan;
+        return plan;
+      });
+
+    const wrapper = mountWithApp(RetagsView, { pinia });
+    await flushPromises();
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Apply selected retags"))
+      ?.trigger("click");
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Confirm and apply"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const confirmation = wrapper.get(".retag-confirm-modal");
+    const applyError = confirmation.get('[role="alert"]');
+    expect(applyError.text()).toContain(
+      "Service state changed since this preview. Rebuild the preview before applying.",
+    );
+    expect(applyError.attributes("tabindex")).toBe("-1");
+
+    await confirmation
+      .findAll("button")
+      .find((button) => button.text().includes("Rebuild preview"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(createRetagPlan).toHaveBeenCalledTimes(1);
+    expect(wrapper.find(".retag-confirm-modal").exists()).toBe(false);
+    expect(wrapper.text()).toContain("Review retag preview");
   });
 
   it("keeps duplicate service apply snapshot rows keyed by target id", async () => {
@@ -792,6 +990,84 @@ describe("RetagsView", () => {
 
     expect(wrapper.text()).not.toContain("media/app");
     expect(wrapper.text()).toContain("data/postgres");
+  });
+
+  it("shows every Compose service by default and sorts and filters runtime state", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse([
+      retagTarget({
+        service_key: "aardvark/unknown",
+        stack: "aardvark",
+        service: "unknown",
+        runtime_state: "unknown",
+      }),
+      retagTarget({
+        service_key: "alpha/stopped-attention",
+        stack: "alpha",
+        service: "stopped-attention",
+        runtime_state: "not-running",
+        retag_available: false,
+      }),
+      retagTarget({
+        service_key: "alpha/running-attention",
+        stack: "alpha",
+        service: "running-attention",
+        retag_available: false,
+      }),
+      retagTarget({
+        service_key: "zeta/stopped-ready",
+        stack: "zeta",
+        service: "stopped-ready",
+        runtime_state: "not-running",
+      }),
+      retagTarget({
+        service_key: "zeta/running-ready",
+        stack: "zeta",
+        service: "running-ready",
+      }),
+    ]);
+    vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+
+    const wrapper = mountWithApp(RetagsView, { pinia });
+    await flushPromises();
+    const visibleServices = () =>
+      wrapper
+        .findAll(".retag-service-cell strong")
+        .map((service) => service.text());
+
+    expect(visibleServices()).toEqual([
+      "zeta/running-ready",
+      "zeta/stopped-ready",
+      "aardvark/unknown",
+      "alpha/running-attention",
+      "alpha/stopped-attention",
+    ]);
+
+    await wrapper
+      .get('select[aria-label="Retag runtime filter"]')
+      .setValue("not-running");
+    await flushPromises();
+    expect(visibleServices()).toEqual([
+      "zeta/stopped-ready",
+      "alpha/stopped-attention",
+    ]);
+
+    await wrapper
+      .get('select[aria-label="Retag runtime filter"]')
+      .setValue("unknown");
+    await flushPromises();
+    expect(visibleServices()).toEqual(["aardvark/unknown"]);
+
+    await wrapper
+      .get('select[aria-label="Retag runtime filter"]')
+      .setValue("running");
+    await flushPromises();
+    expect(visibleServices()).toEqual([
+      "zeta/running-ready",
+      "alpha/running-attention",
+    ]);
   });
 
   it("renders empty, unavailable, loading, and error states", async () => {

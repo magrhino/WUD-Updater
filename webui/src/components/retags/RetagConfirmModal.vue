@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import {
   NAlert,
   NButton,
@@ -24,6 +24,8 @@ const props = defineProps<{
   plan: RetagPlanResponse | null;
   impactLabel: string;
   mutationNotice: string;
+  runtimeWarning: string;
+  applyError: string;
   applyDisabled: boolean;
   loading: boolean;
   applyJobActive: boolean;
@@ -32,7 +34,10 @@ const props = defineProps<{
 const emit = defineEmits<{
   "update:show": [value: boolean];
   confirm: [];
+  "rebuild-preview": [];
 }>();
+
+const applyErrorAlert = ref<HTMLElement | null>(null);
 
 const retagPlanUpdates = computed(() =>
   (props.plan?.stacks ?? []).flatMap((stack) =>
@@ -43,6 +48,17 @@ const retagPlanUpdates = computed(() =>
 function closeModal(): void {
   emit("update:show", false);
 }
+
+watch(
+  () => props.applyError,
+  async (error) => {
+    if (!error) {
+      return;
+    }
+    await nextTick();
+    applyErrorAlert.value?.focus();
+  },
+);
 </script>
 
 <template>
@@ -61,7 +77,8 @@ function closeModal(): void {
           <p class="eyebrow">Confirm retag apply</p>
           <h2 id="retag-confirm-title">Apply selected retags</h2>
           <p class="preflight-summary-text">
-            Review the selected Compose metadata changes before starting the retag apply job.
+            Applying rewrites Compose image metadata, pulls images, and recreates selected services.
+            Review these changes before starting the retag apply job.
           </p>
           <p v-if="impactLabel" class="preflight-impact-text">
             {{ impactLabel }}
@@ -79,6 +96,25 @@ function closeModal(): void {
       >
         {{ mutationNotice }}
       </n-alert>
+
+      <n-alert
+        v-if="runtimeWarning"
+        type="warning"
+        :show-icon="false"
+      >
+        {{ runtimeWarning }}
+      </n-alert>
+
+      <div
+        v-if="applyError"
+        ref="applyErrorAlert"
+        role="alert"
+        tabindex="-1"
+      >
+        <n-alert type="error" :show-icon="false">
+          {{ applyError }}
+        </n-alert>
+      </div>
 
       <n-grid
         v-if="plan"
@@ -143,6 +179,15 @@ function closeModal(): void {
       <n-flex class="preflight-footer" justify="flex-end" :size="8">
         <n-button size="small" quaternary @click="closeModal">
           Cancel
+        </n-button>
+        <n-button
+          v-if="applyError"
+          size="small"
+          secondary
+          :loading="loading"
+          @click="$emit('rebuild-preview')"
+        >
+          Rebuild preview
         </n-button>
         <n-button
           type="primary"

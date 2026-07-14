@@ -97,7 +97,7 @@ compose_services_from_file(){
 }
 
 compose_config_json_from_file(){
-  local file="$1" output
+  local file="$1" project_directory="${2:-}" output project_name
   [[ -f "$file" ]] || return 1
   output="$(awk '
     function esc(value) {
@@ -246,7 +246,18 @@ compose_config_json_from_file(){
       }
     }
   ' "$file")" || return 1
-  printf '{"services":{%s}}\n' "$output"
+  project_name="${COMPOSE_PROJECT_NAME:-}"
+  if [[ -z "$project_name" ]]; then
+    project_name="$(awk '
+      /^name:[[:space:]]*/ {
+        sub(/^name:[[:space:]]*/, "")
+        gsub(/^["\047]|["\047]$/, "")
+        print
+        exit
+      }
+    ' "$file")"
+  fi
+  printf '{"name":"%s","services":{%s}}\n' "${project_name:-$(basename "${project_directory:-$PWD}")}" "$output"
 }
 
 service_images(){
@@ -372,7 +383,7 @@ compose_cmd(){
       case "${1:-}" in
         --format)
           if [[ "${2:-}" == "json" ]]; then
-            compose_config_json_from_file "$file"
+            compose_config_json_from_file "$file" "$project_directory"
           else
             return 1
           fi
@@ -578,8 +589,17 @@ manifest_cmd(){
 
 ps_cmd(){
   log_call "ps $*"
+  if [[ -f "$ROOT/ps_fail" ]]; then
+    printf 'fake docker ps failed\n' >&2
+    return 24
+  fi
   if [[ "${1:-}" == "--format" ]]; then
-    [[ -f "$ROOT/containers.tsv" ]] && cat "$ROOT/containers.tsv"
+    local format="${2:-}"
+    if [[ "$format" == *'com.docker.compose.project.working_dir'* && "$format" == *'com.docker.compose.project.config_files'* && "$format" == *'com.docker.compose.service'* ]]; then
+      [[ -f "$ROOT/compose-runtime.tsv" ]] && cat "$ROOT/compose-runtime.tsv"
+    else
+      [[ -f "$ROOT/containers.tsv" ]] && cat "$ROOT/containers.tsv"
+    fi
   elif [[ $# -eq 0 ]]; then
     printf 'CONTAINER ID   IMAGE\n'
   else
