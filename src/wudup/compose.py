@@ -237,9 +237,9 @@ class ComposeCli:
                 file,
                 project_directory=project_directory,
             )
+            return _project_name_from_config_json(result.stdout)
         except (CommandError, ValueError):
             return ""
-        return _project_name_from_config_json(result.stdout)
 
     def discover_stacks(
         self,

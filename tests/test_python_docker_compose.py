@@ -333,6 +333,19 @@ class ComposeCliTests(FakeDockerCase):
             ["compose -f docker-compose.yml config --images"],
         )
 
+    def test_try_config_project_name_returns_empty_for_invalid_json(self) -> None:
+        with mock.patch.object(
+            self.compose,
+            "config_json",
+            return_value=mock.Mock(stdout="{"),
+        ):
+            project_name = self.compose.try_config_project_name(
+                self.base,
+                "docker-compose.yml",
+            )
+
+        self.assertEqual(project_name, "")
+
     def test_discover_stacks_skips_configured_single_component_ignore(self) -> None:
         stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
         self.make_stack(
@@ -409,6 +422,20 @@ class ComposeCliTests(FakeDockerCase):
             "-f docker-compose.yml config --format json",
             self.call_commands(),
         )
+
+    def test_config_json_uses_project_directory_name_as_fallback(self) -> None:
+        stack = self.make_stack("source-stack", [("app", "repo/app:latest", "cid-app")])
+        project_directory = self.root / "runtime-stack"
+        project_directory.mkdir()
+        self.env.pop("COMPOSE_PROJECT_NAME", None)
+
+        result = self.compose.config_json(
+            stack,
+            "docker-compose.yml",
+            project_directory=project_directory,
+        )
+
+        self.assertEqual(json.loads(result.stdout)["name"], "runtime-stack")
 
     def test_discover_stacks_rejects_unmounted_project_base(self) -> None:
         self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
