@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.56.2](https://github.com/magrhino/wudup/compare/v0.56.1...v0.56.2) (2026-07-14)
+
+
+### Bug Fixes
+
+* **retags:** prioritize safe running compose candidates ([#535](https://github.com/magrhino/wudup/issues/535)) ([7311ec3](https://github.com/magrhino/wudup/commit/7311ec38690b4a87ed0fb149292fe8ae620e80a5))
+
 ## [0.56.1](https://github.com/magrhino/wudup/compare/v0.56.0...v0.56.1) (2026-07-13)
 
 
