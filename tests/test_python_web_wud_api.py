@@ -170,7 +170,7 @@ def test_wud_api_older_forced_refresh_cannot_replace_newer_cache(
         if path == "/health":
             return {"status": "ok"}
         if path == "/api/containers":
-            name = getattr(clock, "name")
+            name = clock.name
             if name == "older":
                 older_waiting.set()
                 assert newer_finished.wait(timeout=5)
