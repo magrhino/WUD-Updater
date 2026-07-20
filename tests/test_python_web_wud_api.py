@@ -3,8 +3,10 @@ from __future__ import annotations
 import base64
 import json
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from pathlib import Path
+from threading import Event, local
 from types import SimpleNamespace
 from typing import Any
 
@@ -148,6 +150,60 @@ def test_wud_api_snapshot_reads_update_metadata(tmp_path: Path, monkeypatch) -> 
     assert container.update_kind == "tag"
     assert container.semver_diff == "minor"
     assert snapshot.hidden_update_candidates == ()
+
+
+def test_wud_api_older_forced_refresh_cannot_replace_newer_cache(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    clock = local()
+    older_waiting = Event()
+    newer_finished = Event()
+    calls: list[str] = []
+
+    def monotonic() -> float:
+        return getattr(clock, "now", 0.0)
+
+    def request_json(url: str, _client_config=None) -> object:
+        path = urllib.parse.urlsplit(url).path
+        calls.append(path)
+        if path == "/health":
+            return {"status": "ok"}
+        if path == "/api/containers":
+            name = clock.name
+            if name == "older":
+                older_waiting.set()
+                assert newer_finished.wait(timeout=5)
+            return [_container_payload(name=name)]
+        raise AssertionError(f"unexpected WUD API URL: {url}")
+
+    def refresh(name: str, now: float) -> web_wud_api.WudApiSnapshot:
+        clock.name = name
+        clock.now = now
+        return web_wud_api.get_snapshot(
+            settings,
+            include_containers=True,
+            force=True,
+        )
+
+    monkeypatch.setattr(web_wud_api.time, "monotonic", monotonic)
+    monkeypatch.setattr(web_wud_api, "_request_json", request_json)
+    settings = _settings(tmp_path, "https://wud.concurrent-refresh.test:3000")
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        older_future = executor.submit(refresh, "older", 1.0)
+        assert older_waiting.wait(timeout=5)
+        newer = executor.submit(refresh, "newer", 2.0).result(timeout=5)
+        newer_finished.set()
+        older = older_future.result(timeout=5)
+
+    clock.now = 3.0
+    cached = web_wud_api.get_snapshot(settings, include_containers=True)
+
+    assert older.containers[0].name == "older"
+    assert newer.containers[0].name == "newer"
+    assert cached.containers[0].name == "newer"
+    assert calls.count("/api/containers") == 2
 
 
 def test_wud_api_snapshot_reads_hidden_update_candidates_from_update_kind_delta(

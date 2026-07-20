@@ -89,7 +89,7 @@ def configure(*, effective_config_loader: EffectiveConfigLoader) -> None:
 
 
 def api_pending(request: Request) -> PendingResponse:
-    return pending_response(_settings(request))
+    return pending_response(_settings(request), force_api=True)
 
 
 def api_pending_metadata(
@@ -318,11 +318,13 @@ def pending_response(
     *,
     include_grouping: bool = True,
     include_wud_metadata: bool = True,
+    force_api: bool = False,
 ) -> PendingResponse:
     try:
         source = web_wud_refresh.refresh_wud_pending_source(
             settings,
             include_wud_metadata=include_wud_metadata,
+            force=force_api,
         ).source
     except OSError as exc:
         raise HTTPException(

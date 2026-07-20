@@ -115,6 +115,54 @@ def test_pending_endpoint_reads_wud_api_source_without_wud_file(
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
+def test_pending_endpoint_bypasses_wud_snapshot_cache_with_gets_only(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, _fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(name=f"app-{index}", image=f"repo/app-{index}")
+        for index in range(7)
+    ]
+    calls = install_recording_wud_api(monkeypatch, containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.pending-refresh.test:3000",
+            **fake_env,
+        },
+    )
+    calls.clear()
+
+    cached = client.get("/api/v1/status")
+
+    assert cached.status_code == 200
+    assert cached.json()["pending_count"] == 7
+    assert calls == [("GET", "/health"), ("GET", "/api/containers")]
+
+    containers.extend(
+        _wud_api_container(name=f"app-{index}", image=f"repo/app-{index}")
+        for index in range(7, 17)
+    )
+    calls.clear()
+
+    refreshed = client.get("/api/v1/pending")
+
+    assert refreshed.status_code == 200
+    assert refreshed.json()["count"] == 17
+    assert calls == [("GET", "/health"), ("GET", "/api/containers")]
+
+    calls.clear()
+
+    status = client.get("/api/v1/status")
+
+    assert status.status_code == 200
+    assert status.json()["pending_count"] == 17
+    assert calls == []
+
+
 def test_pending_endpoint_returns_hidden_wud_api_snoozed_candidates(
     tmp_path: Path,
     monkeypatch,
