@@ -865,6 +865,12 @@ def _store_configuration_diagnostics(
 
 def _store_snapshot(cache_key: WudApiCacheKey, snapshot: WudApiSnapshot) -> None:
     with _cache_lock:
+        current = _snapshot_cache.get(cache_key)
+        if (
+            current is not None
+            and current.checked_monotonic > snapshot.checked_monotonic
+        ):
+            return
         _snapshot_cache[cache_key] = snapshot
 
 
