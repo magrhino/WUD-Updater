@@ -815,6 +815,8 @@ def _lsio_only_update(
     context: ReleaseNoteContext,
     classification: LSIOUpdateClassification,
 ) -> bool:
+    """Return true for classified rebuilds and same-tag digest-only updates."""
+
     if classification.change_type == "image_rebuild":
         return True
     return bool(
