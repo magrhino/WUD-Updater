@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
 from wudup import web as web_module
+from wudup import web_health
 
 from tests.web_test_helpers import (
     WUD_API_AUTH_CONFIG_KEY,
@@ -184,6 +186,51 @@ def test_doctor_endpoint_enforces_auth_csrf_and_post(
     assert missing_csrf.json()["detail"] == "origin header is required"
     assert get_response.status_code == 405
     assert get_response.headers["allow"] == "POST"
+
+def test_doctor_endpoint_preserves_webui_safety_check_contract(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    namespaces: list[argparse.Namespace] = []
+    options_from_namespace = web_health.doctor_options_from_namespace
+
+    def track_namespace(args, **kwargs):
+        namespaces.append(args)
+        return options_from_namespace(args, **kwargs)
+
+    monkeypatch.setattr(
+        web_health,
+        "doctor_options_from_namespace",
+        track_namespace,
+    )
+    client = _doctor_client(
+        tmp_path,
+        {"WUD_WEB_MUTATIONS_ENABLED": "true"},
+    )
+
+    response = client.post("/api/v1/doctor", headers=_csrf_headers(client))
+    checks = {check["code"]: check for check in response.json()["checks"]}
+
+    assert response.status_code == 200
+    assert len(namespaces) == 1
+    assert isinstance(namespaces[0], argparse.Namespace)
+    assert {
+        "webui-authentication",
+        "webui-mutation-gate",
+        "webui-allowed-hosts",
+        "webui-public-origin",
+        "webui-secure-cookies",
+        "webui-trusted-proxies",
+        "webui-static-spa",
+    }.issubset(checks)
+    assert checks["webui-authentication"]["status"] == "WARN"
+    assert checks["webui-authentication"]["suggestions"][0]["snippet"] == (
+        "WUD_WEB_DEV_NO_AUTH=false"
+    )
+    assert checks["webui-mutation-gate"]["status"] == "WARN"
+    assert checks["webui-mutation-gate"]["suggestions"][0]["snippet"] == (
+        "WUD_WEB_MUTATIONS_ENABLED=false"
+    )
 
 def test_doctor_endpoint_returns_structured_redacted_results(
     tmp_path: Path,

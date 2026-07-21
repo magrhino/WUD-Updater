@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import argparse
 import ipaddress
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
-from types import SimpleNamespace
 
 from fastapi import Request, Response
 
@@ -206,7 +206,7 @@ def _web_doctor_options_and_env(
     settings: WebSettings,
 ) -> tuple[DoctorDataOptions, dict[str, str]]:
     env = _doctor_command_env(settings)
-    args = SimpleNamespace(
+    args = argparse.Namespace(
         base=str(settings.config.docker_base),
         file=str(settings.config.wud_out_file),
         log_dir=str(settings.config.log_dir),
@@ -259,13 +259,10 @@ def _doctor_command_env(settings: WebSettings) -> dict[str, str]:
     return env
 
 
-def _web_doctor_checks(
+def _web_access_doctor_checks(
     settings: WebSettings,
-    request: Request,
 ) -> tuple[DoctorDataCheck, ...]:
-    checks: list[DoctorDataCheck] = []
-    checks.append(_web_database_doctor_check(settings))
-    checks.append(
+    return (
         _web_doctor_check(
             "WARN" if settings.dev_no_auth else "PASS",
             "WebUI authentication",
@@ -285,9 +282,7 @@ def _web_doctor_checks(
                     snippet="WUD_WEB_DEV_NO_AUTH=false",
                 ),
             ),
-        )
-    )
-    checks.append(
+        ),
         _web_doctor_check(
             "WARN" if settings.mutations_enabled else "PASS",
             "WebUI mutation gate",
@@ -307,9 +302,7 @@ def _web_doctor_checks(
                     snippet="WUD_WEB_MUTATIONS_ENABLED=false",
                 ),
             ),
-        )
-    )
-    checks.append(
+        ),
         _web_doctor_check(
             "PASS" if settings.allowed_hosts else "FAIL",
             "WebUI allowed hosts",
@@ -320,18 +313,21 @@ def _web_doctor_checks(
             else (
                 DoctorDataSuggestion(
                     label="Configure allowed hosts",
-                    description=(
-                        "Set the hostnames clients use to reach the WebUI."
-                    ),
+                    description="Set the hostnames clients use to reach the WebUI.",
                     snippet="WUD_WEB_ALLOWED_HOSTS=localhost,127.0.0.1",
                 ),
             ),
-        )
+        ),
     )
-    checks.append(_web_wud_api_doctor_check(settings))
-    checks.extend(_web_wud_api_diagnostic_checks(settings))
+
+
+def _web_request_security_doctor_checks(
+    settings: WebSettings,
+    request: Request,
+) -> tuple[DoctorDataCheck, ...]:
     effective_origin = _effective_origin(request, settings)
-    checks.append(
+    secure_cookie = _secure_cookie(settings, request)
+    return (
         _web_doctor_check(
             "PASS" if settings.public_origin else "WARN",
             "WebUI public origin",
@@ -342,10 +338,7 @@ def _web_doctor_checks(
             suggestions=()
             if settings.public_origin
             else _public_origin_suggestions(settings, request, effective_origin),
-        )
-    )
-    secure_cookie = _secure_cookie(settings, request)
-    checks.append(
+        ),
         _web_doctor_check(
             "PASS" if secure_cookie else "WARN",
             "WebUI secure cookies",
@@ -363,17 +356,28 @@ def _web_doctor_checks(
                     snippet="WUD_WEB_PUBLIC_ORIGIN=https://wud.example.test",
                 ),
             ),
-        )
-    )
-    checks.append(
+        ),
         _web_doctor_check(
             "PASS",
             "WebUI trusted proxies",
             _format_sequence(str(network) for network in settings.trusted_proxies)
             or "not configured",
             code="webui-trusted-proxies",
-        )
+        ),
     )
+
+
+def _web_doctor_checks(
+    settings: WebSettings,
+    request: Request,
+) -> tuple[DoctorDataCheck, ...]:
+    checks = [
+        _web_database_doctor_check(settings),
+        *_web_access_doctor_checks(settings),
+        _web_wud_api_doctor_check(settings),
+    ]
+    checks.extend(_web_wud_api_diagnostic_checks(settings))
+    checks.extend(_web_request_security_doctor_checks(settings, request))
     static_available = _static_spa_available(settings)
     checks.append(
         _web_doctor_check(
