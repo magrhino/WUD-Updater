@@ -635,6 +635,10 @@ def test_semver_diff_rejects_unreasonably_long_numeric_parts() -> None:
     ) == ""
 
 
+def test_semver_diff_rejects_non_ascii_digits() -> None:
+    assert notifications_module._semver_diff("١.0.0", "٢.0.0") == ""
+
+
 def test_digest_row_selects_compact_release_links() -> None:
     item = notifications_module.ReleaseNotificationItem(
         line_no=1,
@@ -674,6 +678,36 @@ def test_digest_row_selects_compact_release_links() -> None:
     assert "[upstream](https://example.test/upstream)" in row
     assert "[changelog](https://example.test/changelog)" in row
     assert "[release](https://example.test/release) | [upstream]" in row
+
+
+def test_digest_links_classifies_supported_links_and_deduplicates() -> None:
+    links = [
+        notifications_module.ReleaseNoteLink(
+            label="LinuxServer release",
+            url="https://example.test/lsio",
+            kind="lsio_release",
+        ),
+        notifications_module.ReleaseNoteLink(
+            label="Project page",
+            url="https://example.test/project",
+            kind="project",
+        ),
+        notifications_module.ReleaseNoteLink(
+            label="Project duplicate",
+            url="https://example.test/project",
+            kind="project",
+        ),
+        notifications_module.ReleaseNoteLink(
+            label="Documentation",
+            url="https://example.test/docs",
+            kind="documentation",
+        ),
+    ]
+
+    assert notifications_module._digest_links(links) == [
+        "[LSIO release](https://example.test/lsio)",
+        "[project](https://example.test/project)",
+    ]
 
 
 def test_release_notification_preview_degrades_when_wud_triggers_require_auth(
