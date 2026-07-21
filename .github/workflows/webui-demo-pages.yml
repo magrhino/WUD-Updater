@@ -42,7 +42,7 @@ jobs:
         uses: ./.github/actions/setup-node-env
 
       - name: Install Chromium
-        run: npm --prefix webui exec playwright install chromium
+        run: npm --prefix webui run playwright:install
 
       - name: Build, validate, and smoke-test static demo
         run: npm --prefix webui run test:smoke:demo

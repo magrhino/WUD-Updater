@@ -98,7 +98,7 @@ jobs:
 
       - name: Install Chromium
         if: ${{ inputs.suite == 'webui-smoke' }}
-        run: npm --prefix webui exec playwright install chromium
+        run: npm --prefix webui run playwright:install
 
       - name: Run WebUI smoke tests
         if: ${{ inputs.suite == 'webui-smoke' }}
