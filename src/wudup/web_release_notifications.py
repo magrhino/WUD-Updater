@@ -79,7 +79,8 @@ DISCORD_DIGEST_CATEGORIES = (
     ("routine", "🟢 Routine"),
 )
 SEMVER_PARTS_RE = re.compile(
-    r"(?<![0-9A-Za-z.])v?([0-9]{1,10})[.]([0-9]{1,10})(?:[.]([0-9]{1,10}))?"
+    r"(?<![\dA-Za-z.])v?(\d{1,10})[.](\d{1,10})(?:[.](\d{1,10}))?",
+    re.ASCII,
 )
 RUN_NOTIFICATION_STATUS_REASON = "updated"
 NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL = (
@@ -1310,23 +1311,28 @@ def _digest_row(item: ReleaseNotificationItem) -> str:
     return f"{row} — {' | '.join(selected_links)}" if selected_links else row
 
 
+def _compact_digest_link_label(link: ReleaseNoteLink) -> str:
+    kind = link.kind.lower()
+    label = link.label.lower()
+    if "changelog" in kind or "changelog" in label:
+        return "changelog"
+    if kind == "lsio_release" or "lsio release" in label:
+        return "LSIO release"
+    if "upstream" in kind or "upstream" in label:
+        return "upstream"
+    if "release" in kind or "release" in label:
+        return "release"
+    if "project" in kind or "project" in label:
+        return "project"
+    return ""
+
+
 def _digest_links(links: Sequence[ReleaseNoteLink]) -> list[str]:
     selected: list[str] = []
     seen: set[tuple[str, str]] = set()
     for link in links:
-        kind = link.kind.lower()
-        label = link.label.lower()
-        if "changelog" in kind or "changelog" in label:
-            compact_label = "changelog"
-        elif kind == "lsio_release" or "lsio release" in label:
-            compact_label = "LSIO release"
-        elif "upstream" in kind or "upstream" in label:
-            compact_label = "upstream"
-        elif "release" in kind or "release" in label:
-            compact_label = "release"
-        elif "project" in kind or "project" in label:
-            compact_label = "project"
-        else:
+        compact_label = _compact_digest_link_label(link)
+        if not compact_label:
             continue
         key = (compact_label, link.url)
         if not link.url or key in seen:
