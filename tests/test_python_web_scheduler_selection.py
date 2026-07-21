@@ -130,3 +130,60 @@ def test_auto_update_selection_excludes_unsatisfied_dependency_snoozes() -> None
     assert selection is not None
     assert selection.line_numbers == (2, 3)
     assert selection.service_keys == ("stack/db", "stack/worker")
+
+
+def test_auto_update_selection_requires_complete_consistent_service_policies() -> None:
+    scheduled = datetime(2026, 5, 30, 14, 0, tzinfo=timezone.utc)
+    settings = SimpleNamespace(config=SimpleNamespace(update_mode="live"))
+    grouping = SimpleNamespace(
+        groups=(
+            SimpleNamespace(
+                name="stack",
+                items=(
+                    SimpleNamespace(
+                        desired_tag="",
+                        line_no=1,
+                        services=("app", "sidecar"),
+                    ),
+                    SimpleNamespace(
+                        desired_tag="",
+                        line_no=2,
+                        services=("worker", "db"),
+                    ),
+                    SimpleNamespace(
+                        desired_tag="",
+                        line_no=3,
+                        services=("ready",),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    def policy(service: str, mode: str) -> web_scheduler.AutoUpdatePolicy:
+        return web_scheduler.AutoUpdatePolicy(
+            service_key=f"stack/{service}",
+            update_mode=mode,
+            auto_update_time="09:00",
+            auto_update_days=("sat",),
+            schedule_key=f"stack/{service}|2026-05-30|09:00|America/Chicago",
+            scheduled_for=scheduled,
+        )
+
+    selection = web_scheduler._auto_update_selection(
+        settings,
+        grouping,
+        {
+            "stack/app": policy("app", "live"),
+            "stack/worker": policy("worker", "live"),
+            "stack/db": policy("db", "stop"),
+            "stack/ready": policy("ready", "live"),
+        },
+    )
+
+    assert selection is not None
+    assert selection.line_numbers == (3,)
+    assert selection.service_keys == ("stack/ready",)
+    assert selection.schedule_keys == (
+        "stack/ready|2026-05-30|09:00|America/Chicago",
+    )
