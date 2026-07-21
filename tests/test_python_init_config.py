@@ -191,6 +191,65 @@ class InitConfigTests(unittest.TestCase):
         self.assertIn("WUD_WEB_PUBLIC_ORIGIN=http://wud.lan:7417", content)
         self.assertIn("WUD_WEB_ALLOWED_HOSTS=updates.lan,192.168.1.20", content)
 
+    def test_interactive_helper_preserves_prompt_order_and_resolved_values(self) -> None:
+        prompts: list[str] = []
+        replies = iter(
+            (
+                "helper",
+                str(self.root / "docker"),
+                str(self.root / "helper.env"),
+                "",
+                str(self.root / "helper.override.yml"),
+                str(self.root / "logs"),
+                "1200",
+                "1300",
+            )
+        )
+
+        def answer(prompt: str) -> str:
+            prompts.append(prompt)
+            return next(replies)
+
+        answers = answers_from_namespace(
+            self._args(
+                profile=None,
+                config_file=None,
+                compose_override=None,
+                stack_root=None,
+                log_dir=None,
+                uid=None,
+                gid=None,
+                non_interactive=False,
+                no_doctor=True,
+            ),
+            environ=self._env(),
+            prompter=InitPrompter(input_func=answer),
+        )
+
+        self.assertEqual(
+            [
+                prompt.split(" [", 1)[0]
+                for prompt in prompts
+            ],
+            [
+                "Deployment profile",
+                "Compose stack root",
+                "Config file",
+                "Write a Compose override file",
+                "Compose override file",
+                "Log/state directory",
+                "Shared file UID",
+                "Shared file GID",
+            ],
+        )
+        self.assertEqual(answers.profile, "helper")
+        self.assertEqual(answers.stack_root, self.root / "docker")
+        self.assertEqual(answers.config_file, self.root / "helper.env")
+        self.assertEqual(answers.compose_override, self.root / "helper.override.yml")
+        self.assertEqual(answers.log_dir, self.root / "logs")
+        self.assertEqual(answers.db_path, self.root / "logs" / "wudup.sqlite")
+        self.assertEqual((answers.uid, answers.gid), ("1200", "1300"))
+
     def test_uid_gid_can_come_from_environment_or_cli_override(self) -> None:
         env_answers = answers_from_namespace(
             self._args(

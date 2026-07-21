@@ -141,56 +141,28 @@ def answers_from_namespace(
     prompt = prompter or InitPrompter()
     home = Path(environ.get("HOME") or str(Path.home()))
 
-    profile = str(getattr(args, "profile", "") or "")
-    if not profile:
-        if non_interactive:
-            raise InitConfigError("--profile is required with --non-interactive")
-        profile = prompt.choice("Deployment profile", PROFILES, "webui")
-    _validate_choice("profile", profile, PROFILES)
-
-    raw_stack_root = str(getattr(args, "stack_root", "") or "")
-    if not raw_stack_root:
-        if non_interactive:
-            raise InitConfigError("--stack-root is required with --non-interactive")
-        default_stack_root = _default_stack_root(home, profile)
-        raw_stack_root = prompt.text("Compose stack root", default_stack_root)
-    stack_root = _absolute_path(raw_stack_root, "stack root")
-
-    config_file = _resolve_config_file(args, home, profile)
-    compose_override = _resolve_compose_override(args, home, profile)
-    if not non_interactive and not getattr(args, "config_file", None):
-        config_file = Path(prompt.text("Config file", str(config_file))).expanduser()
-    if (
-        not non_interactive
-        and compose_override is not None
-        and not getattr(args, "compose_override", None)
-    ):
-        if prompt.yes_no("Write a Compose override file", default=True):
-            compose_override = Path(
-                prompt.text("Compose override file", str(compose_override))
-            ).expanduser()
-        else:
-            compose_override = None
-
-    raw_log_dir = str(getattr(args, "log_dir", "") or "")
-    if not raw_log_dir and not non_interactive:
-        raw_log_dir = prompt.text("Log/state directory", _default_log_dir(profile))
-    log_dir = Path(raw_log_dir or _default_log_dir(profile))
-
-    raw_db_path = str(getattr(args, "db_path", "") or "")
-    if not raw_db_path and not non_interactive and profile == "host":
-        raw_db_path = prompt.text("SQLite DB path", str(log_dir / DB_FILENAME))
-    db_path = Path(raw_db_path or str(log_dir / DB_FILENAME))
-
-    uid, gid = _resolve_uid_gid(args, environ)
-    if (
-        not non_interactive
-        and profile in {"webui", "helper", "hardened"}
-        and not getattr(args, "uid", None)
-        and not getattr(args, "gid", None)
-    ):
-        uid = prompt.text("Shared file UID", uid or DEFAULT_UID_GID)
-        gid = prompt.text("Shared file GID", gid or uid or DEFAULT_UID_GID)
+    profile = _resolve_profile(args, non_interactive, prompt)
+    stack_root = _resolve_stack_root(
+        args,
+        home,
+        profile,
+        non_interactive,
+        prompt,
+    )
+    config_file, compose_override, log_dir, db_path = _resolve_output_paths(
+        args,
+        home,
+        profile,
+        non_interactive,
+        prompt,
+    )
+    uid, gid = _resolve_init_uid_gid(
+        args,
+        environ,
+        profile,
+        non_interactive,
+        prompt,
+    )
     web_exposure = _resolve_web_exposure(args, profile, non_interactive, prompt)
     web_bind = _resolve_web_bind(args, web_exposure)
     web_port = str(getattr(args, "web_port", "") or DEFAULT_WEB_PORT)
@@ -234,6 +206,97 @@ def answers_from_namespace(
         no_color=bool(getattr(args, "no_color", False)),
         non_interactive=non_interactive,
     )
+
+
+def _resolve_profile(
+    args: argparse.Namespace,
+    non_interactive: bool,
+    prompter: InitPrompter,
+) -> str:
+    profile = str(getattr(args, "profile", "") or "")
+    if not profile:
+        if non_interactive:
+            raise InitConfigError("--profile is required with --non-interactive")
+        profile = prompter.choice("Deployment profile", PROFILES, "webui")
+    _validate_choice("profile", profile, PROFILES)
+    return profile
+
+
+def _resolve_stack_root(
+    args: argparse.Namespace,
+    home: Path,
+    profile: str,
+    non_interactive: bool,
+    prompter: InitPrompter,
+) -> Path:
+    raw_stack_root = str(getattr(args, "stack_root", "") or "")
+    if not raw_stack_root:
+        if non_interactive:
+            raise InitConfigError("--stack-root is required with --non-interactive")
+        raw_stack_root = prompter.text(
+            "Compose stack root",
+            _default_stack_root(home, profile),
+        )
+    return _absolute_path(raw_stack_root, "stack root")
+
+
+def _resolve_output_paths(
+    args: argparse.Namespace,
+    home: Path,
+    profile: str,
+    non_interactive: bool,
+    prompter: InitPrompter,
+) -> tuple[Path, Path | None, Path, Path]:
+    config_file = _resolve_config_file(args, home, profile)
+    compose_override = _resolve_compose_override(args, home, profile)
+    if not non_interactive and not getattr(args, "config_file", None):
+        config_file = Path(
+            prompter.text("Config file", str(config_file))
+        ).expanduser()
+    if (
+        not non_interactive
+        and compose_override is not None
+        and not getattr(args, "compose_override", None)
+    ):
+        if prompter.yes_no("Write a Compose override file", default=True):
+            compose_override = Path(
+                prompter.text("Compose override file", str(compose_override))
+            ).expanduser()
+        else:
+            compose_override = None
+
+    raw_log_dir = str(getattr(args, "log_dir", "") or "")
+    if not raw_log_dir and not non_interactive:
+        raw_log_dir = prompter.text(
+            "Log/state directory",
+            _default_log_dir(profile),
+        )
+    log_dir = Path(raw_log_dir or _default_log_dir(profile))
+
+    raw_db_path = str(getattr(args, "db_path", "") or "")
+    if not raw_db_path and not non_interactive and profile == "host":
+        raw_db_path = prompter.text("SQLite DB path", str(log_dir / DB_FILENAME))
+    db_path = Path(raw_db_path or str(log_dir / DB_FILENAME))
+    return config_file, compose_override, log_dir, db_path
+
+
+def _resolve_init_uid_gid(
+    args: argparse.Namespace,
+    environ: Mapping[str, str],
+    profile: str,
+    non_interactive: bool,
+    prompter: InitPrompter,
+) -> tuple[str, str]:
+    uid, gid = _resolve_uid_gid(args, environ)
+    if (
+        not non_interactive
+        and profile in {"webui", "helper", "hardened"}
+        and not getattr(args, "uid", None)
+        and not getattr(args, "gid", None)
+    ):
+        uid = prompter.text("Shared file UID", uid or DEFAULT_UID_GID)
+        gid = prompter.text("Shared file GID", gid or uid or DEFAULT_UID_GID)
+    return uid, gid
 
 
 def run_init(
