@@ -1372,7 +1372,7 @@ def test_release_notification_preview_and_digest_distinguish_lsio_rebuild(
     assert posted[0][1]["content"] == preview.json()["messages"][0]
     assert "🟡 Worth noting" in posted[0][1]["content"]
     assert "LSIO image rebuild" in posted[0][1]["content"]
-    assert "[release]" in posted[0][1]["content"]
+    assert "[LSIO release]" in posted[0][1]["content"]
 
 
 def test_release_notification_send_posts_discord_payload_and_audits(

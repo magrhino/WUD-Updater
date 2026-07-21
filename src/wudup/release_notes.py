@@ -745,53 +745,36 @@ def _fetch_lsio_release_note(
             "lsio_release",
         )
     ]
-    if classification.change_type == "image_rebuild":
-        breaking, reasons = detect_breaking(lsio_body, context.current_tag, lsio_tag)
-        return ReleaseNoteInfo(
-            line_no=context.line_no,
-            status="ready",
-            provider=context.provider,
-            image_repo=context.image_repo,
-            upstream_repo=context.upstream_repo,
-            release_tag=lsio_tag,
-            title=str(lsio_release.get("name") or lsio_tag),
-            published_at=str(
-                lsio_release.get("published_at")
-                or lsio_release.get("created_at")
-                or ""
-            ),
-            breaking=breaking,
-            breaking_reasons=reasons,
-            links=links,
-            refreshed_at=timestamp,
-            body=lsio_body,
-            classification=classification,
-        )
+    breaking, reasons = detect_breaking(lsio_body, context.current_tag, lsio_tag)
+    lsio_info = ReleaseNoteInfo(
+        line_no=context.line_no,
+        status="ready",
+        provider=context.provider,
+        image_repo=context.image_repo,
+        upstream_repo=context.upstream_repo,
+        release_tag=lsio_tag,
+        title=str(lsio_release.get("name") or lsio_tag),
+        published_at=str(
+            lsio_release.get("published_at")
+            or lsio_release.get("created_at")
+            or ""
+        ),
+        breaking=breaking,
+        breaking_reasons=reasons,
+        links=links,
+        refreshed_at=timestamp,
+        body=lsio_body,
+        classification=classification,
+    )
+    if _lsio_only_update(context, classification):
+        return lsio_info
     upstream_release = _fetch_lsio_upstream_release(
         client,
         context.upstream_repo,
         upstream_version,
     )
     if upstream_release is None:
-        links.append(
-            ReleaseNoteLink(
-                "Upstream project",
-                _project_url(client, context.upstream_repo),
-                "github_project",
-            )
-        )
-        return ReleaseNoteInfo(
-            line_no=context.line_no,
-            status="not_found",
-            provider=context.provider,
-            image_repo=context.image_repo,
-            upstream_repo=context.upstream_repo,
-            release_tag=upstream_version,
-            title=f"{context.image_repo} -> {context.upstream_repo}",
-            links=links,
-            refreshed_at=timestamp,
-            classification=classification,
-        )
+        return lsio_info
     body = str(upstream_release.get("body") or "")
     release_tag = str(upstream_release.get("tag_name") or "")
     breaking, reasons = detect_breaking(
@@ -825,6 +808,21 @@ def _fetch_lsio_release_note(
         refreshed_at=timestamp,
         body="\n\n".join(part for part in (body, lsio_body) if part),
         classification=classification,
+    )
+
+
+def _lsio_only_update(
+    context: ReleaseNoteContext,
+    classification: LSIOUpdateClassification,
+) -> bool:
+    """Return true for classified rebuilds and same-tag digest-only updates."""
+
+    if classification.change_type == "image_rebuild":
+        return True
+    return bool(
+        context.target_digest
+        and context.current_tag
+        and context.current_tag.lower() == context.target_tag.lower()
     )
 
 

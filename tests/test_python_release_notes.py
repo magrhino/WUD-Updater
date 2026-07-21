@@ -398,9 +398,11 @@ class ReleaseNotesTests(unittest.TestCase):
                 "linuxserver/docker-radarr: Radarr/Radarr\n",
                 encoding="utf-8",
             )
-            parsed = parse_wud_text("linuxserver/radarr:latest\n")
+            parsed = parse_wud_text(
+                "linuxserver/radarr:4.0.0-ls1 tag=5.1.0-ls1\n"
+            )
             responses = {
-                "https://api.github.com/repos/linuxserver/docker-radarr/releases/latest": {
+                "https://api.github.com/repos/linuxserver/docker-radarr/releases/tags/5.1.0-ls1": {
                     "tag_name": "5.1.0-ls1",
                     "name": "5.1.0-ls1",
                     "html_url": "https://github.com/linuxserver/docker-radarr/releases/tag/5.1.0-ls1",
@@ -439,6 +441,114 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertEqual(
             [(link.label, link.kind) for link in items[0].links],
             [("LSIO release", "lsio_release"), ("Upstream release", "github_release")],
+        )
+
+    def test_lsio_mutable_digest_uses_authoritative_lsio_release(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            upstream_map = Path(tmp) / "upstreams.txt"
+            upstream_map.write_text(
+                "linuxserver/docker-jellyfin: jellyfin/jellyfin\n",
+                encoding="utf-8",
+            )
+            parsed = parse_wud_text(
+                f"linuxserver/jellyfin:latest@sha256:{'a' * 64}\n"
+            )
+            lsio_url = (
+                "https://api.github.com/repos/"
+                "linuxserver/docker-jellyfin/releases/latest"
+            )
+            responses = {
+                lsio_url: {
+                    "tag_name": "10.11.11ubu2404-ls41",
+                    "name": "10.11.11ubu2404-ls41",
+                    "html_url": (
+                        "https://github.com/linuxserver/docker-jellyfin/"
+                        "releases/tag/10.11.11ubu2404-ls41"
+                    ),
+                    "body": "Remote Changes:\n- Updating to 10.11.11ubu2404",
+                    "published_at": "2026-07-19T00:00:00Z",
+                },
+            }
+            calls: list[str] = []
+
+            def fetch_json(url: str) -> object:
+                calls.append(url)
+                return responses[url]
+
+            with open_db(":memory:") as conn:
+                init_db(conn)
+                items = refresh_release_notes(
+                    conn,
+                    parsed.targets,
+                    {"UPSTREAM_MAP": str(upstream_map)},
+                    client=GitHubClient(fetch_json=fetch_json),
+                    target_tag_resolver=lambda _target: "latest",
+                )
+
+        self.assertEqual(calls, [lsio_url])
+        self.assertEqual(items[0].status, "ready")
+        self.assertEqual(items[0].release_tag, "10.11.11ubu2404-ls41")
+        self.assertEqual(items[0].classification.change_type, "unknown")
+        self.assertEqual(
+            [(link.label, link.kind) for link in items[0].links],
+            [("LSIO release", "lsio_release")],
+        )
+        self.assertIn("Updating to 10.11.11ubu2404", items[0].body)
+
+    def test_lsio_upstream_enrichment_is_optional(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            upstream_map = Path(tmp) / "upstreams.txt"
+            upstream_map.write_text(
+                "linuxserver/docker-radarr: Radarr/Radarr\n",
+                encoding="utf-8",
+            )
+            parsed = parse_wud_text(
+                "linuxserver/radarr:4.0.0-ls1 tag=5.1.0-ls1\n"
+            )
+            lsio_url = (
+                "https://api.github.com/repos/linuxserver/docker-radarr/"
+                "releases/tags/5.1.0-ls1"
+            )
+            responses = {
+                lsio_url: {
+                    "tag_name": "5.1.0-ls1",
+                    "name": "5.1.0-ls1",
+                    "html_url": (
+                        "https://github.com/linuxserver/docker-radarr/"
+                        "releases/tag/5.1.0-ls1"
+                    ),
+                    "body": "Remote Changes:\n- Updating to 5.1.0",
+                    "published_at": "2026-01-02T00:00:00Z",
+                },
+                "https://api.github.com/repos/Radarr/Radarr/releases/tags/v5.1.0": {
+                    "message": "Not Found"
+                },
+                "https://api.github.com/repos/Radarr/Radarr/releases/tags/5.1.0": {
+                    "message": "Not Found"
+                },
+            }
+            calls: list[str] = []
+
+            def fetch_json(url: str) -> object:
+                calls.append(url)
+                return responses[url]
+
+            with open_db(":memory:") as conn:
+                init_db(conn)
+                items = refresh_release_notes(
+                    conn,
+                    parsed.targets,
+                    {"UPSTREAM_MAP": str(upstream_map)},
+                    client=GitHubClient(fetch_json=fetch_json),
+                )
+
+        self.assertGreater(len(calls), 1)
+        self.assertEqual(items[0].classification.change_type, "upstream_update")
+        self.assertEqual(items[0].status, "ready")
+        self.assertEqual(items[0].release_tag, "5.1.0-ls1")
+        self.assertEqual(
+            [(link.label, link.kind) for link in items[0].links],
+            [("LSIO release", "lsio_release")],
         )
 
     def test_lsio_classification_persists_in_release_note_cache(self) -> None:

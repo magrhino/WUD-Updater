@@ -151,8 +151,11 @@ For explicit LSIO mode or existing `tag-manager.sh` configurations,
 `upstreams.txt`. Missing mappings are sent to `ADMIN_WEBHOOK` and the embed is
 skipped.
 
-Explicit LSIO embeds include both the LinuxServer.io release link and the
-upstream release or project link.
+The LinuxServer.io release is authoritative for LSIO image updates. LSIO-only
+image updates and rebuilds stop after that release is resolved and do not
+require an upstream release match. Confirmed upstream application updates can
+include an upstream release as optional enrichment; a missing match does not
+downgrade the LSIO release-note status.
 
 The WebUI also treats LinuxServer.io `version-*` tags, including branch-specific
 tags such as `libtorrentv1-version-*`, as upstream-tracking aliases that still

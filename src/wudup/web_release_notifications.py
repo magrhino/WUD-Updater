@@ -1318,6 +1318,8 @@ def _digest_links(links: Sequence[ReleaseNoteLink]) -> list[str]:
         label = link.label.lower()
         if "changelog" in kind or "changelog" in label:
             compact_label = "changelog"
+        elif kind == "lsio_release" or "lsio release" in label:
+            compact_label = "LSIO release"
         elif "upstream" in kind or "upstream" in label:
             compact_label = "upstream"
         elif "release" in kind or "release" in label:
