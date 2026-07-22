@@ -90,7 +90,7 @@ demo testing includes the `assert:demo-dist` pre-flight step to harden static
 artifact tests. Install the browser once before running them locally:
 
 ```bash
-npm --prefix webui exec playwright install chromium
+npm --prefix webui run playwright:install
 npm --prefix webui run test:smoke
 npm --prefix webui run test:smoke:demo
 ```
