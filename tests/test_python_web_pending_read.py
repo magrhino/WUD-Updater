@@ -227,6 +227,17 @@ def test_pending_endpoint_preserves_updates_across_degraded_wud_rows(
     assert calls == [("GET", "/health"), ("GET", "/api/containers")]
     assert all(method == "GET" for method, _path in calls)
 
+    calls.clear()
+
+    repeated_degraded = client.get("/api/v1/pending")
+
+    assert repeated_degraded.status_code == 200
+    repeated_degraded_body = repeated_degraded.json()
+    assert repeated_degraded_body["count"] == 17
+    assert repeated_degraded_body["source"]["degraded"] is True
+    assert calls == [("GET", "/health"), ("GET", "/api/containers")]
+    assert all(method == "GET" for method, _path in calls)
+
     containers[:] = [
         _wud_api_container(name=f"app-{index}", image=f"repo/app-{index}")
         for index in range(8)
@@ -250,6 +261,44 @@ def test_pending_endpoint_preserves_updates_across_degraded_wud_rows(
     assert authoritative_body["count"] == 8
     assert authoritative_body["source"]["fresh"] is True
     assert authoritative_body["source"]["degraded"] is False
+    assert calls == [("GET", "/health"), ("GET", "/api/containers")]
+    assert all(method == "GET" for method, _path in calls)
+
+
+def test_pending_endpoint_clears_update_missing_from_authoritative_payload(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, _fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(name="app", image="repo/app"),
+        _wud_api_container(name="worker", image="repo/worker"),
+    ]
+    calls = install_recording_wud_api(monkeypatch, containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.pending-disappearance.test:3000",
+            **fake_env,
+        },
+    )
+
+    initial = client.get("/api/v1/pending")
+
+    assert initial.status_code == 200
+    assert initial.json()["count"] == 2
+
+    containers[:] = [_wud_api_container(name="app", image="repo/app")]
+    calls.clear()
+
+    authoritative = client.get("/api/v1/pending")
+
+    assert authoritative.status_code == 200
+    body = authoritative.json()
+    assert body["count"] == 1
+    assert body["items"][0]["source_id"] == "docker.local.app"
     assert calls == [("GET", "/health"), ("GET", "/api/containers")]
     assert all(method == "GET" for method, _path in calls)
 

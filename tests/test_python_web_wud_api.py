@@ -152,17 +152,15 @@ def test_wud_api_snapshot_reads_update_metadata(tmp_path: Path, monkeypatch) -> 
     assert snapshot.hidden_update_candidates == ()
 
 
-def test_wud_api_older_forced_refresh_cannot_replace_newer_cache(
+def test_wud_api_forced_refreshes_serialize_last_good_reconciliation(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     clock = local()
-    older_waiting = Event()
-    newer_finished = Event()
+    first_waiting = Event()
+    release_first = Event()
+    second_requested = Event()
     calls: list[str] = []
-
-    def monotonic() -> float:
-        return getattr(clock, "now", 0.0)
 
     def request_json(url: str, _client_config=None) -> object:
         path = urllib.parse.urlsplit(url).path
@@ -170,60 +168,42 @@ def test_wud_api_older_forced_refresh_cannot_replace_newer_cache(
         if path == "/health":
             return {"status": "ok"}
         if path == "/api/containers":
-            refresh_name = clock.name
-            if refresh_name == "older":
-                older_waiting.set()
-                assert newer_finished.wait(timeout=5)
-            if refresh_name == "degraded":
-                degraded = _container_payload(name="app", update_available=False)
-                degraded["result"] = None
-                degraded["error"] = {"message": "registry lookup failed"}
-                return [degraded]
-            return [
-                _container_payload(
-                    name="app",
-                    remote_tag="1.2.0" if refresh_name == "newer" else "1.1.0",
-                )
-            ]
+            if clock.name == "first":
+                first_waiting.set()
+                assert release_first.wait(timeout=5)
+                return [_container_payload(name="app")]
+            second_requested.set()
+            degraded = _container_payload(name="app", update_available=False)
+            degraded["result"] = None
+            degraded["error"] = {"message": "registry lookup failed"}
+            return [degraded]
         raise AssertionError(f"unexpected WUD API URL: {url}")
 
-    def refresh(name: str, now: float) -> web_wud_api.WudApiSnapshot:
+    def refresh(name: str) -> web_wud_api.WudApiSnapshot:
         clock.name = name
-        clock.now = now
         return web_wud_api.get_snapshot(
             settings,
             include_containers=True,
             force=True,
         )
 
-    monkeypatch.setattr(web_wud_api.time, "monotonic", monotonic)
     monkeypatch.setattr(web_wud_api, "_request_json", request_json)
     settings = _settings(tmp_path, "https://wud.concurrent-refresh.test:3000")
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        older_future = executor.submit(refresh, "older", 1.0)
-        assert older_waiting.wait(timeout=5)
-        newer = executor.submit(refresh, "newer", 2.0).result(timeout=5)
-        newer_finished.set()
-        older = older_future.result(timeout=5)
+        first_future = executor.submit(refresh, "first")
+        assert first_waiting.wait(timeout=5)
+        second_future = executor.submit(refresh, "second")
+        assert not second_requested.wait(timeout=0.1)
+        release_first.set()
+        first = first_future.result(timeout=5)
+        second = second_future.result(timeout=5)
 
-    clock.now = 3.0
-    cached = web_wud_api.get_snapshot(settings, include_containers=True)
-    clock.name = "degraded"
-    clock.now = 4.0
-    degraded = web_wud_api.get_snapshot(
-        settings,
-        include_containers=True,
-        force=True,
-    )
-
-    assert older.containers[0].remote_tag == "1.1.0"
-    assert newer.containers[0].remote_tag == "1.2.0"
-    assert cached.containers[0].remote_tag == "1.2.0"
-    assert degraded.containers[0].remote_tag == "1.2.0"
-    assert degraded.containers[0].error == "registry lookup failed"
-    assert degraded.retained_update_count == 1
-    assert calls.count("/api/containers") == 3
+    assert first.containers[0].remote_tag == "1.1.0"
+    assert second.containers[0].remote_tag == "1.1.0"
+    assert second.containers[0].error == "registry lookup failed"
+    assert second.retained_update_count == 1
+    assert calls.count("/api/containers") == 2
 
 
 def test_wud_api_snapshot_reads_hidden_update_candidates_from_update_kind_delta(
@@ -1153,6 +1133,85 @@ def test_wud_api_degraded_snapshot_retries_after_short_interval_and_recovers(
     assert recovered.status.metadata_available is True
     assert recovered.containers[0].name == "app"
     assert api.calls == ["/health", "/health", "/api/containers"]
+
+
+def test_wud_api_partially_degraded_snapshot_retries_after_short_interval(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    clock = SimpleNamespace(now=0.0)
+    containers = [_container_payload(name="app")]
+    calls: list[str] = []
+
+    def request_json(url: str, _client_config=None) -> object:
+        path = urllib.parse.urlsplit(url).path
+        calls.append(path)
+        if path == "/health":
+            return {"status": "ok"}
+        if path == "/api/containers":
+            return containers
+        raise AssertionError(f"unexpected WUD API URL: {url}")
+
+    monkeypatch.setattr(web_wud_api.time, "monotonic", lambda: clock.now)
+    monkeypatch.setattr(web_wud_api, "_request_json", request_json)
+    settings = _settings(tmp_path, "https://wud.partial-retry.test:3000")
+
+    ready = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+    assert ready.degraded_container_count == 0
+
+    degraded_row = _container_payload(name="app", update_available=False)
+    degraded_row["result"] = None
+    degraded_row["error"] = {"message": "registry lookup failed"}
+    containers[:] = [degraded_row]
+    clock.now = 1.0
+
+    degraded = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+    assert degraded.degraded_container_count == 1
+    assert degraded.retained_update_count == 1
+
+    containers[:] = [
+        _container_payload(
+            name="app",
+            update_available=False,
+            remote_tag="1.0.0",
+            update_kind="unknown",
+            remote_value="1.0.0",
+        )
+    ]
+    clock.now = 1.0 + web_wud_api.WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS / 2
+
+    cached = web_wud_api.get_snapshot(settings, include_containers=True)
+    assert cached.degraded_container_count == 1
+    assert calls == [
+        "/health",
+        "/api/containers",
+        "/health",
+        "/api/containers",
+    ]
+
+    clock.now = (
+        1.0 + web_wud_api.WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS + 0.1
+    )
+    recovered = web_wud_api.get_snapshot(settings, include_containers=True)
+
+    assert recovered.containers == ()
+    assert recovered.degraded_container_count == 0
+    assert calls == [
+        "/health",
+        "/api/containers",
+        "/health",
+        "/api/containers",
+        "/health",
+        "/api/containers",
+    ]
 
 
 def test_web_startup_continues_when_wud_api_is_unavailable(

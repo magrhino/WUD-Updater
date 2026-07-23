@@ -146,6 +146,8 @@ WudContainerIdentity = tuple[str, str, str, str, str, str, str]
 
 
 _cache_lock = Lock()
+# ponytail: global lock; use per-cache locks only if WUD refresh contention is measured.
+_refresh_lock = Lock()
 _snapshot_cache: dict[WudApiCacheKey, WudApiSnapshot] = {}
 _pending_observation_cache: dict[
     WudApiCacheKey,
@@ -404,7 +406,7 @@ def get_configuration_diagnostics(
 
 
 def _snapshot_cache_ttl(snapshot: WudApiSnapshot) -> float:
-    if snapshot.status.state in {"unavailable", "error"}:
+    if snapshot.status.state in {"unavailable", "error"} or snapshot.degraded_container_count:
         return WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS
     return WUD_API_CACHE_TTL_SECONDS
 
@@ -530,6 +532,18 @@ def container_triggers(
 
 
 def _refresh_snapshot(
+    settings: WebSettings,
+    *,
+    include_containers: bool,
+) -> WudApiSnapshot:
+    with _refresh_lock:
+        return _refresh_snapshot_serialized(
+            settings,
+            include_containers=include_containers,
+        )
+
+
+def _refresh_snapshot_serialized(
     settings: WebSettings,
     *,
     include_containers: bool,

@@ -272,6 +272,7 @@ def plan_can_apply(plan: DryRunPlan, settings: WebSettings) -> bool:
     return (
         settings.mutations_enabled
         and plan.status == "ready"
+        and not (plan.source.active == "api" and plan.source.degraded)
         and not plan.skipped
         and not any(issue.severity == "error" for issue in plan.issues)
     )
