@@ -379,7 +379,12 @@ def test_apply_endpoint_rejects_stale_api_pending_source_without_editing_file(
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
     containers = [
-        _wud_api_container(tag="latest", remote_tag="", update_kind="digest")
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest=f"sha256:{'b' * 64}",
+            update_kind="digest",
+        )
     ]
     _install_wud_api(monkeypatch, containers=containers)
     client = _client(
@@ -440,7 +445,12 @@ def test_apply_endpoint_wraps_api_pending_source_oserror_without_mutation(
     redaction_value = "api-apply-redaction-value"
     fake_env, fake_root = _fake_docker_env(tmp_path)
     containers = [
-        _wud_api_container(tag="latest", remote_tag="", update_kind="digest")
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest=f"sha256:{'b' * 64}",
+            update_kind="digest",
+        )
     ]
     _install_wud_api(monkeypatch, containers=containers)
     client = _client(

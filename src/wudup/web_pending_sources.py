@@ -194,6 +194,11 @@ def _api_source(
     source_ids_by_line = {
         line_no: ",".join(line.source_ids) for line_no, line in enumerate(lines, start=1)
     }
+    degraded = snapshot.degraded_container_count > 0
+    detail = snapshot.status.detail if degraded else ""
+    warnings = parsed.warnings
+    if degraded:
+        warnings = (f"WUD API pending source degraded: {detail}", *warnings)
     return PendingSourceResult(
         configured=configured,
         active="api",
@@ -203,7 +208,10 @@ def _api_source(
         parsed=parsed,
         text=text,
         source_hash=source_hash,
-        warnings=parsed.warnings,
+        fresh=not degraded,
+        degraded=degraded,
+        detail=detail,
+        warnings=warnings,
         wud_snapshot=snapshot,
         metadata_by_line=metadata_by_line,
         container_ids_by_line=container_ids_by_line,

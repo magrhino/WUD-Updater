@@ -12,7 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
@@ -89,6 +89,7 @@ class WudApiContainer:
     error: str
     labels: Mapping[str, str] = field(default_factory=dict)
     platform: ImagePlatform | None = None
+    local_image_id: str = ""
 
     def response(self) -> WudContainerMetadata:
         platform = self.platform
@@ -118,8 +119,17 @@ class WudApiSnapshot:
     status: WudApiStatus
     containers: tuple[WudApiContainer, ...] = ()
     hidden_update_candidates: tuple[WudApiContainer, ...] = ()
+    degraded_container_count: int = 0
+    retained_update_count: int = 0
     metadata_checked: bool = False
     checked_monotonic: float = 0.0
+
+
+@dataclass(frozen=True)
+class _WudContainerObservation:
+    container: WudApiContainer
+    update_available: bool
+    degraded: bool
 
 
 @dataclass(frozen=True)
@@ -132,10 +142,15 @@ class WudApiWatchResult:
 
 WudApiConfigurationSnapshot = web_wud_config.WudApiConfigurationSnapshot
 WudApiCacheKey = tuple[str, str]
+WudContainerIdentity = tuple[str, str, str, str, str, str, str]
 
 
 _cache_lock = Lock()
 _snapshot_cache: dict[WudApiCacheKey, WudApiSnapshot] = {}
+_pending_observation_cache: dict[
+    WudApiCacheKey,
+    Mapping[WudContainerIdentity, WudApiContainer],
+] = {}
 _configuration_diagnostics_cache: dict[WudApiCacheKey, WudApiConfigurationSnapshot] = {}
 
 
@@ -656,28 +671,42 @@ def _refresh_snapshot(
         _store_snapshot(_cache_key(settings, base_url), snapshot)
         return snapshot
 
-    containers = tuple(
-        item
-        for item in (_parse_container(raw, settings) for raw in payload)
-        if item is not None
+    cache_key = _cache_key(settings, base_url)
+    (
+        containers,
+        hidden_update_candidates,
+        degraded_container_count,
+        retained_update_count,
+        pending_observations,
+    ) = _reconcile_container_observations(
+        payload,
+        settings,
+        previous=_pending_observations(cache_key),
     )
-    hidden_update_candidates = tuple(
-        item
-        for item in (_parse_hidden_update_candidate(raw, settings) for raw in payload)
-        if item is not None
-    )
+    detail = f"{len(containers)} WUD update metadata item(s) available"
+    if degraded_container_count:
+        detail = (
+            f"{detail}; {degraded_container_count} container observation(s) degraded; "
+            f"{retained_update_count} last-known-good update(s) retained"
+        )
     snapshot = _snapshot(
         "ready",
         available=True,
         metadata_available=True,
         checked_at=checked_at,
-        detail=f"{len(containers)} WUD update metadata item(s) available",
+        detail=detail,
         checked_monotonic=checked_monotonic,
         metadata_checked=True,
         containers=containers,
         hidden_update_candidates=hidden_update_candidates,
+        degraded_container_count=degraded_container_count,
+        retained_update_count=retained_update_count,
     )
-    _store_snapshot(_cache_key(settings, base_url), snapshot)
+    _store_snapshot(
+        cache_key,
+        snapshot,
+        pending_observations=pending_observations,
+    )
     return snapshot
 
 
@@ -863,7 +892,21 @@ def _store_configuration_diagnostics(
         _configuration_diagnostics_cache[cache_key] = snapshot
 
 
-def _store_snapshot(cache_key: WudApiCacheKey, snapshot: WudApiSnapshot) -> None:
+def _pending_observations(
+    cache_key: WudApiCacheKey,
+) -> Mapping[WudContainerIdentity, WudApiContainer]:
+    with _cache_lock:
+        cached = _pending_observation_cache.get(cache_key)
+        return {} if cached is None else cached
+
+
+def _store_snapshot(
+    cache_key: WudApiCacheKey,
+    snapshot: WudApiSnapshot,
+    *,
+    pending_observations: Mapping[WudContainerIdentity, WudApiContainer]
+    | None = None,
+) -> None:
     with _cache_lock:
         current = _snapshot_cache.get(cache_key)
         if (
@@ -872,6 +915,8 @@ def _store_snapshot(cache_key: WudApiCacheKey, snapshot: WudApiSnapshot) -> None
         ):
             return
         _snapshot_cache[cache_key] = snapshot
+        if pending_observations is not None:
+            _pending_observation_cache[cache_key] = dict(pending_observations)
 
 
 def _snapshot(
@@ -885,6 +930,8 @@ def _snapshot(
     metadata_checked: bool = False,
     containers: Sequence[WudApiContainer] = (),
     hidden_update_candidates: Sequence[WudApiContainer] = (),
+    degraded_container_count: int = 0,
+    retained_update_count: int = 0,
 ) -> WudApiSnapshot:
     return WudApiSnapshot(
         status=WudApiStatus(
@@ -896,6 +943,8 @@ def _snapshot(
         ),
         containers=tuple(containers),
         hidden_update_candidates=tuple(hidden_update_candidates),
+        degraded_container_count=degraded_container_count,
+        retained_update_count=retained_update_count,
         metadata_checked=metadata_checked,
         checked_monotonic=checked_monotonic,
     )
@@ -975,25 +1024,103 @@ def _join_url(base_url: str, path: str) -> str:
     return f"{base_url}{path}"
 
 
-def _parse_container(
-    raw: object,
+def _reconcile_container_observations(
+    payload: Sequence[object],
     settings: WebSettings,
-) -> WudApiContainer | None:
-    if not isinstance(raw, dict) or raw.get("updateAvailable") is not True:
-        return None
-    return _parse_container_payload(raw, settings)
+    *,
+    previous: Mapping[WudContainerIdentity, WudApiContainer],
+) -> tuple[
+    tuple[WudApiContainer, ...],
+    tuple[WudApiContainer, ...],
+    int,
+    int,
+    Mapping[WudContainerIdentity, WudApiContainer],
+]:
+    containers: list[WudApiContainer] = []
+    hidden_update_candidates: list[WudApiContainer] = []
+    pending_observations: dict[WudContainerIdentity, WudApiContainer] = {}
+    degraded_container_count = 0
+    retained_update_count = 0
+
+    for raw in payload:
+        observation = _parse_container_observation(raw, settings)
+        if observation is None:
+            degraded_container_count += 1
+            continue
+
+        container = observation.container
+        identity = _container_identity(container)
+        if observation.degraded:
+            degraded_container_count += 1
+            retained = previous.get(identity) if identity is not None else None
+            if retained is None:
+                continue
+            retained = replace(
+                retained,
+                display_name=container.display_name,
+                status=container.status,
+                error=container.error or "WUD update result is unavailable",
+                labels=container.labels,
+            )
+            containers.append(retained)
+            pending_observations[identity] = retained
+            retained_update_count += 1
+            continue
+
+        if observation.update_available:
+            containers.append(container)
+            if identity is not None:
+                pending_observations[identity] = container
+            continue
+
+        update_kind = _object(cast(Mapping[str, object], raw).get("updateKind"))
+        if _hidden_update_kind_has_delta(update_kind):
+            hidden_update_candidates.append(container)
+
+    return (
+        tuple(containers),
+        tuple(hidden_update_candidates),
+        degraded_container_count,
+        retained_update_count,
+        pending_observations,
+    )
 
 
-def _parse_hidden_update_candidate(
+def _parse_container_observation(
     raw: object,
     settings: WebSettings,
-) -> WudApiContainer | None:
-    if not isinstance(raw, dict) or raw.get("updateAvailable") is True:
+) -> _WudContainerObservation | None:
+    if not isinstance(raw, dict):
         return None
-    update_kind = _object(raw.get("updateKind"))
-    if not _hidden_update_kind_has_delta(update_kind):
+    container = _parse_container_payload(raw, settings)
+    if container is None:
         return None
-    return _parse_container_payload(raw, settings)
+    update_available = raw.get("updateAvailable")
+    return _WudContainerObservation(
+        container=container,
+        update_available=update_available is True,
+        degraded=(
+            not isinstance(update_available, bool)
+            or bool(container.error)
+            or not _has_usable_scan_result(raw, container)
+        ),
+    )
+
+
+def _has_usable_scan_result(
+    raw: Mapping[str, object],
+    container: WudApiContainer,
+) -> bool:
+    result = raw.get("result")
+    if not isinstance(result, dict):
+        return False
+    if raw.get("updateAvailable") is True:
+        return bool(container.remote_tag or container.remote_digest)
+    return bool(
+        _string(result.get("tag"))
+        or _string(result.get("digest"))
+        or _string(result.get("created"))
+    )
 
 
 def _hidden_update_kind_has_delta(update_kind: Mapping[str, object]) -> bool:
@@ -1002,6 +1129,23 @@ def _hidden_update_kind_has_delta(update_kind: Mapping[str, object]) -> bool:
     local_value = _string(update_kind.get("localValue"))
     remote_value = _string(update_kind.get("remoteValue"))
     return bool(local_value and remote_value and local_value != remote_value)
+
+
+def _container_identity(
+    container: WudApiContainer,
+) -> WudContainerIdentity | None:
+    if not container.id or not container.image:
+        return None
+    platform = container.platform.value if container.platform is not None else ""
+    return (
+        container.watcher,
+        container.id,
+        container.name,
+        container.image,
+        container.local_image_id,
+        container.local_digest,
+        platform,
+    )
 
 
 def _parse_container_payload(
@@ -1035,6 +1179,7 @@ def _parse_container_payload(
         error=_sanitize_detail(settings, _error_message(raw.get("error"))),
         labels=labels,
         platform=_container_platform(raw, image),
+        local_image_id=_string(image.get("id")),
     )
 
 

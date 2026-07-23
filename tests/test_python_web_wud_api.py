@@ -170,11 +170,21 @@ def test_wud_api_older_forced_refresh_cannot_replace_newer_cache(
         if path == "/health":
             return {"status": "ok"}
         if path == "/api/containers":
-            name = clock.name
-            if name == "older":
+            refresh_name = clock.name
+            if refresh_name == "older":
                 older_waiting.set()
                 assert newer_finished.wait(timeout=5)
-            return [_container_payload(name=name)]
+            if refresh_name == "degraded":
+                degraded = _container_payload(name="app", update_available=False)
+                degraded["result"] = None
+                degraded["error"] = {"message": "registry lookup failed"}
+                return [degraded]
+            return [
+                _container_payload(
+                    name="app",
+                    remote_tag="1.2.0" if refresh_name == "newer" else "1.1.0",
+                )
+            ]
         raise AssertionError(f"unexpected WUD API URL: {url}")
 
     def refresh(name: str, now: float) -> web_wud_api.WudApiSnapshot:
@@ -199,11 +209,21 @@ def test_wud_api_older_forced_refresh_cannot_replace_newer_cache(
 
     clock.now = 3.0
     cached = web_wud_api.get_snapshot(settings, include_containers=True)
+    clock.name = "degraded"
+    clock.now = 4.0
+    degraded = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
 
-    assert older.containers[0].name == "older"
-    assert newer.containers[0].name == "newer"
-    assert cached.containers[0].name == "newer"
-    assert calls.count("/api/containers") == 2
+    assert older.containers[0].remote_tag == "1.1.0"
+    assert newer.containers[0].remote_tag == "1.2.0"
+    assert cached.containers[0].remote_tag == "1.2.0"
+    assert degraded.containers[0].remote_tag == "1.2.0"
+    assert degraded.containers[0].error == "registry lookup failed"
+    assert degraded.retained_update_count == 1
+    assert calls.count("/api/containers") == 3
 
 
 def test_wud_api_snapshot_reads_hidden_update_candidates_from_update_kind_delta(
@@ -287,7 +307,10 @@ def test_wud_api_snapshot_preserves_registry_url_for_unqualified_images(
                     image="amir20/dozzle@sha256:local",
                     tag="",
                     remote_tag="",
-                    result_digest="",
+                    result_digest="sha256:remote",
+                    update_kind="digest",
+                    local_value="sha256:local",
+                    remote_value="sha256:remote",
                     registry_url="https://ghcr.io",
                 ),
             ],
