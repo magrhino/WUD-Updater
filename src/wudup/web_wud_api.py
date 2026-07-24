@@ -1038,6 +1038,40 @@ def _join_url(base_url: str, path: str) -> str:
     return f"{base_url}{path}"
 
 
+def _append_pending_observation(
+    container: WudApiContainer,
+    containers: list[WudApiContainer],
+    pending_observations: dict[WudContainerIdentity, WudApiContainer],
+) -> None:
+    containers.append(container)
+    identity = _container_identity(container)
+    if identity is not None:
+        pending_observations[identity] = container
+
+
+def _retain_previous_observation(
+    container: WudApiContainer,
+    previous: Mapping[WudContainerIdentity, WudApiContainer],
+    containers: list[WudApiContainer],
+    pending_observations: dict[WudContainerIdentity, WudApiContainer],
+) -> bool:
+    identity = _container_identity(container)
+    retained = previous.get(identity) if identity is not None else None
+    if retained is None:
+        return False
+
+    retained = replace(
+        retained,
+        display_name=container.display_name,
+        status=container.status,
+        error=container.error or "WUD update result is unavailable",
+        labels=container.labels,
+    )
+    containers.append(retained)
+    pending_observations[identity] = retained
+    return True
+
+
 def _reconcile_container_observations(
     payload: Sequence[object],
     settings: WebSettings,
@@ -1063,28 +1097,23 @@ def _reconcile_container_observations(
             continue
 
         container = observation.container
-        identity = _container_identity(container)
         if observation.degraded:
             degraded_container_count += 1
-            retained = previous.get(identity) if identity is not None else None
-            if retained is None:
-                continue
-            retained = replace(
-                retained,
-                display_name=container.display_name,
-                status=container.status,
-                error=container.error or "WUD update result is unavailable",
-                labels=container.labels,
-            )
-            containers.append(retained)
-            pending_observations[identity] = retained
-            retained_update_count += 1
+            if _retain_previous_observation(
+                container,
+                previous,
+                containers,
+                pending_observations,
+            ):
+                retained_update_count += 1
             continue
 
         if observation.update_available:
-            containers.append(container)
-            if identity is not None:
-                pending_observations[identity] = container
+            _append_pending_observation(
+                container,
+                containers,
+                pending_observations,
+            )
             continue
 
         update_kind = _object(cast(Mapping[str, object], raw).get("updateKind"))
