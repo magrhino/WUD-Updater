@@ -163,6 +163,198 @@ def test_pending_endpoint_bypasses_wud_snapshot_cache_with_gets_only(
     assert calls == []
 
 
+def test_pending_endpoint_preserves_updates_across_degraded_wud_rows(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, _fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(name=f"app-{index}", image=f"repo/app-{index}")
+        for index in range(17)
+    ]
+    calls = install_recording_wud_api(monkeypatch, containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.pending-degraded.test:3000",
+            **fake_env,
+        },
+    )
+    calls.clear()
+
+    initial = client.get("/api/v1/pending")
+
+    assert initial.status_code == 200
+    assert initial.json()["count"] == 17
+    assert calls == [("GET", "/health"), ("GET", "/api/containers")]
+
+    degraded_rows = []
+    for index in range(8, 17):
+        row = _wud_api_container(
+            name=f"app-{index}",
+            image=f"repo/app-{index}",
+            update_available=False,
+            update_kind="unknown",
+        )
+        row["result"] = None if index % 2 == 0 else "malformed"
+        row["error"] = (
+            {"message": "registry lookup failed"} if index % 2 == 0 else {}
+        )
+        degraded_rows.append(row)
+    containers[:] = [
+        _wud_api_container(name=f"app-{index}", image=f"repo/app-{index}")
+        for index in range(8)
+    ] + degraded_rows
+    calls.clear()
+
+    degraded = client.get("/api/v1/pending")
+
+    assert degraded.status_code == 200
+    degraded_body = degraded.json()
+    assert degraded_body["count"] == 17
+    assert degraded_body["source"]["fresh"] is False
+    assert degraded_body["source"]["degraded"] is True
+    assert degraded_body["source"]["detail"] == (
+        "17 WUD update metadata item(s) available; "
+        "9 container observation(s) degraded; "
+        "9 last-known-good update(s) retained"
+    )
+    retained = [
+        item
+        for item in degraded_body["items"]
+        if int(item["wud_metadata"]["name"].removeprefix("app-")) >= 8
+    ]
+    assert len(retained) == 9
+    assert all(item["wud_metadata"]["error"] for item in retained)
+    assert calls == [("GET", "/health"), ("GET", "/api/containers")]
+    assert all(method == "GET" for method, _path in calls)
+
+    calls.clear()
+
+    repeated_degraded = client.get("/api/v1/pending")
+
+    assert repeated_degraded.status_code == 200
+    repeated_degraded_body = repeated_degraded.json()
+    assert repeated_degraded_body["count"] == 17
+    assert repeated_degraded_body["source"]["degraded"] is True
+    assert calls == [("GET", "/health"), ("GET", "/api/containers")]
+    assert all(method == "GET" for method, _path in calls)
+
+    containers[:] = [
+        _wud_api_container(name=f"app-{index}", image=f"repo/app-{index}")
+        for index in range(8)
+    ] + [
+        _wud_api_container(
+            name=f"app-{index}",
+            image=f"repo/app-{index}",
+            remote_tag="1.0",
+            update_kind="unknown",
+            update_available=False,
+            remote_value="1.0",
+        )
+        for index in range(8, 17)
+    ]
+    calls.clear()
+
+    authoritative = client.get("/api/v1/pending")
+
+    assert authoritative.status_code == 200
+    authoritative_body = authoritative.json()
+    assert authoritative_body["count"] == 8
+    assert authoritative_body["source"]["fresh"] is True
+    assert authoritative_body["source"]["degraded"] is False
+    assert calls == [("GET", "/health"), ("GET", "/api/containers")]
+    assert all(method == "GET" for method, _path in calls)
+
+
+def test_pending_endpoint_clears_update_missing_from_authoritative_payload(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, _fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(name="app", image="repo/app"),
+        _wud_api_container(name="worker", image="repo/worker"),
+    ]
+    calls = install_recording_wud_api(monkeypatch, containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.pending-disappearance.test:3000",
+            **fake_env,
+        },
+    )
+
+    initial = client.get("/api/v1/pending")
+
+    assert initial.status_code == 200
+    assert initial.json()["count"] == 2
+
+    containers[:] = [_wud_api_container(name="app", image="repo/app")]
+    calls.clear()
+
+    authoritative = client.get("/api/v1/pending")
+
+    assert authoritative.status_code == 200
+    body = authoritative.json()
+    assert body["count"] == 1
+    assert body["items"][0]["source_id"] == "docker.local.app"
+    assert calls == [("GET", "/health"), ("GET", "/api/containers")]
+    assert all(method == "GET" for method, _path in calls)
+
+
+def test_pending_endpoint_does_not_transfer_retained_update_to_changed_image(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, _fake_root = _fake_docker_env(tmp_path)
+    containers = [_wud_api_container(name="app", image="repo/app")]
+    initial_image = containers[0]["image"]
+    assert isinstance(initial_image, dict)
+    initial_image["id"] = "sha256:original"
+    calls = install_recording_wud_api(monkeypatch, containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.pending-identity.test:3000",
+            **fake_env,
+        },
+    )
+
+    initial = client.get("/api/v1/pending")
+    assert initial.status_code == 200
+    assert initial.json()["count"] == 1
+
+    changed = _wud_api_container(
+        name="app",
+        image="repo/app",
+        update_available=False,
+        update_kind="unknown",
+    )
+    changed_image = changed["image"]
+    assert isinstance(changed_image, dict)
+    changed_image["id"] = "sha256:replacement"
+    changed["result"] = None
+    changed["error"] = {"message": "registry lookup failed"}
+    containers[:] = [changed]
+    calls.clear()
+
+    degraded = client.get("/api/v1/pending")
+
+    assert degraded.status_code == 200
+    degraded_body = degraded.json()
+    assert degraded_body["count"] == 0
+    assert degraded_body["source"]["degraded"] is True
+    assert calls == [("GET", "/health"), ("GET", "/api/containers")]
+    assert all(method == "GET" for method, _path in calls)
+
+
 def test_pending_endpoint_returns_hidden_wud_api_snoozed_candidates(
     tmp_path: Path,
     monkeypatch,

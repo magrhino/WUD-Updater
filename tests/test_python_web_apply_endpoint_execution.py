@@ -373,13 +373,93 @@ def test_apply_endpoint_uses_api_pending_source_without_editing_wud_file(
     assert pending["count"] == 0
 
 
+def test_apply_endpoint_rejects_degraded_api_last_good_source(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:new",
+            update_kind="digest",
+        )
+    ]
+    _install_wud_api(monkeypatch, containers=containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.apply-api-degraded.test:3000",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    initial = client.get("/api/v1/pending")
+    assert initial.status_code == 200
+    assert initial.json()["count"] == 1
+
+    containers[0]["updateAvailable"] = False
+    containers[0]["result"] = None
+    containers[0]["error"] = {"message": "registry lookup failed"}
+
+    degraded = client.get("/api/v1/pending")
+    assert degraded.status_code == 200
+    assert degraded.json()["count"] == 1
+    assert degraded.json()["source"]["degraded"] is True
+
+    headers = _csrf_headers(client)
+    plan_response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+    plan = plan_response.json()
+
+    assert plan_response.status_code == 200
+    assert plan["status"] == "ready"
+    assert plan["source"]["active"] == "api"
+    assert plan["source"]["degraded"] is True
+    assert plan["can_apply"] is False
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert apply_response.status_code == 409
+    assert apply_response.json()["detail"] == "plan is not ready to apply"
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
 def test_apply_endpoint_rejects_stale_api_pending_source_without_editing_file(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
     containers = [
-        _wud_api_container(tag="latest", remote_tag="", update_kind="digest")
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest=f"sha256:{'b' * 64}",
+            update_kind="digest",
+        )
     ]
     _install_wud_api(monkeypatch, containers=containers)
     client = _client(
@@ -440,7 +520,12 @@ def test_apply_endpoint_wraps_api_pending_source_oserror_without_mutation(
     redaction_value = "api-apply-redaction-value"
     fake_env, fake_root = _fake_docker_env(tmp_path)
     containers = [
-        _wud_api_container(tag="latest", remote_tag="", update_kind="digest")
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest=f"sha256:{'b' * 64}",
+            update_kind="digest",
+        )
     ]
     _install_wud_api(monkeypatch, containers=containers)
     client = _client(
