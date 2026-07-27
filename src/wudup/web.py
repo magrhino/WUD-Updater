@@ -108,12 +108,12 @@ def create_app(
         )
 
     def shutdown_apply_executor() -> None:
-        web_wud_api.checkpoint_pending_observation_cache(active_settings)
         web_release_notifications.shutdown_release_notification_scheduler_state(app.state)
         web_scheduler.shutdown_auto_update_scheduler_state(app.state)
         web_retags.shutdown_retag_preview_state(app.state)
         web_security.shutdown_security_scan_state(app.state)
         web_jobs.shutdown_apply_job_state(app.state)
+        web_wud_api.checkpoint_pending_observation_cache(active_settings)
 
     router_shutdown = getattr(getattr(app, "router", None), "on_shutdown", None)
     if isinstance(router_shutdown, list):

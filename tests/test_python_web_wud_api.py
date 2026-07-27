@@ -13,8 +13,15 @@ from typing import Any
 
 import pytest
 
-from wudup import web_release_notes as release_notes_module
-from wudup import web_wud_api
+from wudup import (
+    web_jobs,
+    web_release_notifications,
+    web_release_notes as release_notes_module,
+    web_retags,
+    web_scheduler,
+    web_security,
+    web_wud_api,
+)
 from wudup.config import ConfigError
 from wudup.release_notes import (
     ReleaseNoteInfo as ReleaseNoteData,
@@ -363,6 +370,22 @@ def test_web_app_wires_pending_observation_lifecycle(
         ),
     )
     monkeypatch.setattr(web_wud_api, "startup_probe", lambda _settings: None)
+    for module, attribute, name in (
+        (
+            web_release_notifications,
+            "shutdown_release_notification_scheduler_state",
+            "release-notifications",
+        ),
+        (web_scheduler, "shutdown_auto_update_scheduler_state", "scheduler"),
+        (web_retags, "shutdown_retag_preview_state", "retag-preview"),
+        (web_security, "shutdown_security_scan_state", "security-scan"),
+        (web_jobs, "shutdown_apply_job_state", "apply-jobs"),
+    ):
+        monkeypatch.setattr(
+            module,
+            attribute,
+            lambda _state, label=name: calls.append(f"stop:{label}"),
+        )
 
     app = create_app(settings)
     shutdown = next(
@@ -374,6 +397,11 @@ def test_web_app_wires_pending_observation_lifecycle(
 
     assert calls == [
         "load:https://wud.lifecycle.test:3000",
+        "stop:release-notifications",
+        "stop:scheduler",
+        "stop:retag-preview",
+        "stop:security-scan",
+        "stop:apply-jobs",
         "save:https://wud.lifecycle.test:3000",
     ]
 
