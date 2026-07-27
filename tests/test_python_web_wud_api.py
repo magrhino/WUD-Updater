@@ -406,6 +406,59 @@ def test_web_app_wires_pending_observation_lifecycle(
     ]
 
 
+def test_wud_api_checkpoint_waits_for_active_refresh(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    refresh_waiting = Event()
+    release_refresh = Event()
+    checkpoint_finished = Event()
+
+    def request_json(url: str, _client_config=None) -> object:
+        path = urllib.parse.urlsplit(url).path
+        if path == "/health":
+            return {"status": "ok"}
+        if path == "/api/containers":
+            refresh_waiting.set()
+            assert release_refresh.wait(timeout=5)
+            return [_container_payload(name="app")]
+        raise AssertionError(f"unexpected WUD API URL: {url}")
+
+    monkeypatch.setattr(web_wud_api, "_request_json", request_json)
+    monkeypatch.setattr(web_wud_api, "_snapshot_cache", {})
+    monkeypatch.setattr(web_wud_api, "_pending_observation_cache", {})
+    settings = _settings(tmp_path, "https://wud.checkpoint-race.test:3000")
+    settings.config.db_path.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(settings.config.db_path)):
+        pass
+    web_wud_api.initialize_pending_observation_cache(settings)
+
+    def checkpoint() -> None:
+        web_wud_api.checkpoint_pending_observation_cache(settings)
+        checkpoint_finished.set()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        refresh_future = executor.submit(
+            web_wud_api.get_snapshot,
+            settings,
+            include_containers=True,
+            force=True,
+        )
+        assert refresh_waiting.wait(timeout=5)
+        checkpoint_future = executor.submit(checkpoint)
+        assert not checkpoint_finished.wait(timeout=0.1)
+        release_refresh.set()
+        refreshed = refresh_future.result(timeout=5)
+        checkpoint_future.result(timeout=5)
+
+    assert refreshed.containers[0].name == "app"
+    with closing(sqlite3.connect(settings.config.db_path)) as conn:
+        persisted = conn.execute(
+            "SELECT COUNT(*) FROM wud_pending_observation_cache"
+        ).fetchone()[0]
+    assert persisted == 1
+
+
 def test_wud_api_ignores_unrelated_unsupported_registry_observation(
     tmp_path: Path,
     monkeypatch,

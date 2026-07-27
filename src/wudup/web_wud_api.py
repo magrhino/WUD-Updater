@@ -414,33 +414,34 @@ def checkpoint_pending_observation_cache(settings: WebSettings) -> None:
         return
     base_url = settings.wud_api_base_url or DEFAULT_WUD_API_BASE_URL
     cache_key = _cache_key(settings, base_url)
-    with _cache_lock:
-        cached = _pending_observation_cache.get(cache_key)
-        if cached is None:
-            return
+    with _refresh_lock:
+        with _cache_lock:
+            cached = _pending_observation_cache.get(cache_key)
+            if cached is None:
+                return
 
-    stored = tuple(
-        web_wud_observation_store.StoredPendingObservation(
-            identity=identity,
-            observation=_stored_observation(state.container),
-            observed_at=state.observed_at,
+        stored = tuple(
+            web_wud_observation_store.StoredPendingObservation(
+                identity=identity,
+                observation=_stored_observation(state.container),
+                observed_at=state.observed_at,
+            )
+            for identity, state in sorted(
+                cached.items(),
+                key=lambda item: item[0],
+            )
         )
-        for identity, state in sorted(
-            cached.items(),
-            key=lambda item: item[0],
-        )
-    )
-    try:
-        web_wud_observation_store.replace_pending_observations(
-            settings.config.db_path,
-            source=_observation_store_source(settings),
-            observations=stored,
-        )
-    except (OSError, ValueError, sqlite3.Error, DatabaseError) as exc:
-        LOGGER.warning(
-            "failed to persist WUD pending observations: %s",
-            _safe_cache_error(settings, exc),
-        )
+        try:
+            web_wud_observation_store.replace_pending_observations(
+                settings.config.db_path,
+                source=_observation_store_source(settings),
+                observations=stored,
+            )
+        except (OSError, ValueError, sqlite3.Error, DatabaseError) as exc:
+            LOGGER.warning(
+                "failed to persist WUD pending observations: %s",
+                _safe_cache_error(settings, exc),
+            )
 
 
 def get_snapshot(
