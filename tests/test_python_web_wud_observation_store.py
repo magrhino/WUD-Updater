@@ -95,7 +95,7 @@ def test_pending_observation_store_replaces_historical_sources(tmp_path: Path) -
     ] == ["second"]
 
 
-def test_pending_observation_store_ignores_malformed_rows(tmp_path: Path) -> None:
+def test_pending_observation_store_ignores_malformed_value(tmp_path: Path) -> None:
     db_path = tmp_path / "wudup.sqlite"
     source = web_wud_observation_store.source_key("https://wud.test:3000")
     web_wud_observation_store.replace_pending_observations(
@@ -106,11 +106,11 @@ def test_pending_observation_store_ignores_malformed_rows(tmp_path: Path) -> Non
     with sqlite3.connect(db_path) as conn:
         conn.execute(
             """
-            UPDATE wud_pending_observation_cache
-            SET observation_json = '[]'
-            WHERE source_key = ?
+            UPDATE web_settings
+            SET value = '[]'
+            WHERE key = ?
             """,
-            (source,),
+            (web_wud_observation_store.PENDING_OBSERVATIONS_SETTING_KEY,),
         )
 
     assert web_wud_observation_store.load_pending_observations(

@@ -9,9 +9,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from .db import init_db, open_db
+from .db import init_db, open_db, utc_timestamp
 
 WudContainerIdentity = tuple[str, str, str, str, str, str, str]
+PENDING_OBSERVATIONS_SETTING_KEY = "wud.pending_observations"
 
 
 @dataclass(frozen=True)
@@ -36,31 +37,31 @@ def load_pending_observations(
         return ()
     with open_db(db_path) as conn:
         init_db(conn)
-        rows = conn.execute(
+        row = conn.execute(
             """
-            SELECT identity_json, observation_json, observed_at
-            FROM wud_pending_observation_cache
-            WHERE source_key = ?
-            ORDER BY identity_json
+            SELECT value
+            FROM web_settings
+            WHERE key = ?
             """,
-            (source,),
-        ).fetchall()
+            (PENDING_OBSERVATIONS_SETTING_KEY,),
+        ).fetchone()
+    if row is None:
+        return ()
 
-    result: list[StoredPendingObservation] = []
-    for row in rows:
-        identity = _identity_from_json(str(row["identity_json"]))
-        observation = _observation_from_json(str(row["observation_json"]))
-        observed_at = str(row["observed_at"])
-        if identity is None or observation is None or not observed_at:
-            continue
-        result.append(
-            StoredPendingObservation(
-                identity=identity,
-                observation=observation,
-                observed_at=observed_at,
-            )
-        )
-    return tuple(result)
+    try:
+        payload = json.loads(str(row["value"]))
+    except json.JSONDecodeError:
+        return ()
+    if not isinstance(payload, dict) or payload.get("source") != source:
+        return ()
+    observations = payload.get("observations")
+    if not isinstance(observations, list):
+        return ()
+    return tuple(
+        stored
+        for raw in observations
+        if (stored := _stored_observation(raw)) is not None
+    )
 
 
 def replace_pending_observations(
@@ -71,58 +72,51 @@ def replace_pending_observations(
 ) -> None:
     if str(db_path) == ":memory:":
         return
-    rows = [
-        (
-            source,
-            json.dumps(item.identity, separators=(",", ":")),
-            json.dumps(
-                dict(item.observation),
-                sort_keys=True,
-                separators=(",", ":"),
-            ),
-            item.observed_at,
-        )
-        for item in observations
-    ]
+    value = json.dumps(
+        {
+            "source": source,
+            "observations": [
+                {
+                    "identity": item.identity,
+                    "observation": dict(item.observation),
+                    "observed_at": item.observed_at,
+                }
+                for item in observations
+            ],
+        }
+    )
     with open_db(db_path) as conn:
         init_db(conn)
         with conn:
-            conn.execute("DELETE FROM wud_pending_observation_cache")
-            conn.executemany(
+            conn.execute(
                 """
-                INSERT INTO wud_pending_observation_cache (
-                    source_key,
-                    identity_json,
-                    observation_json,
-                    observed_at
-                )
-                VALUES (?, ?, ?, ?)
+                INSERT INTO web_settings (key, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = excluded.updated_at
                 """,
-                rows,
+                (PENDING_OBSERVATIONS_SETTING_KEY, value, utc_timestamp()),
             )
 
 
-def _identity_from_json(raw: str) -> WudContainerIdentity | None:
-    try:
-        value = json.loads(raw)
-    except json.JSONDecodeError:
+def _stored_observation(raw: object) -> StoredPendingObservation | None:
+    if not isinstance(raw, dict):
         return None
+    identity = raw.get("identity")
+    observation = raw.get("observation")
+    observed_at = raw.get("observed_at")
     if (
-        not isinstance(value, list)
-        or len(value) != 7
-        or not all(isinstance(item, str) for item in value)
+        not isinstance(identity, list)
+        or len(identity) != 7
+        or not all(isinstance(item, str) for item in identity)
+        or not isinstance(observation, dict)
+        or not isinstance(observed_at, str)
+        or not observed_at
     ):
         return None
-    return cast(WudContainerIdentity, tuple(value))
-
-
-def _observation_from_json(raw: str) -> Mapping[str, object] | None:
-    try:
-        value = json.loads(raw)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(value, dict):
-        return None
-    if not all(isinstance(key, str) for key in value):
-        return None
-    return value
+    return StoredPendingObservation(
+        identity=cast(WudContainerIdentity, tuple(identity)),
+        observation=observation,
+        observed_at=observed_at,
+    )

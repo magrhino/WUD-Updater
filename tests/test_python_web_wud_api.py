@@ -21,6 +21,7 @@ from wudup import (
     web_scheduler,
     web_security,
     web_wud_api,
+    web_wud_observation_store,
 )
 from wudup.config import ConfigError
 from wudup.release_notes import (
@@ -52,6 +53,15 @@ def _settings(
         values.update(env)
     return load_web_settings(
         environ=_web_env(tmp_path, values),
+    )
+
+
+def _persisted_observations(
+    settings: Any,
+) -> tuple[web_wud_observation_store.StoredPendingObservation, ...]:
+    return web_wud_observation_store.load_pending_observations(
+        settings.config.db_path,
+        source=web_wud_observation_store.source_key(settings.wud_api_base_url),
     )
 
 
@@ -235,18 +245,10 @@ def test_wud_api_pending_observation_survives_process_restart(
     )
 
     assert ready.retained_update_count == 0
-    with closing(sqlite3.connect(settings.config.db_path)) as conn:
-        persisted_before_shutdown = conn.execute(
-            "SELECT COUNT(*) FROM wud_pending_observation_cache"
-        ).fetchone()[0]
-    assert persisted_before_shutdown == 0
+    assert _persisted_observations(settings) == ()
 
     web_wud_api.checkpoint_pending_observation_cache(settings)
-    with closing(sqlite3.connect(settings.config.db_path)) as conn:
-        persisted_after_shutdown = conn.execute(
-            "SELECT COUNT(*) FROM wud_pending_observation_cache"
-        ).fetchone()[0]
-    assert persisted_after_shutdown == 1
+    assert len(_persisted_observations(settings)) == 1
 
     web_wud_api._snapshot_cache.clear()
     web_wud_api._pending_observation_cache.clear()
@@ -380,17 +382,13 @@ def test_wud_api_authenticated_client_does_not_load_persisted_observations(
     )
 
     web_wud_api.initialize_pending_observation_cache(authenticated)
-    with closing(sqlite3.connect(authenticated.config.db_path)) as conn:
-        persisted = conn.execute(
-            "SELECT COUNT(*) FROM wud_pending_observation_cache"
-        ).fetchone()[0]
     snapshot = web_wud_api.get_snapshot(
         authenticated,
         include_containers=True,
         force=True,
     )
 
-    assert persisted == 0
+    assert _persisted_observations(authenticated) == ()
     assert snapshot.containers == ()
     assert snapshot.degraded_container_count == 1
     assert snapshot.retained_update_count == 0
@@ -503,11 +501,7 @@ def test_wud_api_checkpoint_waits_for_active_refresh(
         checkpoint_future.result(timeout=5)
 
     assert refreshed.containers[0].name == "app"
-    with closing(sqlite3.connect(settings.config.db_path)) as conn:
-        persisted = conn.execute(
-            "SELECT COUNT(*) FROM wud_pending_observation_cache"
-        ).fetchone()[0]
-    assert persisted == 1
+    assert len(_persisted_observations(settings)) == 1
 
 
 def test_wud_api_ignores_unrelated_unsupported_registry_observation(
@@ -537,7 +531,6 @@ def test_wud_api_ignores_unrelated_unsupported_registry_observation(
     assert snapshot.containers[0].name == "app"
     assert snapshot.degraded_container_count == 0
     assert snapshot.retained_update_count == 0
-    assert snapshot.unsupported_container_count == 1
     assert snapshot.status.detail == (
         "1 WUD update metadata item(s) available; "
         "1 unsupported container observation(s) ignored"
@@ -574,7 +567,6 @@ def test_wud_api_retains_prior_update_when_registry_becomes_unsupported(
     assert degraded.containers[0].remote_tag == "1.1.0"
     assert degraded.degraded_container_count == 1
     assert degraded.retained_update_count == 1
-    assert degraded.unsupported_container_count == 0
 
 
 def test_wud_api_snapshot_reads_hidden_update_candidates_from_update_kind_delta(

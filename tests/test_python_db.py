@@ -133,7 +133,6 @@ class DatabaseTests(unittest.TestCase):
                     "auto_update_schedule_runs",
                     "known_images",
                     "pending_updates",
-                    "wud_pending_observation_cache",
                     "release_note_cache",
                     "release_notification_history",
                     "security_scan_cache",
@@ -162,36 +161,6 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertIsNotNone(row)
         self.assertEqual(row["status"], "started")
-
-    def test_init_db_migrates_v13_and_preserves_existing_rows(self) -> None:
-        with db_connection(":memory:") as conn:
-            init_db(conn)
-            conn.execute(
-                """
-                INSERT INTO update_runs (started_at, status)
-                VALUES ('2026-07-27T12:00:00+00:00', 'success')
-                """
-            )
-            conn.execute("DROP TABLE wud_pending_observation_cache")
-            conn.execute("DELETE FROM schema_migrations WHERE version = 14")
-            conn.execute("PRAGMA user_version = 13")
-
-            init_db(conn)
-
-            version = conn.execute("PRAGMA user_version").fetchone()[0]
-            run = conn.execute("SELECT status FROM update_runs").fetchone()
-            table = conn.execute(
-                """
-                SELECT name
-                FROM sqlite_master
-                WHERE type = 'table'
-                  AND name = 'wud_pending_observation_cache'
-                """
-            ).fetchone()
-
-        self.assertEqual(version, SCHEMA_VERSION)
-        self.assertEqual(run[0], "success")
-        self.assertIsNotNone(table)
 
     def test_init_db_sets_user_version_to_current_schema(self) -> None:
         with db_connection(":memory:") as conn:

@@ -126,7 +126,6 @@ class WudApiSnapshot:
     hidden_update_candidates: tuple[WudApiContainer, ...] = ()
     degraded_container_count: int = 0
     retained_update_count: int = 0
-    unsupported_container_count: int = 0
     metadata_checked: bool = False
     checked_monotonic: float = 0.0
 
@@ -439,10 +438,7 @@ def checkpoint_pending_observation_cache(settings: WebSettings) -> None:
                 observation=_stored_observation(state.container),
                 observed_at=state.observed_at,
             )
-            for identity, state in sorted(
-                cached.items(),
-                key=lambda item: item[0],
-            )
+            for identity, state in cached.items()
         )
         try:
             web_wud_observation_store.replace_pending_observations(
@@ -819,7 +815,6 @@ def _refresh_snapshot_serialized(
         hidden_update_candidates=hidden_update_candidates,
         degraded_container_count=degraded_container_count,
         retained_update_count=retained_update_count,
-        unsupported_container_count=unsupported_container_count,
     )
     _store_snapshot(
         cache_key,
@@ -1051,7 +1046,6 @@ def _snapshot(
     hidden_update_candidates: Sequence[WudApiContainer] = (),
     degraded_container_count: int = 0,
     retained_update_count: int = 0,
-    unsupported_container_count: int = 0,
 ) -> WudApiSnapshot:
     return WudApiSnapshot(
         status=WudApiStatus(
@@ -1065,7 +1059,6 @@ def _snapshot(
         hidden_update_candidates=tuple(hidden_update_candidates),
         degraded_container_count=degraded_container_count,
         retained_update_count=retained_update_count,
-        unsupported_container_count=unsupported_container_count,
         metadata_checked=metadata_checked,
         checked_monotonic=checked_monotonic,
     )
@@ -1293,28 +1286,20 @@ def _reconcile_container_observations(
             continue
 
         container = observation.container
-        if observation.unsupported:
-            if _retain_previous_observation(
+        if observation.unsupported or observation.degraded:
+            retained = _retain_previous_observation(
                 container,
                 previous,
                 containers,
                 pending_observations,
-            ):
+            )
+            if retained:
                 degraded_container_count += 1
                 retained_update_count += 1
-            else:
+            elif observation.unsupported:
                 unsupported_container_count += 1
-            continue
-
-        if observation.degraded:
-            degraded_container_count += 1
-            if _retain_previous_observation(
-                container,
-                previous,
-                containers,
-                pending_observations,
-            ):
-                retained_update_count += 1
+            else:
+                degraded_container_count += 1
             continue
 
         if observation.update_available:
