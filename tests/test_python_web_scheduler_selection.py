@@ -132,6 +132,76 @@ def test_auto_update_selection_excludes_unsatisfied_dependency_snoozes() -> None
     assert selection.service_keys == ("stack/db", "stack/worker")
 
 
+def test_auto_update_selection_uses_eligible_candidate_schedule() -> None:
+    earliest = datetime(2026, 5, 30, 14, 0, tzinfo=timezone.utc)
+    selected = datetime(2026, 5, 30, 14, 2, tzinfo=timezone.utc)
+    later = datetime(2026, 5, 30, 14, 4, tzinfo=timezone.utc)
+    settings = SimpleNamespace(config=SimpleNamespace(update_mode="live"))
+    grouping = SimpleNamespace(
+        groups=(
+            SimpleNamespace(
+                name="stack",
+                items=(
+                    SimpleNamespace(
+                        desired_tag="",
+                        line_no=1,
+                        services=("snoozed",),
+                    ),
+                    SimpleNamespace(
+                        desired_tag="",
+                        line_no=2,
+                        services=("later",),
+                    ),
+                    SimpleNamespace(
+                        desired_tag="",
+                        line_no=3,
+                        services=("selected",),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    def policy(
+        service: str,
+        mode: str,
+        scheduled_for: datetime,
+    ) -> web_scheduler.AutoUpdatePolicy:
+        return web_scheduler.AutoUpdatePolicy(
+            service_key=f"stack/{service}",
+            update_mode=mode,
+            auto_update_time="09:00",
+            auto_update_days=("sat",),
+            schedule_key=f"stack/{service}|2026-05-30|09:00|America/Chicago",
+            scheduled_for=scheduled_for,
+        )
+
+    selection = web_scheduler._auto_update_selection(
+        settings,
+        grouping,
+        {
+            "stack/snoozed": policy("snoozed", "mode-a", earliest),
+            "stack/later": policy("later", "mode-a", later),
+            "stack/selected": policy("selected", "mode-b", selected),
+        },
+        dependency_snoozes=(
+            {
+                "service_key": "stack/snoozed",
+                "wait_for_service_key": "stack/dependency",
+            },
+        ),
+    )
+
+    assert selection is not None
+    assert selection.update_mode == "mode-b"
+    assert selection.line_numbers == (3,)
+    assert selection.service_keys == ("stack/selected",)
+    assert selection.schedule_keys == (
+        "stack/selected|2026-05-30|09:00|America/Chicago",
+    )
+    assert selection.scheduled_for == selected
+
+
 def test_auto_update_selection_requires_complete_consistent_service_policies() -> None:
     scheduled = datetime(2026, 5, 30, 14, 0, tzinfo=timezone.utc)
     settings = SimpleNamespace(config=SimpleNamespace(update_mode="live"))
