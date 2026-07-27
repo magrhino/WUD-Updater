@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.56.4](https://github.com/magrhino/wudup/compare/v0.56.3...v0.56.4) (2026-07-27)
+
+
+### Bug Fixes
+
+* **ci:** harden on-demand Node tooling ([#546](https://github.com/magrhino/wudup/issues/546)) ([b24885a](https://github.com/magrhino/wudup/commit/b24885acf69b10f7303379f4a4a05703384d72c9))
+* **web:** preserve pending updates across WUD scan errors ([#553](https://github.com/magrhino/wudup/issues/553)) ([98e6ca5](https://github.com/magrhino/wudup/commit/98e6ca5e178acaf8b2e11588202e446c565ab930))
+
 ## [0.56.3](https://github.com/magrhino/wudup/compare/v0.56.2...v0.56.3) (2026-07-21)
 
 
