@@ -5,7 +5,7 @@ import json
 import sqlite3
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import nullcontext
+from contextlib import closing, nullcontext
 from pathlib import Path
 from threading import Event, local
 from types import SimpleNamespace
@@ -215,7 +215,7 @@ def test_wud_api_pending_observation_survives_process_restart(
     _install_wud_api(monkeypatch, containers=containers)
     settings = _settings(tmp_path, "https://wud.restart-cache.test:3000")
     settings.config.db_path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(settings.config.db_path):
+    with closing(sqlite3.connect(settings.config.db_path)):
         pass
     monkeypatch.setattr(web_wud_api, "_snapshot_cache", {})
     monkeypatch.setattr(web_wud_api, "_pending_observation_cache", {})
@@ -228,14 +228,14 @@ def test_wud_api_pending_observation_survives_process_restart(
     )
 
     assert ready.retained_update_count == 0
-    with sqlite3.connect(settings.config.db_path) as conn:
+    with closing(sqlite3.connect(settings.config.db_path)) as conn:
         persisted_before_shutdown = conn.execute(
             "SELECT COUNT(*) FROM wud_pending_observation_cache"
         ).fetchone()[0]
     assert persisted_before_shutdown == 0
 
     web_wud_api.checkpoint_pending_observation_cache(settings)
-    with sqlite3.connect(settings.config.db_path) as conn:
+    with closing(sqlite3.connect(settings.config.db_path)) as conn:
         persisted_after_shutdown = conn.execute(
             "SELECT COUNT(*) FROM wud_pending_observation_cache"
         ).fetchone()[0]
@@ -307,7 +307,7 @@ def test_wud_api_persisted_observation_does_not_cross_container_identity(
     _install_wud_api(monkeypatch, containers=containers)
     settings = _settings(tmp_path, "https://wud.restart-identity.test:3000")
     settings.config.db_path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(settings.config.db_path):
+    with closing(sqlite3.connect(settings.config.db_path)):
         pass
     monkeypatch.setattr(web_wud_api, "_snapshot_cache", {})
     monkeypatch.setattr(web_wud_api, "_pending_observation_cache", {})
