@@ -376,7 +376,20 @@ def startup_probe(settings: WebSettings) -> WudApiSnapshot:
 def initialize_pending_observation_cache(settings: WebSettings) -> None:
     """Load restart-safe pending observations before serving requests."""
 
-    if not _observation_database_exists(settings):
+    if _observation_database_exists(settings) and settings.wud_api_client.configured:
+        try:
+            web_wud_observation_store.replace_pending_observations(
+                settings.config.db_path,
+                source=_observation_store_source(settings),
+                observations=(),
+            )
+        except (OSError, ValueError, sqlite3.Error, DatabaseError) as exc:
+            LOGGER.warning(
+                "failed to clear persisted WUD pending observations: %s",
+                _safe_cache_error(settings, exc),
+            )
+        return
+    if not _observation_persistence_enabled(settings):
         return
     try:
         source = _observation_store_source(settings)
@@ -410,7 +423,7 @@ def initialize_pending_observation_cache(settings: WebSettings) -> None:
 def checkpoint_pending_observation_cache(settings: WebSettings) -> None:
     """Atomically persist the latest in-memory pending observations."""
 
-    if not _observation_database_exists(settings):
+    if not _observation_persistence_enabled(settings):
         return
     base_url = settings.wud_api_base_url or DEFAULT_WUD_API_BASE_URL
     cache_key = _cache_key(settings, base_url)
@@ -1141,6 +1154,16 @@ def _observation_store_source(settings: WebSettings) -> str:
 def _observation_database_exists(settings: WebSettings) -> bool:
     db_path = settings.config.db_path
     return str(db_path) != ":memory:" and db_path.is_file()
+
+
+def _observation_persistence_enabled(settings: WebSettings) -> bool:
+    # The configured client fingerprint is intentionally process-local so secret
+    # values cannot become reusable hashes in SQLite. Without a stable, non-secret
+    # principal identifier, authenticated observations must not cross restarts.
+    return (
+        _observation_database_exists(settings)
+        and not settings.wud_api_client.configured
+    )
 
 
 def _stored_observation(container: WudApiContainer) -> Mapping[str, object]:

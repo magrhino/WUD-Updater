@@ -345,6 +345,57 @@ def test_wud_api_persisted_observation_does_not_cross_container_identity(
     assert degraded.retained_update_count == 0
 
 
+def test_wud_api_authenticated_client_does_not_load_persisted_observations(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    containers = [_container_payload(name="app")]
+    _install_wud_api(monkeypatch, containers=containers)
+    base_url = "https://wud.authenticated-cache.test:3000"
+    unauthenticated = _settings(tmp_path, base_url)
+    unauthenticated.config.db_path.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(unauthenticated.config.db_path)):
+        pass
+    monkeypatch.setattr(web_wud_api, "_snapshot_cache", {})
+    monkeypatch.setattr(web_wud_api, "_pending_observation_cache", {})
+
+    web_wud_api.initialize_pending_observation_cache(unauthenticated)
+    web_wud_api.get_snapshot(
+        unauthenticated,
+        include_containers=True,
+        force=True,
+    )
+    web_wud_api.checkpoint_pending_observation_cache(unauthenticated)
+
+    web_wud_api._snapshot_cache.clear()
+    web_wud_api._pending_observation_cache.clear()
+    degraded = _container_payload(name="app", update_available=False)
+    degraded["result"] = None
+    degraded["error"] = {"message": "registry lookup failed"}
+    containers[:] = [degraded]
+    authenticated = _settings(
+        tmp_path,
+        base_url,
+        {web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: "new-principal-secret"},
+    )
+
+    web_wud_api.initialize_pending_observation_cache(authenticated)
+    with closing(sqlite3.connect(authenticated.config.db_path)) as conn:
+        persisted = conn.execute(
+            "SELECT COUNT(*) FROM wud_pending_observation_cache"
+        ).fetchone()[0]
+    snapshot = web_wud_api.get_snapshot(
+        authenticated,
+        include_containers=True,
+        force=True,
+    )
+
+    assert persisted == 0
+    assert snapshot.containers == ()
+    assert snapshot.degraded_container_count == 1
+    assert snapshot.retained_update_count == 0
+
+
 def test_web_app_wires_pending_observation_lifecycle(
     tmp_path: Path,
     monkeypatch,

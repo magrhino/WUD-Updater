@@ -66,7 +66,7 @@ def test_pending_observation_store_round_trips_and_replaces_source(
     assert replaced[0].observed_at == "2026-07-27T13:00:00+00:00"
 
 
-def test_pending_observation_store_is_scoped_by_hashed_source(tmp_path: Path) -> None:
+def test_pending_observation_store_replaces_historical_sources(tmp_path: Path) -> None:
     db_path = tmp_path / "wudup.sqlite"
     first_source = web_wud_observation_store.source_key("https://wud-a.test:3000")
     second_source = web_wud_observation_store.source_key("https://wud-b.test:3000")
@@ -80,11 +80,6 @@ def test_pending_observation_store_is_scoped_by_hashed_source(tmp_path: Path) ->
         db_path,
         source=second_source,
         observations=[_observation("second")],
-    )
-    web_wud_observation_store.replace_pending_observations(
-        db_path,
-        source=first_source,
-        observations=[],
     )
 
     assert web_wud_observation_store.load_pending_observations(

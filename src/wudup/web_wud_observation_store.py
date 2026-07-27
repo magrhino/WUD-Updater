@@ -87,13 +87,7 @@ def replace_pending_observations(
     with open_db(db_path) as conn:
         init_db(conn)
         with conn:
-            conn.execute(
-                """
-                DELETE FROM wud_pending_observation_cache
-                WHERE source_key = ?
-                """,
-                (source,),
-            )
+            conn.execute("DELETE FROM wud_pending_observation_cache")
             conn.executemany(
                 """
                 INSERT INTO wud_pending_observation_cache (

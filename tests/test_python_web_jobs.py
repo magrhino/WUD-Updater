@@ -116,6 +116,12 @@ def test_refresh_api_pending_source_reports_degraded_detail(
             watch_result=watch_result,
         ),
     )
+    checkpoints: list[WebSettings] = []
+    monkeypatch.setattr(
+        web_jobs.web_wud_api,
+        "checkpoint_pending_observation_cache",
+        checkpoints.append,
+    )
 
     web_jobs._refresh_api_pending_source_after_apply(
         settings,
@@ -128,6 +134,7 @@ def test_refresh_api_pending_source_reports_degraded_detail(
     assert event.phase == "wud-api-refresh"
     assert event.status == "skipped"
     assert event.message == f"WUD API pending refresh skipped. {detail}"
+    assert checkpoints == [settings]
 
 
 def test_refresh_api_pending_source_logs_unexpected_watch_error(
