@@ -448,51 +448,17 @@ def _auto_update_selection(
 ) -> AutoUpdateSelection | None:
     if not policies:
         return None
-    lines_by_mode: dict[str, list[int]] = {}
-    services_by_mode: dict[str, set[str]] = {}
-    schedules_by_mode: dict[str, set[str]] = {}
-    scheduled_for_by_mode: dict[str, datetime] = {}
-    candidates_by_mode: dict[str, list[AutoUpdateCandidate]] = {}
-    for group in grouping.groups:
-        for item in group.items:
-            if item.desired_tag:
-                continue
-            service_keys = tuple(
-                f"{group.name}/{service}" for service in item.services if service
-            )
-            if not service_keys:
-                continue
-            line_policies = [policies.get(service_key) for service_key in service_keys]
-            if any(policy is None for policy in line_policies):
-                continue
-            concrete = tuple(
-                policy for policy in line_policies if policy is not None
-            )
-            mode = concrete[0].update_mode or settings.config.update_mode
-            if any(
-                (policy.update_mode or settings.config.update_mode) != mode
-                for policy in concrete
-            ):
-                continue
-            candidates_by_mode.setdefault(mode, []).append(
-                (item.line_no, service_keys, concrete)
-            )
-            current = scheduled_for_by_mode.get(mode)
-            scheduled_for = min(policy.scheduled_for for policy in concrete)
-            scheduled_for_by_mode[mode] = (
-                scheduled_for if current is None else min(current, scheduled_for)
-            )
-    for mode, candidates in candidates_by_mode.items():
-        eligible = _dependency_eligible_auto_update_candidates(
-            candidates,
+    candidates_by_mode = _auto_update_candidates_by_mode(
+        settings,
+        grouping,
+        policies,
+    )
+    lines_by_mode, services_by_mode, schedules_by_mode, scheduled_for_by_mode = (
+        _eligible_auto_update_candidates_by_mode(
+            candidates_by_mode,
             dependency_snoozes=dependency_snoozes,
         )
-        for line_no, service_keys, concrete in eligible:
-            lines_by_mode.setdefault(mode, []).append(line_no)
-            services_by_mode.setdefault(mode, set()).update(service_keys)
-            schedules_by_mode.setdefault(mode, set()).update(
-                policy.schedule_key for policy in concrete
-            )
+    )
     eligible_modes = [
         mode
         for mode in sorted(lines_by_mode)
@@ -508,6 +474,91 @@ def _auto_update_selection(
         schedule_keys=tuple(sorted(schedules_by_mode[mode])),
         scheduled_for=scheduled_for_by_mode[mode],
         update_mode=mode,
+    )
+
+
+def _auto_update_candidates_by_mode(
+    settings: WebSettings,
+    grouping: Any,
+    policies: Mapping[str, AutoUpdatePolicy],
+) -> dict[str, list[AutoUpdateCandidate]]:
+    candidates_by_mode: dict[str, list[AutoUpdateCandidate]] = {}
+    for group in grouping.groups:
+        for item in group.items:
+            candidate = _auto_update_candidate_for_item(
+                settings,
+                group.name,
+                item,
+                policies,
+            )
+            if candidate is None:
+                continue
+            mode, line_candidate = candidate
+            candidates_by_mode.setdefault(mode, []).append(line_candidate)
+    return candidates_by_mode
+
+
+def _auto_update_candidate_for_item(
+    settings: WebSettings,
+    group_name: str,
+    item: Any,
+    policies: Mapping[str, AutoUpdatePolicy],
+) -> tuple[str, AutoUpdateCandidate] | None:
+    if item.desired_tag:
+        return None
+    service_keys = tuple(
+        f"{group_name}/{service}" for service in item.services if service
+    )
+    if not service_keys:
+        return None
+    line_policies = tuple(policies.get(service_key) for service_key in service_keys)
+    if any(policy is None for policy in line_policies):
+        return None
+    concrete = tuple(policy for policy in line_policies if policy is not None)
+    mode = concrete[0].update_mode or settings.config.update_mode
+    if any(
+        (policy.update_mode or settings.config.update_mode) != mode
+        for policy in concrete
+    ):
+        return None
+    return mode, (item.line_no, service_keys, concrete)
+
+
+def _eligible_auto_update_candidates_by_mode(
+    candidates_by_mode: Mapping[str, Sequence[AutoUpdateCandidate]],
+    *,
+    dependency_snoozes: Iterable[Any],
+) -> tuple[
+    dict[str, list[int]],
+    dict[str, set[str]],
+    dict[str, set[str]],
+    dict[str, datetime],
+]:
+    lines_by_mode: dict[str, list[int]] = {}
+    services_by_mode: dict[str, set[str]] = {}
+    schedules_by_mode: dict[str, set[str]] = {}
+    scheduled_for_by_mode: dict[str, datetime] = {}
+    for mode, candidates in candidates_by_mode.items():
+        eligible = _dependency_eligible_auto_update_candidates(
+            candidates,
+            dependency_snoozes=dependency_snoozes,
+        )
+        for line_no, service_keys, concrete in eligible:
+            lines_by_mode.setdefault(mode, []).append(line_no)
+            services_by_mode.setdefault(mode, set()).update(service_keys)
+            schedules_by_mode.setdefault(mode, set()).update(
+                policy.schedule_key for policy in concrete
+            )
+            scheduled_for = min(policy.scheduled_for for policy in concrete)
+            current = scheduled_for_by_mode.get(mode)
+            scheduled_for_by_mode[mode] = (
+                scheduled_for if current is None else min(current, scheduled_for)
+            )
+    return (
+        lines_by_mode,
+        services_by_mode,
+        schedules_by_mode,
+        scheduled_for_by_mode,
     )
 
 
