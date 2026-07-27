@@ -7,6 +7,7 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from .db import init_db, open_db
 
@@ -118,7 +119,7 @@ def _identity_from_json(raw: str) -> WudContainerIdentity | None:
         or not all(isinstance(item, str) for item in value)
     ):
         return None
-    return tuple(value)  # type: ignore[return-value]
+    return cast(WudContainerIdentity, tuple(value))
 
 
 def _observation_from_json(raw: str) -> Mapping[str, object] | None:

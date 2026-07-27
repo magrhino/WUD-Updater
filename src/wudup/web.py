@@ -83,6 +83,7 @@ def create_app(
     app.state.web_login_throttle = {}
     app.state.web_login_client_throttle = {}
     web_scheduler.initialize_auto_update_scheduler_state(app.state)
+    web_wud_api.initialize_pending_observation_cache(active_settings)
     web_wud_api.startup_probe(active_settings)
     if not active_settings.dev_no_auth:
         app.state.web_setup_claim = web_auth._prepare_web_auth_state(
@@ -107,6 +108,7 @@ def create_app(
         )
 
     def shutdown_apply_executor() -> None:
+        web_wud_api.checkpoint_pending_observation_cache(active_settings)
         web_release_notifications.shutdown_release_notification_scheduler_state(app.state)
         web_scheduler.shutdown_auto_update_scheduler_state(app.state)
         web_retags.shutdown_retag_preview_state(app.state)

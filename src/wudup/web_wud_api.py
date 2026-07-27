@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import math
 import re
+import sqlite3
 import secrets
 import time
 import urllib.error
@@ -18,7 +20,8 @@ from pathlib import Path
 from threading import Lock
 from typing import cast
 
-from . import web_wud_config
+from . import web_wud_config, web_wud_observation_store
+from .db import DatabaseError
 from .digest_verifier import DOCKER_HUB_REGISTRIES
 from .web_wud_config import _auth_required_detail
 from .images import (
@@ -70,6 +73,8 @@ WUD_API_CACHE_TTL_SECONDS = 30.0
 WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS = 5.0
 WUD_API_USER_AGENT = "wudup-webui-wud-api/1.0"
 _HEADER_NAME_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
+_UNSUPPORTED_REGISTRY_ERROR_PREFIX = "unsupported registry "
+LOGGER = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class WudApiContainer:
@@ -121,6 +126,7 @@ class WudApiSnapshot:
     hidden_update_candidates: tuple[WudApiContainer, ...] = ()
     degraded_container_count: int = 0
     retained_update_count: int = 0
+    unsupported_container_count: int = 0
     metadata_checked: bool = False
     checked_monotonic: float = 0.0
 
@@ -130,6 +136,13 @@ class _WudContainerObservation:
     container: WudApiContainer
     update_available: bool
     degraded: bool
+    unsupported: bool
+
+
+@dataclass(frozen=True)
+class _PendingObservation:
+    container: WudApiContainer
+    observed_at: str
 
 
 @dataclass(frozen=True)
@@ -142,7 +155,7 @@ class WudApiWatchResult:
 
 WudApiConfigurationSnapshot = web_wud_config.WudApiConfigurationSnapshot
 WudApiCacheKey = tuple[str, str]
-WudContainerIdentity = tuple[str, str, str, str, str, str, str]
+WudContainerIdentity = web_wud_observation_store.WudContainerIdentity
 
 
 _cache_lock = Lock()
@@ -151,7 +164,7 @@ _refresh_lock = Lock()
 _snapshot_cache: dict[WudApiCacheKey, WudApiSnapshot] = {}
 _pending_observation_cache: dict[
     WudApiCacheKey,
-    Mapping[WudContainerIdentity, WudApiContainer],
+    Mapping[WudContainerIdentity, _PendingObservation],
 ] = {}
 _configuration_diagnostics_cache: dict[WudApiCacheKey, WudApiConfigurationSnapshot] = {}
 
@@ -358,6 +371,76 @@ def startup_probe(settings: WebSettings) -> WudApiSnapshot:
         snapshot = _refresh_snapshot(settings, include_containers=False)
         if snapshot.status.state != "unavailable":
             return snapshot
+
+
+def initialize_pending_observation_cache(settings: WebSettings) -> None:
+    """Load restart-safe pending observations before serving requests."""
+
+    if not _observation_database_exists(settings):
+        return
+    try:
+        source = _observation_store_source(settings)
+        stored = web_wud_observation_store.load_pending_observations(
+            settings.config.db_path,
+            source=source,
+        )
+    except (OSError, ValueError, sqlite3.Error, DatabaseError) as exc:
+        LOGGER.warning(
+            "failed to load persisted WUD pending observations: %s",
+            _safe_cache_error(settings, exc),
+        )
+        return
+
+    pending: dict[WudContainerIdentity, _PendingObservation] = {}
+    for item in stored:
+        container = _container_from_stored_observation(item.observation)
+        if container is None or _container_identity(container) != item.identity:
+            LOGGER.warning("ignored malformed persisted WUD pending observation")
+            continue
+        pending[item.identity] = _PendingObservation(
+            container=container,
+            observed_at=item.observed_at,
+        )
+
+    base_url = settings.wud_api_base_url or DEFAULT_WUD_API_BASE_URL
+    with _cache_lock:
+        _pending_observation_cache[_cache_key(settings, base_url)] = pending
+
+
+def checkpoint_pending_observation_cache(settings: WebSettings) -> None:
+    """Atomically persist the latest in-memory pending observations."""
+
+    if not _observation_database_exists(settings):
+        return
+    base_url = settings.wud_api_base_url or DEFAULT_WUD_API_BASE_URL
+    cache_key = _cache_key(settings, base_url)
+    with _cache_lock:
+        cached = _pending_observation_cache.get(cache_key)
+        if cached is None:
+            return
+
+    stored = tuple(
+        web_wud_observation_store.StoredPendingObservation(
+            identity=identity,
+            observation=_stored_observation(state.container),
+            observed_at=state.observed_at,
+        )
+        for identity, state in sorted(
+            cached.items(),
+            key=lambda item: item[0],
+        )
+    )
+    try:
+        web_wud_observation_store.replace_pending_observations(
+            settings.config.db_path,
+            source=_observation_store_source(settings),
+            observations=stored,
+        )
+    except (OSError, ValueError, sqlite3.Error, DatabaseError) as exc:
+        LOGGER.warning(
+            "failed to persist WUD pending observations: %s",
+            _safe_cache_error(settings, exc),
+        )
 
 
 def get_snapshot(
@@ -691,17 +774,24 @@ def _refresh_snapshot_serialized(
         hidden_update_candidates,
         degraded_container_count,
         retained_update_count,
+        unsupported_container_count,
         pending_observations,
     ) = _reconcile_container_observations(
         payload,
         settings,
         previous=_pending_observations(cache_key),
+        observed_at=checked_at,
     )
     detail = f"{len(containers)} WUD update metadata item(s) available"
     if degraded_container_count:
         detail = (
             f"{detail}; {degraded_container_count} container observation(s) degraded; "
             f"{retained_update_count} last-known-good update(s) retained"
+        )
+    if unsupported_container_count:
+        detail = (
+            f"{detail}; {unsupported_container_count} unsupported container "
+            "observation(s) ignored"
         )
     snapshot = _snapshot(
         "ready",
@@ -715,6 +805,7 @@ def _refresh_snapshot_serialized(
         hidden_update_candidates=hidden_update_candidates,
         degraded_container_count=degraded_container_count,
         retained_update_count=retained_update_count,
+        unsupported_container_count=unsupported_container_count,
     )
     _store_snapshot(
         cache_key,
@@ -908,7 +999,7 @@ def _store_configuration_diagnostics(
 
 def _pending_observations(
     cache_key: WudApiCacheKey,
-) -> Mapping[WudContainerIdentity, WudApiContainer]:
+) -> Mapping[WudContainerIdentity, _PendingObservation]:
     with _cache_lock:
         cached = _pending_observation_cache.get(cache_key)
         return {} if cached is None else cached
@@ -918,7 +1009,7 @@ def _store_snapshot(
     cache_key: WudApiCacheKey,
     snapshot: WudApiSnapshot,
     *,
-    pending_observations: Mapping[WudContainerIdentity, WudApiContainer]
+    pending_observations: Mapping[WudContainerIdentity, _PendingObservation]
     | None = None,
 ) -> None:
     with _cache_lock:
@@ -946,6 +1037,7 @@ def _snapshot(
     hidden_update_candidates: Sequence[WudApiContainer] = (),
     degraded_container_count: int = 0,
     retained_update_count: int = 0,
+    unsupported_container_count: int = 0,
 ) -> WudApiSnapshot:
     return WudApiSnapshot(
         status=WudApiStatus(
@@ -959,6 +1051,7 @@ def _snapshot(
         hidden_update_candidates=tuple(hidden_update_candidates),
         degraded_container_count=degraded_container_count,
         retained_update_count=retained_update_count,
+        unsupported_container_count=unsupported_container_count,
         metadata_checked=metadata_checked,
         checked_monotonic=checked_monotonic,
     )
@@ -1038,28 +1131,101 @@ def _join_url(base_url: str, path: str) -> str:
     return f"{base_url}{path}"
 
 
+def _observation_store_source(settings: WebSettings) -> str:
+    base_url = settings.wud_api_base_url or DEFAULT_WUD_API_BASE_URL
+    normalized_base_url = _normalize_base_url(base_url)
+    return web_wud_observation_store.source_key(normalized_base_url)
+
+
+def _observation_database_exists(settings: WebSettings) -> bool:
+    db_path = settings.config.db_path
+    return str(db_path) != ":memory:" and db_path.is_file()
+
+
+def _stored_observation(container: WudApiContainer) -> Mapping[str, object]:
+    platform = container.platform
+    return {
+        "id": container.id,
+        "name": container.name,
+        "display_name": container.display_name,
+        "status": container.status,
+        "watcher": container.watcher,
+        "image": container.image,
+        "local_tag": container.local_tag,
+        "local_digest": container.local_digest,
+        "remote_tag": container.remote_tag,
+        "remote_digest": container.remote_digest,
+        "update_kind": container.update_kind,
+        "semver_diff": container.semver_diff,
+        "link": container.link,
+        "platform": platform.value if platform is not None else "",
+        "local_image_id": container.local_image_id,
+    }
+
+
+def _container_from_stored_observation(
+    raw: Mapping[str, object],
+) -> WudApiContainer | None:
+    platform_value = _string(raw.get("platform"))
+    platform = parse_platform(platform_value) if platform_value else None
+    container = WudApiContainer(
+        id=_string(raw.get("id")),
+        name=_string(raw.get("name")),
+        display_name=_string(raw.get("display_name")),
+        status=_string(raw.get("status")),
+        watcher=_string(raw.get("watcher")),
+        image=_string(raw.get("image")),
+        local_tag=_string(raw.get("local_tag")),
+        local_digest=_string(raw.get("local_digest")),
+        remote_tag=_string(raw.get("remote_tag")),
+        remote_digest=_string(raw.get("remote_digest")),
+        update_kind=_string(raw.get("update_kind")),
+        semver_diff=_string(raw.get("semver_diff")),
+        link=_string(raw.get("link")),
+        error="",
+        platform=platform,
+        local_image_id=_string(raw.get("local_image_id")),
+    )
+    if (
+        _container_identity(container) is None
+        or not (container.remote_tag or container.remote_digest)
+    ):
+        return None
+    return container
+
+
+def _safe_cache_error(settings: WebSettings, exc: BaseException) -> str:
+    return _sanitize_detail(settings, str(exc))
+
+
 def _append_pending_observation(
     container: WudApiContainer,
     containers: list[WudApiContainer],
-    pending_observations: dict[WudContainerIdentity, WudApiContainer],
+    pending_observations: dict[WudContainerIdentity, _PendingObservation],
+    *,
+    observed_at: str,
 ) -> None:
     containers.append(container)
     identity = _container_identity(container)
     if identity is not None:
-        pending_observations[identity] = container
+        pending_observations[identity] = _PendingObservation(
+            container=container,
+            observed_at=observed_at,
+        )
 
 
 def _retain_previous_observation(
     container: WudApiContainer,
-    previous: Mapping[WudContainerIdentity, WudApiContainer],
+    previous: Mapping[WudContainerIdentity, _PendingObservation],
     containers: list[WudApiContainer],
-    pending_observations: dict[WudContainerIdentity, WudApiContainer],
+    pending_observations: dict[WudContainerIdentity, _PendingObservation],
 ) -> bool:
     identity = _container_identity(container)
-    retained = previous.get(identity) if identity is not None else None
-    if retained is None:
+    previous_observation = previous.get(identity) if identity is not None else None
+    if previous_observation is None:
         return False
 
+    retained = previous_observation.container
     retained = replace(
         retained,
         display_name=container.display_name,
@@ -1068,7 +1234,10 @@ def _retain_previous_observation(
         labels=container.labels,
     )
     containers.append(retained)
-    pending_observations[identity] = retained
+    pending_observations[identity] = _PendingObservation(
+        container=retained,
+        observed_at=previous_observation.observed_at,
+    )
     return True
 
 
@@ -1076,19 +1245,22 @@ def _reconcile_container_observations(
     payload: Sequence[object],
     settings: WebSettings,
     *,
-    previous: Mapping[WudContainerIdentity, WudApiContainer],
+    previous: Mapping[WudContainerIdentity, _PendingObservation],
+    observed_at: str,
 ) -> tuple[
     tuple[WudApiContainer, ...],
     tuple[WudApiContainer, ...],
     int,
     int,
-    Mapping[WudContainerIdentity, WudApiContainer],
+    int,
+    Mapping[WudContainerIdentity, _PendingObservation],
 ]:
     containers: list[WudApiContainer] = []
     hidden_update_candidates: list[WudApiContainer] = []
-    pending_observations: dict[WudContainerIdentity, WudApiContainer] = {}
+    pending_observations: dict[WudContainerIdentity, _PendingObservation] = {}
     degraded_container_count = 0
     retained_update_count = 0
+    unsupported_container_count = 0
 
     for raw in payload:
         observation = _parse_container_observation(raw, settings)
@@ -1097,6 +1269,19 @@ def _reconcile_container_observations(
             continue
 
         container = observation.container
+        if observation.unsupported:
+            if _retain_previous_observation(
+                container,
+                previous,
+                containers,
+                pending_observations,
+            ):
+                degraded_container_count += 1
+                retained_update_count += 1
+            else:
+                unsupported_container_count += 1
+            continue
+
         if observation.degraded:
             degraded_container_count += 1
             if _retain_previous_observation(
@@ -1113,6 +1298,7 @@ def _reconcile_container_observations(
                 container,
                 containers,
                 pending_observations,
+                observed_at=observed_at,
             )
             continue
 
@@ -1125,6 +1311,7 @@ def _reconcile_container_observations(
         tuple(hidden_update_candidates),
         degraded_container_count,
         retained_update_count,
+        unsupported_container_count,
         pending_observations,
     )
 
@@ -1139,13 +1326,23 @@ def _parse_container_observation(
     if container is None:
         return None
     update_available = raw.get("updateAvailable")
+    usable_scan_result = _has_usable_scan_result(raw, container)
+    unsupported = (
+        update_available is False
+        and not usable_scan_result
+        and container.error.casefold().startswith(_UNSUPPORTED_REGISTRY_ERROR_PREFIX)
+    )
     return _WudContainerObservation(
         container=container,
         update_available=update_available is True,
+        unsupported=unsupported,
         degraded=(
-            not isinstance(update_available, bool)
-            or bool(container.error)
-            or not _has_usable_scan_result(raw, container)
+            not unsupported
+            and (
+                not isinstance(update_available, bool)
+                or bool(container.error)
+                or not usable_scan_result
+            )
         ),
     )
 
