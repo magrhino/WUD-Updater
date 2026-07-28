@@ -448,6 +448,67 @@ def test_apply_endpoint_rejects_degraded_api_last_good_source(
     assert " up -d " not in calls
 
 
+def test_plan_allows_fresh_update_with_unrelated_unsupported_registry_row(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:new",
+            update_kind="digest",
+        )
+    ]
+    unsupported = _wud_api_container(
+        name="socket-proxy",
+        image="linuxserver/socket-proxy",
+        update_available=False,
+        update_kind="unknown",
+    )
+    unsupported["result"] = None
+    unsupported["error"] = {"message": "Unsupported Registry unknown"}
+    containers.append(unsupported)
+    _install_wud_api(monkeypatch, containers=containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.apply-api-unsupported.test:3000",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    pending = client.get("/api/v1/pending")
+    headers = _csrf_headers(client)
+    plan_response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+    plan = plan_response.json()
+
+    assert pending.status_code == 200
+    assert pending.json()["source"]["degraded"] is False
+    assert plan_response.status_code == 200
+    assert plan["status"] == "ready"
+    assert plan["source"]["active"] == "api"
+    assert plan["source"]["degraded"] is False
+    assert plan["can_apply"] is True
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
 def test_apply_endpoint_rejects_stale_api_pending_source_without_editing_file(
     tmp_path: Path,
     monkeypatch,

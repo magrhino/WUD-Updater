@@ -598,6 +598,7 @@ def generate_static_demo_fixtures() -> dict[str, Any]:
 def _preserved_wud_api_snapshot_cache():
     with web_wud_api._cache_lock:
         original_cache = dict(web_wud_api._snapshot_cache)
+        original_pending_cache = dict(web_wud_api._pending_observation_cache)
         original_diagnostics_cache = dict(web_wud_api._configuration_diagnostics_cache)
     try:
         yield
@@ -605,6 +606,8 @@ def _preserved_wud_api_snapshot_cache():
         with web_wud_api._cache_lock:
             web_wud_api._snapshot_cache.clear()
             web_wud_api._snapshot_cache.update(original_cache)
+            web_wud_api._pending_observation_cache.clear()
+            web_wud_api._pending_observation_cache.update(original_pending_cache)
             web_wud_api._configuration_diagnostics_cache.clear()
             web_wud_api._configuration_diagnostics_cache.update(
                 original_diagnostics_cache

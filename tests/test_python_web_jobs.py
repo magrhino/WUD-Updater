@@ -1,6 +1,8 @@
 from __future__ import annotations
 import logging
 from pathlib import Path
+from types import SimpleNamespace
+
 from wudup import web_jobs
 from wudup import web_wud_api
 from wudup import web_self_update as self_update_module
@@ -116,6 +118,12 @@ def test_refresh_api_pending_source_reports_degraded_detail(
             watch_result=watch_result,
         ),
     )
+    checkpoints: list[WebSettings] = []
+    monkeypatch.setattr(
+        web_jobs.web_wud_api,
+        "checkpoint_pending_observation_cache",
+        checkpoints.append,
+    )
 
     web_jobs._refresh_api_pending_source_after_apply(
         settings,
@@ -128,6 +136,7 @@ def test_refresh_api_pending_source_reports_degraded_detail(
     assert event.phase == "wud-api-refresh"
     assert event.status == "skipped"
     assert event.message == f"WUD API pending refresh skipped. {detail}"
+    assert checkpoints == [settings]
 
 
 def test_refresh_api_pending_source_logs_unexpected_watch_error(
@@ -167,6 +176,76 @@ def test_refresh_api_pending_source_logs_unexpected_watch_error(
     assert event.message == "WUD API pending refresh skipped."
     assert "WUD API pending refresh failed" in caplog.text
     assert "watch exploded" in caplog.text
+
+
+def test_successful_apply_survives_pending_checkpoint_failure(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    settings = _settings_for_lock_timeout(tmp_path, {})
+    jobs = {
+        "job": WebApplyJob(
+            id="job",
+            status="running",
+            selected_line_numbers=(1,),
+        )
+    }
+    snapshot = web_wud_api.WudApiSnapshot(
+        status=web_wud_api.WudApiStatus(
+            state="ready",
+            available=True,
+            metadata_available=True,
+            last_checked_at="2026-01-01T00:00:00+00:00",
+        )
+    )
+    watch_result = web_wud_api.WudApiWatchResult(
+        snapshot=snapshot,
+        watched=True,
+        requested_count=1,
+        watched_count=1,
+    )
+    monkeypatch.setattr(
+        web_jobs.web_wud_refresh,
+        "refresh_wud_pending_source",
+        lambda *_args, **_kwargs: web_jobs.web_wud_refresh.WudPendingRefresh(
+            source=None,
+            watch_result=watch_result,
+        ),
+    )
+
+    def fail_checkpoint(_settings: WebSettings) -> None:
+        raise RuntimeError("checkpoint exploded")
+
+    monkeypatch.setattr(
+        web_jobs.web_wud_api,
+        "checkpoint_pending_observation_cache",
+        fail_checkpoint,
+    )
+    runner = SimpleNamespace(
+        audit_run_id=7,
+        log_file=tmp_path / "apply.log",
+    )
+
+    with caplog.at_level(logging.ERROR, logger=web_jobs.LOGGER.name):
+        result = web_jobs._handle_apply_job_run_result(
+            settings,
+            jobs,
+            web_jobs.Condition(),
+            "job",
+            runner,
+            0,
+            web_jobs.ApplyJobRunContext(
+                pending_source_active="api",
+                pending_source_text="registry.example/acme/app:1.0.0\n",
+            ),
+            lambda *_args, **_kwargs: None,
+        )
+
+    assert result["status"] == "success"
+    assert jobs["job"].progress[-1].status == "success"
+    assert "WUD API pending observation checkpoint failed" in caplog.text
+    assert "checkpoint exploded" not in caplog.text
 
 
 def test_apply_job_refreshes_only_api_pending_source(

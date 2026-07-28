@@ -18,7 +18,7 @@ from typing import Any, Protocol, cast
 from fastapi import HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 
-from . import web_wud_refresh
+from . import web_wud_api, web_wud_refresh
 from .command import CommandRunner
 from .config import UpdaterConfig
 from .db import utc_timestamp
@@ -687,6 +687,10 @@ def _refresh_api_pending_source_after_apply(
             message = "WUD API pending refresh skipped."
             if result.snapshot.status.detail:
                 message = f"{message} {result.snapshot.status.detail}"
+    try:
+        web_wud_api.checkpoint_pending_observation_cache(settings)
+    except Exception:  # noqa: BLE001 - persistence must not fail a successful apply.
+        LOGGER.error("WUD API pending observation checkpoint failed")
     _append_apply_job_progress(
         jobs,
         apply_condition,

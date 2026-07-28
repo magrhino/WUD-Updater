@@ -269,6 +269,48 @@ def test_pending_endpoint_preserves_updates_across_degraded_wud_rows(
     assert all(method == "GET" for method, _path in calls)
 
 
+def test_pending_endpoint_stays_fresh_with_unrelated_unsupported_registry_row(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, _fake_root = _fake_docker_env(tmp_path)
+    containers = [_wud_api_container(name="app", image="repo/app")]
+    unsupported = _wud_api_container(
+        name="socket-proxy",
+        image="linuxserver/socket-proxy",
+        update_available=False,
+        update_kind="unknown",
+    )
+    unsupported["result"] = None
+    unsupported["error"] = {"message": "Unsupported Registry unknown"}
+    containers.append(unsupported)
+    calls = install_recording_wud_api(monkeypatch, containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.pending-unsupported.test:3000",
+            **fake_env,
+        },
+    )
+    calls.clear()
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["source"]["fresh"] is True
+    assert body["source"]["degraded"] is False
+    assert body["warnings"] == []
+    assert body["wud_api"]["detail"] == (
+        "1 WUD update metadata item(s) available; "
+        "1 unsupported container observation(s) ignored"
+    )
+    assert calls == [("GET", "/health"), ("GET", "/api/containers")]
+
+
 def test_pending_endpoint_clears_update_missing_from_authoritative_payload(
     tmp_path: Path,
     monkeypatch,

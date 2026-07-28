@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
+import sqlite3
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import nullcontext
+from contextlib import closing, nullcontext
+from dataclasses import replace
 from pathlib import Path
 from threading import Event, local
 from types import SimpleNamespace
@@ -12,14 +15,23 @@ from typing import Any
 
 import pytest
 
-from wudup import web_release_notes as release_notes_module
-from wudup import web_wud_api
+from wudup import (
+    web as web_module,
+    web_jobs,
+    web_release_notifications,
+    web_release_notes as release_notes_module,
+    web_retags,
+    web_scheduler,
+    web_security,
+    web_wud_api,
+    web_wud_observation_store,
+)
 from wudup.config import ConfigError
 from wudup.release_notes import (
     ReleaseNoteInfo as ReleaseNoteData,
     release_note_contexts,
 )
-from wudup.web import load_web_settings
+from wudup.web import create_app, load_web_settings
 from wudup.web_auth import WebConfigError
 
 from tests.web_test_helpers import (
@@ -44,6 +56,15 @@ def _settings(
         values.update(env)
     return load_web_settings(
         environ=_web_env(tmp_path, values),
+    )
+
+
+def _persisted_observations(
+    settings: Any,
+) -> tuple[web_wud_observation_store.StoredPendingObservation, ...]:
+    return web_wud_observation_store.load_pending_observations(
+        settings.config.db_path,
+        source=web_wud_observation_store.source_key(settings.wud_api_base_url),
     )
 
 
@@ -94,6 +115,34 @@ def _container_payload(
         "error": {"message": ""},
         "updateAvailable": update_available,
     }
+
+
+def test_wud_api_persisted_container_round_trips_without_transient_fields() -> None:
+    container = web_wud_api.WudApiContainer(
+        id="docker.local.app",
+        name="app",
+        display_name="Application",
+        status="running",
+        watcher="local",
+        image="registry.example/acme/app:1.0.0",
+        local_tag="1.0.0",
+        local_digest="sha256:local",
+        remote_tag="1.1.0",
+        remote_digest="sha256:remote",
+        update_kind="tag",
+        semver_diff="minor",
+        link="https://github.com/acme/app/releases/tag/v1.1.0",
+        error="transient registry error",
+        labels={"org.opencontainers.image.source": "https://github.com/acme/app"},
+        platform=web_wud_api.ImagePlatform("linux", "amd64"),
+        local_image_id="sha256:image",
+    )
+
+    stored = web_wud_api._stored_observation(container)
+    restored = web_wud_api._container_from_stored_observation(stored)
+
+    assert stored.keys() == web_wud_api._PERSISTED_WUD_API_CONTAINER_FIELDS
+    assert restored == replace(container, error="", labels={})
 
 
 class _ToggleableWudApi:
@@ -204,6 +253,358 @@ def test_wud_api_forced_refreshes_serialize_last_good_reconciliation(
     assert second.containers[0].error == "registry lookup failed"
     assert second.retained_update_count == 1
     assert calls.count("/api/containers") == 2
+
+
+def test_wud_api_pending_observation_survives_process_restart(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    containers = [_container_payload(name="app")]
+    _install_wud_api(monkeypatch, containers=containers)
+    settings = _settings(tmp_path, "https://wud.restart-cache.test:3000")
+    settings.config.db_path.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(settings.config.db_path)):
+        pass
+    monkeypatch.setattr(web_wud_api, "_snapshot_cache", {})
+    monkeypatch.setattr(web_wud_api, "_pending_observation_cache", {})
+
+    web_wud_api.initialize_pending_observation_cache(settings)
+    ready = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+
+    assert ready.retained_update_count == 0
+    assert _persisted_observations(settings) == ()
+
+    web_wud_api.checkpoint_pending_observation_cache(settings)
+    assert len(_persisted_observations(settings)) == 1
+
+    web_wud_api._snapshot_cache.clear()
+    web_wud_api._pending_observation_cache.clear()
+    degraded = _container_payload(name="app", update_available=False)
+    degraded["result"] = None
+    degraded["error"] = {"message": "registry lookup failed"}
+    containers[:] = [degraded]
+
+    web_wud_api.initialize_pending_observation_cache(settings)
+    restored = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+
+    assert len(restored.containers) == 1
+    assert restored.containers[0].name == "app"
+    assert restored.containers[0].remote_tag == "1.1.0"
+    assert restored.containers[0].error == "registry lookup failed"
+    assert restored.degraded_container_count == 1
+    assert restored.retained_update_count == 1
+
+    containers[:] = [
+        _container_payload(
+            name="app",
+            update_available=False,
+            remote_tag="1.0.0",
+            update_kind="unknown",
+            remote_value="1.0.0",
+        )
+    ]
+    authoritative = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+    assert authoritative.containers == ()
+    assert authoritative.degraded_container_count == 0
+    web_wud_api.checkpoint_pending_observation_cache(settings)
+
+    web_wud_api._snapshot_cache.clear()
+    web_wud_api._pending_observation_cache.clear()
+    containers[:] = [degraded]
+    web_wud_api.initialize_pending_observation_cache(settings)
+    cleared = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+
+    assert cleared.containers == ()
+    assert cleared.degraded_container_count == 1
+    assert cleared.retained_update_count == 0
+
+
+def test_wud_api_persisted_observation_does_not_cross_container_identity(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    initial = _container_payload(name="app")
+    initial_image = initial["image"]
+    assert isinstance(initial_image, dict)
+    initial_image["id"] = "sha256:original"
+    containers = [initial]
+    _install_wud_api(monkeypatch, containers=containers)
+    settings = _settings(tmp_path, "https://wud.restart-identity.test:3000")
+    settings.config.db_path.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(settings.config.db_path)):
+        pass
+    monkeypatch.setattr(web_wud_api, "_snapshot_cache", {})
+    monkeypatch.setattr(web_wud_api, "_pending_observation_cache", {})
+
+    web_wud_api.initialize_pending_observation_cache(settings)
+    web_wud_api.get_snapshot(settings, include_containers=True, force=True)
+    web_wud_api.checkpoint_pending_observation_cache(settings)
+
+    web_wud_api._snapshot_cache.clear()
+    web_wud_api._pending_observation_cache.clear()
+    replacement = _container_payload(name="app", update_available=False)
+    replacement_image = replacement["image"]
+    assert isinstance(replacement_image, dict)
+    replacement_image["id"] = "sha256:replacement"
+    replacement["result"] = None
+    replacement["error"] = {"message": "registry lookup failed"}
+    containers[:] = [replacement]
+
+    web_wud_api.initialize_pending_observation_cache(settings)
+    degraded = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+
+    assert degraded.containers == ()
+    assert degraded.degraded_container_count == 1
+    assert degraded.retained_update_count == 0
+
+
+def test_wud_api_authenticated_client_does_not_load_persisted_observations(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    containers = [_container_payload(name="app")]
+    _install_wud_api(monkeypatch, containers=containers)
+    base_url = "https://wud.authenticated-cache.test:3000"
+    unauthenticated = _settings(tmp_path, base_url)
+    unauthenticated.config.db_path.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(unauthenticated.config.db_path)):
+        pass
+    monkeypatch.setattr(web_wud_api, "_snapshot_cache", {})
+    monkeypatch.setattr(web_wud_api, "_pending_observation_cache", {})
+
+    web_wud_api.initialize_pending_observation_cache(unauthenticated)
+    web_wud_api.get_snapshot(
+        unauthenticated,
+        include_containers=True,
+        force=True,
+    )
+    web_wud_api.checkpoint_pending_observation_cache(unauthenticated)
+
+    web_wud_api._snapshot_cache.clear()
+    web_wud_api._pending_observation_cache.clear()
+    degraded = _container_payload(name="app", update_available=False)
+    degraded["result"] = None
+    degraded["error"] = {"message": "registry lookup failed"}
+    containers[:] = [degraded]
+    authenticated = _settings(
+        tmp_path,
+        base_url,
+        {web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: "new-principal-secret"},
+    )
+
+    web_wud_api.initialize_pending_observation_cache(authenticated)
+    snapshot = web_wud_api.get_snapshot(
+        authenticated,
+        include_containers=True,
+        force=True,
+    )
+
+    assert _persisted_observations(authenticated) == ()
+    assert snapshot.containers == ()
+    assert snapshot.degraded_container_count == 1
+    assert snapshot.retained_update_count == 0
+
+
+def test_web_app_wires_pending_observation_lifecycle_and_contains_checkpoint_failure(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    calls: list[str] = []
+    settings = _settings(
+        tmp_path,
+        "https://wud.lifecycle.test:3000",
+        {"WUD_WEB_DEV_NO_AUTH": "true"},
+    )
+    monkeypatch.setattr(
+        web_wud_api,
+        "initialize_pending_observation_cache",
+        lambda active_settings: calls.append(
+            f"load:{active_settings.wud_api_base_url}"
+        ),
+    )
+
+    def fail_checkpoint(active_settings) -> None:
+        calls.append(f"save:{active_settings.wud_api_base_url}")
+        raise RuntimeError("checkpoint exploded")
+
+    monkeypatch.setattr(
+        web_wud_api,
+        "checkpoint_pending_observation_cache",
+        fail_checkpoint,
+    )
+    monkeypatch.setattr(web_wud_api, "startup_probe", lambda _settings: None)
+    for module, attribute, name in (
+        (
+            web_release_notifications,
+            "shutdown_release_notification_scheduler_state",
+            "release-notifications",
+        ),
+        (web_scheduler, "shutdown_auto_update_scheduler_state", "scheduler"),
+        (web_retags, "shutdown_retag_preview_state", "retag-preview"),
+        (web_security, "shutdown_security_scan_state", "security-scan"),
+        (web_jobs, "shutdown_apply_job_state", "apply-jobs"),
+    ):
+        monkeypatch.setattr(
+            module,
+            attribute,
+            lambda _state, label=name: calls.append(f"stop:{label}"),
+        )
+
+    app = create_app(settings)
+    shutdown = next(
+        callback
+        for callback in app.router.on_shutdown
+        if callback.__name__ == "shutdown_apply_executor"
+    )
+    with caplog.at_level(logging.ERROR, logger=web_module.LOGGER.name):
+        shutdown()
+
+    assert calls == [
+        "load:https://wud.lifecycle.test:3000",
+        "stop:release-notifications",
+        "stop:scheduler",
+        "stop:retag-preview",
+        "stop:security-scan",
+        "stop:apply-jobs",
+        "save:https://wud.lifecycle.test:3000",
+    ]
+    assert "WUD API pending observation checkpoint failed" in caplog.text
+    assert "checkpoint exploded" not in caplog.text
+
+
+def test_wud_api_checkpoint_waits_for_active_refresh(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    refresh_waiting = Event()
+    release_refresh = Event()
+    checkpoint_finished = Event()
+
+    def request_json(url: str, _client_config=None) -> object:
+        path = urllib.parse.urlsplit(url).path
+        if path == "/health":
+            return {"status": "ok"}
+        if path == "/api/containers":
+            refresh_waiting.set()
+            assert release_refresh.wait(timeout=5)
+            return [_container_payload(name="app")]
+        raise AssertionError(f"unexpected WUD API URL: {url}")
+
+    monkeypatch.setattr(web_wud_api, "_request_json", request_json)
+    monkeypatch.setattr(web_wud_api, "_snapshot_cache", {})
+    monkeypatch.setattr(web_wud_api, "_pending_observation_cache", {})
+    settings = _settings(tmp_path, "https://wud.checkpoint-race.test:3000")
+    settings.config.db_path.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(settings.config.db_path)):
+        pass
+    web_wud_api.initialize_pending_observation_cache(settings)
+
+    def checkpoint() -> None:
+        web_wud_api.checkpoint_pending_observation_cache(settings)
+        checkpoint_finished.set()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        refresh_future = executor.submit(
+            web_wud_api.get_snapshot,
+            settings,
+            include_containers=True,
+            force=True,
+        )
+        assert refresh_waiting.wait(timeout=5)
+        checkpoint_future = executor.submit(checkpoint)
+        assert not checkpoint_finished.wait(timeout=0.1)
+        release_refresh.set()
+        refreshed = refresh_future.result(timeout=5)
+        checkpoint_future.result(timeout=5)
+
+    assert refreshed.containers[0].name == "app"
+    assert len(_persisted_observations(settings)) == 1
+
+
+def test_wud_api_ignores_unrelated_unsupported_registry_observation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    unsupported = _container_payload(
+        name="socket-proxy",
+        image="linuxserver/socket-proxy",
+        update_available=False,
+        update_kind="unknown",
+    )
+    unsupported["result"] = None
+    unsupported["error"] = {"message": "Unsupported Registry unknown"}
+    _install_wud_api(
+        monkeypatch,
+        containers=[_container_payload(name="app"), unsupported],
+    )
+
+    snapshot = web_wud_api.get_snapshot(
+        _settings(tmp_path, "https://wud.unsupported.test:3000"),
+        include_containers=True,
+        force=True,
+    )
+
+    assert len(snapshot.containers) == 1
+    assert snapshot.containers[0].name == "app"
+    assert snapshot.degraded_container_count == 0
+    assert snapshot.retained_update_count == 0
+    assert snapshot.status.detail == (
+        "1 WUD update metadata item(s) available; "
+        "1 unsupported container observation(s) ignored"
+    )
+
+
+def test_wud_api_retains_prior_update_when_registry_becomes_unsupported(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    containers = [_container_payload(name="app")]
+    _install_wud_api(monkeypatch, containers=containers)
+    settings = _settings(tmp_path, "https://wud.unsupported-retain.test:3000")
+
+    ready = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+    assert len(ready.containers) == 1
+
+    unsupported = _container_payload(name="app", update_available=False)
+    unsupported["result"] = None
+    unsupported["error"] = {"message": "Unsupported Registry unknown"}
+    containers[:] = [unsupported]
+
+    degraded = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+
+    assert len(degraded.containers) == 1
+    assert degraded.containers[0].remote_tag == "1.1.0"
+    assert degraded.degraded_container_count == 1
+    assert degraded.retained_update_count == 1
 
 
 def test_wud_api_snapshot_reads_hidden_update_candidates_from_update_kind_delta(
