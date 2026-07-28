@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
@@ -117,6 +117,35 @@ class WudApiContainer:
             platform_architecture=platform.architecture if platform is not None else "",
             platform_variant=platform.variant if platform is not None else "",
         )
+
+
+_PERSISTED_WUD_API_CONTAINER_FIELDS = frozenset(
+    {
+        "id",
+        "name",
+        "display_name",
+        "status",
+        "watcher",
+        "image",
+        "local_tag",
+        "local_digest",
+        "remote_tag",
+        "remote_digest",
+        "update_kind",
+        "semver_diff",
+        "link",
+        "platform",
+        "local_image_id",
+    }
+)
+_EXCLUDED_WUD_API_CONTAINER_FIELDS = frozenset({"error", "labels"})
+assert (
+    _PERSISTED_WUD_API_CONTAINER_FIELDS | _EXCLUDED_WUD_API_CONTAINER_FIELDS
+    == {item.name for item in fields(WudApiContainer)}
+)
+assert not (
+    _PERSISTED_WUD_API_CONTAINER_FIELDS & _EXCLUDED_WUD_API_CONTAINER_FIELDS
+)
 
 
 @dataclass(frozen=True)
@@ -1161,7 +1190,7 @@ def _observation_persistence_enabled(settings: WebSettings) -> bool:
 
 def _stored_observation(container: WudApiContainer) -> Mapping[str, object]:
     platform = container.platform
-    return {
+    stored = {
         "id": container.id,
         "name": container.name,
         "display_name": container.display_name,
@@ -1178,6 +1207,8 @@ def _stored_observation(container: WudApiContainer) -> Mapping[str, object]:
         "platform": platform.value if platform is not None else "",
         "local_image_id": container.local_image_id,
     }
+    assert stored.keys() == _PERSISTED_WUD_API_CONTAINER_FIELDS
+    return stored
 
 
 def _container_from_stored_observation(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from wudup import web_wud_observation_store
@@ -103,7 +104,7 @@ def test_pending_observation_store_ignores_malformed_value(tmp_path: Path) -> No
         source=source,
         observations=[_observation("app")],
     )
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         conn.execute(
             """
             UPDATE web_settings

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import sqlite3
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing, nullcontext
+from dataclasses import replace
 from pathlib import Path
 from threading import Event, local
 from types import SimpleNamespace
@@ -14,6 +16,7 @@ from typing import Any
 import pytest
 
 from wudup import (
+    web as web_module,
     web_jobs,
     web_release_notifications,
     web_release_notes as release_notes_module,
@@ -112,6 +115,34 @@ def _container_payload(
         "error": {"message": ""},
         "updateAvailable": update_available,
     }
+
+
+def test_wud_api_persisted_container_round_trips_without_transient_fields() -> None:
+    container = web_wud_api.WudApiContainer(
+        id="docker.local.app",
+        name="app",
+        display_name="Application",
+        status="running",
+        watcher="local",
+        image="registry.example/acme/app:1.0.0",
+        local_tag="1.0.0",
+        local_digest="sha256:local",
+        remote_tag="1.1.0",
+        remote_digest="sha256:remote",
+        update_kind="tag",
+        semver_diff="minor",
+        link="https://github.com/acme/app/releases/tag/v1.1.0",
+        error="transient registry error",
+        labels={"org.opencontainers.image.source": "https://github.com/acme/app"},
+        platform=web_wud_api.ImagePlatform("linux", "amd64"),
+        local_image_id="sha256:image",
+    )
+
+    stored = web_wud_api._stored_observation(container)
+    restored = web_wud_api._container_from_stored_observation(stored)
+
+    assert stored.keys() == web_wud_api._PERSISTED_WUD_API_CONTAINER_FIELDS
+    assert restored == replace(container, error="", labels={})
 
 
 class _ToggleableWudApi:
@@ -394,9 +425,10 @@ def test_wud_api_authenticated_client_does_not_load_persisted_observations(
     assert snapshot.retained_update_count == 0
 
 
-def test_web_app_wires_pending_observation_lifecycle(
+def test_web_app_wires_pending_observation_lifecycle_and_contains_checkpoint_failure(
     tmp_path: Path,
     monkeypatch,
+    caplog,
 ) -> None:
     calls: list[str] = []
     settings = _settings(
@@ -411,12 +443,15 @@ def test_web_app_wires_pending_observation_lifecycle(
             f"load:{active_settings.wud_api_base_url}"
         ),
     )
+
+    def fail_checkpoint(active_settings) -> None:
+        calls.append(f"save:{active_settings.wud_api_base_url}")
+        raise RuntimeError("checkpoint exploded")
+
     monkeypatch.setattr(
         web_wud_api,
         "checkpoint_pending_observation_cache",
-        lambda active_settings: calls.append(
-            f"save:{active_settings.wud_api_base_url}"
-        ),
+        fail_checkpoint,
     )
     monkeypatch.setattr(web_wud_api, "startup_probe", lambda _settings: None)
     for module, attribute, name in (
@@ -442,7 +477,8 @@ def test_web_app_wires_pending_observation_lifecycle(
         for callback in app.router.on_shutdown
         if callback.__name__ == "shutdown_apply_executor"
     )
-    shutdown()
+    with caplog.at_level(logging.ERROR, logger=web_module.LOGGER.name):
+        shutdown()
 
     assert calls == [
         "load:https://wud.lifecycle.test:3000",
@@ -453,6 +489,8 @@ def test_web_app_wires_pending_observation_lifecycle(
         "stop:apply-jobs",
         "save:https://wud.lifecycle.test:3000",
     ]
+    assert "WUD API pending observation checkpoint failed" in caplog.text
+    assert "checkpoint exploded" not in caplog.text
 
 
 def test_wud_api_checkpoint_waits_for_active_refresh(

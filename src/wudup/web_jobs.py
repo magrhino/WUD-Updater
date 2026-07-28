@@ -687,7 +687,10 @@ def _refresh_api_pending_source_after_apply(
             message = "WUD API pending refresh skipped."
             if result.snapshot.status.detail:
                 message = f"{message} {result.snapshot.status.detail}"
-    web_wud_api.checkpoint_pending_observation_cache(settings)
+    try:
+        web_wud_api.checkpoint_pending_observation_cache(settings)
+    except Exception:  # noqa: BLE001 - persistence must not fail a successful apply.
+        LOGGER.error("WUD API pending observation checkpoint failed")
     _append_apply_job_progress(
         jobs,
         apply_condition,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from collections.abc import Awaitable, Callable, Mapping
@@ -56,6 +57,7 @@ from .config import (
 )
 
 DEFAULT_WEB_PORT = 7417
+LOGGER = logging.getLogger(__name__)
 
 
 def create_app(
@@ -113,7 +115,10 @@ def create_app(
         web_retags.shutdown_retag_preview_state(app.state)
         web_security.shutdown_security_scan_state(app.state)
         web_jobs.shutdown_apply_job_state(app.state)
-        web_wud_api.checkpoint_pending_observation_cache(active_settings)
+        try:
+            web_wud_api.checkpoint_pending_observation_cache(active_settings)
+        except Exception:  # noqa: BLE001 - persistence must not fail app shutdown.
+            LOGGER.error("WUD API pending observation checkpoint failed")
 
     router_shutdown = getattr(getattr(app, "router", None), "on_shutdown", None)
     if isinstance(router_shutdown, list):
