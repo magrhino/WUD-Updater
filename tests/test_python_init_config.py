@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import tempfile
 import unittest
+from collections.abc import Sequence
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
@@ -192,7 +193,7 @@ class InitConfigTests(unittest.TestCase):
         self.assertIn("WUD_WEB_ALLOWED_HOSTS=updates.lan,192.168.1.20", content)
 
     def test_interactive_helper_preserves_prompt_order_and_resolved_values(self) -> None:
-        prompts: list[str] = []
+        questions: list[str] = []
         replies = iter(
             (
                 "helper",
@@ -206,9 +207,26 @@ class InitConfigTests(unittest.TestCase):
             )
         )
 
-        def answer(prompt: str) -> str:
-            prompts.append(prompt)
+        def answer(_prompt: str) -> str:
             return next(replies)
+
+        class RecordingPrompter(InitPrompter):
+            def choice(
+                self,
+                question: str,
+                choices: Sequence[str],
+                default: str,
+            ) -> str:
+                questions.append(question)
+                return super().choice(question, choices, default)
+
+            def text(self, question: str, default: str = "") -> str:
+                questions.append(question)
+                return super().text(question, default)
+
+            def yes_no(self, question: str, default: bool = False) -> bool:
+                questions.append(question)
+                return super().yes_no(question, default)
 
         answers = answers_from_namespace(
             self._args(
@@ -223,14 +241,11 @@ class InitConfigTests(unittest.TestCase):
                 no_doctor=True,
             ),
             environ=self._env(),
-            prompter=InitPrompter(input_func=answer),
+            prompter=RecordingPrompter(input_func=answer),
         )
 
         self.assertEqual(
-            [
-                prompt.split(" [", 1)[0]
-                for prompt in prompts
-            ],
+            questions,
             [
                 "Deployment profile",
                 "Compose stack root",

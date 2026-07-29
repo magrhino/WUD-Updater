@@ -57,6 +57,14 @@ class InitAnswers:
 
 
 @dataclass(frozen=True)
+class _InitOutputPaths:
+    config_file: Path
+    compose_override: Path | None
+    log_dir: Path
+    db_path: Path
+
+
+@dataclass(frozen=True)
 class GeneratedFile:
     path: Path
     content: str
@@ -149,7 +157,7 @@ def answers_from_namespace(
         non_interactive,
         prompt,
     )
-    config_file, compose_override, log_dir, db_path = _resolve_output_paths(
+    output_paths = _resolve_output_paths(
         args,
         home,
         profile,
@@ -186,11 +194,11 @@ def answers_from_namespace(
 
     return InitAnswers(
         profile=profile,
-        config_file=config_file,
-        compose_override=compose_override,
+        config_file=output_paths.config_file,
+        compose_override=output_paths.compose_override,
         stack_root=stack_root,
-        log_dir=log_dir,
-        db_path=db_path,
+        log_dir=output_paths.log_dir,
+        db_path=output_paths.db_path,
         uid=uid,
         gid=gid,
         web_exposure=web_exposure,
@@ -246,7 +254,7 @@ def _resolve_output_paths(
     profile: str,
     non_interactive: bool,
     prompter: InitPrompter,
-) -> tuple[Path, Path | None, Path, Path]:
+) -> _InitOutputPaths:
     config_file = _resolve_config_file(args, home, profile)
     compose_override = _resolve_compose_override(args, home, profile)
     if not non_interactive and not getattr(args, "config_file", None):
@@ -277,7 +285,12 @@ def _resolve_output_paths(
     if not raw_db_path and not non_interactive and profile == "host":
         raw_db_path = prompter.text("SQLite DB path", str(log_dir / DB_FILENAME))
     db_path = Path(raw_db_path or str(log_dir / DB_FILENAME))
-    return config_file, compose_override, log_dir, db_path
+    return _InitOutputPaths(
+        config_file=config_file,
+        compose_override=compose_override,
+        log_dir=log_dir,
+        db_path=db_path,
+    )
 
 
 def _resolve_init_uid_gid(
@@ -287,7 +300,7 @@ def _resolve_init_uid_gid(
     non_interactive: bool,
     prompter: InitPrompter,
 ) -> tuple[str, str]:
-    uid, gid = _resolve_uid_gid(args, environ)
+    uid, gid = _resolve_uid_gid_from_args_or_env(args, environ)
     if (
         not non_interactive
         and profile in {"webui", "helper", "hardened"}
@@ -636,7 +649,7 @@ def _resolve_compose_override(
     return home / ".config" / CONFIG_DIR_NAME / f"docker-compose.{profile}.override.yml"
 
 
-def _resolve_uid_gid(
+def _resolve_uid_gid_from_args_or_env(
     args: argparse.Namespace,
     environ: Mapping[str, str],
 ) -> tuple[str, str]:
