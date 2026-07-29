@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import tempfile
 import unittest
+from collections.abc import Sequence
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
@@ -190,6 +191,79 @@ class InitConfigTests(unittest.TestCase):
 
         self.assertIn("WUD_WEB_PUBLIC_ORIGIN=http://wud.lan:7417", content)
         self.assertIn("WUD_WEB_ALLOWED_HOSTS=updates.lan,192.168.1.20", content)
+
+    def test_interactive_helper_preserves_prompt_order_and_resolved_values(self) -> None:
+        questions: list[str] = []
+        replies = iter(
+            (
+                "helper",
+                str(self.root / "docker"),
+                str(self.root / "helper.env"),
+                "",
+                str(self.root / "helper.override.yml"),
+                str(self.root / "logs"),
+                "1200",
+                "1300",
+            )
+        )
+
+        def answer(_prompt: str) -> str:
+            return next(replies)
+
+        class RecordingPrompter(InitPrompter):
+            def choice(
+                self,
+                question: str,
+                choices: Sequence[str],
+                default: str,
+            ) -> str:
+                questions.append(question)
+                return super().choice(question, choices, default)
+
+            def text(self, question: str, default: str = "") -> str:
+                questions.append(question)
+                return super().text(question, default)
+
+            def yes_no(self, question: str, default: bool = False) -> bool:
+                questions.append(question)
+                return super().yes_no(question, default)
+
+        answers = answers_from_namespace(
+            self._args(
+                profile=None,
+                config_file=None,
+                compose_override=None,
+                stack_root=None,
+                log_dir=None,
+                uid=None,
+                gid=None,
+                non_interactive=False,
+                no_doctor=True,
+            ),
+            environ=self._env(),
+            prompter=RecordingPrompter(input_func=answer),
+        )
+
+        self.assertEqual(
+            questions,
+            [
+                "Deployment profile",
+                "Compose stack root",
+                "Config file",
+                "Write a Compose override file",
+                "Compose override file",
+                "Log/state directory",
+                "Shared file UID",
+                "Shared file GID",
+            ],
+        )
+        self.assertEqual(answers.profile, "helper")
+        self.assertEqual(answers.stack_root, self.root / "docker")
+        self.assertEqual(answers.config_file, self.root / "helper.env")
+        self.assertEqual(answers.compose_override, self.root / "helper.override.yml")
+        self.assertEqual(answers.log_dir, self.root / "logs")
+        self.assertEqual(answers.db_path, self.root / "logs" / "wudup.sqlite")
+        self.assertEqual((answers.uid, answers.gid), ("1200", "1300"))
 
     def test_uid_gid_can_come_from_environment_or_cli_override(self) -> None:
         env_answers = answers_from_namespace(
