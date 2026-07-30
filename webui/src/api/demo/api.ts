@@ -8,6 +8,7 @@ import type {
   PendingMetadataRefreshRequest,
   PendingRescanLine,
   PendingRescanScope,
+  PlanSelectionRequest,
   RetagChoiceRequest,
   SelfUpdatePlanResponse,
   SelfUpdateResponse,
@@ -146,12 +147,14 @@ export function createDemoWebApi(): WebApi {
       tagOverrides: TagOverrideRequest[],
       digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
       _csrfToken: string,
+      selections: PlanSelectionRequest[] = [],
     ) =>
       state.createPlan(
         lineNumbers,
         allowTagUpdates,
         tagOverrides,
         digestPinLabelRewriteApprovals,
+        selections,
       ),
     createJob: async (
       _planId: string,
@@ -160,6 +163,7 @@ export function createDemoWebApi(): WebApi {
       _tagOverrides: TagOverrideRequest[],
       _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
       _csrfToken: string,
+      _selections: PlanSelectionRequest[] = [],
     ) => rejectStaticDemoMutation(),
     applyPlan: async (
       _planId: string,
@@ -168,6 +172,7 @@ export function createDemoWebApi(): WebApi {
       _tagOverrides: TagOverrideRequest[],
       _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
       _csrfToken: string,
+      _selections: PlanSelectionRequest[] = [],
     ) => rejectStaticDemoMutation(),
     job: async (_jobId: string) => rejectStaticDemoMutation(),
     applyJob: async (_jobId: string) => rejectStaticDemoMutation(),

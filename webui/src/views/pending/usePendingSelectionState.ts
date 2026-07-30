@@ -1,9 +1,17 @@
-import { computed, ref, watch, type ComputedRef } from "vue";
+import {
+  computed,
+  ref,
+  watch,
+  type ComputedRef,
+  type WritableComputedRef,
+} from "vue";
 import type { DataTableRowKey } from "naive-ui";
 
 import type {
+  PendingGroupedItem,
   PendingItem,
   PendingStackGroup,
+  PlanSelectionRequest,
   TagOverrideRequest,
 } from "../../api/client";
 import { useUpdatesStore } from "../../stores/updates";
@@ -12,6 +20,8 @@ import { uniqueSorted } from "./pendingDisplay";
 export type UsePendingSelectionStateOptions = {
   pendingItems: ComputedRef<PendingItem[]>;
   selectableLineNumbers: ComputedRef<number[]>;
+  selectableSelections?: ComputedRef<PlanSelectionRequest[]>;
+  availableSelections?: ComputedRef<PlanSelectionRequest[]>;
   onSelectionChanged?: () => void;
 };
 
@@ -21,14 +31,70 @@ function tagOverrideKey(item: PendingItem): string {
   return JSON.stringify([item.raw, item.image, item.repo, item.desired_tag]);
 }
 
+export function pendingSelectionKey(
+  selection: PlanSelectionRequest,
+): string {
+  return selection.selection_id || `line:${selection.line_no}`;
+}
+
+export function pendingSelectionForItem(
+  item: PendingGroupedItem,
+): PlanSelectionRequest {
+  return {
+    line_no: item.line_no,
+    selection_id: item.selection_id ?? "",
+  };
+}
+
+export function pendingSelectionsForGroup(
+  group: PendingStackGroup,
+): PlanSelectionRequest[] {
+  return group.items.map(pendingSelectionForItem);
+}
+
+function lineSelection(lineNo: number): PlanSelectionRequest {
+  return { line_no: lineNo, selection_id: "" };
+}
+
+export function uniqueSelections(
+  selections: PlanSelectionRequest[],
+): PlanSelectionRequest[] {
+  const unique = new Map<string, PlanSelectionRequest>();
+  for (const selection of selections) {
+    unique.set(pendingSelectionKey(selection), selection);
+  }
+  return [...unique.values()].sort(
+    (left, right) =>
+      left.line_no - right.line_no ||
+      left.selection_id.localeCompare(right.selection_id),
+  );
+}
+
 export function usePendingSelectionState(
   options: UsePendingSelectionStateOptions,
 ) {
   const updates = useUpdatesStore();
-  const selectedLineNumbers = ref<number[]>([]);
+  const selectedSelections = ref<PlanSelectionRequest[]>([]);
+  const selectedLineNumbers: WritableComputedRef<number[]> = computed({
+    get: () =>
+      uniqueSorted(
+        selectedSelections.value.map((selection) => selection.line_no),
+      ),
+    set: (lineNumbers) => {
+      selectedSelections.value = uniqueSorted(lineNumbers).map(lineSelection);
+    },
+  });
   const tagOverrides = ref<Record<number, string>>({});
   const tagOverrideKeys = ref<Record<number, string>>({});
   const selectedLineSet = computed(() => new Set(selectedLineNumbers.value));
+  const selectedSelectionKeySet = computed(
+    () =>
+      new Set(
+        selectedSelections.value.map((selection) =>
+          pendingSelectionKey(selection),
+        ),
+      ),
+  );
 
   function tagOverrideValue(item: PendingItem): string {
     return tagOverrides.value[item.line_no] ?? item.desired_tag;
@@ -85,71 +151,110 @@ export function usePendingSelectionState(
       ...tagOverrideKeys.value,
       [item.line_no]: tagOverrideKey(item),
     };
-    if (!selectedLineSet.value.has(item.line_no)) {
-      selectedLineNumbers.value = uniqueSorted([
-        ...selectedLineNumbers.value,
-        item.line_no,
+    const groupedItem = item as Partial<PendingGroupedItem>;
+    const selection = groupedItem.selection_id
+      ? {
+          line_no: item.line_no,
+          selection_id: groupedItem.selection_id,
+        }
+      : lineSelection(item.line_no);
+    if (
+      !selectedSelectionKeySet.value.has(pendingSelectionKey(selection))
+    ) {
+      selectedSelections.value = uniqueSelections([
+        ...selectedSelections.value,
+        selection,
       ]);
     }
     markSelectionChanged();
   }
 
   function updateCheckedRowKeys(keys: DataTableRowKey[]): void {
-    selectedLineNumbers.value = uniqueSorted(
+    selectedSelections.value = uniqueSorted(
       keys.map(Number).filter((key) => Number.isFinite(key)),
+    ).map(lineSelection);
+    markSelectionChanged();
+  }
+
+  function toggleSelection(
+    selection: PlanSelectionRequest,
+    checked: boolean,
+  ): void {
+    const key = pendingSelectionKey(selection);
+    const selected = new Map(
+      selectedSelections.value.map((item) => [pendingSelectionKey(item), item]),
     );
+    if (checked) {
+      selected.set(key, selection);
+    } else {
+      selected.delete(key);
+    }
+    selectedSelections.value = uniqueSelections([...selected.values()]);
     markSelectionChanged();
   }
 
   function toggleLine(lineNo: number, checked: boolean): void {
-    const selected = new Set(selectedLineNumbers.value);
-    if (checked) {
-      selected.add(lineNo);
-    } else {
-      selected.delete(lineNo);
-    }
-    selectedLineNumbers.value = uniqueSorted([...selected]);
-    markSelectionChanged();
+    toggleSelection(lineSelection(lineNo), checked);
+  }
+
+  function toggleGroupedItem(
+    item: PendingGroupedItem,
+    checked: boolean,
+  ): void {
+    toggleSelection(pendingSelectionForItem(item), checked);
   }
 
   function selectAllVisible(): void {
-    selectedLineNumbers.value = [...options.selectableLineNumbers.value];
+    selectedSelections.value = uniqueSelections(
+      options.selectableSelections?.value ??
+        options.selectableLineNumbers.value.map(lineSelection),
+    );
     markSelectionChanged();
   }
 
   function clearSelection(): void {
-    selectedLineNumbers.value = [];
+    selectedSelections.value = [];
     markSelectionChanged();
   }
 
   function stackSelected(group: PendingStackGroup): boolean {
+    const selections = pendingSelectionsForGroup(group);
     return (
-      group.line_numbers.length > 0 &&
-      group.line_numbers.every((lineNo) => selectedLineSet.value.has(lineNo))
+      selections.length > 0 &&
+      selections.every((selection) =>
+        selectedSelectionKeySet.value.has(pendingSelectionKey(selection)),
+      )
     );
   }
 
   function stackIndeterminate(group: PendingStackGroup): boolean {
     return (
-      group.line_numbers.some((lineNo) => selectedLineSet.value.has(lineNo)) &&
+      pendingSelectionsForGroup(group).some((selection) =>
+        selectedSelectionKeySet.value.has(pendingSelectionKey(selection)),
+      ) &&
       !stackSelected(group)
     );
   }
 
   function stackHasSelection(group: PendingStackGroup): boolean {
-    return group.line_numbers.some((lineNo) => selectedLineSet.value.has(lineNo));
+    return pendingSelectionsForGroup(group).some((selection) =>
+      selectedSelectionKeySet.value.has(pendingSelectionKey(selection)),
+    );
   }
 
   function toggleStack(group: PendingStackGroup, checked: boolean): void {
-    const selected = new Set(selectedLineNumbers.value);
-    for (const lineNo of group.line_numbers) {
+    const selected = new Map(
+      selectedSelections.value.map((item) => [pendingSelectionKey(item), item]),
+    );
+    for (const selection of pendingSelectionsForGroup(group)) {
+      const key = pendingSelectionKey(selection);
       if (checked) {
-        selected.add(lineNo);
+        selected.set(key, selection);
       } else {
-        selected.delete(lineNo);
+        selected.delete(key);
       }
     }
-    selectedLineNumbers.value = uniqueSorted([...selected]);
+    selectedSelections.value = uniqueSelections([...selected.values()]);
     markSelectionChanged();
   }
 
@@ -162,8 +267,11 @@ export function usePendingSelectionState(
   }
 
   watch(
-    () => options.pendingItems.value,
-    (items) => {
+    [
+      () => options.pendingItems.value,
+      () => options.availableSelections?.value,
+    ],
+    ([items, availableSelections]) => {
       const next: Record<number, string> = {};
       const nextKeys: Record<number, string> = {};
       const pendingLineNumbers = new Set<number>();
@@ -181,10 +289,19 @@ export function usePendingSelectionState(
       }
       tagOverrides.value = next;
       tagOverrideKeys.value = nextKeys;
-      selectedLineNumbers.value = uniqueSorted(
-        selectedLineNumbers.value.filter((lineNo) =>
-          pendingLineNumbers.has(lineNo),
-        ),
+      const availableKeys = availableSelections
+        ? new Set(availableSelections.map(pendingSelectionKey))
+        : null;
+      selectedSelections.value = uniqueSelections(
+        selectedSelections.value.filter((selection) => {
+          if (!pendingLineNumbers.has(selection.line_no)) {
+            return false;
+          }
+          return (
+            !availableKeys ||
+            availableKeys.has(pendingSelectionKey(selection))
+          );
+        }),
       );
     },
     { immediate: true },
@@ -197,6 +314,8 @@ export function usePendingSelectionState(
     selectAllVisible,
     selectedLineNumbers,
     selectedLineSet,
+    selectedSelections,
+    selectedSelectionKeySet,
     stackHasSelection,
     stackIndeterminate,
     stackSelected,
@@ -205,6 +324,8 @@ export function usePendingSelectionState(
     tagOverrides,
     tagOverridesForLines,
     toggleLine,
+    toggleGroupedItem,
+    toggleSelection,
     toggleStack,
     updateCheckedRowKeys,
     updateDisabled,

@@ -142,6 +142,7 @@ export interface PendingDiagnostic {
 export type PendingGroupingStatus = "ready" | "unavailable";
 
 export interface PendingGroupedItem extends PendingItem {
+  selection_id?: string;
   resolved_image: string;
   target_image: string;
   compose_images: string[];
@@ -850,6 +851,11 @@ export interface TagOverrideRequest {
   tag: string;
 }
 
+export interface PlanSelectionRequest {
+  line_no: number;
+  selection_id: string;
+}
+
 export interface PlanResponse {
   plan_id: string;
   dry_run: boolean;
@@ -861,6 +867,7 @@ export interface PlanResponse {
   max_wait: number;
   digest_pin_updates: boolean;
   selected_line_numbers: number[];
+  selected_selections?: PlanSelectionRequest[];
   summary: PlanSummary;
   targets: PlanTarget[];
   stacks: PlanStack[];

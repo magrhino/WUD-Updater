@@ -11,6 +11,7 @@ from fastapi import HTTPException, Request
 from . import (
     web_database,
     web_diagnostics,
+    web_file_selection_store,
     web_jobs,
     web_pending_sources,
     web_scheduler,
@@ -19,13 +20,19 @@ from . import (
 from .config import ConfigError, UpdaterConfig
 from .images import tag_value_valid
 from .locks import DirectoryLock
+from .plan_matching import pending_target_key
 from .plans import (
     DryRunPlan,
     PlanFileMissing,
     PlanInputError,
+    _PlanSelectionScope,
     build_dry_run_plan_from_pending_source,
 )
-from .updater_models import DigestPinLabelRewriteApproval, TagOverride
+from .updater_models import (
+    DigestPinLabelRewriteApproval,
+    TagOverride,
+    UpdateSelection,
+)
 from .web_auth import _safe_exception_detail, _settings
 from .web_models import (
     ApplyJobResponse,
@@ -89,6 +96,7 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
                 settings,
                 PlanRequest(
                     line_numbers=payload.line_numbers,
+                    selections=payload.selections,
                     allow_tag_updates=payload.allow_tag_updates,
                     tag_overrides=payload.tag_overrides,
                     digest_pin_label_rewrite_approvals=(
@@ -188,6 +196,18 @@ def build_web_plan(
     ).source
     if source.active == "file" and not source.exists:
         raise PlanFileMissing(f"WUD file not found: {settings.config.wud_out_file}")
+    completed_update_selections = (
+        web_file_selection_store.load_completed_update_selections(
+            settings.config.db_path,
+            pending_file=settings.config.wud_out_file,
+            pending_target_keys={
+                pending_target_key(target.raw)
+                for target in source.parsed.targets
+            },
+        )
+        if source.active == "file" and payload.selections
+        else ()
+    )
     return build_dry_run_plan_from_pending_source(
         config,
         source.parsed,
@@ -195,6 +215,10 @@ def build_web_plan(
         source_hash=source.source_hash,
         source=source.plan_source(),
         line_numbers=payload.line_numbers,
+        selection_scope=_PlanSelectionScope(
+            update_selections=update_selections_from_payload(payload),
+            completed_update_selections=completed_update_selections,
+        ),
         allow_tag_updates=payload.allow_tag_updates,
         tag_overrides=tag_overrides_from_payload(payload),
         digest_pin_label_rewrite_approvals=(
@@ -226,6 +250,18 @@ def tag_overrides_from_payload(
         overrides.append(TagOverride(line_no=line_no, tag=item.tag))
         seen.add(line_no)
     return tuple(overrides)
+
+
+def update_selections_from_payload(
+    payload: PlanRequest | ApplyPlanRequest,
+) -> tuple[UpdateSelection, ...]:
+    return tuple(
+        UpdateSelection(
+            line_no=item.line_no,
+            selection_id=item.selection_id,
+        )
+        for item in payload.selections
+    )
 
 
 def digest_pin_label_rewrite_approvals_from_payload(

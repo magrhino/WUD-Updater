@@ -618,6 +618,7 @@ export function pendingGroupedItem(
   const item = pendingItem(overrides);
   return {
     ...item,
+    selection_id: `selection-${item.line_no}`,
     resolved_image: item.image,
     target_image: item.desired_tag ? `${item.repo}:${item.desired_tag}` : item.image,
     compose_images: [item.image],
@@ -1127,6 +1128,7 @@ export function planResponse(overrides: Partial<PlanResponse> = {}): PlanRespons
     max_wait: 120,
     digest_pin_updates: false,
     selected_line_numbers: [1],
+    selected_selections: [],
     summary: {
       target_count: 1,
       matched_target_count: 1,

@@ -1728,6 +1728,7 @@ describe("updates store", () => {
       [],
       [],
       "csrf-plan-apply",
+      [],
     );
     expect(createJob).not.toHaveBeenCalled();
     expect(job.job_id).toBe("job-plan");

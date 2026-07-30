@@ -1,8 +1,18 @@
 from __future__ import annotations
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from wudup import plans as core_plans
 from wudup import web_plans as plans_module
+from wudup.compose import ComposeStack, ServiceImage
 from wudup.config import ConfigError
+from wudup.plan_matching import (
+    completed_update_selection_for_matches,
+    selection_id_for_matches,
+)
+from wudup.plan_models import DryRunPlanSource
+from wudup.updater_models import Match
+from wudup.wud_file import parse_wud_text
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -13,6 +23,31 @@ from tests.web_test_helpers import (
     _install_wud_api,
     _wud_api_container,
 )
+
+
+def test_pending_source_plan_builder_preserves_source_hash_keyword(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+    sentinel = object()
+
+    def fake_plan_builder(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(build=lambda: sentinel)
+
+    monkeypatch.setattr(core_plans, "_PlanBuilder", fake_plan_builder)
+
+    result = core_plans.build_dry_run_plan_from_pending_source(
+        object(),
+        parse_wud_text(""),
+        source_file="WUD API",
+        source_hash="authoritative",
+        source=DryRunPlanSource(source_hash="embedded"),
+        line_numbers=(),
+    )
+
+    assert result is sentinel
+    assert captured["source_hash"] == "authoritative"
 
 
 def test_plan_endpoint_rejects_unauthenticated_requests(tmp_path: Path) -> None:
@@ -111,6 +146,51 @@ def test_plan_endpoint_wraps_source_oserror(
     assert "[REDACTED_PATH]" in detail
 
 
+def test_plan_endpoint_fails_closed_when_completion_state_is_unreadable(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    redacted_value = "completion-state-redaction-fixture"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_TOKEN": redacted_value,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/shared:latest\n", encoding="utf-8")
+
+    def fail_load(*_args, **_kwargs):
+        raise OSError(
+            f"read failed for {tmp_path / 'state' / 'wud.sqlite'} "
+            f"with {redacted_value}"
+        )
+
+    monkeypatch.setattr(
+        plans_module.web_file_selection_store,
+        "load_completed_update_selections",
+        fail_load,
+    )
+    response = client.post(
+        "/api/v1/plans",
+        json={
+            "selections": [
+                {"line_no": 1, "selection_id": f"sel-v1-{'0' * 64}"}
+            ]
+        },
+        headers=_csrf_headers(client),
+    )
+    detail = response.json()["detail"]
+
+    assert response.status_code == 500
+    assert detail.startswith("could not create plan: ")
+    assert redacted_value not in detail
+    assert str(tmp_path) not in detail
+    assert "<redacted>" in detail
+    assert "[REDACTED_PATH]" in detail
+
+
 def test_plan_endpoint_returns_selected_dry_run_without_mutation(
     tmp_path: Path,
 ) -> None:
@@ -161,6 +241,183 @@ def test_plan_endpoint_returns_selected_dry_run_without_mutation(
     calls = _fake_docker_calls(fake_root)
     assert " pull " not in calls
     assert " up -d " not in calls
+
+
+def test_plan_endpoint_scopes_shared_line_by_selection_id(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/shared:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "active",
+        [("app", "repo/shared:latest", "cid-active")],
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "backup",
+        [("app", "repo/shared:latest", "cid-backup")],
+    )
+    headers = _csrf_headers(client)
+    pending = client.get("/api/v1/pending").json()
+    selections = {
+        group["name"]: {
+            "line_no": group["items"][0]["line_no"],
+            "selection_id": group["items"][0]["selection_id"],
+        }
+        for group in pending["grouping"]["groups"]
+    }
+
+    active_only = client.post(
+        "/api/v1/plans",
+        json={"selections": [selections["active"]]},
+        headers=headers,
+    )
+    both = client.post(
+        "/api/v1/plans",
+        json={"selections": [selections["active"], selections["backup"]]},
+        headers=headers,
+    )
+    legacy = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+
+    assert active_only.status_code == 200
+    active_body = active_only.json()
+    assert active_body["selected_line_numbers"] == [1]
+    assert active_body["selected_selections"] == [selections["active"]]
+    assert [stack["name"] for stack in active_body["stacks"]] == ["active"]
+    assert both.status_code == 200
+    assert {stack["name"] for stack in both.json()["stacks"]} == {
+        "active",
+        "backup",
+    }
+    assert {
+        (item["line_no"], item["selection_id"])
+        for item in both.json()["selected_selections"]
+    } == {
+        (item["line_no"], item["selection_id"])
+        for item in selections.values()
+    }
+    assert legacy.status_code == 200
+    assert legacy.json()["selected_selections"] == []
+    assert {stack["name"] for stack in legacy.json()["stacks"]} == {
+        "active",
+        "backup",
+    }
+
+
+def test_completion_identity_survives_expected_compose_image_rewrites(
+    tmp_path: Path,
+) -> None:
+    target = parse_wud_text("repo/shared:1.0 tag=2.0\n").targets[0]
+
+    def match(compose_image: str) -> Match:
+        stack = ComposeStack(
+            index=1,
+            directory=tmp_path / "shared",
+            file="docker-compose.yml",
+            name="shared",
+            images=(compose_image,),
+            service_images=(ServiceImage("app", compose_image),),
+            project_directory=tmp_path / "shared",
+            project_name="shared",
+        )
+        return Match(
+            stack=stack,
+            target=target,
+            resolved=target.first,
+            compose_image=compose_image,
+            service="app",
+        )
+
+    original = match("repo/shared:1.0")
+    tag_rewrite = match("repo/shared:2.0")
+    digest_rewrite = match(f"repo/shared@sha256:{'a' * 64}")
+
+    assert selection_id_for_matches((original,)) != selection_id_for_matches(
+        (tag_rewrite,)
+    )
+    assert completed_update_selection_for_matches(
+        (original,)
+    ) == completed_update_selection_for_matches((tag_rewrite,))
+    assert completed_update_selection_for_matches(
+        (original,)
+    ) == completed_update_selection_for_matches((digest_rewrite,))
+
+
+def test_plan_endpoint_rejects_invalid_scoped_selections(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/shared:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "active",
+        [("app", "repo/shared:latest", "cid-active")],
+    )
+    headers = _csrf_headers(client)
+    selection = client.get("/api/v1/pending").json()["grouping"]["groups"][0][
+        "items"
+    ][0]
+    valid = {
+        "line_no": selection["line_no"],
+        "selection_id": selection["selection_id"],
+    }
+
+    duplicate = client.post(
+        "/api/v1/plans",
+        json={"selections": [valid, valid]},
+        headers=headers,
+    )
+    forged = client.post(
+        "/api/v1/plans",
+        json={
+            "selections": [
+                {"line_no": 1, "selection_id": f"sel-v1-{'0' * 64}"}
+            ]
+        },
+        headers=headers,
+    )
+    mixed_scope = client.post(
+        "/api/v1/plans",
+        json={
+            "selections": [
+                valid,
+                {"line_no": 1, "selection_id": ""},
+            ]
+        },
+        headers=headers,
+    )
+    mixed_contract = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1], "selections": [valid]},
+        headers=headers,
+    )
+    unknown_line = client.post(
+        "/api/v1/plans",
+        json={"selections": [{"line_no": 2, "selection_id": ""}]},
+        headers=headers,
+    )
+
+    assert duplicate.status_code == 422
+    assert "more than once" in duplicate.json()["detail"]
+    assert forged.status_code == 422
+    assert "stale or no longer available" in forged.json()["detail"]
+    assert mixed_scope.status_code == 422
+    assert "cannot mix line-wide and stack-scoped" in mixed_scope.json()["detail"]
+    assert mixed_contract.status_code == 422
+    assert unknown_line.status_code == 422
+    assert "actionable WUD target lines" in unknown_line.json()["detail"]
 
 
 def test_plan_endpoint_uses_api_pending_source_without_wud_file(

@@ -498,6 +498,57 @@ describe("webApi", () => {
     });
   });
 
+  it("serializes stack-scoped plan and apply selections without broad lines", async () => {
+    const fetchMock = mockFetch({});
+    const selections = [
+      { line_no: 1, selection_id: "selection-active" },
+      { line_no: 1, selection_id: "selection-backup" },
+    ];
+
+    await webApi.createPlan([1], false, [], [], "csrf", selections);
+    await webApi.createJob(
+      "plan-id",
+      [1],
+      false,
+      [],
+      [],
+      "csrf",
+      selections,
+    );
+    await webApi.applyPlan(
+      "plan-id",
+      [1],
+      false,
+      [],
+      [],
+      "csrf",
+      selections,
+    );
+
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      selections,
+      allow_tag_updates: false,
+      tag_overrides: [],
+      digest_pin_label_rewrite_approvals: [],
+    });
+    expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual({
+      plan_id: "plan-id",
+      selections,
+      allow_tag_updates: false,
+      tag_overrides: [],
+      digest_pin_label_rewrite_approvals: [],
+      confirmation: "apply",
+    });
+    expect(jsonRequestBody(fetchMock.mock.calls[2])).toEqual({
+      plan_id: "plan-id",
+      selections,
+      allow_tag_updates: false,
+      tag_overrides: [],
+      digest_pin_label_rewrite_approvals: [],
+      confirmation: "apply",
+    });
+  });
+
   it("serializes pending rescan payload exactly", async () => {
     const fetchMock = mockFetch({});
 

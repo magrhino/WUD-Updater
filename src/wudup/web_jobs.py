@@ -18,7 +18,7 @@ from typing import Any, Protocol, cast
 from fastapi import HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 
-from . import web_wud_api, web_wud_refresh
+from . import web_file_selection_store, web_wud_api, web_wud_refresh
 from .command import CommandRunner
 from .config import UpdaterConfig
 from .db import utc_timestamp
@@ -28,10 +28,12 @@ from .updater import UpdateFromWudRunner
 from .updater_digest_pin import digest_pin_update_from_values
 from .updater_digest_unpin import digest_unpin_update_from_values
 from .updater_models import (
+    CompletedUpdateSelection,
     DigestPinLabelRewriteApproval,
     DigestPinUpdate,
     DigestUnpinUpdate,
     TagOverride,
+    UpdateSelection,
     UpdaterOptions,
     UpdaterProgressEvent,
 )
@@ -90,6 +92,13 @@ class ApplyJobRunContext:
     pending_source_active: PendingSourceActive = "file"
     pending_source_text: str | None = None
     pending_source_label: str = ""
+
+
+@dataclass(frozen=True)
+class _ApplySelectionScope:
+    line_numbers: tuple[int, ...]
+    update_selections: tuple[UpdateSelection, ...] = ()
+    completed_update_selections: tuple[CompletedUpdateSelection, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -185,6 +194,8 @@ def _submit_apply_job_state(
             effective_config_loader,
             auto_update_schedule_run_updater,
             active_run_context,
+            tuple(plan.selected_selections),
+            tuple(plan.completed_update_selections),
         )
         return response
 
@@ -471,6 +482,8 @@ def _run_apply_job(
     effective_config_loader: EffectiveConfigLoader,
     auto_update_schedule_run_updater: AutoUpdateScheduleRunUpdater,
     run_context: ApplyJobRunContext,
+    update_selections: tuple[UpdateSelection, ...] = (),
+    completed_update_selections: tuple[CompletedUpdateSelection, ...] = (),
 ) -> None:
     if run_context.start_event is not None:
         run_context.start_event.wait()
@@ -489,13 +502,18 @@ def _run_apply_job(
         "error": "apply job did not complete",
     }
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
+    status_code: int | None = None
     try:
         temp_dir, wud_file_override, wud_file_label_override = (
             _pending_source_wud_file(run_context)
         )
         options = _apply_options(
             settings,
-            line_numbers=line_numbers,
+            selection_scope=_ApplySelectionScope(
+                line_numbers=line_numbers,
+                update_selections=update_selections,
+                completed_update_selections=completed_update_selections,
+            ),
             allow_tag_updates=allow_tag_updates,
             tag_overrides=tag_overrides,
             digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
@@ -529,6 +547,11 @@ def _run_apply_job(
             log_file=str(runner.log_file),
         )
         status_code = runner.run()
+        _checkpoint_file_selection_completions(
+            settings,
+            runner,
+            run_context=run_context,
+        )
         terminal_job_fields = _handle_apply_job_run_result(
             settings,
             jobs,
@@ -540,6 +563,22 @@ def _run_apply_job(
             auto_update_schedule_run_updater,
         )
     except Exception as exc:
+        error = exc
+        if (
+            runner is not None
+            and status_code is None
+            and runner.successful_completed_update_selections
+        ):
+            try:
+                _checkpoint_file_selection_completions(
+                    settings,
+                    runner,
+                    run_context=run_context,
+                )
+            except (
+                web_file_selection_store.FileSelectionCheckpointError
+            ) as checkpoint_exc:
+                error = checkpoint_exc
         run_id = None if runner is None else runner.audit_run_id
         _append_apply_job_progress(
             jobs,
@@ -548,7 +587,7 @@ def _run_apply_job(
             UpdaterProgressEvent(
                 phase="completion",
                 status="failure",
-                message=str(exc),
+                message=str(error),
             ),
         )
         auto_update_schedule_run_updater(
@@ -556,13 +595,13 @@ def _run_apply_job(
             run_context.auto_update_schedule_keys,
             status="failure",
             run_id=run_id,
-            error=str(exc),
+            error=str(error),
         )
         terminal_job_fields = {
             "status": "failure",
             "run_id": run_id,
             "log_file": "" if runner is None else str(runner.log_file),
-            "error": str(exc),
+            "error": str(error),
         }
     finally:
         cleanup_error = _cleanup_apply_job_resources(wud_lock, temp_dir)
@@ -591,6 +630,24 @@ def _pending_source_wud_file(
         temp_dir.cleanup()
         raise
     return temp_dir, wud_file, run_context.pending_source_label or "WUD API"
+
+
+def _checkpoint_file_selection_completions(
+    settings: WebSettings,
+    runner: UpdateFromWudRunner,
+    *,
+    run_context: ApplyJobRunContext,
+) -> None:
+    if run_context.pending_source_active != "file":
+        return
+    web_file_selection_store.checkpoint_completed_update_selections(
+        settings.config.db_path,
+        pending_file=settings.config.wud_out_file,
+        scoped=bool(runner.options.update_selections),
+        previous=runner.options.completed_update_selections,
+        successful=runner.successful_completed_update_selections,
+        discovered=runner.discovered_completed_update_selections,
+    )
 
 
 def _handle_apply_job_run_result(
@@ -752,7 +809,7 @@ def _append_apply_job_progress(
 def _apply_options(
     settings: WebSettings,
     *,
-    line_numbers: tuple[int, ...],
+    selection_scope: _ApplySelectionScope,
     allow_tag_updates: bool,
     tag_overrides: tuple[TagOverride, ...],
     plan_id: str,
@@ -765,10 +822,15 @@ def _apply_options(
     wud_file_override: Path | None = None,
     wud_file_label_override: str | None = None,
 ) -> UpdaterOptions:
-    line_spec = _line_spec(line_numbers)
+    line_spec = _line_spec(selection_scope.line_numbers)
     metadata = {
         "plan_id": plan_id,
-        "selected_line_numbers": list(line_numbers),
+        "selected_line_numbers": list(selection_scope.line_numbers),
+        "selected_selection_ids": [
+            item.selection_id
+            for item in selection_scope.update_selections
+            if item.selection_id
+        ],
         "source": "webui",
     }
     if metadata_extra:
@@ -808,6 +870,8 @@ def _apply_options(
         wud_file_label=wud_file_label,
         log_dir_label=str(config.log_dir),
         metadata_json=metadata_json,
+        update_selections=selection_scope.update_selections,
+        completed_update_selections=selection_scope.completed_update_selections,
     )
 
 

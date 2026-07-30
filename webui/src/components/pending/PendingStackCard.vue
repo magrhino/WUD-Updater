@@ -24,6 +24,10 @@ import {
   previewImageLabel,
 } from "../../views/pending/pendingDisplay";
 import type { SafetyCue } from "../../views/pending/safetyCues";
+import {
+  pendingSelectionForItem,
+  pendingSelectionKey,
+} from "../../views/pending/usePendingSelectionState";
 import { pluralize } from "../../views/pending/utils";
 import PendingUpdateRow from "./PendingUpdateRow.vue";
 
@@ -35,7 +39,7 @@ const props = defineProps<{
   releaseNoteStatus: (note: ReleaseNoteInfo | null) => string;
   riskCues: (item: PendingGroupedItem) => SafetyCue[];
   securityScanFor: (item: PendingGroupedItem) => SecurityScanInfo | null;
-  selectedLineSet: Set<number>;
+  selectedSelectionKeySet: Set<string>;
   stackHasSelection: boolean;
   stackIndeterminate: boolean;
   stackSelected: boolean;
@@ -46,7 +50,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   previewStack: [group: PendingStackGroup];
-  toggleLine: [lineNo: number, checked: boolean];
+  toggleItem: [item: PendingGroupedItem, checked: boolean];
   toggleStack: [group: PendingStackGroup, checked: boolean];
   updateTag: [item: PendingGroupedItem, value: string];
 }>();
@@ -168,11 +172,11 @@ const emit = defineEmits<{
         Details
       </summary>
       <div class="stack-items">
-        <PendingUpdateRow
-          v-for="item in group.items"
-          :key="`${group.name}-${item.line_no}`"
+      <PendingUpdateRow
+        v-for="item in group.items"
+        :key="`${group.name}-${pendingSelectionKey(pendingSelectionForItem(item))}`"
           :item="item"
-          :selected="selectedLineSet.has(item.line_no)"
+          :selected="selectedSelectionKeySet.has(pendingSelectionKey(pendingSelectionForItem(item)))"
           :service-label="groupedItemServices(item)"
           :status-label="groupedItemActionLabel(item)"
           :status-tag-type="groupedItemActionTagType(item)"
@@ -187,7 +191,7 @@ const emit = defineEmits<{
           :tag-override-value="tagOverrideValue(item)"
           :show-tag-input="Boolean(item.desired_tag)"
           :tag-input-props="tagInputProps(item)"
-          @toggle="(lineNo, checked) => emit('toggleLine', lineNo, checked)"
+          @toggle="(_lineNo, checked) => emit('toggleItem', item, checked)"
           @update-tag="emit('updateTag', item, $event)"
         />
       </div>

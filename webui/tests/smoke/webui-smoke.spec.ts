@@ -17,6 +17,10 @@ type FixtureState = {
 
 const appOrigin = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5173";
 const csrfToken = "csrf-smoke";
+const stackSelection = {
+  line_no: 1,
+  selection_id: "selection-media-app",
+};
 const mobileNavLabels = [
   "Dashboard",
   "Pending",
@@ -81,6 +85,7 @@ function pendingResponse() {
   };
   const groupedItem = {
     ...item,
+    selection_id: stackSelection.selection_id,
     resolved_image: "repo/app:1.0",
     target_image: "repo/app:1.1",
     compose_images: ["repo/app:1.0"],
@@ -185,6 +190,7 @@ function planResponse(overrides: Record<string, unknown> = {}) {
     max_wait: 120,
     digest_pin_updates: false,
     selected_line_numbers: [1],
+    selected_selections: [stackSelection],
     summary: {
       target_count: 1,
       matched_target_count: 1,
@@ -994,15 +1000,19 @@ test("mutation-enabled pending flow creates jobs only after confirmation", async
   const planCall = state.calls.find((call) => call.path === "/api/v1/plans");
   const applyCall = state.calls.find((call) => call.path === "/api/v1/plans/apply");
   expect(planCall?.headers["x-wud-csrf-token"]).toBe(csrfToken);
-  expect(planCall?.body).toMatchObject({
-    line_numbers: [1],
+  expect(planCall?.body).toEqual({
+    selections: [stackSelection],
     allow_tag_updates: true,
+    tag_overrides: [],
+    digest_pin_label_rewrite_approvals: [],
   });
   expect(applyCall?.headers["x-wud-csrf-token"]).toBe(csrfToken);
-  expect(applyCall?.body).toMatchObject({
+  expect(applyCall?.body).toEqual({
     plan_id: "plan-smoke",
-    line_numbers: [1],
+    selections: [stackSelection],
     allow_tag_updates: true,
+    tag_overrides: [],
+    digest_pin_label_rewrite_approvals: [],
     confirmation: "apply",
   });
 });

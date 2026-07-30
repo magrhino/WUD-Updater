@@ -3,6 +3,7 @@ import { computed } from "vue";
 import type {
   PendingItem,
   PendingResponse,
+  PlanSelectionRequest,
   ReleaseNoteInfo,
 } from "../../api/client";
 import type { ReleaseChangelogState } from "../../utils/releaseChangelog";
@@ -88,6 +89,39 @@ export function usePendingQueueState() {
   const stackLineNumbers = computed(() =>
     selectableLineNumbersForGroups(stackGroups.value),
   );
+  const selectionsForItems = (
+    items: Array<{ line_no: number; selection_id?: string }>,
+  ): PlanSelectionRequest[] =>
+    items.map((item) => ({
+      line_no: item.line_no,
+      selection_id: item.selection_id ?? "",
+    }));
+  const selectableSelections = computed(() => {
+    if (groupingReady.value) {
+      return selectionsForItems(
+        stackGroups.value.flatMap((group) => group.items),
+      );
+    }
+    if (activeSnoozedServiceKeys.value.size) {
+      return [];
+    }
+    return allLineNumbers.value.map((lineNo) => ({
+      line_no: lineNo,
+      selection_id: "",
+    }));
+  });
+  const availableSelections = computed(() => {
+    if (groupingReady.value) {
+      return selectionsForItems([
+        ...rawStackGroups.value.flatMap((group) => group.items),
+        ...unmatchedItems.value,
+      ]);
+    }
+    return allLineNumbers.value.map((lineNo) => ({
+      line_no: lineNo,
+      selection_id: "",
+    }));
+  });
   const pendingLoaded = computed(() => updates.pending !== null);
   const pendingLoadFailed = computed(
     () =>
@@ -192,6 +226,8 @@ export function usePendingQueueState() {
     releaseNotesByLine,
     riskCues,
     selectableLineNumbers,
+    selectableSelections,
+    availableSelections,
     selectAllLabel,
     snoozedCandidates,
     snoozedItems,

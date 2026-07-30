@@ -5,12 +5,14 @@ from __future__ import annotations
 import argparse
 import contextlib
 import copy
+import hashlib
 import json
 import os
 import re
 import shutil
 import tempfile
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -1326,7 +1328,81 @@ def _sanitize_payload(value: Any, paths: dict[str, Path]) -> Any:
         str(REPO_ROOT): "demo/repo",
     }
     sanitized = _normalize_demo_runtime_details(_replace_many(value, replacements))
+    sanitized = _normalize_demo_selection_ids(sanitized)
     return _normalize_demo_retag_target_ids(sanitized)
+
+
+def _normalize_demo_selection_ids(value: Any) -> Any:
+    replacements: dict[str, str] = {}
+    for item in _nested_dicts(value):
+        groups = item.get("groups")
+        if not isinstance(groups, list):
+            continue
+        for group in groups:
+            replacements.update(_demo_group_selection_id_replacements(group))
+    return _replace_exact_strings(value, replacements)
+
+
+def _nested_dicts(value: Any) -> Iterator[dict[str, Any]]:
+    if isinstance(value, list):
+        for child in value:
+            yield from _nested_dicts(child)
+    elif isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _nested_dicts(child)
+
+
+def _demo_group_selection_id_replacements(group: Any) -> dict[str, str]:
+    if not isinstance(group, dict):
+        return {}
+    grouped_items = group.get("items")
+    if not isinstance(grouped_items, list):
+        return {}
+    replacements: dict[str, str] = {}
+    for grouped_item in grouped_items:
+        replacement = _demo_selection_id_replacement(group, grouped_item)
+        if replacement is not None:
+            current, stable = replacement
+            replacements[current] = stable
+    return replacements
+
+
+def _demo_selection_id_replacement(
+    group: dict[str, Any],
+    grouped_item: Any,
+) -> tuple[str, str] | None:
+    if not isinstance(grouped_item, dict):
+        return None
+    current = grouped_item.get("selection_id")
+    if not isinstance(current, str) or not current:
+        return None
+    payload = {
+        "compose_file": (
+            f"{str(group.get('directory', '')).rstrip('/')}/"
+            f"{group.get('compose_file', '')}"
+        ),
+        "compose_images": sorted(
+            str(image)
+            for image in grouped_item.get("compose_images", [])
+        ),
+        "directory": str(group.get("directory", "")),
+        "line_no": grouped_item.get("line_no", 0),
+        "project_directory": str(group.get("project_directory", "")),
+        "project_name": str(group.get("name", "")),
+        "services": sorted(
+            str(service) for service in grouped_item.get("services", [])
+        ),
+        "target": str(grouped_item.get("raw", "")),
+    }
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    stable = "sel-v1-" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return current, stable
 
 
 def _normalize_demo_retag_target_ids(value: Any) -> Any:

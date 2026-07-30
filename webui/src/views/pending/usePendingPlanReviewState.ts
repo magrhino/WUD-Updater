@@ -11,6 +11,7 @@ import type {
   PlanAction,
   PlanCleanupItem,
   PlanIssue,
+  PlanSelectionRequest,
   TagOverrideRequest,
 } from "../../api/client";
 import { useAuthStore } from "../../stores/auth";
@@ -26,11 +27,16 @@ import {
   reviewCountLabel,
   summarizeList,
 } from "./utils";
+import {
+  pendingSelectionForItem,
+  pendingSelectionKey,
+} from "./usePendingSelectionState";
 
 export type PendingUpdateIntent = {
   title: string;
   contextLabel: string;
   lineNumbers: number[];
+  selections: PlanSelectionRequest[];
   allowTagUpdates: boolean;
   tagOverrides: TagOverrideRequest[];
   digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[];
@@ -53,7 +59,8 @@ type DiagnosticItem = {
 
 export type UsePendingPlanReviewStateOptions = {
   selectedLineNumbers: Ref<number[]>;
-  selectedLineSet: ComputedRef<Set<number>>;
+  selectedSelections: Ref<PlanSelectionRequest[]>;
+  selectedSelectionKeySet: ComputedRef<Set<string>>;
   stackGroups: ComputedRef<PendingStackGroup[]>;
   unmatchedItems: ComputedRef<PendingGroupedItem[]>;
   pendingSourceLabel: ComputedRef<string>;
@@ -222,11 +229,14 @@ export function usePendingPlanReviewState(
     () => applyVisible.value && !!updates.plan?.can_apply,
   );
   const applyDisabled = computed(() => !applyAvailable.value || updates.loading);
-  const applyButtonLabel = computed(() =>
-    updates.plan?.selected_line_numbers.length
-      ? `Apply ${pluralize(updates.plan.selected_line_numbers.length, "update")}`
-      : "Apply selected updates",
-  );
+  const applyButtonLabel = computed(() => {
+    const count =
+      (updates.plan?.selected_selections?.length ?? 0) ||
+      (updates.plan?.selected_line_numbers.length ?? 0);
+    return count
+      ? `Apply ${pluralize(count, "update")}`
+      : "Apply selected updates";
+  });
   const cleanupItems = computed(() => updates.plan?.cleanup.items ?? []);
   const cleanupAvailable = computed(() => cleanupItems.value.length > 0);
   const visiblePlanIssues = computed(() => {
@@ -338,8 +348,10 @@ export function usePendingPlanReviewState(
   const selectedStackNames = computed(() =>
     options.stackGroups.value
       .filter((group) =>
-        group.line_numbers.some((lineNo) =>
-          options.selectedLineSet.value.has(lineNo),
+        group.items.some((item) =>
+          options.selectedSelectionKeySet.value.has(
+            pendingSelectionKey(pendingSelectionForItem(item)),
+          ),
         ),
       )
       .map((group) => group.name),
@@ -354,7 +366,7 @@ export function usePendingPlanReviewState(
     return "selected updates";
   });
   const batchSummaryLabel = computed(() => {
-    const count = pluralize(options.selectedLineNumbers.value.length, "update");
+    const count = pluralize(options.selectedSelections.value.length, "update");
     return selectedUpdateContext.value === "selected updates"
       ? `${count} selected`
       : `${count} selected in ${selectedUpdateContext.value}`;
@@ -493,6 +505,7 @@ export function usePendingPlanReviewState(
       nextIntent.allowTagUpdates,
       nextIntent.tagOverrides,
       nextIntent.digestPinLabelRewriteApprovals,
+      nextIntent.selections ?? [],
     );
     if (updateIntent.value !== intent) {
       return false;

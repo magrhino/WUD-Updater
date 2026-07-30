@@ -1,6 +1,10 @@
 import { ref, type ComputedRef, type Ref } from "vue";
 
-import type { PendingStackGroup, TagOverrideRequest } from "../../api/client";
+import type {
+  PendingStackGroup,
+  PlanSelectionRequest,
+  TagOverrideRequest,
+} from "../../api/client";
 import { useRunsStore } from "../../stores/runs";
 import { useUpdatesStore } from "../../stores/updates";
 import { uniqueSorted } from "./pendingDisplay";
@@ -9,6 +13,10 @@ import type {
   PendingApplyPlanPayload,
   PendingUpdateIntent,
 } from "./usePendingPlanReviewState";
+import {
+  pendingSelectionsForGroup,
+  uniqueSelections,
+} from "./usePendingSelectionState";
 
 export type UsePendingPlanActionsOptions = {
   applyDisabled: ComputedRef<boolean>;
@@ -26,7 +34,9 @@ export type UsePendingPlanActionsOptions = {
   removalDisabled: ComputedRef<boolean>;
   removeSelectedDisabled: ComputedRef<boolean>;
   selectedLineNumbers: Ref<number[]>;
+  selectedSelections: Ref<PlanSelectionRequest[]>;
   selectedUpdateContext: ComputedRef<string>;
+  stackGroups: ComputedRef<PendingStackGroup[]>;
   setUpdateIntent: (intent: PendingUpdateIntent) => void;
   subscribeApplyJob: (jobId: string) => void;
   tagOverrideErrorForLines: (lineNumbers: number[]) => string;
@@ -52,28 +62,38 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
     await startUpdateFlow({
       title: "Preview selected plan",
       contextLabel: options.selectedUpdateContext.value,
-      lineNumbers: options.selectedLineNumbers.value,
+      selections: options.selectedSelections.value,
     });
   }
 
   async function startStackUpdate(group: PendingStackGroup): Promise<void> {
+    const fullGroup =
+      options.stackGroups.value.find(
+        (candidate) =>
+          candidate.directory === group.directory &&
+          candidate.compose_file === group.compose_file &&
+          candidate.project_directory === group.project_directory,
+      ) ?? group;
     await startUpdateFlow({
       title: `Preview ${group.name} plan`,
       contextLabel: group.name,
-      lineNumbers: group.line_numbers,
+      selections: pendingSelectionsForGroup(fullGroup),
     });
   }
 
   async function startUpdateFlow(input: {
     title: string;
     contextLabel: string;
-    lineNumbers: number[];
+    selections: PlanSelectionRequest[];
   }): Promise<void> {
-    const lineNumbers = uniqueSorted(input.lineNumbers);
+    const selections = uniqueSelections(input.selections);
+    const lineNumbers = uniqueSorted(
+      selections.map((selection) => selection.line_no),
+    );
     if (lineNumbers.length === 0 || updates.loading) {
       return;
     }
-    options.selectedLineNumbers.value = lineNumbers;
+    options.selectedSelections.value = selections;
     const validationError = options.tagOverrideErrorForLines(lineNumbers);
     if (validationError) {
       clearPreflight();
@@ -84,6 +104,7 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
       title: input.title,
       contextLabel: input.contextLabel,
       lineNumbers,
+      selections,
       allowTagUpdates: options.lineNumbersHaveTagUpdates(lineNumbers),
       tagOverrides: options.tagOverridesForLines(lineNumbers),
       digestPinLabelRewriteApprovals: [],
@@ -95,6 +116,7 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
         intent.allowTagUpdates,
         intent.tagOverrides,
         intent.digestPinLabelRewriteApprovals,
+        intent.selections,
       );
     } catch {
       showPreflightModal.value = false;
@@ -126,7 +148,6 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
     if (lineNumbers.length === 0 || options.removeSelectedDisabled.value) {
       return;
     }
-    options.selectedLineNumbers.value = lineNumbers;
     try {
       await updates.createRemovalPlan(lineNumbers);
     } catch {
@@ -157,8 +178,8 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
       removal.lines.map((item) => ({ line_no: item.line_no, raw: item.raw })),
     );
     const removedLines = new Set(result.removed.map((item) => item.line_no));
-    options.selectedLineNumbers.value = options.selectedLineNumbers.value.filter(
-      (lineNo) => !removedLines.has(lineNo),
+    options.selectedSelections.value = options.selectedSelections.value.filter(
+      (selection) => !removedLines.has(selection.line_no),
     );
     showRemovalModal.value = false;
     await Promise.all([
@@ -181,8 +202,8 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
       cleanup.items.map((item) => ({ line_no: item.line_no, raw: item.raw })),
     );
     const removedLines = new Set(result.removed.map((item) => item.line_no));
-    options.selectedLineNumbers.value = options.selectedLineNumbers.value.filter(
-      (lineNo) => !removedLines.has(lineNo),
+    options.selectedSelections.value = options.selectedSelections.value.filter(
+      (selection) => !removedLines.has(selection.line_no),
     );
     showCleanupModal.value = false;
     showPreflightModal.value = false;
@@ -209,6 +230,7 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
       payload.allowTagUpdates,
       payload.tagOverrides,
       payload.digestPinLabelRewriteApprovals,
+      updates.plan.selected_selections ?? [],
     );
     options.applyJobSnapshot.value = snapshot;
     options.subscribeApplyJob(job.job_id);

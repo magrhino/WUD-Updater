@@ -12,6 +12,7 @@ import type {
   PendingResponse,
   PendingRescanResponse,
   PendingRescanScope,
+  PlanSelectionRequest,
   PlanResponse,
   ReleaseNotesResponse,
   RetagChoiceRequest,
@@ -89,6 +90,55 @@ function activeLineNumbers(activeKeys: Set<string>): Set<number> {
 
 function uniqueSortedNumbers(values: number[]): number[] {
   return [...new Set(values)].sort((left, right) => left - right);
+}
+
+function normalizeDemoSelections(
+  pending: PendingResponse,
+  selections: PlanSelectionRequest[],
+): PlanSelectionRequest[] {
+  const normalized = [...selections].sort(
+    (left, right) =>
+      left.line_no - right.line_no ||
+      left.selection_id.localeCompare(right.selection_id),
+  );
+  const seen = new Set<string>();
+  const modesByLine = new Map<number, Set<boolean>>();
+  const available = new Map(
+    pending.grouping.groups.flatMap((group) =>
+      group.items
+        .filter((item) => item.selection_id)
+        .map((item) => [item.selection_id as string, item.line_no] as const),
+    ),
+  );
+  for (const selection of normalized) {
+    const key = `${selection.line_no}\0${selection.selection_id}`;
+    if (seen.has(key)) {
+      throw new Error(
+        `selection for line ${selection.line_no} was provided more than once`,
+      );
+    }
+    seen.add(key);
+    const modes = modesByLine.get(selection.line_no) ?? new Set<boolean>();
+    modes.add(Boolean(selection.selection_id));
+    modesByLine.set(selection.line_no, modes);
+    if (
+      selection.selection_id &&
+      available.get(selection.selection_id) !== selection.line_no
+    ) {
+      throw new Error(
+        `selection for line ${selection.line_no} is stale or no longer available`,
+      );
+    }
+  }
+  const mixed = [...modesByLine.entries()]
+    .filter(([, modes]) => modes.size > 1)
+    .map(([lineNo]) => lineNo);
+  if (mixed.length) {
+    throw new Error(
+      `selections cannot mix line-wide and stack-scoped entries for line(s): ${mixed.join(", ")}`,
+    );
+  }
+  return normalized;
 }
 
 function demoNotificationKey(lineNo: number): string {
@@ -241,6 +291,7 @@ function planIdFor(
   allowTagUpdates: boolean,
   tagOverrides: Map<number, string>,
   digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
+  selections: PlanSelectionRequest[] = [],
 ): string {
   const parts = [
     `demo-session-${selectedLineNumbers.join("-") || "empty"}`,
@@ -251,6 +302,16 @@ function planIdFor(
       [...tagOverrides.entries()]
         .sort(([left], [right]) => left - right)
         .map(([lineNo, tag]) => `${lineNo}-${demoIdPart(tag)}`)
+        .join("-"),
+    );
+  }
+  if (selections.length) {
+    parts.push(
+      selections
+        .map(
+          (selection) =>
+            `${selection.line_no}-${demoIdPart(selection.selection_id || "line")}`,
+        )
         .join("-"),
     );
   }
@@ -269,9 +330,21 @@ function filterPendingResponse(activeKeys: Set<string>): PendingResponse {
   response.count = response.items.length;
   response.grouping.groups = response.grouping.groups
     .map((group) => {
-      const items = group.items.filter((item) =>
-        activeKeys.has(cleanupLineKey(item)),
-      );
+      const items = group.items
+        .filter((item) => activeKeys.has(cleanupLineKey(item)))
+        .map((item) => ({
+          ...item,
+          selection_id:
+            item.selection_id ||
+            [
+              "demo-selection",
+              group.directory,
+              group.compose_file,
+              group.name,
+              item.line_no,
+              item.services.join(","),
+            ].join(":"),
+        }));
       return {
         ...group,
         line_numbers: items.map((item) => item.line_no),
@@ -279,9 +352,9 @@ function filterPendingResponse(activeKeys: Set<string>): PendingResponse {
       };
     })
     .filter((group) => group.items.length > 0);
-  response.grouping.unmatched = response.grouping.unmatched.filter((item) =>
-    activeKeys.has(cleanupLineKey(item)),
-  );
+  response.grouping.unmatched = response.grouping.unmatched
+    .filter((item) => activeKeys.has(cleanupLineKey(item)))
+    .map((item) => ({ ...item, selection_id: "" }));
   return response;
 }
 
@@ -291,8 +364,24 @@ function readOnlyPlanFromPending(
   allowTagUpdates: boolean,
   tagOverrides: TagOverrideRequest[],
   digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
+  selections: PlanSelectionRequest[] = [],
 ): PlanResponse {
   const selected = new Set(selectedLineNumbers);
+  const scopedSelections = new Set(
+    selections
+      .filter((selection) => selection.selection_id)
+      .map((selection) => selection.selection_id),
+  );
+  const broadLines = new Set(
+    selections
+      .filter((selection) => !selection.selection_id)
+      .map((selection) => selection.line_no),
+  );
+  const itemSelected = (item: PendingResponse["grouping"]["unmatched"][number]) =>
+    selected.has(item.line_no) &&
+    (!selections.length ||
+      broadLines.has(item.line_no) ||
+      scopedSelections.has(item.selection_id ?? ""));
   const overrides = tagOverridesByLine(
     pending,
     selectedLineNumbers,
@@ -303,12 +392,12 @@ function readOnlyPlanFromPending(
     .map((group) => ({
       ...group,
       items: group.items
-        .filter((item) => selected.has(item.line_no))
+        .filter(itemSelected)
         .map((item) => materializeTagOverride(item, overrides)),
     }))
     .filter((group) => group.items.length > 0);
   const selectedUnmatchedItems = pending.grouping.unmatched
-    .filter((item) => selected.has(item.line_no))
+    .filter(itemSelected)
     .map((item) => materializeTagOverride(item, overrides));
   const tagUpdatesDisabled = [
     ...selectedGroups.flatMap((group) => group.items),
@@ -384,6 +473,7 @@ function readOnlyPlanFromPending(
       allowTagUpdates,
       overrides,
       digestPinLabelRewriteApprovals,
+      selections,
     ),
     dry_run: true,
     can_apply: false,
@@ -394,6 +484,7 @@ function readOnlyPlanFromPending(
     max_wait: 180,
     digest_pin_updates: false,
     selected_line_numbers: selectedLineNumbers,
+    selected_selections: selections,
     summary: {
       target_count: selectedLineNumbers.length,
       matched_target_count: matchedTargets.length,
@@ -1106,15 +1197,23 @@ export class DemoApiState {
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
+    selections: PlanSelectionRequest[] = [],
   ): PlanResponse {
-    const selectedLineNumbers = uniqueSortedNumbers(lineNumbers);
+    const pending = this.pendingResponse();
+    const normalizedSelections = normalizeDemoSelections(pending, selections);
+    const selectedLineNumbers = uniqueSortedNumbers(
+      normalizedSelections.length
+        ? normalizedSelections.map((selection) => selection.line_no)
+        : lineNumbers,
+    );
     this.requireActiveLines(selectedLineNumbers);
     return readOnlyPlanFromPending(
-      this.pendingResponse(),
+      pending,
       selectedLineNumbers,
       allowTagUpdates,
       tagOverrides,
       digestPinLabelRewriteApprovals,
+      normalizedSelections,
     );
   }
 
