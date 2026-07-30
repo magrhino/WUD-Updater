@@ -3,10 +3,13 @@ import logging
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from wudup import web_jobs
 from wudup import web_wud_api
 from wudup import web_self_update as self_update_module
 from wudup.config import UpdaterConfig
+from wudup.updater_models import CompletedUpdateSelection
 from wudup.web_models import WebApplyJob, WebSettings
 from tests.web_test_helpers import (
     _client,
@@ -46,6 +49,107 @@ def _settings_for_lock_timeout(
         ),
         auth_token="",
         command_env=command_env,
+    )
+
+
+def _shared_update_case(
+    tmp_path: Path,
+    *,
+    wud_line: str = "repo/shared:latest",
+    compose_image: str = "repo/shared:latest",
+    pull_image: str = "repo/shared:latest",
+) -> SimpleNamespace:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    environ = {
+        "WUD_WEB_DEV_NO_AUTH": "true",
+        "WUD_WEB_MUTATIONS_ENABLED": "true",
+        **fake_env,
+    }
+    client = _client(tmp_path, environ)
+    wud_file = tmp_path / "state" / "images.todo"
+    original = f"{wud_line}\n"
+    wud_file.write_text(original, encoding="utf-8")
+    stack_dirs = {
+        stack_name: _make_fake_stack(
+            tmp_path,
+            fake_root,
+            stack_name,
+            [("app", compose_image, f"cid-{stack_name}")],
+        )
+        for stack_name in ("active", "backup")
+    }
+    _write_fake_image_after_pull(
+        fake_root,
+        pull_image,
+        "sha256:new-id",
+        "sha256:new",
+    )
+    return SimpleNamespace(
+        fake_root=fake_root,
+        environ=environ,
+        client=client,
+        headers=_csrf_headers(client),
+        wud_file=wud_file,
+        original=original,
+        active_dir=stack_dirs["active"],
+        backup_dir=stack_dirs["backup"],
+    )
+
+
+def _selection_for_group(client, group_name: str) -> dict[str, object]:
+    pending = client.get("/api/v1/pending").json()
+    item = next(
+        group["items"][0]
+        for group in pending["grouping"]["groups"]
+        if group["name"] == group_name
+    )
+    return {
+        "line_no": item["line_no"],
+        "selection_id": item["selection_id"],
+    }
+
+
+def _all_group_selections(client) -> list[dict[str, object]]:
+    pending = client.get("/api/v1/pending").json()
+    return [
+        {
+            "line_no": group["items"][0]["line_no"],
+            "selection_id": group["items"][0]["selection_id"],
+        }
+        for group in pending["grouping"]["groups"]
+    ]
+
+
+def _plan_and_apply(
+    client,
+    headers: dict[str, str],
+    selections: list[dict[str, object]],
+    **plan_options: object,
+) -> SimpleNamespace:
+    plan_response = client.post(
+        "/api/v1/plans",
+        json={"selections": selections, **plan_options},
+        headers=headers,
+    )
+    plan = plan_response.json()
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "selections": plan["selected_selections"],
+            "confirmation": "apply",
+            **plan_options,
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+    assert plan_response.status_code == 200
+    assert apply_response.status_code == 202
+    return SimpleNamespace(
+        plan_response=plan_response,
+        plan=plan,
+        apply_response=apply_response,
+        job=job,
     )
 
 
@@ -267,6 +371,12 @@ def test_apply_job_refreshes_only_api_pending_source(
         def __init__(self, *_args, **_kwargs) -> None:
             self.audit_run_id = 7
             self.log_file = tmp_path / "apply.log"
+            self.options = SimpleNamespace(
+                update_selections=(),
+                completed_update_selections=(),
+            )
+            self.successful_completed_update_selections = ()
+            self.discovered_completed_update_selections = ()
 
         def run(self) -> int:
             return 0
@@ -487,58 +597,19 @@ def test_job_stream_emits_initial_and_terminal_status(tmp_path: Path) -> None:
     assert "log" in event_names[:-1]
 
 
-def test_scoped_apply_updates_only_selected_stack_and_retains_shared_line(
+def test_scoped_apply_updates_shared_stacks_sequentially_and_clears_line(
     tmp_path: Path,
 ) -> None:
-    fake_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            **fake_env,
-        },
-    )
-    wud_file = tmp_path / "state" / "images.todo"
-    original = "repo/shared:latest\n"
-    wud_file.write_text(original, encoding="utf-8")
-    active_dir = _make_fake_stack(
-        tmp_path,
-        fake_root,
-        "active",
-        [("app", "repo/shared:latest", "cid-active")],
-    )
-    backup_dir = _make_fake_stack(
-        tmp_path,
-        fake_root,
-        "backup",
-        [("app", "repo/shared:latest", "cid-backup")],
-    )
-    _write_fake_image_after_pull(
-        fake_root,
-        "repo/shared:latest",
-        "sha256:new-id",
-        "sha256:new",
-    )
-    headers = _csrf_headers(client)
-    pending = client.get("/api/v1/pending").json()
-    active_item = next(
-        group["items"][0]
-        for group in pending["grouping"]["groups"]
-        if group["name"] == "active"
-    )
-    selection = {
-        "line_no": active_item["line_no"],
-        "selection_id": active_item["selection_id"],
-    }
-    plan_response = client.post(
+    case = _shared_update_case(tmp_path)
+    selection = _selection_for_group(case.client, "active")
+    plan_response = case.client.post(
         "/api/v1/plans",
         json={"selections": [selection]},
-        headers=headers,
+        headers=case.headers,
     )
     plan = plan_response.json()
 
-    stale_apply = client.post(
+    stale_apply = case.client.post(
         "/api/v1/jobs",
         json={
             "plan_id": plan["plan_id"],
@@ -547,18 +618,18 @@ def test_scoped_apply_updates_only_selected_stack_and_retains_shared_line(
             ],
             "confirmation": "apply",
         },
-        headers=headers,
+        headers=case.headers,
     )
-    apply_response = client.post(
+    apply_response = case.client.post(
         "/api/v1/jobs",
         json={
             "plan_id": plan["plan_id"],
             "selections": plan["selected_selections"],
             "confirmation": "apply",
         },
-        headers=headers,
+        headers=case.headers,
     )
-    job = _wait_apply_job(client, apply_response.json()["job_id"])
+    job = _wait_apply_job(case.client, apply_response.json()["job_id"])
 
     assert plan_response.status_code == 200
     assert [stack["name"] for stack in plan["stacks"]] == ["active"]
@@ -567,18 +638,18 @@ def test_scoped_apply_updates_only_selected_stack_and_retains_shared_line(
     assert apply_response.status_code == 202
     assert job["status"] == "success"
     assert job["selected_line_numbers"] == [1]
-    assert wud_file.read_text(encoding="utf-8") == original
-    calls = _fake_docker_calls(fake_root)
+    assert case.wud_file.read_text(encoding="utf-8") == case.original
+    calls = _fake_docker_calls(case.fake_root)
     active_mutations = [
         line
         for line in calls.splitlines()
-        if str(active_dir) in line
+        if str(case.active_dir) in line
         and (" pull app" in line or " up -d " in line)
     ]
     backup_mutations = [
         line
         for line in calls.splitlines()
-        if str(backup_dir) in line
+        if str(case.backup_dir) in line
         and (" pull app" in line or " up -d " in line)
     ]
     assert active_mutations
@@ -588,13 +659,318 @@ def test_scoped_apply_updates_only_selected_stack_and_retains_shared_line(
         for event in job["progress"]
         if event["stack"]
     } == {"active"}
-    run = client.get(f"/api/v1/runs/{job['run_id']}")
+    run = case.client.get(f"/api/v1/runs/{job['run_id']}")
     assert run.status_code == 200
     assert {
         event["stack_name"]
         for event in run.json()["events"]
         if event["stack_name"]
     } == {"active"}
+
+    unrelated = "repo/unrelated:latest\n"
+    case.wud_file.write_text(
+        f"{case.original}{unrelated}",
+        encoding="utf-8",
+    )
+    restarted_client = _client(tmp_path, case.environ)
+    restarted_headers = _csrf_headers(restarted_client)
+    remaining_pending = restarted_client.get("/api/v1/pending").json()
+    assert [
+        group["name"] for group in remaining_pending["grouping"]["groups"]
+    ] == ["backup"]
+    legacy_plan = restarted_client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=restarted_headers,
+    )
+    assert legacy_plan.status_code == 200
+    assert {
+        stack["name"] for stack in legacy_plan.json()["stacks"]
+    } == {"active", "backup"}
+    backup_result = _plan_and_apply(
+        restarted_client,
+        restarted_headers,
+        [_selection_for_group(restarted_client, "backup")],
+    )
+
+    assert [stack["name"] for stack in backup_result.plan["stacks"]] == ["backup"]
+    assert backup_result.job["status"] == "success"
+    assert case.wud_file.read_text(encoding="utf-8") == unrelated
+    final_pending = restarted_client.get("/api/v1/pending").json()
+    assert final_pending["count"] == 1
+    assert final_pending["grouping"]["groups"] == []
+    final_calls = _fake_docker_calls(case.fake_root)
+    final_active_mutations = [
+        line
+        for line in final_calls.splitlines()
+        if str(case.active_dir) in line
+        and (" pull app" in line or " up -d " in line)
+    ]
+    final_backup_mutations = [
+        line
+        for line in final_calls.splitlines()
+        if str(case.backup_dir) in line
+        and (" pull app" in line or " up -d " in line)
+    ]
+    assert final_active_mutations == active_mutations
+    assert final_backup_mutations
+    assert {
+        event["stack"]
+        for event in backup_result.job["progress"]
+        if event["stack"]
+    } == {"backup"}
+
+
+def test_scoped_apply_preserves_completions_for_other_pending_lines(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    environ = {
+        "WUD_WEB_DEV_NO_AUTH": "true",
+        "WUD_WEB_MUTATIONS_ENABLED": "true",
+        **fake_env,
+    }
+    client = _client(tmp_path, environ)
+    wud_file = tmp_path / "state" / "images.todo"
+    original = "repo/one:latest\nrepo/two:latest\n"
+    wud_file.write_text(original, encoding="utf-8")
+    for image_name in ("one", "two"):
+        for stack_role in ("active", "backup"):
+            _make_fake_stack(
+                tmp_path,
+                fake_root,
+                f"{image_name}-{stack_role}",
+                [
+                    (
+                        "app",
+                        f"repo/{image_name}:latest",
+                        f"cid-{image_name}-{stack_role}",
+                    )
+                ],
+            )
+        _write_fake_image_after_pull(
+            fake_root,
+            f"repo/{image_name}:latest",
+            f"sha256:{image_name}-new-id",
+            f"sha256:{image_name}-new",
+        )
+    headers = _csrf_headers(client)
+
+    for group_name in ("one-active", "two-active"):
+        result = _plan_and_apply(
+            client,
+            headers,
+            [_selection_for_group(client, group_name)],
+        )
+        assert result.job["status"] == "success"
+
+    assert wud_file.read_text(encoding="utf-8") == original
+    restarted_client = _client(tmp_path, environ)
+    remaining = restarted_client.get("/api/v1/pending").json()
+    assert {
+        group["name"] for group in remaining["grouping"]["groups"]
+    } == {"one-backup", "two-backup"}
+
+
+def test_legacy_broad_apply_clears_scoped_completion_for_target(
+    tmp_path: Path,
+) -> None:
+    case = _shared_update_case(tmp_path)
+    scoped_result = _plan_and_apply(
+        case.client,
+        case.headers,
+        [_selection_for_group(case.client, "active")],
+    )
+    assert scoped_result.job["status"] == "success"
+    assert case.wud_file.read_text(encoding="utf-8") == case.original
+
+    legacy_plan_response = case.client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=case.headers,
+    )
+    legacy_plan = legacy_plan_response.json()
+    legacy_apply = case.client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": legacy_plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=case.headers,
+    )
+    legacy_job = _wait_apply_job(case.client, legacy_apply.json()["job_id"])
+
+    assert legacy_plan_response.status_code == 200
+    assert {
+        stack["name"] for stack in legacy_plan["stacks"]
+    } == {"active", "backup"}
+    assert legacy_apply.status_code == 202
+    assert legacy_job["status"] == "success"
+    assert case.wud_file.read_text(encoding="utf-8") == ""
+
+    case.wud_file.write_text(case.original, encoding="utf-8")
+    restarted_client = _client(tmp_path, case.environ)
+    requeued = restarted_client.get("/api/v1/pending").json()
+    assert {
+        group["name"] for group in requeued["grouping"]["groups"]
+    } == {"active", "backup"}
+
+
+def test_scoped_tag_rewrite_keeps_completed_stack_hidden_after_restart(
+    tmp_path: Path,
+) -> None:
+    case = _shared_update_case(
+        tmp_path,
+        wud_line="repo/shared:1.0 tag=2.0",
+        compose_image="repo/shared:1.0",
+        pull_image="repo/shared:2.0",
+    )
+    result = _plan_and_apply(
+        case.client,
+        case.headers,
+        [_selection_for_group(case.client, "active")],
+        allow_tag_updates=True,
+    )
+
+    assert result.job["status"] == "success"
+    assert case.wud_file.read_text(encoding="utf-8") == case.original
+    assert "image: repo/shared:2.0" in (
+        case.active_dir / "docker-compose.yml"
+    ).read_text(encoding="utf-8")
+    assert "image: repo/shared:1.0" in (
+        case.backup_dir / "docker-compose.yml"
+    ).read_text(encoding="utf-8")
+
+    restarted_client = _client(tmp_path, case.environ)
+    remaining = restarted_client.get("/api/v1/pending").json()
+    assert [
+        group["name"] for group in remaining["grouping"]["groups"]
+    ] == ["backup"]
+
+
+def test_scoped_apply_checkpoints_successful_stack_when_sibling_fails(
+    tmp_path: Path,
+) -> None:
+    case = _shared_update_case(tmp_path)
+    pull_failure = case.fake_root / "stacks" / "backup" / "pull_fail"
+    pull_failure.write_text(
+        "fail\n",
+        encoding="utf-8",
+    )
+    result = _plan_and_apply(
+        case.client,
+        case.headers,
+        _all_group_selections(case.client),
+    )
+
+    assert result.job["status"] == "failure"
+    assert case.wud_file.read_text(encoding="utf-8") == case.original
+    first_calls = _fake_docker_calls(case.fake_root)
+    active_mutations = [
+        line
+        for line in first_calls.splitlines()
+        if str(case.active_dir) in line
+        and (" pull app" in line or " up -d " in line)
+    ]
+    assert active_mutations
+    assert any(
+        str(case.backup_dir) in line and " pull app" in line
+        for line in first_calls.splitlines()
+    )
+
+    restarted_client = _client(tmp_path, case.environ)
+    restarted_headers = _csrf_headers(restarted_client)
+    remaining = restarted_client.get("/api/v1/pending").json()
+    assert [
+        group["name"] for group in remaining["grouping"]["groups"]
+    ] == ["backup"]
+    pull_failure.unlink()
+    retry_result = _plan_and_apply(
+        restarted_client,
+        restarted_headers,
+        [_selection_for_group(restarted_client, "backup")],
+    )
+
+    assert [stack["name"] for stack in retry_result.plan["stacks"]] == ["backup"]
+    assert retry_result.job["status"] == "success"
+    assert case.wud_file.read_text(encoding="utf-8") == ""
+    final_calls = _fake_docker_calls(case.fake_root)
+    final_active_mutations = [
+        line
+        for line in final_calls.splitlines()
+        if str(case.active_dir) in line
+        and (" pull app" in line or " up -d " in line)
+    ]
+    assert final_active_mutations == active_mutations
+
+
+def test_scoped_apply_fails_when_completion_checkpoint_cannot_persist(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    case = _shared_update_case(tmp_path)
+    plan_response = case.client.post(
+        "/api/v1/plans",
+        json={"selections": [_selection_for_group(case.client, "active")]},
+        headers=case.headers,
+    )
+    plan = plan_response.json()
+
+    def fail_checkpoint(*_args, **_kwargs) -> None:
+        raise RuntimeError("private database path")
+
+    monkeypatch.setattr(
+        web_jobs.web_file_selection_store,
+        "replace_completed_update_selections",
+        fail_checkpoint,
+    )
+    apply_response = case.client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "selections": plan["selected_selections"],
+            "confirmation": "apply",
+        },
+        headers=case.headers,
+    )
+    job = _wait_apply_job(case.client, apply_response.json()["job_id"])
+
+    assert plan_response.status_code == 200
+    assert apply_response.status_code == 202
+    assert job["status"] == "failure"
+    assert job["error"] == "Could not persist partial update completion state."
+    assert "private database path" not in str(job)
+    assert case.wud_file.read_text(encoding="utf-8") == case.original
+
+
+def test_file_selection_checkpoint_read_failure_is_not_reported_as_success(
+    tmp_path: Path,
+) -> None:
+    settings = _settings_for_lock_timeout(tmp_path, {})
+    settings.config.wud_out_file.parent.mkdir(parents=True)
+    settings.config.wud_out_file.mkdir()
+    selection = CompletedUpdateSelection("target", "current")
+    runner = SimpleNamespace(
+        options=SimpleNamespace(
+            update_selections=(SimpleNamespace(line_no=1, selection_id="selected"),),
+            completed_update_selections=(),
+        ),
+        successful_completed_update_selections=(selection,),
+        discovered_completed_update_selections=(selection,),
+    )
+
+    with pytest.raises(
+        web_jobs.web_file_selection_store.FileSelectionCheckpointError,
+        match="Could not persist partial update completion state",
+    ):
+        web_jobs._checkpoint_file_selection_completions(
+            settings,
+            runner,
+            run_context=web_jobs.ApplyJobRunContext(
+                pending_source_active="file",
+            ),
+        )
 
 
 def test_job_stream_caps_live_log_tail_size(tmp_path: Path) -> None:
