@@ -3,7 +3,11 @@ import { computed, ref } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 
-import type { ApplyJobProgressEvent, PlanIssue } from "../src/api/client";
+import type {
+  ApplyJobProgressEvent,
+  PlanIssue,
+  PlanSelectionRequest,
+} from "../src/api/client";
 import { usePolledJob } from "../src/composables/usePolledJob";
 import { useUpdateTargetOptions } from "../src/composables/useUpdateTargetOptions";
 import { useAuthStore } from "../src/stores/auth";
@@ -31,7 +35,10 @@ import {
   usePendingPlanReviewState,
 } from "../src/views/pending/usePendingPlanReviewState";
 import { usePendingQueueState } from "../src/views/pending/usePendingQueueState";
-import { usePendingSelectionState } from "../src/views/pending/usePendingSelectionState";
+import {
+  pendingSelectionKey,
+  usePendingSelectionState,
+} from "../src/views/pending/usePendingSelectionState";
 import { mockApplyJobStream } from "./helpers/applyJobStream";
 
 describe("useUpdateTargetOptions", () => {
@@ -310,7 +317,10 @@ function setupPendingPlanReview(mutationsEnabled = true) {
   auth.session = authSession({ mutations_enabled: mutationsEnabled });
   const updates = useUpdatesStore();
   const selectedLineNumbers = ref<number[]>([]);
-  const selectedLineSet = computed(() => new Set(selectedLineNumbers.value));
+  const selectedSelections = ref<PlanSelectionRequest[]>([]);
+  const selectedSelectionKeySet = computed(
+    () => new Set(selectedSelections.value.map(pendingSelectionKey)),
+  );
   const stackGroups = computed(() => updates.pending?.grouping.groups ?? []);
   const unmatchedItems = computed(() => updates.pending?.grouping.unmatched ?? []);
   const pendingSourceLabel = computed(() => "images.todo");
@@ -318,7 +328,8 @@ function setupPendingPlanReview(mutationsEnabled = true) {
   const state = usePendingPlanReviewState({
     pendingSourceLabel,
     selectedLineNumbers,
-    selectedLineSet,
+    selectedSelections,
+    selectedSelectionKeySet,
     stackGroups,
     tagOverrideErrorForLines,
     unmatchedItems,
@@ -328,7 +339,7 @@ function setupPendingPlanReview(mutationsEnabled = true) {
     state,
     updates,
     selectedLineNumbers,
-    selectedLineSet,
+    selectedSelections,
     tagOverrideErrorForLines,
   };
 }
@@ -563,6 +574,7 @@ describe("usePendingPlanReviewState", () => {
       title: "Preview media plan",
       contextLabel: "media",
       lineNumbers: [1],
+      selections: [{ line_no: 1, selection_id: "selection-media-app" }],
       allowTagUpdates: true,
       tagOverrides,
       digestPinLabelRewriteApprovals: [],
@@ -601,12 +613,18 @@ describe("usePendingPlanReviewState", () => {
     auth.session = authSession({ mutations_enabled: true });
     const updates = useUpdatesStore();
     const selectedLineNumbers = ref<number[]>([1]);
-    const selectedLineSet = computed(() => new Set(selectedLineNumbers.value));
+    const selectedSelections = ref<PlanSelectionRequest[]>([
+      { line_no: 1, selection_id: "" },
+    ]);
+    const selectedSelectionKeySet = computed(
+      () => new Set(selectedSelections.value.map(pendingSelectionKey)),
+    );
     const tagValidationError = ref("");
     const state = usePendingPlanReviewState({
       pendingSourceLabel: computed(() => "images.todo"),
       selectedLineNumbers,
-      selectedLineSet,
+      selectedSelections,
+      selectedSelectionKeySet,
       stackGroups: computed(() => updates.pending?.grouping.groups ?? []),
       tagOverrideErrorForLines: () => tagValidationError.value,
       unmatchedItems: computed(() => updates.pending?.grouping.unmatched ?? []),
@@ -815,6 +833,7 @@ describe("usePendingPlanReviewState", () => {
       title: "Preview media plan",
       contextLabel: "media",
       lineNumbers: [1],
+      selections: [{ line_no: 1, selection_id: "selection-media-app" }],
       allowTagUpdates: true,
       tagOverrides: [{ line_no: 1, tag: "1.1" }],
       digestPinLabelRewriteApprovals: [],
@@ -835,7 +854,7 @@ describe("usePendingPlanReviewState", () => {
           proposed_label_value: "1.1",
         },
       ],
-      [],
+      [{ line_no: 1, selection_id: "selection-media-app" }],
     );
     expect(state.digestPinLabelApprovalApproved(issue)).toBe(true);
   });

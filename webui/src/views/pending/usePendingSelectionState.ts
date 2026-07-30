@@ -56,7 +56,7 @@ function lineSelection(lineNo: number): PlanSelectionRequest {
   return { line_no: lineNo, selection_id: "" };
 }
 
-function uniqueSelections(
+export function uniqueSelections(
   selections: PlanSelectionRequest[],
 ): PlanSelectionRequest[] {
   const unique = new Map<string, PlanSelectionRequest>();

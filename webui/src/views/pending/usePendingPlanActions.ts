@@ -14,8 +14,8 @@ import type {
   PendingUpdateIntent,
 } from "./usePendingPlanReviewState";
 import {
-  pendingSelectionKey,
   pendingSelectionsForGroup,
+  uniqueSelections,
 } from "./usePendingSelectionState";
 
 export type UsePendingPlanActionsOptions = {
@@ -274,18 +274,4 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
     startSelectedUpdate,
     startStackUpdate,
   };
-}
-
-function uniqueSelections(
-  selections: PlanSelectionRequest[],
-): PlanSelectionRequest[] {
-  const unique = new Map<string, PlanSelectionRequest>();
-  for (const selection of selections) {
-    unique.set(pendingSelectionKey(selection), selection);
-  }
-  return [...unique.values()].sort(
-    (left, right) =>
-      left.line_no - right.line_no ||
-      left.selection_id.localeCompare(right.selection_id),
-  );
 }

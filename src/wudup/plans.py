@@ -371,9 +371,7 @@ class _PlanBuilder(_UpdateScopeMixin):
                 update
                 for update in updates
                 if any(
-                    match.compose_image == update.old_image
-                    and match.service in update.services
-                    and match.target.digest == update.target_digest
+                    self._match_digest_unpin(match) is update
                     for match in selected_matches
                 )
             )

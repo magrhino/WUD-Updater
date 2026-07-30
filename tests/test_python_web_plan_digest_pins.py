@@ -62,6 +62,58 @@ def test_plan_endpoint_uses_known_image_provenance_for_digest_unpin(
     assert line["digest_provenance"]["provenance_source"] == "plan"
 
 
+def test_plan_endpoint_scopes_digest_unpin_by_selection_id(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    _seed_known_digest_provenance(tmp_path, service_key="active/app")
+    _seed_known_digest_provenance(tmp_path, service_key="backup/app")
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest@sha256:new\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "active",
+        [("app", "repo/app@sha256:old", "cid-active")],
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "backup",
+        [("app", "repo/app@sha256:old", "cid-backup")],
+    )
+    pending = client.get("/api/v1/pending").json()
+    active_group = next(
+        group
+        for group in pending["grouping"]["groups"]
+        if group["name"] == "active"
+    )
+    selection = {
+        "line_no": active_group["items"][0]["line_no"],
+        "selection_id": active_group["items"][0]["selection_id"],
+    }
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"selections": [selection]},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["selected_selections"] == [selection]
+    assert [stack["name"] for stack in body["stacks"]] == ["active"]
+    assert body["stacks"][0]["digest_unpin_updates"][0]["services"] == ["app"]
+
+
 def test_plan_endpoint_treats_digest_provenance_lookup_failure_as_best_effort(
     tmp_path: Path,
     monkeypatch,
