@@ -1,12 +1,16 @@
 import { computed, type ComputedRef, type Ref } from "vue";
 
-import type { PendingGroupedItem } from "../../api/client";
+import type {
+  PendingGroupedItem,
+  PlanSelectionRequest,
+} from "../../api/client";
+import { pendingSelectionKey } from "./usePendingSelectionState";
 import { pluralize } from "./utils";
 
 type UsePendingSearchResultStateOptions = {
   pendingSearchActive: ComputedRef<boolean>;
-  visibleLineNumbers: ComputedRef<number[]>;
-  selectedLineNumbers: Ref<number[]>;
+  visibleSelections: ComputedRef<PlanSelectionRequest[]>;
+  selectedSelections: Ref<PlanSelectionRequest[]>;
   filteredUnmatchedItems: ComputedRef<PendingGroupedItem[]>;
   unmatchedItems: ComputedRef<PendingGroupedItem[]>;
   unmatchedIssueSummary: ComputedRef<string>;
@@ -21,9 +25,11 @@ export function usePendingSearchResultState(
     if (!options.pendingSearchActive.value) {
       return 0;
     }
-    const visibleLines = new Set(options.visibleLineNumbers.value);
-    return options.selectedLineNumbers.value.filter(
-      (lineNo) => !visibleLines.has(lineNo),
+    const visibleKeys = new Set(
+      options.visibleSelections.value.map(pendingSelectionKey),
+    );
+    return options.selectedSelections.value.filter(
+      (selection) => !visibleKeys.has(pendingSelectionKey(selection)),
     ).length;
   });
   const visibleUnmatchedReviewSummary = computed(() => {

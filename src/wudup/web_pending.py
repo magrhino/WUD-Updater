@@ -680,6 +680,7 @@ def _pending_grouped_item(
         compose_images=list(item.compose_images),
         services=list(item.services),
         action=item.action,
+        selection_id=item.selection_id,
         diagnostic=(
             None
             if item.diagnostic is None

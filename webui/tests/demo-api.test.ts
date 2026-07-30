@@ -120,12 +120,28 @@ describe("demo web API", () => {
   it("previews pending plans and blocks apply in the static demo", async () => {
     const api = createDemoWebApi();
     const tagOverrides = [{ line_no: 2, tag: "2026.6.0" }];
-    const plan = await api.createPlan([2], true, tagOverrides, [], "csrf");
+    const pending = await api.pending();
+    const homeItem = pending.grouping.groups.find(
+      (group) => group.name === "home",
+    )?.items[0];
+    expect(homeItem?.selection_id).toBeTruthy();
+    const selections = [
+      { line_no: 2, selection_id: homeItem?.selection_id ?? "" },
+    ];
+    const plan = await api.createPlan(
+      [2],
+      true,
+      tagOverrides,
+      [],
+      "csrf",
+      selections,
+    );
 
     expect(plan).toMatchObject({
       can_apply: false,
       status: "ready",
       selected_line_numbers: [2],
+      selected_selections: selections,
       summary: {
         target_count: 1,
         matched_target_count: 1,
@@ -150,6 +166,16 @@ describe("demo web API", () => {
       desired_tag: "2026.6.0",
       target_image: "ghcr.io/home-assistant/home-assistant:2026.6.0",
     });
+    await expect(
+      api.createPlan(
+        [2],
+        true,
+        tagOverrides,
+        [],
+        "csrf",
+        [{ line_no: 2, selection_id: "selection-forged" }],
+      ),
+    ).rejects.toThrow("stale or no longer available");
 
     await expect(
       api.applyPlan(

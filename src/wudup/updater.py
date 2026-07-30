@@ -79,6 +79,7 @@ class UpdateFromWudRunner(
         )
         self.failures: list[FailureRecord] = []
         self.stale_pending_digest_lines: set[tuple[int, int]] = set()
+        self.partially_selected_line_numbers: tuple[int, ...] = ()
         self.audit_conn: sqlite3.Connection | None = None
         self.audit_run_id: int | None = None
         self.audit_db_path: Path | None = None
@@ -455,24 +456,29 @@ class UpdateFromWudRunner(
             != "success"
         }
         failed_lines.extend(sorted(failed_exclusion_lines))
-        if failed_lines:
-            stale_failed_lines = self._stale_pending_digest_line_numbers(
-                matches,
-                failed_lines,
+        partial_lines = set(self.partially_selected_line_numbers)
+        stale_failed_lines = (
+            self._stale_pending_digest_line_numbers(matches, failed_lines)
+            - partial_lines
+        )
+        restorable_failed_lines = [
+            line_no
+            for line_no in failed_lines
+            if line_no not in stale_failed_lines
+        ]
+        restore_line_numbers = sorted(
+            set(restorable_failed_lines) | partial_lines
+        )
+        if restore_line_numbers:
+            wud_file.restore_failed_lines(
+                opts.wud_file,
+                audit_parsed,
+                restore_line_numbers,
+                lock=lock,
+                owner=self.owner,
             )
-            restorable_failed_lines = [
-                line_no
-                for line_no in failed_lines
-                if line_no not in stale_failed_lines
-            ]
+        if failed_lines:
             if restorable_failed_lines:
-                wud_file.restore_failed_lines(
-                    opts.wud_file,
-                    audit_parsed,
-                    restorable_failed_lines,
-                    lock=lock,
-                    owner=self.owner,
-                )
                 self.log.warn(f"Restored failed WUD entries in {opts.wud_file}")
             if stale_failed_lines:
                 stale_lines = ", ".join(str(line) for line in sorted(stale_failed_lines))
@@ -501,7 +507,14 @@ class UpdateFromWudRunner(
             )
         else:
             self._mark_failed_lines_restored(())
-            self.log.info("Successful WUD entries were removed before update.")
+            if partial_lines:
+                lines = ", ".join(str(line_no) for line_no in sorted(partial_lines))
+                self.log.info(
+                    "Retained partially selected WUD entries for unselected "
+                    f"Compose stacks: lines {lines}."
+                )
+            else:
+                self.log.info("Successful WUD entries were removed before update.")
             self._progress(
                 "cleanup",
                 "success",

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -14,10 +16,11 @@ from .plan_models import (
     DryRunPlanCleanup,
     DryRunPlanCleanupItem,
     DryRunPlanSkipped,
+    PlanInputError,
     UnmatchedDiagnostic,
 )
 from .updater_matching import _services_for_target_match
-from .updater_models import Match
+from .updater_models import Match, UpdateSelection
 from .wud_file import ParsedWudFile, WudTarget
 
 
@@ -25,6 +28,7 @@ COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
 COMPOSE_WORKING_DIR_LABEL = "com.docker.compose.project.working_dir"
 COMPOSE_CONFIG_FILES_LABEL = "com.docker.compose.project.config_files"
 COMPOSE_SERVICE_LABEL = "com.docker.compose.service"
+SELECTION_ID_PREFIX = "sel-v1-"
 UNMATCHED_HINT = (
     "Preflight found a matching running container, but its Docker Compose "
     "labels do not point to an active supported Compose file. Restore or "
@@ -124,6 +128,156 @@ def _match_targets(
         if target.line_no not in matched_lines and target.line_no not in skipped_lines:
             skipped.append(_skipped(target, "unmatched"))
     return matches, skipped
+
+
+def normalize_update_selections(
+    selections: Sequence[UpdateSelection],
+) -> tuple[UpdateSelection, ...]:
+    normalized: list[UpdateSelection] = []
+    seen: set[tuple[int, str]] = set()
+    modes_by_line: dict[int, set[bool]] = {}
+    for item in selections:
+        if item.line_no < 1:
+            raise PlanInputError(
+                f"selections line numbers must be positive integers: {item.line_no}"
+            )
+        key = (item.line_no, item.selection_id)
+        if key in seen:
+            raise PlanInputError(
+                f"selection for line {item.line_no} was provided more than once"
+            )
+        seen.add(key)
+        modes_by_line.setdefault(item.line_no, set()).add(bool(item.selection_id))
+        normalized.append(item)
+    mixed = sorted(
+        line_no for line_no, modes in modes_by_line.items() if len(modes) > 1
+    )
+    if mixed:
+        values = ", ".join(str(line_no) for line_no in mixed)
+        raise PlanInputError(
+            "selections cannot mix line-wide and stack-scoped entries for line(s): "
+            + values
+        )
+    return tuple(
+        sorted(normalized, key=lambda item: (item.line_no, item.selection_id))
+    )
+
+
+def selection_id_for_matches(matches: Sequence[Match]) -> str:
+    if not matches:
+        raise ValueError("selection identity requires at least one match")
+    first = matches[0]
+    if any(
+        item.stack.index != first.stack.index
+        or item.target.line_no != first.target.line_no
+        for item in matches
+    ):
+        raise ValueError("selection identity matches must share a stack and line")
+    stack_directory = first.stack.directory.resolve(strict=False)
+    payload = {
+        "compose_file": str(
+            (stack_directory / first.stack.file).resolve(strict=False)
+        ),
+        "compose_images": sorted({item.compose_image for item in matches}),
+        "directory": str(stack_directory),
+        "line_no": first.target.line_no,
+        "project_directory": (
+            "" if first.stack.project_directory is None
+            else str(first.stack.project_directory.resolve(strict=False))
+        ),
+        "project_name": first.stack.project_name,
+        "services": sorted({item.service for item in matches}),
+        "target": first.target.raw,
+    }
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return f"{SELECTION_ID_PREFIX}{digest}"
+
+
+def filter_matches_for_selections(
+    matches: Sequence[Match],
+    selections: Sequence[UpdateSelection],
+) -> tuple[list[Match], tuple[UpdateSelection, ...]]:
+    normalized = normalize_update_selections(selections)
+    if not normalized:
+        return list(matches), ()
+
+    matches_by_line: dict[int, list[Match]] = {}
+    grouped_matches: dict[tuple[int, int], list[Match]] = {}
+    for match in matches:
+        matches_by_line.setdefault(match.target.line_no, []).append(match)
+        grouped_matches.setdefault(
+            (match.stack.index, match.target.line_no),
+            [],
+        ).append(match)
+    matches_by_selection_id = {
+        selection_id_for_matches(group): group
+        for group in grouped_matches.values()
+    }
+
+    selected: list[Match] = []
+    for item in normalized:
+        if not item.selection_id:
+            selected.extend(matches_by_line.get(item.line_no, ()))
+            continue
+        scoped = matches_by_selection_id.get(item.selection_id)
+        if scoped is None or scoped[0].target.line_no != item.line_no:
+            raise PlanInputError(
+                f"selection for line {item.line_no} is stale or no longer available"
+            )
+        selected.extend(scoped)
+
+    selected_keys = {
+        (
+            item.stack.index,
+            item.target.line_no,
+            item.resolved,
+            item.compose_image,
+            item.service,
+        )
+        for item in selected
+    }
+    return (
+        [
+            item
+            for item in matches
+            if (
+                item.stack.index,
+                item.target.line_no,
+                item.resolved,
+                item.compose_image,
+                item.service,
+            )
+            in selected_keys
+        ],
+        normalized,
+    )
+
+
+def partially_selected_line_numbers(
+    all_matches: Sequence[Match],
+    selected_matches: Sequence[Match],
+) -> tuple[int, ...]:
+    all_by_line: dict[int, set[tuple[int, str, str]]] = {}
+    selected_by_line: dict[int, set[tuple[int, str, str]]] = {}
+    for match in all_matches:
+        all_by_line.setdefault(match.target.line_no, set()).add(
+            (match.stack.index, match.compose_image, match.service)
+        )
+    for match in selected_matches:
+        selected_by_line.setdefault(match.target.line_no, set()).add(
+            (match.stack.index, match.compose_image, match.service)
+        )
+    return tuple(
+        line_no
+        for line_no in sorted(selected_by_line)
+        if selected_by_line[line_no] != all_by_line.get(line_no, set())
+    )
 
 
 def _matches_for_target(

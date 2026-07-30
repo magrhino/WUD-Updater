@@ -10,6 +10,11 @@ from .compose import ComposeStack
 from .digest_provenance import digest_from_image
 from .images import image_has_tag, image_tag, normalize_digest, repo_key
 from .line_specs import parse_line_spec
+from .plan_matching import (
+    filter_matches_for_selections,
+    partially_selected_line_numbers,
+)
+from .plan_models import PlanInputError
 from .updater_matching import _services_for_target_match
 from .updater_models import Match, UpdaterError, UpdaterProgressEvent
 from .wud_file import (
@@ -138,6 +143,18 @@ class _RunnerMatchingMixin:
                 item.compose_image,
                 item.service,
             )
+        )
+        all_matches = list(matches)
+        try:
+            matches, _normalized = filter_matches_for_selections(
+                all_matches,
+                self.options.update_selections,
+            )
+        except PlanInputError as exc:
+            raise UpdaterError(str(exc)) from exc
+        self.partially_selected_line_numbers = partially_selected_line_numbers(
+            all_matches,
+            matches,
         )
         return matches, skipped_tags
 

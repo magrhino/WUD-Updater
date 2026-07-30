@@ -17,6 +17,7 @@ import {
   type PendingRescanScope,
   type PendingItem,
   type PlanResponse,
+  type PlanSelectionRequest,
   type PendingResponse,
   type ReleaseNoteInfo,
   type ReleaseNotesResponse,
@@ -758,6 +759,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[] = [],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
+    selections: PlanSelectionRequest[] = [],
   ): Promise<void> {
     const auth = useAuthStore();
     await loadWithState(async () => {
@@ -772,6 +774,7 @@ export const useUpdatesStore = defineStore("updates", () => {
         tagOverrides,
         digestPinLabelRewriteApprovals,
         await auth.ensureCsrf(),
+        selections,
       );
     });
   }
@@ -947,6 +950,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[] = [],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
+    selections: PlanSelectionRequest[] = [],
   ): Promise<ApplyJobResponse> {
     const auth = useAuthStore();
     await loadWithState(async () => {
@@ -958,6 +962,7 @@ export const useUpdatesStore = defineStore("updates", () => {
         tagOverrides,
         digestPinLabelRewriteApprovals,
         await auth.ensureCsrf(),
+        selections,
       );
       setApplyJob(job);
     });
@@ -973,6 +978,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[] = [],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
+    selections: PlanSelectionRequest[] = [],
   ): Promise<ApplyJobResponse> {
     const auth = useAuthStore();
     await loadWithState(async () => {
@@ -984,6 +990,7 @@ export const useUpdatesStore = defineStore("updates", () => {
         tagOverrides,
         digestPinLabelRewriteApprovals,
         await auth.ensureCsrf(),
+        selections,
       );
       setApplyJob(job);
     });

@@ -173,7 +173,16 @@ describe("pending view search filter", () => {
       .find((button) => button.text().includes("Preview media plan"))
       ?.trigger("click");
 
-    expect(createPlan).toHaveBeenCalledWith([1, 2], true, [], []);
+    expect(createPlan).toHaveBeenCalledWith(
+      [1, 2],
+      true,
+      [],
+      [],
+      [
+        { line_no: 1, selection_id: "selection-1" },
+        { line_no: 2, selection_id: "selection-2" },
+      ],
+    );
   });
 
   it("shows and clears an empty filtered result state", async () => {
@@ -232,6 +241,37 @@ describe("pending view search filter", () => {
     expect(wrapper.text()).toContain("Preview selected plan");
     expect(wrapper.text()).toContain("postgres:16");
     expect(wrapper.text()).not.toContain("linuxserver/radarr:4.0");
+  });
+
+  it("counts a selected shared-line stack as hidden when its peer is visible", async () => {
+    const activeItem = pendingGroupedItem({
+      line_no: 1,
+      selection_id: "selection-active",
+      image: "repo/shared:latest",
+      repo: "repo/shared",
+      services: ["app"],
+    });
+    const backupItem = pendingGroupedItem({
+      line_no: 1,
+      selection_id: "selection-backup",
+      image: "repo/shared:latest",
+      repo: "repo/shared",
+      services: ["app"],
+    });
+    const { wrapper } = mountFilteredPendingView(
+      pendingWithGroups([
+        stackGroup("active", [activeItem]),
+        stackGroup("backup", [backupItem]),
+      ]),
+    );
+    await flushPromises();
+
+    await wrapper.find('input[aria-label="Select stack active"]').setValue(true);
+    await setPendingSearch(wrapper, "backup");
+
+    expect(wrapper.text()).toContain("1 selected update hidden by search");
+    expect(wrapper.text()).toContain("backup");
+    expect(wrapper.text()).not.toContain("Preview active plan");
   });
 
   it("filters by loaded release-note unavailable reasons", async () => {

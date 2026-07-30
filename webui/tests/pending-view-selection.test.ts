@@ -861,7 +861,127 @@ describe("pending view selection actions", () => {
       .find((button) => button.text().includes("Preview media plan"))
       ?.trigger("click");
 
-    expect(createPlan).toHaveBeenCalledWith([4, 9], true, [], []);
+    expect(createPlan).toHaveBeenCalledWith(
+      [4, 9],
+      true,
+      [],
+      [],
+      [
+        { line_no: 4, selection_id: "selection-4" },
+        { line_no: 9, selection_id: "selection-9" },
+      ],
+    );
+  });
+
+  it("selects identical shared-line rows independently by stack", async () => {
+    const activeItem = pendingGroupedItem({
+      line_no: 1,
+      selection_id: "selection-active",
+      image: "repo/shared:latest",
+      repo: "repo/shared",
+      services: ["app"],
+    });
+    const backupItem = pendingGroupedItem({
+      line_no: 1,
+      selection_id: "selection-backup",
+      image: "repo/shared:latest",
+      repo: "repo/shared",
+      services: ["app"],
+    });
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = {
+      ...pendingResponse([
+        pendingItem({
+          line_no: 1,
+          image: "repo/shared:latest",
+          repo: "repo/shared",
+        }),
+      ]),
+      grouping: {
+        status: "ready",
+        groups: [
+          {
+            name: "active",
+            directory: "/docker/active",
+            compose_file: "docker-compose.yml",
+            project_directory: "/docker/active",
+            services_label: "app",
+            services: ["app"],
+            line_numbers: [1],
+            items: [activeItem],
+          },
+          {
+            name: "backup",
+            directory: "/docker/backup",
+            compose_file: "docker-compose.yml",
+            project_directory: "/docker/backup",
+            services_label: "app",
+            services: ["app"],
+            line_numbers: [1],
+            items: [backupItem],
+          },
+        ],
+        unmatched: [],
+        warnings: [],
+      },
+    };
+    mockPendingLifecycle(settings, updates);
+    const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
+    const wrapper = mountPendingView(pinia);
+    const rowCheckboxes = wrapper.findAll(
+      'input[aria-label="Select update repo/shared:latest"]',
+    );
+
+    expect(rowCheckboxes).toHaveLength(2);
+    await rowCheckboxes[0].setValue(true);
+    expect((rowCheckboxes[0].element as HTMLInputElement).checked).toBe(true);
+    expect((rowCheckboxes[1].element as HTMLInputElement).checked).toBe(false);
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview selected plan"))
+      ?.trigger("click");
+
+    expect(createPlan).toHaveBeenLastCalledWith(
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-active" }],
+    );
+
+    await rowCheckboxes[0].setValue(false);
+    await rowCheckboxes[1].setValue(true);
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview selected plan"))
+      ?.trigger("click");
+
+    expect(createPlan).toHaveBeenLastCalledWith(
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-backup" }],
+    );
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Select all stack updates"))
+      ?.trigger("click");
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview selected plan"))
+      ?.trigger("click");
+    expect(createPlan).toHaveBeenLastCalledWith(
+      [1],
+      true,
+      [],
+      [],
+      [
+        { line_no: 1, selection_id: "selection-active" },
+        { line_no: 1, selection_id: "selection-backup" },
+      ],
+    );
   });
 
   it("marks a stack indeterminate after one grouped item is deselected", async () => {
@@ -887,7 +1007,13 @@ describe("pending view selection actions", () => {
     expect(
       wrapper.find('input[aria-label="Select stack media"]').attributes("aria-checked"),
     ).toBe("mixed");
-    expect(createPlan).toHaveBeenCalledWith([1], true, [], []);
+    expect(createPlan).toHaveBeenCalledWith(
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-1" }],
+    );
   });
 
   it("excludes unmatched items from select all stack updates", async () => {
@@ -924,7 +1050,13 @@ describe("pending view selection actions", () => {
       ?.trigger("click");
 
     expect(wrapper.text()).toContain("No Compose match");
-    expect(createPlan).toHaveBeenCalledWith([1], true, [], []);
+    expect(createPlan).toHaveBeenCalledWith(
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-1" }],
+    );
   });
 
   it("excludes time-snoozed items from bulk stack selection but allows direct selection", async () => {
@@ -934,7 +1066,13 @@ describe("pending view selection actions", () => {
 
     expect(wrapper.text()).toContain("Snoozed pending entries");
     expect(wrapper.text()).toContain("Excluded from bulk selection while snoozed.");
-    expect(createPlan).toHaveBeenCalledWith([2], true, [], []);
+    expect(createPlan).toHaveBeenCalledWith(
+      [2],
+      true,
+      [],
+      [],
+      [{ line_no: 2, selection_id: "selection-2" }],
+    );
 
     await wrapper
       .find('input[aria-label="Select update repo/app:1.0"]')
@@ -944,7 +1082,16 @@ describe("pending view selection actions", () => {
       .find((button) => button.text().includes("Preview selected plan"))
       ?.trigger("click");
 
-    expect(createPlan).toHaveBeenLastCalledWith([1, 2], true, [], []);
+    expect(createPlan).toHaveBeenLastCalledWith(
+      [1, 2],
+      true,
+      [],
+      [],
+      [
+        { line_no: 1, selection_id: "selection-1" },
+        { line_no: 2, selection_id: "selection-2" },
+      ],
+    );
   });
 
   it("excludes dependency-snoozed items from bulk stack selection", async () => {
@@ -953,7 +1100,13 @@ describe("pending view selection actions", () => {
     await selectAllAndPreview(wrapper);
 
     expect(wrapper.text()).toContain("Snoozed pending entries");
-    expect(createPlan).toHaveBeenCalledWith([2], true, [], []);
+    expect(createPlan).toHaveBeenCalledWith(
+      [2],
+      true,
+      [],
+      [],
+      [{ line_no: 2, selection_id: "selection-2" }],
+    );
   });
 
   it("excludes future active snooze kinds from bulk stack selection", async () => {
@@ -964,7 +1117,13 @@ describe("pending view selection actions", () => {
     await selectAllAndPreview(wrapper);
 
     expect(wrapper.text()).toContain("Snoozed pending entries");
-    expect(createPlan).toHaveBeenCalledWith([2], true, [], []);
+    expect(createPlan).toHaveBeenCalledWith(
+      [2],
+      true,
+      [],
+      [],
+      [{ line_no: 2, selection_id: "selection-2" }],
+    );
   });
 
   it("shows matched snoozes before stale entries without selecting them in bulk", async () => {
@@ -1031,7 +1190,13 @@ describe("pending view selection actions", () => {
 
     await selectAllAndPreview(wrapper);
 
-    expect(createPlan).toHaveBeenCalledWith([3], true, [], []);
+    expect(createPlan).toHaveBeenCalledWith(
+      [3],
+      true,
+      [],
+      [],
+      [{ line_no: 3, selection_id: "selection-3" }],
+    );
   });
 
   it("selects tag update rows and enables tag rewrites when an override is edited", async () => {
@@ -1059,6 +1224,7 @@ describe("pending view selection actions", () => {
       true,
       [{ line_no: 1, tag: "1.2" }],
       [],
+      [{ line_no: 1, selection_id: "selection-1" }],
     );
   });
 

@@ -15,6 +15,7 @@ from tests.web_test_helpers import (
     _fake_docker_env,
     _make_fake_stack,
     _fake_docker_calls,
+    _write_fake_image_after_pull,
     _wait_apply_job,
     _sse_event_names,
     _sse_job_events,
@@ -484,6 +485,116 @@ def test_job_stream_emits_initial_and_terminal_status(tmp_path: Path) -> None:
     event_names = _sse_event_names(content)
     assert event_names[-1] == "job"
     assert "log" in event_names[:-1]
+
+
+def test_scoped_apply_updates_only_selected_stack_and_retains_shared_line(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    original = "repo/shared:latest\n"
+    wud_file.write_text(original, encoding="utf-8")
+    active_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "active",
+        [("app", "repo/shared:latest", "cid-active")],
+    )
+    backup_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "backup",
+        [("app", "repo/shared:latest", "cid-backup")],
+    )
+    _write_fake_image_after_pull(
+        fake_root,
+        "repo/shared:latest",
+        "sha256:new-id",
+        "sha256:new",
+    )
+    headers = _csrf_headers(client)
+    pending = client.get("/api/v1/pending").json()
+    active_item = next(
+        group["items"][0]
+        for group in pending["grouping"]["groups"]
+        if group["name"] == "active"
+    )
+    selection = {
+        "line_no": active_item["line_no"],
+        "selection_id": active_item["selection_id"],
+    }
+    plan_response = client.post(
+        "/api/v1/plans",
+        json={"selections": [selection]},
+        headers=headers,
+    )
+    plan = plan_response.json()
+
+    stale_apply = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "selections": [
+                {"line_no": 1, "selection_id": f"sel-v1-{'0' * 64}"}
+            ],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "selections": plan["selected_selections"],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert plan_response.status_code == 200
+    assert [stack["name"] for stack in plan["stacks"]] == ["active"]
+    assert stale_apply.status_code == 409
+    assert stale_apply.json()["detail"] == "plan is stale"
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    assert job["selected_line_numbers"] == [1]
+    assert wud_file.read_text(encoding="utf-8") == original
+    calls = _fake_docker_calls(fake_root)
+    active_mutations = [
+        line
+        for line in calls.splitlines()
+        if str(active_dir) in line
+        and (" pull app" in line or " up -d " in line)
+    ]
+    backup_mutations = [
+        line
+        for line in calls.splitlines()
+        if str(backup_dir) in line
+        and (" pull app" in line or " up -d " in line)
+    ]
+    assert active_mutations
+    assert backup_mutations == []
+    assert {
+        event["stack"]
+        for event in job["progress"]
+        if event["stack"]
+    } == {"active"}
+    run = client.get(f"/api/v1/runs/{job['run_id']}")
+    assert run.status_code == 200
+    assert {
+        event["stack_name"]
+        for event in run.json()["events"]
+        if event["stack_name"]
+    } == {"active"}
 
 
 def test_job_stream_caps_live_log_tail_size(tmp_path: Path) -> None:

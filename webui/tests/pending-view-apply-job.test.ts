@@ -149,7 +149,11 @@ describe("pending view apply jobs", () => {
         updates.releaseNotification = releaseNotificationResponse();
       });
     vi.spyOn(updates, "createPlan").mockImplementation(async () => {
-      updates.plan = planResponse();
+      updates.plan = planResponse({
+        selected_selections: [
+          { line_no: 1, selection_id: "selection-reviewed" },
+        ],
+      });
     });
     const applyPlan = vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
       const job = applyJobResponse();
@@ -177,7 +181,14 @@ describe("pending view apply jobs", () => {
       .find((button) => button.text().includes("Apply 1 update"))
       ?.trigger("click");
 
-    expect(applyPlan).toHaveBeenCalledWith("plan-test", [1], true, [], []);
+    expect(applyPlan).toHaveBeenCalledWith(
+      "plan-test",
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-reviewed" }],
+    );
     expect(jobStream.observed).toBe(true);
     await flushPromises();
 

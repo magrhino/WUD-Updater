@@ -513,6 +513,41 @@ describe("usePendingSelectionState", () => {
     expect(state.tagOverrideValue(updates.pending.items[0])).toBe("2.1");
     expect(state.tagOverridesForLines([1])).toEqual([]);
   });
+
+  it("drops stale stack-scoped selections while preserving line-only fallback", async () => {
+    const updates = useUpdatesStore();
+    updates.pending = pendingResponse([
+      pendingItem({ line_no: 1, image: "repo/shared:latest" }),
+    ]);
+    const availableSelections = ref([
+      { line_no: 1, selection_id: "selection-active" },
+      { line_no: 1, selection_id: "selection-backup" },
+    ]);
+    const state = usePendingSelectionState({
+      pendingItems: computed(() => updates.pending?.items ?? []),
+      selectableLineNumbers: computed(() => [1]),
+      selectableSelections: computed(() => availableSelections.value),
+      availableSelections: computed(() => availableSelections.value),
+    });
+
+    state.toggleSelection(availableSelections.value[0], true);
+    expect(state.selectedSelections.value).toEqual([
+      { line_no: 1, selection_id: "selection-active" },
+    ]);
+
+    availableSelections.value = [
+      { line_no: 1, selection_id: "selection-backup" },
+    ];
+    await flushPromises();
+    expect(state.selectedSelections.value).toEqual([]);
+
+    availableSelections.value = [{ line_no: 1, selection_id: "" }];
+    await flushPromises();
+    state.toggleLine(1, true);
+    expect(state.selectedSelections.value).toEqual([
+      { line_no: 1, selection_id: "" },
+    ]);
+  });
 });
 
 describe("usePendingPlanReviewState", () => {
@@ -800,6 +835,7 @@ describe("usePendingPlanReviewState", () => {
           proposed_label_value: "1.1",
         },
       ],
+      [],
     );
     expect(state.digestPinLabelApprovalApproved(issue)).toBe(true);
   });

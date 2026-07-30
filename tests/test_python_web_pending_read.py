@@ -57,6 +57,51 @@ def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> Non
     assert wud_file.read_text(encoding="utf-8") == original
 
 
+def test_pending_shared_line_has_stable_stack_scoped_selection_ids(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/shared:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "active",
+        [("app", "repo/shared:latest", "cid-active")],
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "backup",
+        [("app", "repo/shared:latest", "cid-backup")],
+    )
+
+    first = client.get("/api/v1/pending")
+    second = client.get("/api/v1/pending")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    first_items = {
+        group["name"]: group["items"][0]
+        for group in first.json()["grouping"]["groups"]
+    }
+    second_ids = {
+        group["name"]: group["items"][0]["selection_id"]
+        for group in second.json()["grouping"]["groups"]
+    }
+    assert set(first_items) == {"active", "backup"}
+    assert {item["line_no"] for item in first_items.values()} == {1}
+    assert all(
+        item["selection_id"].startswith("sel-v1-")
+        for item in first_items.values()
+    )
+    assert len({item["selection_id"] for item in first_items.values()}) == 2
+    assert {
+        name: item["selection_id"] for name, item in first_items.items()
+    } == second_ids
+
+
 def test_pending_endpoint_reads_wud_api_source_without_wud_file(
     tmp_path: Path,
     monkeypatch,

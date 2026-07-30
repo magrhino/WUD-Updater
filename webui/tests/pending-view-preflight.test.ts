@@ -93,7 +93,13 @@ describe("pending view preflight safety", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("Read-only mode is active");
-    expect(createPlan).toHaveBeenCalledWith([1], true, [], []);
+    expect(createPlan).toHaveBeenCalledWith(
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-1" }],
+    );
     const applyButton = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Apply 1 update"));
@@ -151,7 +157,13 @@ describe("pending view preflight safety", () => {
       ?.trigger("click");
     await flushPromises();
 
-    expect(createPlan).toHaveBeenCalledWith([1], true, [], []);
+    expect(createPlan).toHaveBeenCalledWith(
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-1" }],
+    );
     expect(wrapper.find('[role="dialog"]').text()).toContain("Plan blocked");
     expect(wrapper.find('[role="dialog"]').text()).toContain(
       "No Compose service matched repo/app:1.0.",
@@ -264,8 +276,23 @@ describe("pending view preflight safety", () => {
       ?.trigger("click");
     await flushPromises();
 
-    expect(createPlan).toHaveBeenNthCalledWith(1, [1], true, [], []);
-    expect(createPlan).toHaveBeenNthCalledWith(2, [1], true, [], [approval]);
+    const selections = [{ line_no: 1, selection_id: "selection-1" }];
+    expect(createPlan).toHaveBeenNthCalledWith(
+      1,
+      [1],
+      true,
+      [],
+      [],
+      selections,
+    );
+    expect(createPlan).toHaveBeenNthCalledWith(
+      2,
+      [1],
+      true,
+      [],
+      [approval],
+      selections,
+    );
     expect(wrapper.find('[role="dialog"]').text()).toContain(
       "Digest-pin label updates",
     );
@@ -384,8 +411,23 @@ describe("pending view preflight safety", () => {
     resolveSecondPlan();
     await flushPromises();
 
-    expect(createPlan).toHaveBeenNthCalledWith(1, [1], true, [], []);
-    expect(createPlan).toHaveBeenNthCalledWith(2, [1], true, [], [approval]);
+    const selections = [{ line_no: 1, selection_id: "selection-1" }];
+    expect(createPlan).toHaveBeenNthCalledWith(
+      1,
+      [1],
+      true,
+      [],
+      [],
+      selections,
+    );
+    expect(createPlan).toHaveBeenNthCalledWith(
+      2,
+      [1],
+      true,
+      [],
+      [approval],
+      selections,
+    );
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
   });
 });

@@ -74,7 +74,9 @@ const {
   releaseChangelogFor,
   releaseNoteFor,
   riskCues,
+  availableSelections,
   selectableLineNumbers,
+  selectableSelections,
   selectAllLabel,
   snoozedCandidates,
   snoozedItems,
@@ -92,8 +94,9 @@ const {
   pendingSearchEmpty,
   pendingSearchQuery,
   pendingSearchResultLabel,
-  visibleLineNumbers,
+  visibleSelections,
   visibleSelectableLineNumbers,
+  visibleSelectableSelections,
   visibleSelectAllLabel,
 } = usePendingSearchState({
   pendingItems,
@@ -101,6 +104,7 @@ const {
   snoozedCandidates,
   snoozedItems,
   selectableLineNumbers,
+  selectableSelections,
   selectAllLabel,
   stackGroups,
   unmatchedItems,
@@ -135,12 +139,15 @@ const {
   selectAllVisible,
   selectedLineNumbers,
   selectedLineSet,
+  selectedSelections,
+  selectedSelectionKeySet,
   stackHasSelection,
   stackIndeterminate,
   stackSelected,
   tagOverrideErrorForLines,
   tagOverrideValue,
   tagOverridesForLines,
+  toggleGroupedItem,
   toggleLine,
   toggleStack,
   updateCheckedRowKeys,
@@ -149,6 +156,8 @@ const {
 } = usePendingSelectionState({
   pendingItems,
   selectableLineNumbers: visibleSelectableLineNumbers,
+  selectableSelections: visibleSelectableSelections,
+  availableSelections,
   onSelectionChanged: () => clearPreflightHandler(),
 });
 
@@ -410,7 +419,8 @@ const {
 } = usePendingPlanReviewState({
   pendingSourceLabel,
   selectedLineNumbers,
-  selectedLineSet,
+  selectedSelections,
+  selectedSelectionKeySet,
   stackGroups,
   tagOverrideErrorForLines,
   unmatchedItems,
@@ -422,8 +432,8 @@ const {
   visibleUnmatchedReviewSummary,
 } = usePendingSearchResultState({
   pendingSearchActive,
-  visibleLineNumbers,
-  selectedLineNumbers,
+  visibleSelections,
+  selectedSelections,
   filteredUnmatchedItems,
   unmatchedItems,
   unmatchedIssueSummary,
@@ -515,7 +525,9 @@ const {
   removalDisabled,
   removeSelectedDisabled,
   selectedLineNumbers,
+  selectedSelections,
   selectedUpdateContext,
+  stackGroups,
   setUpdateIntent,
   subscribeApplyJob,
   tagOverrideErrorForLines,
@@ -876,9 +888,9 @@ onBeforeUnmount(() => {
       :removal-button-label="removalButtonLabel"
       :remove-selected-disabled="removeSelectedDisabled"
       :remove-selected-disabled-message="removeSelectedDisabledMessage"
-      :selectable-count="visibleSelectableLineNumbers.length"
+      :selectable-count="visibleSelectableSelections.length"
       :select-all-label="visibleSelectAllLabel"
-      :selected-count="selectedLineNumbers.length"
+      :selected-count="selectedSelections.length"
       :selected-hidden-count="selectedHiddenCount"
       :selected-rescan-disabled="selectedRescanDisabled"
       :selected-rescan-disabled-message="selectedRescanDisabledMessage"
@@ -921,7 +933,7 @@ onBeforeUnmount(() => {
         :release-note-status="releaseNoteStatus"
         :risk-cues="riskCues"
         :security-scan-for="updates.securityScanFor"
-        :selected-line-set="selectedLineSet"
+        :selected-selection-key-set="selectedSelectionKeySet"
         :show-setup-link="showSetupLink"
         :snoozed-candidates="filteredSnoozedCandidates"
         :snoozed-items="filteredSnoozedItems"
@@ -938,7 +950,7 @@ onBeforeUnmount(() => {
         :unmatched-review-summary="visibleUnmatchedReviewSummary"
         :update-disabled="updateDisabled"
         @preview-stack="startStackUpdate"
-        @toggle-line="toggleLine"
+        @toggle-item="toggleGroupedItem"
         @toggle-stack="toggleStack"
         @update-tag="updateTagOverride"
       />

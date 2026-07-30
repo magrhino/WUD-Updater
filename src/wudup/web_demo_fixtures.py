@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import copy
+import hashlib
 import json
 import os
 import re
@@ -1326,7 +1327,70 @@ def _sanitize_payload(value: Any, paths: dict[str, Path]) -> Any:
         str(REPO_ROOT): "demo/repo",
     }
     sanitized = _normalize_demo_runtime_details(_replace_many(value, replacements))
+    sanitized = _normalize_demo_selection_ids(sanitized)
     return _normalize_demo_retag_target_ids(sanitized)
+
+
+def _normalize_demo_selection_ids(value: Any) -> Any:
+    replacements: dict[str, str] = {}
+
+    def collect(item: Any) -> None:
+        if isinstance(item, list):
+            for child in item:
+                collect(child)
+            return
+        if not isinstance(item, dict):
+            return
+        groups = item.get("groups")
+        if isinstance(groups, list):
+            for group in groups:
+                if not isinstance(group, dict):
+                    continue
+                grouped_items = group.get("items")
+                if not isinstance(grouped_items, list):
+                    continue
+                for grouped_item in grouped_items:
+                    if not isinstance(grouped_item, dict):
+                        continue
+                    current = grouped_item.get("selection_id")
+                    if not isinstance(current, str) or not current:
+                        continue
+                    payload = {
+                        "compose_file": (
+                            f"{str(group.get('directory', '')).rstrip('/')}/"
+                            f"{group.get('compose_file', '')}"
+                        ),
+                        "compose_images": sorted(
+                            str(image)
+                            for image in grouped_item.get("compose_images", [])
+                        ),
+                        "directory": str(group.get("directory", "")),
+                        "line_no": grouped_item.get("line_no", 0),
+                        "project_directory": str(
+                            group.get("project_directory", "")
+                        ),
+                        "project_name": str(group.get("name", "")),
+                        "services": sorted(
+                            str(service)
+                            for service in grouped_item.get("services", [])
+                        ),
+                        "target": str(grouped_item.get("raw", "")),
+                    }
+                    canonical = json.dumps(
+                        payload,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=True,
+                    )
+                    replacements[current] = (
+                        "sel-v1-"
+                        + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+                    )
+        for child in item.values():
+            collect(child)
+
+    collect(value)
+    return _replace_exact_strings(value, replacements)
 
 
 def _normalize_demo_retag_target_ids(value: Any) -> Any:

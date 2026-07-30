@@ -104,6 +104,7 @@ __all__ = (
     "PlanLine",
     "PlanRequest",
     "PlanResponse",
+    "PlanSelectionRequest",
     "PlanSkipped",
     "PlanStack",
     "PlanStatus",
@@ -574,6 +575,7 @@ class PendingGroupedItem(PendingItem):
     compose_images: list[str] = Field(default_factory=list)
     services: list[str] = Field(default_factory=list)
     action: str
+    selection_id: str = ""
     diagnostic: PendingDiagnostic | None = None
 
 class PendingStackGroup(BaseModel):
@@ -1383,13 +1385,24 @@ class DigestPinLabelRewriteApprovalRequest(BaseModel):
     planned_tag: str = Field(min_length=1, max_length=128)
     proposed_label_value: str = Field(min_length=1, max_length=512)
 
+class PlanSelectionRequest(BaseModel):
+    line_no: LineNumber
+    selection_id: str = Field(default="", max_length=128)
+
 class PlanRequest(BaseModel):
-    line_numbers: list[LineNumber] = Field(min_length=1)
+    line_numbers: list[LineNumber] = Field(default_factory=list)
+    selections: list[PlanSelectionRequest] = Field(default_factory=list)
     allow_tag_updates: bool = False
     tag_overrides: list[TagOverrideRequest] = Field(default_factory=list)
     digest_pin_label_rewrite_approvals: list[
         DigestPinLabelRewriteApprovalRequest
     ] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_selection_mode(self) -> "PlanRequest":
+        if bool(self.line_numbers) == bool(self.selections):
+            raise ValueError("provide exactly one of line_numbers or selections")
+        return self
 
 class PlanSummary(BaseModel):
     target_count: int
@@ -1529,6 +1542,7 @@ class PlanResponse(BaseModel):
     max_wait: int
     digest_pin_updates: bool
     selected_line_numbers: list[int] = Field(default_factory=list)
+    selected_selections: list[PlanSelectionRequest] = Field(default_factory=list)
     summary: PlanSummary
     targets: list[PlanTarget] = Field(default_factory=list)
     stacks: list[PlanStack] = Field(default_factory=list)
@@ -1631,13 +1645,20 @@ class PendingRemovalRequest(BaseModel):
 
 class ApplyPlanRequest(BaseModel):
     plan_id: str = Field(min_length=1)
-    line_numbers: list[LineNumber] = Field(min_length=1)
+    line_numbers: list[LineNumber] = Field(default_factory=list)
+    selections: list[PlanSelectionRequest] = Field(default_factory=list)
     allow_tag_updates: bool = False
     tag_overrides: list[TagOverrideRequest] = Field(default_factory=list)
     digest_pin_label_rewrite_approvals: list[
         DigestPinLabelRewriteApprovalRequest
     ] = Field(default_factory=list)
     confirmation: Literal["apply"]
+
+    @model_validator(mode="after")
+    def validate_selection_mode(self) -> "ApplyPlanRequest":
+        if bool(self.line_numbers) == bool(self.selections):
+            raise ValueError("provide exactly one of line_numbers or selections")
+        return self
 
 class ApplyJobResponse(BaseModel):
     job_id: str

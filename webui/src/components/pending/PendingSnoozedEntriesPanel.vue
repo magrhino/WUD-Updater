@@ -13,13 +13,17 @@ import {
   type PendingTagInputProps,
 } from "../../views/pending/pendingDisplay";
 import type { SafetyCue } from "../../views/pending/safetyCues";
+import {
+  pendingSelectionForItem,
+  pendingSelectionKey,
+} from "../../views/pending/usePendingSelectionState";
 import { pluralize } from "../../views/pending/utils";
 import PendingUpdateRow from "./PendingUpdateRow.vue";
 
 defineProps<{
   riskCues: (item: PendingGroupedItem) => SafetyCue[];
   securityScanFor: (item: PendingGroupedItem) => SecurityScanInfo | null;
-  selectedLineSet: Set<number>;
+  selectedSelectionKeySet: Set<string>;
   snoozedCandidates: PendingSnoozedCandidate[];
   snoozedItems: SnoozedPendingItem[];
   tagInputProps: (item: Pick<PendingItem, "image">) => PendingTagInputProps;
@@ -27,7 +31,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  toggleLine: [lineNo: number, checked: boolean];
+  toggleItem: [item: PendingGroupedItem, checked: boolean];
   updateTag: [item: PendingGroupedItem, value: string];
 }>();
 
@@ -88,9 +92,9 @@ function candidateMeta(candidate: PendingSnoozedCandidate): string {
       <div class="stack-items">
         <PendingUpdateRow
           v-for="{ group, item } in snoozedItems"
-          :key="`snoozed-${item.line_no}`"
+          :key="`snoozed-${pendingSelectionKey(pendingSelectionForItem(item))}`"
           :item="item"
-          :selected="selectedLineSet.has(item.line_no)"
+          :selected="selectedSelectionKeySet.has(pendingSelectionKey(pendingSelectionForItem(item)))"
           :group-name="group.name"
           :service-label="groupedItemServices(item)"
           status-label="Snoozed"
@@ -102,7 +106,7 @@ function candidateMeta(candidate: PendingSnoozedCandidate): string {
           :tag-override-value="tagOverrideValue(item)"
           :show-tag-input="Boolean(item.desired_tag)"
           :tag-input-props="tagInputProps(item)"
-          @toggle="(lineNo, checked) => emit('toggleLine', lineNo, checked)"
+          @toggle="(_lineNo, checked) => emit('toggleItem', item, checked)"
           @update-tag="emit('updateTag', item, $event)"
         />
         <div

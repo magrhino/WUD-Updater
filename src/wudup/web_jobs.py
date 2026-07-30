@@ -32,6 +32,7 @@ from .updater_models import (
     DigestPinUpdate,
     DigestUnpinUpdate,
     TagOverride,
+    UpdateSelection,
     UpdaterOptions,
     UpdaterProgressEvent,
 )
@@ -185,6 +186,7 @@ def _submit_apply_job_state(
             effective_config_loader,
             auto_update_schedule_run_updater,
             active_run_context,
+            tuple(plan.selected_selections),
         )
         return response
 
@@ -471,6 +473,7 @@ def _run_apply_job(
     effective_config_loader: EffectiveConfigLoader,
     auto_update_schedule_run_updater: AutoUpdateScheduleRunUpdater,
     run_context: ApplyJobRunContext,
+    update_selections: tuple[UpdateSelection, ...] = (),
 ) -> None:
     if run_context.start_event is not None:
         run_context.start_event.wait()
@@ -496,6 +499,7 @@ def _run_apply_job(
         options = _apply_options(
             settings,
             line_numbers=line_numbers,
+            update_selections=update_selections,
             allow_tag_updates=allow_tag_updates,
             tag_overrides=tag_overrides,
             digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
@@ -753,6 +757,7 @@ def _apply_options(
     settings: WebSettings,
     *,
     line_numbers: tuple[int, ...],
+    update_selections: tuple[UpdateSelection, ...] = (),
     allow_tag_updates: bool,
     tag_overrides: tuple[TagOverride, ...],
     plan_id: str,
@@ -769,6 +774,11 @@ def _apply_options(
     metadata = {
         "plan_id": plan_id,
         "selected_line_numbers": list(line_numbers),
+        "selected_selection_ids": [
+            item.selection_id
+            for item in update_selections
+            if item.selection_id
+        ],
         "source": "webui",
     }
     if metadata_extra:
@@ -808,6 +818,7 @@ def _apply_options(
         wud_file_label=wud_file_label,
         log_dir_label=str(config.log_dir),
         metadata_json=metadata_json,
+        update_selections=update_selections,
     )
 
 

@@ -5,6 +5,7 @@ import type {
   PendingItem,
   PendingSnoozedCandidate,
   PendingStackGroup,
+  PlanSelectionRequest,
   ReleaseNoteInfo,
 } from "../../api/client";
 import type { ReleaseChangelogState } from "../../utils/releaseChangelog";
@@ -25,6 +26,7 @@ type UsePendingSearchStateOptions = {
   snoozedCandidates: ComputedRef<PendingSnoozedCandidate[]>;
   snoozedItems: ComputedRef<SnoozedPendingItem[]>;
   selectableLineNumbers: ComputedRef<number[]>;
+  selectableSelections: ComputedRef<PlanSelectionRequest[]>;
   selectAllLabel: ComputedRef<string>;
   stackGroups: ComputedRef<PendingStackGroup[]>;
   unmatchedItems: ComputedRef<PendingGroupedItem[]>;
@@ -95,12 +97,52 @@ export function usePendingSearchState(options: UsePendingSearchStateOptions) {
     }
     return filteredPendingItems.value.map((item) => item.line_no);
   });
+  const visibleSelections = computed<PlanSelectionRequest[]>(() => {
+    if (options.groupingReady.value) {
+      return [
+        ...filteredStackGroups.value.flatMap((group) =>
+          group.items.map((item) => ({
+            line_no: item.line_no,
+            selection_id: item.selection_id ?? "",
+          })),
+        ),
+        ...filteredSnoozedItems.value.map(({ item }) => ({
+          line_no: item.line_no,
+          selection_id: item.selection_id ?? "",
+        })),
+        ...filteredUnmatchedItems.value.map((item) => ({
+          line_no: item.line_no,
+          selection_id: item.selection_id ?? "",
+        })),
+      ];
+    }
+    return filteredPendingItems.value.map((item) => ({
+      line_no: item.line_no,
+      selection_id: "",
+    }));
+  });
   const visibleSelectableLineNumbers = computed(() => {
     const visibleLines = new Set(visibleLineNumbers.value);
     return options.selectableLineNumbers.value.filter((lineNo) =>
       visibleLines.has(lineNo),
     );
   });
+  const visibleSelectionKeys = computed(
+    () =>
+      new Set(
+        visibleSelections.value.map(
+          (selection) =>
+            selection.selection_id || `line:${selection.line_no}`,
+        ),
+      ),
+  );
+  const visibleSelectableSelections = computed(() =>
+    options.selectableSelections.value.filter((selection) =>
+      visibleSelectionKeys.value.has(
+        selection.selection_id || `line:${selection.line_no}`,
+      ),
+    ),
+  );
   const visibleSelectAllLabel = computed(() =>
     pendingSearchActive.value ? "Select visible updates" : options.selectAllLabel.value,
   );
@@ -147,7 +189,9 @@ export function usePendingSearchState(options: UsePendingSearchStateOptions) {
     pendingSearchQuery,
     pendingSearchResultLabel,
     visibleLineNumbers,
+    visibleSelections,
     visibleSelectableLineNumbers,
+    visibleSelectableSelections,
     visibleSelectAllLabel,
   };
 }

@@ -36,6 +36,7 @@ from .updater_models import (
     DigestUnpinUpdate,
     Match,
     TagOverride,
+    UpdateSelection,
 )
 from .plan_actions import render_plan_actions
 from .plan_digest_unpin import recover_digest_unpin_matches
@@ -52,6 +53,9 @@ from .plan_matching import (
     _cleanup_for_skipped,
     _match_targets,
     _unmatched_diagnostics,
+    filter_matches_for_selections,
+    normalize_update_selections,
+    selection_id_for_matches,
 )
 from .plan_models import (
     DryRunPlan,
@@ -119,6 +123,7 @@ _DigestUnpinUpdatesByStack = Mapping[int, Sequence[DigestUnpinUpdate]]
 class _PlanBuilder(_UpdateScopeMixin):
     config: UpdaterConfig
     line_numbers: Sequence[int]
+    update_selections: Sequence[UpdateSelection] = ()
     allow_tag_updates: bool = False
     tag_overrides: Sequence[TagOverride] = ()
     digest_pin_label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval] = ()
@@ -152,7 +157,15 @@ class _PlanBuilder(_UpdateScopeMixin):
         self.compose = ComposeCli(runner=runner)
 
     def build(self) -> DryRunPlan:
-        selected = _selected_line_numbers(self.line_numbers)
+        normalized_selections = normalize_update_selections(self.update_selections)
+        if self.line_numbers and normalized_selections:
+            raise PlanInputError(
+                "provide either line_numbers or selections, not both"
+            )
+        selected = _selected_line_numbers(
+            self.line_numbers
+            or tuple(item.line_no for item in normalized_selections)
+        )
         if self.source_parsed is None:
             full_parse = _read_wud_file(self.config.wud_out_file)
             source_file = str(self.config.wud_out_file)
@@ -203,6 +216,17 @@ class _PlanBuilder(_UpdateScopeMixin):
             )
         else:
             matches, skipped, digest_unpin_issues = self._build_matches(parsed, stacks)
+            matches, normalized_selections = filter_matches_for_selections(
+                matches,
+                normalized_selections,
+            )
+            self._filter_digest_unpin_updates(matches)
+            if any(item.selection_id for item in normalized_selections):
+                digest_unpin_issues = tuple(
+                    issue
+                    for issue in digest_unpin_issues
+                    if _issue_applies_to_matches(issue, matches)
+                )
             diagnostics = _unmatched_diagnostics(
                 self.config,
                 parsed.targets,
@@ -283,6 +307,7 @@ class _PlanBuilder(_UpdateScopeMixin):
             digest_pin_updates=self.config.digest_pin_updates,
             selected_line_numbers=selected,
             summary=summary,
+            selected_selections=normalized_selections,
             source=plan_source,
             targets=targets,
             stacks=plan_stacks,
@@ -305,6 +330,30 @@ class _PlanBuilder(_UpdateScopeMixin):
                 source_file=source_file,
             ),
         )
+
+    def _filter_digest_unpin_updates(self, matches: Sequence[Match]) -> None:
+        selected_by_stack = {
+            stack.index: [
+                match for match in matches if match.stack.index == stack.index
+            ]
+            for stack in _stacks_to_update(matches)
+        }
+        filtered: dict[int, tuple[DigestUnpinUpdate, ...]] = {}
+        for stack_index, updates in self.digest_unpin_updates_by_stack.items():
+            selected_matches = selected_by_stack.get(stack_index, ())
+            selected_updates = tuple(
+                update
+                for update in updates
+                if any(
+                    match.compose_image == update.old_image
+                    and match.service in update.services
+                    and match.target.digest == update.target_digest
+                    for match in selected_matches
+                )
+            )
+            if selected_updates:
+                filtered[stack_index] = selected_updates
+        self.digest_unpin_updates_by_stack = filtered
 
     def _apply_tag_overrides(self, parsed: ParsedWudFile) -> ParsedWudFile:
         overrides = {item.line_no: item.tag for item in self.tag_overrides}
@@ -656,6 +705,7 @@ def build_dry_run_plan(
     config: UpdaterConfig,
     *,
     line_numbers: Sequence[int],
+    update_selections: Sequence[UpdateSelection] = (),
     allow_tag_updates: bool = False,
     tag_overrides: Sequence[TagOverride] = (),
     digest_pin_label_rewrite_approvals: Sequence[
@@ -669,6 +719,7 @@ def build_dry_run_plan(
     return _PlanBuilder(
         config=config,
         line_numbers=line_numbers,
+        update_selections=update_selections,
         allow_tag_updates=allow_tag_updates,
         tag_overrides=tag_overrides,
         digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
@@ -686,6 +737,7 @@ def build_dry_run_plan_from_pending_source(
     source_hash: str,
     source: DryRunPlanSource,
     line_numbers: Sequence[int],
+    update_selections: Sequence[UpdateSelection] = (),
     allow_tag_updates: bool = False,
     tag_overrides: Sequence[TagOverride] = (),
     digest_pin_label_rewrite_approvals: Sequence[
@@ -699,6 +751,7 @@ def build_dry_run_plan_from_pending_source(
     return _PlanBuilder(
         config=config,
         line_numbers=line_numbers,
+        update_selections=update_selections,
         allow_tag_updates=allow_tag_updates,
         tag_overrides=tag_overrides,
         digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
@@ -942,6 +995,7 @@ def _pending_grouping_items(
                 digest_provenance=digest_provenance,
                 target_image=_pending_digest_unpin_target_image(digest_unpin),
                 digest_pin_updates_enabled=digest_pin_updates_enabled,
+                selection_id=selection_id_for_matches(line_matches),
             )
         )
     return tuple(items)
@@ -979,6 +1033,7 @@ def _pending_grouping_item(
     digest_provenance: DigestTagProvenance | None = None,
     target_image: str = "",
     digest_pin_updates_enabled: bool = True,
+    selection_id: str = "",
 ) -> PendingGroupingItem:
     resolved = resolved_image or target.first
     resolved_target_image = _pending_grouping_target_image(
@@ -1003,6 +1058,7 @@ def _pending_grouping_item(
         compose_images=tuple(compose_images),
         services=tuple(services),
         action=action,
+        selection_id=selection_id,
         platform=target.platform_value,
         platform_os=target.platform.os if target.platform is not None else "",
         platform_architecture=(
@@ -1011,6 +1067,20 @@ def _pending_grouping_item(
         platform_variant=target.platform.variant if target.platform is not None else "",
         diagnostic=diagnostic,
         digest_provenance=digest_provenance,
+    )
+
+
+def _issue_applies_to_matches(
+    issue: DryRunPlanIssue,
+    matches: Sequence[Match],
+) -> bool:
+    if not issue.stack and not issue.service and issue.line_no is None:
+        return True
+    return any(
+        (issue.line_no is None or issue.line_no == match.target.line_no)
+        and (not issue.stack or issue.stack == match.stack.name)
+        and (not issue.service or issue.service == match.service)
+        for match in matches
     )
 
 

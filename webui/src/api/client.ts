@@ -101,6 +101,7 @@ export type {
   ApplyPreflightCheck,
   ApplyPreflightResponse,
   TagOverrideRequest,
+  PlanSelectionRequest,
   PlanResponse,
   // Jobs
   ApplyJobStatus,
@@ -231,6 +232,7 @@ import type {
   SelfUpdatePrepareRequest,
   ContainerRestartResponse,
   TagOverrideRequest,
+  PlanSelectionRequest,
   DigestPinLabelRewriteApprovalRequest,
   PlanResponse,
   ApplyJobResponse,
@@ -697,12 +699,15 @@ const plansApi = {
     tagOverrides: TagOverrideRequest[],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
     csrfToken: string,
+    selections: PlanSelectionRequest[] = [],
   ) =>
     apiRequest<PlanResponse>("/plans", {
       method: "POST",
       headers: { "x-wud-csrf-token": csrfToken },
       body: JSON.stringify({
-        line_numbers: lineNumbers,
+        ...(selections.length
+          ? { selections }
+          : { line_numbers: lineNumbers }),
         allow_tag_updates: allowTagUpdates,
         tag_overrides: tagOverrides,
         digest_pin_label_rewrite_approvals: digestPinLabelRewriteApprovals,
@@ -715,13 +720,16 @@ const plansApi = {
     tagOverrides: TagOverrideRequest[],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
     csrfToken: string,
+    selections: PlanSelectionRequest[] = [],
   ) =>
     apiRequest<ApplyJobResponse>("/jobs", {
       method: "POST",
       headers: { "x-wud-csrf-token": csrfToken },
       body: JSON.stringify({
         plan_id: planId,
-        line_numbers: lineNumbers,
+        ...(selections.length
+          ? { selections }
+          : { line_numbers: lineNumbers }),
         allow_tag_updates: allowTagUpdates,
         tag_overrides: tagOverrides,
         digest_pin_label_rewrite_approvals: digestPinLabelRewriteApprovals,
@@ -735,13 +743,16 @@ const plansApi = {
     tagOverrides: TagOverrideRequest[],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
     csrfToken: string,
+    selections: PlanSelectionRequest[] = [],
   ) =>
     apiRequest<ApplyJobResponse>("/plans/apply", {
       method: "POST",
       headers: { "x-wud-csrf-token": csrfToken },
       body: JSON.stringify({
         plan_id: planId,
-        line_numbers: lineNumbers,
+        ...(selections.length
+          ? { selections }
+          : { line_numbers: lineNumbers }),
         allow_tag_updates: allowTagUpdates,
         tag_overrides: tagOverrides,
         digest_pin_label_rewrite_approvals: digestPinLabelRewriteApprovals,
