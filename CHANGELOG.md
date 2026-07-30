@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.56.6](https://github.com/magrhino/wudup/compare/v0.56.5...v0.56.6) (2026-07-30)
+
+
+### Bug Fixes
+
+* **web:** scope WUD updates by compose stack ([#562](https://github.com/magrhino/wudup/issues/562)) ([d4ba4bc](https://github.com/magrhino/wudup/commit/d4ba4bc0251575feff6d196ebcc4402834cf99b6))
+
 ## [0.56.5](https://github.com/magrhino/wudup/compare/v0.56.4...v0.56.5) (2026-07-29)
 
 
