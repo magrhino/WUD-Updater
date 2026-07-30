@@ -95,6 +95,13 @@ class ApplyJobRunContext:
 
 
 @dataclass(frozen=True)
+class _ApplySelectionScope:
+    line_numbers: tuple[int, ...]
+    update_selections: tuple[UpdateSelection, ...] = ()
+    completed_update_selections: tuple[CompletedUpdateSelection, ...] = ()
+
+
+@dataclass(frozen=True)
 class _ApplyJobStreamSnapshot:
     job: ApplyJobResponse
     response: ApplyJobResponse | None
@@ -502,9 +509,11 @@ def _run_apply_job(
         )
         options = _apply_options(
             settings,
-            line_numbers=line_numbers,
-            update_selections=update_selections,
-            completed_update_selections=completed_update_selections,
+            selection_scope=_ApplySelectionScope(
+                line_numbers=line_numbers,
+                update_selections=update_selections,
+                completed_update_selections=completed_update_selections,
+            ),
             allow_tag_updates=allow_tag_updates,
             tag_overrides=tag_overrides,
             digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
@@ -800,9 +809,7 @@ def _append_apply_job_progress(
 def _apply_options(
     settings: WebSettings,
     *,
-    line_numbers: tuple[int, ...],
-    update_selections: tuple[UpdateSelection, ...] = (),
-    completed_update_selections: tuple[CompletedUpdateSelection, ...] = (),
+    selection_scope: _ApplySelectionScope,
     allow_tag_updates: bool,
     tag_overrides: tuple[TagOverride, ...],
     plan_id: str,
@@ -815,13 +822,13 @@ def _apply_options(
     wud_file_override: Path | None = None,
     wud_file_label_override: str | None = None,
 ) -> UpdaterOptions:
-    line_spec = _line_spec(line_numbers)
+    line_spec = _line_spec(selection_scope.line_numbers)
     metadata = {
         "plan_id": plan_id,
-        "selected_line_numbers": list(line_numbers),
+        "selected_line_numbers": list(selection_scope.line_numbers),
         "selected_selection_ids": [
             item.selection_id
-            for item in update_selections
+            for item in selection_scope.update_selections
             if item.selection_id
         ],
         "source": "webui",
@@ -863,8 +870,8 @@ def _apply_options(
         wud_file_label=wud_file_label,
         log_dir_label=str(config.log_dir),
         metadata_json=metadata_json,
-        update_selections=update_selections,
-        completed_update_selections=completed_update_selections,
+        update_selections=selection_scope.update_selections,
+        completed_update_selections=selection_scope.completed_update_selections,
     )
 
 

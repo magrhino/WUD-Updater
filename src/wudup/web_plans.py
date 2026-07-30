@@ -25,6 +25,7 @@ from .plans import (
     DryRunPlan,
     PlanFileMissing,
     PlanInputError,
+    _PlanSelectionScope,
     build_dry_run_plan_from_pending_source,
 )
 from .updater_models import (
@@ -214,8 +215,10 @@ def build_web_plan(
         source_hash=source.source_hash,
         source=source.plan_source(),
         line_numbers=payload.line_numbers,
-        update_selections=update_selections_from_payload(payload),
-        completed_update_selections=completed_update_selections,
+        selection_scope=_PlanSelectionScope(
+            update_selections=update_selections_from_payload(payload),
+            completed_update_selections=completed_update_selections,
+        ),
         allow_tag_updates=payload.allow_tag_updates,
         tag_overrides=tag_overrides_from_payload(payload),
         digest_pin_label_rewrite_approvals=(

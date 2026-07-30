@@ -1,6 +1,8 @@
 from __future__ import annotations
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from wudup import plans as core_plans
 from wudup import web_plans as plans_module
 from wudup.compose import ComposeStack, ServiceImage
 from wudup.config import ConfigError
@@ -8,6 +10,7 @@ from wudup.plan_matching import (
     completed_update_selection_for_matches,
     selection_id_for_matches,
 )
+from wudup.plan_models import DryRunPlanSource
 from wudup.updater_models import Match
 from wudup.wud_file import parse_wud_text
 from tests.web_test_helpers import (
@@ -20,6 +23,31 @@ from tests.web_test_helpers import (
     _install_wud_api,
     _wud_api_container,
 )
+
+
+def test_pending_source_plan_builder_preserves_source_hash_keyword(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+    sentinel = object()
+
+    def fake_plan_builder(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(build=lambda: sentinel)
+
+    monkeypatch.setattr(core_plans, "_PlanBuilder", fake_plan_builder)
+
+    result = core_plans.build_dry_run_plan_from_pending_source(
+        object(),
+        parse_wud_text(""),
+        source_file="WUD API",
+        source_hash="authoritative",
+        source=DryRunPlanSource(source_hash="embedded"),
+        line_numbers=(),
+    )
+
+    assert result is sentinel
+    assert captured["source_hash"] == "authoritative"
 
 
 def test_plan_endpoint_rejects_unauthenticated_requests(tmp_path: Path) -> None:

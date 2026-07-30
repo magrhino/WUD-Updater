@@ -959,6 +959,9 @@ def test_file_selection_checkpoint_read_failure_is_not_reported_as_success(
         successful_completed_update_selections=(selection,),
         discovered_completed_update_selections=(selection,),
     )
+    run_context = web_jobs.ApplyJobRunContext(
+        pending_source_active="file",
+    )
 
     with pytest.raises(
         web_jobs.web_file_selection_store.FileSelectionCheckpointError,
@@ -967,9 +970,7 @@ def test_file_selection_checkpoint_read_failure_is_not_reported_as_success(
         web_jobs._checkpoint_file_selection_completions(
             settings,
             runner,
-            run_context=web_jobs.ApplyJobRunContext(
-                pending_source_active="file",
-            ),
+            run_context=run_context,
         )
 
 

@@ -17,6 +17,7 @@ from .updater_models import CompletedUpdateSelection
 from .wud_file import parse_wud_text
 
 FILE_SELECTIONS_SETTING_KEY = "wud.file_selection_completions"
+_READ_SELECTIONS_ERROR = "Could not read partial update completion state."
 LOGGER = logging.getLogger(__name__)
 
 
@@ -35,9 +36,7 @@ def load_completed_update_selections(
     pending_target_keys: Collection[str],
 ) -> tuple[CompletedUpdateSelection, ...]:
     if str(db_path) == ":memory:":
-        raise FileSelectionStoreError(
-            "Could not read partial update completion state."
-        )
+        raise FileSelectionStoreError(_READ_SELECTIONS_ERROR)
     pending_file_key = _pending_file_key(pending_file)
     path = Path(db_path)
     if not path.is_file():
@@ -60,45 +59,31 @@ def load_completed_update_selections(
                 (FILE_SELECTIONS_SETTING_KEY,),
             ).fetchone()
     except sqlite3.Error as exc:
-        raise FileSelectionStoreError(
-            "Could not read partial update completion state."
-        ) from exc
+        raise FileSelectionStoreError(_READ_SELECTIONS_ERROR) from exc
     if row is None:
         return ()
 
     try:
         payload = json.loads(str(row["value"]))
     except json.JSONDecodeError as exc:
-        raise FileSelectionStoreError(
-            "Could not read partial update completion state."
-        ) from exc
+        raise FileSelectionStoreError(_READ_SELECTIONS_ERROR) from exc
     if not isinstance(payload, dict):
-        raise FileSelectionStoreError(
-            "Could not read partial update completion state."
-        )
+        raise FileSelectionStoreError(_READ_SELECTIONS_ERROR)
     if payload.get("version") != 1:
-        raise FileSelectionStoreError(
-            "Could not read partial update completion state."
-        )
+        raise FileSelectionStoreError(_READ_SELECTIONS_ERROR)
     stored_pending_file_key = payload.get("pending_file_key")
     if not isinstance(stored_pending_file_key, str):
-        raise FileSelectionStoreError(
-            "Could not read partial update completion state."
-        )
+        raise FileSelectionStoreError(_READ_SELECTIONS_ERROR)
     if stored_pending_file_key != pending_file_key:
         return ()
     raw_items = payload.get("selections")
     if not isinstance(raw_items, list):
-        raise FileSelectionStoreError(
-            "Could not read partial update completion state."
-        )
+        raise FileSelectionStoreError(_READ_SELECTIONS_ERROR)
     selections: list[CompletedUpdateSelection] = []
     for raw in raw_items:
         item = _completed_update_selection(raw)
         if item is None:
-            raise FileSelectionStoreError(
-                "Could not read partial update completion state."
-            )
+            raise FileSelectionStoreError(_READ_SELECTIONS_ERROR)
         if item.target_key in pending_target_keys:
             selections.append(item)
     return tuple(selections)

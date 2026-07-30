@@ -121,6 +121,12 @@ _DigestProvenanceByService = Mapping[str, DigestTagProvenance]
 _DigestUnpinUpdatesByStack = Mapping[int, Sequence[DigestUnpinUpdate]]
 
 
+@dataclass(frozen=True)
+class _PlanSelectionScope:
+    update_selections: Sequence[UpdateSelection] = ()
+    completed_update_selections: Sequence[CompletedUpdateSelection] = ()
+
+
 @dataclass
 class _PlanBuilder(_UpdateScopeMixin):
     config: UpdaterConfig
@@ -159,6 +165,29 @@ class _PlanBuilder(_UpdateScopeMixin):
         self.docker = DockerCli(runner=runner)
         self.compose = ComposeCli(runner=runner)
 
+    def _source_input(
+        self,
+    ) -> tuple[ParsedWudFile, str, str, DryRunPlanSource]:
+        if self.source_parsed is None:
+            full_parse = _read_wud_file(self.config.wud_out_file)
+            source_hash = _file_sha256(self.config.wud_out_file)
+            return (
+                full_parse,
+                str(self.config.wud_out_file),
+                source_hash,
+                DryRunPlanSource(source_hash=source_hash),
+            )
+        source_hash = self.source_hash or ""
+        plan_source = self.source or DryRunPlanSource(source_hash=source_hash)
+        if plan_source.source_hash != source_hash:
+            plan_source = replace(plan_source, source_hash=source_hash)
+        return (
+            self.source_parsed,
+            self.source_file or str(self.config.wud_out_file),
+            source_hash,
+            plan_source,
+        )
+
     def build(self) -> DryRunPlan:
         normalized_selections = normalize_update_selections(self.update_selections)
         if self.line_numbers and normalized_selections:
@@ -169,18 +198,7 @@ class _PlanBuilder(_UpdateScopeMixin):
             self.line_numbers
             or tuple(item.line_no for item in normalized_selections)
         )
-        if self.source_parsed is None:
-            full_parse = _read_wud_file(self.config.wud_out_file)
-            source_file = str(self.config.wud_out_file)
-            source_hash = _file_sha256(self.config.wud_out_file)
-            plan_source = DryRunPlanSource(source_hash=source_hash)
-        else:
-            full_parse = self.source_parsed
-            source_file = self.source_file or str(self.config.wud_out_file)
-            source_hash = self.source_hash or ""
-            plan_source = self.source or DryRunPlanSource(source_hash=source_hash)
-            if plan_source.source_hash != source_hash:
-                plan_source = replace(plan_source, source_hash=source_hash)
+        full_parse, source_file, source_hash, plan_source = self._source_input()
         _validate_selected_targets(full_parse, selected)
         parsed = (
             parse_wud_file(self.config.wud_out_file, selected_lines=selected)
@@ -747,8 +765,7 @@ def build_dry_run_plan_from_pending_source(
     source_hash: str,
     source: DryRunPlanSource,
     line_numbers: Sequence[int],
-    update_selections: Sequence[UpdateSelection] = (),
-    completed_update_selections: Sequence[CompletedUpdateSelection] = (),
+    selection_scope: _PlanSelectionScope | None = None,
     allow_tag_updates: bool = False,
     tag_overrides: Sequence[TagOverride] = (),
     digest_pin_label_rewrite_approvals: Sequence[
@@ -759,11 +776,12 @@ def build_dry_run_plan_from_pending_source(
     known_digest_provenance_by_service: _DigestProvenanceByService | None = None,
 ) -> DryRunPlan:
     runner = CommandRunner(env=environ) if environ is not None else CommandRunner()
+    selections = selection_scope or _PlanSelectionScope()
     return _PlanBuilder(
         config=config,
         line_numbers=line_numbers,
-        update_selections=update_selections,
-        completed_update_selections=completed_update_selections,
+        update_selections=selections.update_selections,
+        completed_update_selections=selections.completed_update_selections,
         allow_tag_updates=allow_tag_updates,
         tag_overrides=tag_overrides,
         digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
