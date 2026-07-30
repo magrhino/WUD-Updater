@@ -11,6 +11,7 @@ from fastapi import HTTPException, Request
 from . import (
     web_database,
     web_diagnostics,
+    web_file_selection_store,
     web_jobs,
     web_pending_sources,
     web_scheduler,
@@ -19,6 +20,7 @@ from . import (
 from .config import ConfigError, UpdaterConfig
 from .images import tag_value_valid
 from .locks import DirectoryLock
+from .plan_matching import pending_target_key
 from .plans import (
     DryRunPlan,
     PlanFileMissing,
@@ -193,6 +195,18 @@ def build_web_plan(
     ).source
     if source.active == "file" and not source.exists:
         raise PlanFileMissing(f"WUD file not found: {settings.config.wud_out_file}")
+    completed_update_selections = (
+        web_file_selection_store.load_completed_update_selections(
+            settings.config.db_path,
+            pending_file=settings.config.wud_out_file,
+            pending_target_keys={
+                pending_target_key(target.raw)
+                for target in source.parsed.targets
+            },
+        )
+        if source.active == "file" and payload.selections
+        else ()
+    )
     return build_dry_run_plan_from_pending_source(
         config,
         source.parsed,
@@ -201,6 +215,7 @@ def build_web_plan(
         source=source.plan_source(),
         line_numbers=payload.line_numbers,
         update_selections=update_selections_from_payload(payload),
+        completed_update_selections=completed_update_selections,
         allow_tag_updates=payload.allow_tag_updates,
         tag_overrides=tag_overrides_from_payload(payload),
         digest_pin_label_rewrite_approvals=(

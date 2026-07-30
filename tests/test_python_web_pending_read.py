@@ -57,6 +57,43 @@ def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> Non
     assert wud_file.read_text(encoding="utf-8") == original
 
 
+def test_pending_endpoint_fails_closed_when_completion_state_is_unreadable(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    redacted_value = "pending-completion-redaction-fixture"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_TOKEN": redacted_value,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/shared:latest\n", encoding="utf-8")
+
+    def fail_load(*_args, **_kwargs):
+        raise OSError(
+            f"read failed for {tmp_path / 'state' / 'wud.sqlite'} "
+            f"with {redacted_value}"
+        )
+
+    monkeypatch.setattr(
+        pending_module.web_file_selection_store,
+        "load_completed_update_selections",
+        fail_load,
+    )
+    response = client.get("/api/v1/pending")
+    detail = response.json()["detail"]
+
+    assert response.status_code == 500
+    assert detail.startswith("could not read pending source: ")
+    assert redacted_value not in detail
+    assert str(tmp_path) not in detail
+    assert "<redacted>" in detail
+    assert "[REDACTED_PATH]" in detail
+
+
 def test_pending_shared_line_has_stable_stack_scoped_selection_ids(
     tmp_path: Path,
 ) -> None:

@@ -2,7 +2,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from wudup import web_plans as plans_module
+from wudup.compose import ComposeStack, ServiceImage
 from wudup.config import ConfigError
+from wudup.plan_matching import (
+    completed_update_selection_for_matches,
+    selection_id_for_matches,
+)
+from wudup.updater_models import Match
+from wudup.wud_file import parse_wud_text
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -99,6 +106,51 @@ def test_plan_endpoint_wraps_source_oserror(
     response = client.post(
         "/api/v1/plans",
         json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    )
+    detail = response.json()["detail"]
+
+    assert response.status_code == 500
+    assert detail.startswith("could not create plan: ")
+    assert redacted_value not in detail
+    assert str(tmp_path) not in detail
+    assert "<redacted>" in detail
+    assert "[REDACTED_PATH]" in detail
+
+
+def test_plan_endpoint_fails_closed_when_completion_state_is_unreadable(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    redacted_value = "completion-state-redaction-fixture"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_TOKEN": redacted_value,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/shared:latest\n", encoding="utf-8")
+
+    def fail_load(*_args, **_kwargs):
+        raise OSError(
+            f"read failed for {tmp_path / 'state' / 'wud.sqlite'} "
+            f"with {redacted_value}"
+        )
+
+    monkeypatch.setattr(
+        plans_module.web_file_selection_store,
+        "load_completed_update_selections",
+        fail_load,
+    )
+    response = client.post(
+        "/api/v1/plans",
+        json={
+            "selections": [
+                {"line_no": 1, "selection_id": f"sel-v1-{'0' * 64}"}
+            ]
+        },
         headers=_csrf_headers(client),
     )
     detail = response.json()["detail"]
@@ -231,6 +283,45 @@ def test_plan_endpoint_scopes_shared_line_by_selection_id(
         "active",
         "backup",
     }
+
+
+def test_completion_identity_survives_expected_compose_image_rewrites(
+    tmp_path: Path,
+) -> None:
+    target = parse_wud_text("repo/shared:1.0 tag=2.0\n").targets[0]
+
+    def match(compose_image: str) -> Match:
+        stack = ComposeStack(
+            index=1,
+            directory=tmp_path / "shared",
+            file="docker-compose.yml",
+            name="shared",
+            images=(compose_image,),
+            service_images=(ServiceImage("app", compose_image),),
+            project_directory=tmp_path / "shared",
+            project_name="shared",
+        )
+        return Match(
+            stack=stack,
+            target=target,
+            resolved=target.first,
+            compose_image=compose_image,
+            service="app",
+        )
+
+    original = match("repo/shared:1.0")
+    tag_rewrite = match("repo/shared:2.0")
+    digest_rewrite = match(f"repo/shared@sha256:{'a' * 64}")
+
+    assert selection_id_for_matches((original,)) != selection_id_for_matches(
+        (tag_rewrite,)
+    )
+    assert completed_update_selection_for_matches(
+        (original,)
+    ) == completed_update_selection_for_matches((tag_rewrite,))
+    assert completed_update_selection_for_matches(
+        (original,)
+    ) == completed_update_selection_for_matches((digest_rewrite,))
 
 
 def test_plan_endpoint_rejects_invalid_scoped_selections(

@@ -14,6 +14,7 @@ from fastapi import HTTPException, Request
 
 from . import (
     web_database,
+    web_file_selection_store,
     web_jobs,
     web_pending_snoozes,
     web_pending_sources,
@@ -31,6 +32,7 @@ from .db import (
 )
 from .file_ops import OwnerConfig
 from .images import image_tag, repo_key
+from .plan_matching import pending_target_key
 from .plans import (
     DryRunPlanCleanup,
     DryRunPlanCleanupItem,
@@ -39,6 +41,7 @@ from .plans import (
     build_unmatched_cleanup,
     resolve_pending_groups,
 )
+from .updater_models import CompletedUpdateSelection
 from .web_auth import (
     _immediate_transaction,
     _request_actor_type,
@@ -326,6 +329,18 @@ def pending_response(
             include_wud_metadata=include_wud_metadata,
             force=force_api,
         ).source
+        completed_update_selections = (
+            web_file_selection_store.load_completed_update_selections(
+                settings.config.db_path,
+                pending_file=settings.config.wud_out_file,
+                pending_target_keys={
+                    pending_target_key(target.raw)
+                    for target in source.parsed.targets
+                },
+            )
+            if source.active == "file"
+            else ()
+        )
     except OSError as exc:
         raise HTTPException(
             status_code=500,
@@ -346,6 +361,7 @@ def pending_response(
             wud_metadata_by_line=wud_metadata_by_line,
             source=source.active,
             source_ids_by_line=source_ids_by_line,
+            completed_update_selections=completed_update_selections,
         )
         if include_grouping
         else PendingGrouping(status="unavailable")
@@ -607,6 +623,7 @@ def _pending_grouping_response(
     wud_metadata_by_line: dict[int, Any],
     source: str,
     source_ids_by_line: dict[int, str],
+    completed_update_selections: Sequence[CompletedUpdateSelection],
 ) -> PendingGrouping:
     grouping = resolve_pending_groups(
         _effective_config(settings),
@@ -616,6 +633,7 @@ def _pending_grouping_response(
         known_digest_provenance_by_service=(
             web_database.known_digest_provenance_by_service(settings)
         ),
+        completed_update_selections=completed_update_selections,
     )
     return PendingGrouping(
         status=grouping.status,
