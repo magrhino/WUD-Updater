@@ -12,6 +12,8 @@ from wudup.compose import (
 )
 from wudup.config import load_config
 from wudup.digest_verifier import (
+    DigestCheckResult,
+    DigestResolveResult,
     DigestVerifier,
     DockerManifestResolver,
 )
@@ -174,6 +176,141 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
                 ),
                 stack.images,
             )
+        )
+    def test_digest_pin_verification_checks_all_updates_after_failure(self) -> None:
+        stack = ComposeStack(
+            index=1,
+            directory=self.root,
+            file="docker-compose.yml",
+            name="app",
+            images=("docker.io/repo/second:2.0",),
+            service_images=(
+                ServiceImage("second", "docker.io/repo/second:2.0"),
+            ),
+        )
+        updates = (
+            digest_pin_update_from_values(
+                old_image="repo/first:1.0",
+                resolved_tag="2.0",
+                planned_digest="sha256:first",
+                services=("first",),
+            ),
+            digest_pin_update_from_values(
+                old_image="repo/second:1.0",
+                resolved_tag="2.0",
+                planned_digest="sha256:second",
+                services=("second",),
+            ),
+        )
+        digest_verifier = mock.Mock()
+        digest_verifier.verify.return_value = DigestCheckResult(
+            True,
+            "verified",
+            "digest-match",
+        )
+        runner = self.make_runner(digest_verifier=digest_verifier)
+
+        with mock.patch.object(
+            runner.lifecycle,
+            "_verify_digest_pin_update_target",
+            side_effect=(
+                DigestResolveResult(False, "mismatch", "stale-digest"),
+                DigestResolveResult(
+                    True,
+                    "verified",
+                    "digest-match",
+                    digest="sha256:second",
+                ),
+            ),
+        ) as resolve:
+            verified = runner._verify_digest_pin_updates(
+                stack,
+                updates,
+                stack.images,
+            )
+
+        self.assertFalse(verified)
+        self.assertEqual(resolve.call_count, 2)
+        digest_verifier.verify.assert_called_once_with(
+            "docker.io/repo/second:2.0",
+            "sha256:second",
+        )
+    def test_digest_pin_verification_checks_all_updates_after_digest_failure(
+        self,
+    ) -> None:
+        stack = ComposeStack(
+            index=1,
+            directory=self.root,
+            file="docker-compose.yml",
+            name="app",
+            images=(
+                "docker.io/repo/first:2.0",
+                "docker.io/repo/second:2.0",
+            ),
+            service_images=(
+                ServiceImage("first", "docker.io/repo/first:2.0"),
+                ServiceImage("second", "docker.io/repo/second:2.0"),
+            ),
+        )
+        updates = (
+            digest_pin_update_from_values(
+                old_image="repo/first:1.0",
+                resolved_tag="2.0",
+                planned_digest="sha256:first",
+                services=("first",),
+            ),
+            digest_pin_update_from_values(
+                old_image="repo/second:1.0",
+                resolved_tag="2.0",
+                planned_digest="sha256:second",
+                services=("second",),
+            ),
+        )
+        digest_verifier = mock.Mock()
+        digest_verifier.verify.side_effect = (
+            DigestCheckResult(False, "mismatch", "digest-mismatch"),
+            DigestCheckResult(True, "verified", "digest-match"),
+        )
+        runner = self.make_runner(digest_verifier=digest_verifier)
+
+        with mock.patch.object(
+            runner.lifecycle,
+            "_verify_digest_pin_update_target",
+            side_effect=(
+                DigestResolveResult(
+                    True,
+                    "verified",
+                    "digest-match",
+                    digest="sha256:first",
+                ),
+                DigestResolveResult(
+                    True,
+                    "verified",
+                    "digest-match",
+                    digest="sha256:second",
+                ),
+            ),
+        ) as resolve:
+            verified = runner._verify_digest_pin_updates(
+                stack,
+                updates,
+                stack.images,
+            )
+
+        self.assertFalse(verified)
+        self.assertEqual(
+            resolve.call_args_list,
+            [
+                mock.call(updates[0]),
+                mock.call(updates[1]),
+            ],
+        )
+        self.assertEqual(
+            digest_verifier.verify.call_args_list,
+            [
+                mock.call("docker.io/repo/first:2.0", "sha256:first"),
+                mock.call("docker.io/repo/second:2.0", "sha256:second"),
+            ],
         )
     def test_digest_pin_plan_includes_digest_actions_and_hashes_digest(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")

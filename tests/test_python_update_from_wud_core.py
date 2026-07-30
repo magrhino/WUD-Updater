@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import unittest
+from unittest import mock
 
 from wudup.compose import (
     ComposeStack,
     ServiceImage,
 )
+from wudup.digest_verifier import DigestCheckResult
 from wudup.updater_lifecycle_health import _updated_images
 from wudup.updater_models import (
     ImageState,
@@ -90,6 +92,54 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
             runner.lifecycle._expected_digest_failure_reason(stack, matches),
             STALE_PENDING_DIGEST_REASON,
         )
+    def test_expected_digest_verification_checks_all_requirements(self) -> None:
+        stack_dir = self.make_stack(
+            "app",
+            [
+                ("first", "repo/first:latest", "cid-first"),
+                ("second", "repo/second:latest", "cid-second"),
+            ],
+        )
+        stack = ComposeStack(
+            index=1,
+            directory=stack_dir,
+            file="docker-compose.yml",
+            name="app",
+            images=("repo/first:latest", "repo/second:latest"),
+            service_images=(
+                ServiceImage("first", "repo/first:latest"),
+                ServiceImage("second", "repo/second:latest"),
+            ),
+        )
+        targets = parse_wud_text(
+            "repo/first:latest@sha256:first\n"
+            "repo/second:latest@sha256:second\n"
+        ).targets
+        matches = tuple(
+            Match(
+                stack=stack,
+                target=target,
+                resolved=stack.images[index],
+                compose_image=stack.images[index],
+                service=stack.service_images[index].service,
+            )
+            for index, target in enumerate(targets)
+        )
+        digest_verifier = mock.Mock()
+        digest_verifier.verify.side_effect = (
+            DigestCheckResult(False, "mismatch", "digest-mismatch"),
+            DigestCheckResult(True, "verified", "digest-match"),
+        )
+        runner = self.make_runner(digest_verifier=digest_verifier)
+
+        verified = runner.lifecycle._verify_expected_digests(
+            stack,
+            matches,
+            stack.images,
+        )
+
+        self.assertFalse(verified)
+        self.assertEqual(digest_verifier.verify.call_count, 2)
     def test_wrapper_default_dry_run_plans_without_mutation(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])

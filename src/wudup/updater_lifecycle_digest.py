@@ -67,46 +67,76 @@ class _LifecycleDigestMixin:
             for match in matches
             if (expected_digest := _expected_digest_requirement(match))
         }
-        for line_no, target, expected_image, allow_repo, expected in sorted(requirements):
-            matched = False
-            digest_result: DigestCheckResult | None = None
-            stale_result: DigestCheckResult | None = None
-            for image in images:
-                if not image_matches_resolved_target(image, expected_image, allow_repo):
-                    continue
-                matched = True
-                digest_result = self.digest_verifier.verify(image, expected)
-                if digest_result.reason == "stale-digest":
-                    stale_result = digest_result
-                if digest_result.ok:
-                    break
-            if digest_result is not None and digest_result.status == "untrusted":
-                self.log.warn(
-                    f"[{stack.name}] Digest verification was inconclusive for line {line_no} ({target}): wanted {expected}"
-                )
-                self._log_digest_untrusted(stack.name, digest_result)
-                continue
-            if digest_result is None or not digest_result.ok:
+        for requirement in sorted(requirements):
+            if not self._verify_expected_digest_requirement(
+                stack,
+                requirement,
+                images,
+            ):
                 ok = False
-                self.log.error(
-                    f"[{stack.name}] Expected digest not reached for line {line_no} ({target}): wanted {expected}"
-                )
-                if digest_result is not None:
-                    self._log_digest_mismatch(stack.name, digest_result)
-                if stale_result is not None:
-                    self._mark_stale_pending_digest(
-                        stack,
-                        line_no,
-                        target,
-                        expected,
-                        stale_result,
-                    )
-                if not matched:
-                    self.log.plain(
-                        "ERROR",
-                        f"[{stack.name}] No compose image matched line {line_no} while checking expected digest",
-                    )
         return ok
+
+    def _verify_expected_digest_requirement(
+        self,
+        stack: ComposeStack,
+        requirement: tuple[int, str, str, bool, str],
+        images: Sequence[str],
+    ) -> bool:
+        line_no, target, expected_image, allow_repo, expected = requirement
+        digest_result, stale_result, matched = self._verify_expected_digest_images(
+            expected_image,
+            allow_repo,
+            expected,
+            images,
+        )
+        if digest_result is not None and digest_result.status == "untrusted":
+            self.log.warn(
+                f"[{stack.name}] Digest verification was inconclusive for line {line_no} ({target}): wanted {expected}"
+            )
+            self._log_digest_untrusted(stack.name, digest_result)
+            return True
+        if digest_result is not None and digest_result.ok:
+            return True
+        self.log.error(
+            f"[{stack.name}] Expected digest not reached for line {line_no} ({target}): wanted {expected}"
+        )
+        if digest_result is not None:
+            self._log_digest_mismatch(stack.name, digest_result)
+        if stale_result is not None:
+            self._mark_stale_pending_digest(
+                stack,
+                line_no,
+                target,
+                expected,
+                stale_result,
+            )
+        if not matched:
+            self.log.plain(
+                "ERROR",
+                f"[{stack.name}] No compose image matched line {line_no} while checking expected digest",
+            )
+        return False
+
+    def _verify_expected_digest_images(
+        self,
+        expected_image: str,
+        allow_repo: bool,
+        expected: str,
+        images: Sequence[str],
+    ) -> tuple[DigestCheckResult | None, DigestCheckResult | None, bool]:
+        matched = False
+        digest_result: DigestCheckResult | None = None
+        stale_result: DigestCheckResult | None = None
+        for image in images:
+            if not image_matches_resolved_target(image, expected_image, allow_repo):
+                continue
+            matched = True
+            digest_result = self.digest_verifier.verify(image, expected)
+            if digest_result.reason == "stale-digest":
+                stale_result = digest_result
+            if digest_result.ok:
+                break
+        return digest_result, stale_result, matched
 
     def _mark_stale_pending_digest(
         self,
@@ -144,65 +174,88 @@ class _LifecycleDigestMixin:
     ) -> bool:
         ok = True
         for update in updates:
-            current = self._verify_digest_pin_update_target(update)
-            if not current.ok:
+            if not self._verify_digest_pin_update(stack, update, images):
                 ok = False
-                if current.reason == "stale-digest":
-                    current_digest = normalize_digest(current.digest)
-                    suffix = f", current {current_digest}" if current_digest else ""
-                    self.log.plain(
-                        "ERROR",
-                        f"[{stack.name}] Digest-pin target moved for "
-                        f"{update.resolved_image}: planned {update.planned_digest}"
-                        f"{suffix}",
-                    )
-                else:
-                    self.log.error(
-                        f"[{stack.name}] Could not re-resolve digest-pin target "
-                        f"{update.resolved_image}: {current.reason}"
-                    )
-                    if current.error:
-                        self.log.plain(
-                            "ERROR",
-                            f"[{stack.name}] Digest resolution error: {updater_logging.sanitize_stream(current.error)}",
-                        )
-                continue
-            matched = False
-            digest_result: DigestCheckResult | None = None
-            for image in images:
-                if not image_matches_resolved_target(
-                    image,
-                    update.resolved_image,
-                    False,
-                ):
-                    continue
-                matched = True
-                digest_result = self.digest_verifier.verify(
-                    image,
-                    update.planned_digest,
-                )
-                if digest_result.ok:
-                    break
-            if digest_result is not None and digest_result.ok:
-                self.log.info(
-                    f"[{stack.name}] Verified digest-pin target: "
-                    f"{update.resolved_image} -> {update.planned_digest}"
-                )
-                continue
-            ok = False
-            self.log.error(
-                f"[{stack.name}] Digest-pin target did not verify for "
-                f"{update.resolved_image}: wanted {update.planned_digest}"
-            )
-            if digest_result is not None:
-                self._log_digest_mismatch(stack.name, digest_result)
-            if not matched:
-                self.log.plain(
-                    "ERROR",
-                    f"[{stack.name}] No compose image matched digest-pin target "
-                    f"{update.resolved_image}",
-                )
         return ok
+
+    def _verify_digest_pin_update(
+        self,
+        stack: ComposeStack,
+        update: DigestPinUpdate,
+        images: Sequence[str],
+    ) -> bool:
+        current = self._verify_digest_pin_update_target(update)
+        if not current.ok:
+            self._log_digest_pin_resolution_failure(stack, update, current)
+            return False
+        digest_result, matched = self._verify_digest_pin_images(update, images)
+        if digest_result is not None and digest_result.ok:
+            self.log.info(
+                f"[{stack.name}] Verified digest-pin target: "
+                f"{update.resolved_image} -> {update.planned_digest}"
+            )
+            return True
+        self.log.error(
+            f"[{stack.name}] Digest-pin target did not verify for "
+            f"{update.resolved_image}: wanted {update.planned_digest}"
+        )
+        if digest_result is not None:
+            self._log_digest_mismatch(stack.name, digest_result)
+        if not matched:
+            self.log.plain(
+                "ERROR",
+                f"[{stack.name}] No compose image matched digest-pin target "
+                f"{update.resolved_image}",
+            )
+        return False
+
+    def _log_digest_pin_resolution_failure(
+        self,
+        stack: ComposeStack,
+        update: DigestPinUpdate,
+        current: DigestResolveResult,
+    ) -> None:
+        if current.reason == "stale-digest":
+            current_digest = normalize_digest(current.digest)
+            suffix = f", current {current_digest}" if current_digest else ""
+            self.log.plain(
+                "ERROR",
+                f"[{stack.name}] Digest-pin target moved for "
+                f"{update.resolved_image}: planned {update.planned_digest}{suffix}",
+            )
+            return
+        self.log.error(
+            f"[{stack.name}] Could not re-resolve digest-pin target "
+            f"{update.resolved_image}: {current.reason}"
+        )
+        if current.error:
+            self.log.plain(
+                "ERROR",
+                f"[{stack.name}] Digest resolution error: {updater_logging.sanitize_stream(current.error)}",
+            )
+
+    def _verify_digest_pin_images(
+        self,
+        update: DigestPinUpdate,
+        images: Sequence[str],
+    ) -> tuple[DigestCheckResult | None, bool]:
+        matched = False
+        digest_result: DigestCheckResult | None = None
+        for image in images:
+            if not image_matches_resolved_target(
+                image,
+                update.resolved_image,
+                False,
+            ):
+                continue
+            matched = True
+            digest_result = self.digest_verifier.verify(
+                image,
+                update.planned_digest,
+            )
+            if digest_result.ok:
+                break
+        return digest_result, matched
 
     def _log_digest_untrusted(
         self,
