@@ -53,12 +53,19 @@ class UpdaterOptions:
         "DigestPinLabelRewriteApproval", ...
     ] = ()
     update_selections: tuple["UpdateSelection", ...] = ()
+    completed_update_selections: tuple["CompletedUpdateSelection", ...] = ()
 
 
 @dataclass(frozen=True)
 class UpdateSelection:
     line_no: int
     selection_id: str = ""
+
+
+@dataclass(frozen=True)
+class CompletedUpdateSelection:
+    target_key: str
+    completion_id: str
 
 
 @dataclass(frozen=True)

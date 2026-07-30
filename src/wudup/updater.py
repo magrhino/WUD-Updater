@@ -23,6 +23,7 @@ from .updater_matching import (
     _unique_matches,
 )
 from .updater_models import (
+    CompletedUpdateSelection,
     StackStatus,
     UpdaterError,
 )
@@ -80,6 +81,12 @@ class UpdateFromWudRunner(
         self.failures: list[FailureRecord] = []
         self.stale_pending_digest_lines: set[tuple[int, int]] = set()
         self.partially_selected_line_numbers: tuple[int, ...] = ()
+        self.successful_completed_update_selections: tuple[
+            CompletedUpdateSelection, ...
+        ] = ()
+        self.discovered_completed_update_selections: tuple[
+            CompletedUpdateSelection, ...
+        ] = ()
         self.audit_conn: sqlite3.Connection | None = None
         self.audit_run_id: int | None = None
         self.audit_db_path: Path | None = None
@@ -426,7 +433,10 @@ class UpdateFromWudRunner(
             stack_matches = [
                 match for match in matches if match.stack.index == stack.index
             ]
-            stack_statuses[stack.index] = self._update_stack(stack, stack_matches)
+            stack_status = self._update_stack(stack, stack_matches)
+            stack_statuses[stack.index] = stack_status
+            if stack_status.status == "success":
+                self._record_successful_completed_update_selections(stack_matches)
         return stack_statuses
 
     def _reconcile_pending_entries(
