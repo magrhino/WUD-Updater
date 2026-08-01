@@ -54,7 +54,7 @@ from .web_models import (
     WudApiWatcherDiagnostics as WudApiWatcherDiagnostics,
     WudContainerMetadata,
 )
-from .wud_file import WudTarget
+from .wud_file import WudTarget, parse_wud_text
 
 DEFAULT_WUD_API_BASE_URL = "http://wud:3000"
 WUD_API_BASE_URL_ENV = "WUD_API_BASE_URL"
@@ -155,6 +155,7 @@ class WudApiSnapshot:
     hidden_update_candidates: tuple[WudApiContainer, ...] = ()
     degraded_container_count: int = 0
     retained_update_count: int = 0
+    recovered_update_count: int = 0
     metadata_checked: bool = False
     checked_monotonic: float = 0.0
 
@@ -813,6 +814,7 @@ def _refresh_snapshot_serialized(
         hidden_update_candidates,
         degraded_container_count,
         retained_update_count,
+        recovered_update_count,
         unsupported_container_count,
         pending_observations,
     ) = _reconcile_container_observations(
@@ -826,6 +828,10 @@ def _refresh_snapshot_serialized(
         detail = (
             f"{detail}; {degraded_container_count} container observation(s) degraded; "
             f"{retained_update_count} last-known-good update(s) retained"
+        )
+    if recovered_update_count:
+        detail = (
+            f"{detail}; {recovered_update_count} pending-file update(s) recovered"
         )
     if unsupported_container_count:
         detail = (
@@ -844,6 +850,7 @@ def _refresh_snapshot_serialized(
         hidden_update_candidates=hidden_update_candidates,
         degraded_container_count=degraded_container_count,
         retained_update_count=retained_update_count,
+        recovered_update_count=recovered_update_count,
     )
     _store_snapshot(
         cache_key,
@@ -1075,6 +1082,7 @@ def _snapshot(
     hidden_update_candidates: Sequence[WudApiContainer] = (),
     degraded_container_count: int = 0,
     retained_update_count: int = 0,
+    recovered_update_count: int = 0,
 ) -> WudApiSnapshot:
     return WudApiSnapshot(
         status=WudApiStatus(
@@ -1088,6 +1096,7 @@ def _snapshot(
         hidden_update_candidates=tuple(hidden_update_candidates),
         degraded_container_count=degraded_container_count,
         retained_update_count=retained_update_count,
+        recovered_update_count=recovered_update_count,
         metadata_checked=metadata_checked,
         checked_monotonic=checked_monotonic,
     )
@@ -1289,6 +1298,53 @@ def _retain_previous_observation(
     return True
 
 
+def _pending_file_recovery_targets(settings: WebSettings) -> tuple[WudTarget, ...]:
+    if not settings.legacy_scripts_enabled:
+        return ()
+    try:
+        text = settings.config.wud_out_file.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ()
+    return parse_wud_text(text).targets
+
+
+def _recover_pending_file_observation(
+    container: WudApiContainer,
+    targets: Sequence[WudTarget],
+) -> WudApiContainer | None:
+    for target in targets:
+        if not _container_matches_target(container, target):
+            continue
+        if target.platform is not None and target.platform != container.platform:
+            continue
+        if target.desired_tag and target.desired_tag == container.local_tag:
+            continue
+        if (
+            not target.desired_tag
+            and target.digest
+            and target.digest == normalize_digest(container.local_digest)
+        ):
+            continue
+
+        update_kind = container.update_kind
+        if target.desired_tag:
+            update_kind = "tag"
+        elif target.digest:
+            update_kind = "digest"
+        return replace(
+            container,
+            remote_tag=target.desired_tag,
+            remote_digest=target.digest,
+            update_kind=update_kind,
+            error=(
+                container.error
+                or "WUD update result is unavailable; pending update recovered "
+                "from WUD_OUT_FILE"
+            ),
+        )
+    return None
+
+
 def _reconcile_container_observations(
     payload: Sequence[object],
     settings: WebSettings,
@@ -1301,6 +1357,7 @@ def _reconcile_container_observations(
     int,
     int,
     int,
+    int,
     Mapping[WudContainerIdentity, _PendingObservation],
 ]:
     containers: list[WudApiContainer] = []
@@ -1308,7 +1365,9 @@ def _reconcile_container_observations(
     pending_observations: dict[WudContainerIdentity, _PendingObservation] = {}
     degraded_container_count = 0
     retained_update_count = 0
+    recovered_update_count = 0
     unsupported_container_count = 0
+    recovery_targets: tuple[WudTarget, ...] | None = None
 
     for raw in payload:
         observation = _parse_container_observation(raw, settings)
@@ -1327,10 +1386,21 @@ def _reconcile_container_observations(
             if retained:
                 degraded_container_count += 1
                 retained_update_count += 1
-            elif observation.unsupported:
-                unsupported_container_count += 1
             else:
-                degraded_container_count += 1
+                if recovery_targets is None:
+                    recovery_targets = _pending_file_recovery_targets(settings)
+                recovered = _recover_pending_file_observation(
+                    container,
+                    recovery_targets,
+                )
+                if recovered is not None:
+                    containers.append(recovered)
+                    degraded_container_count += 1
+                    recovered_update_count += 1
+                elif observation.unsupported:
+                    unsupported_container_count += 1
+                else:
+                    degraded_container_count += 1
             continue
 
         if observation.update_available:
@@ -1351,6 +1421,7 @@ def _reconcile_container_observations(
         tuple(hidden_update_candidates),
         degraded_container_count,
         retained_update_count,
+        recovered_update_count,
         unsupported_container_count,
         pending_observations,
     )

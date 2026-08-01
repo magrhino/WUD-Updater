@@ -27,6 +27,16 @@ file and derives the same pending lines from WUD `/api/containers` over the
 private Compose app network. `auto` uses that API when available and falls back
 to `WUD_OUT_FILE`; `file` keeps the legacy callback-only behavior.
 
+When legacy scripts remain enabled, API mode may read `WUD_OUT_FILE` as a
+read-only cold-start recovery hint if WUD returns a degraded container row and
+no last-known-good observation exists. Recovery requires the pending line to
+match the container's current image, platform, and installed digest or tag, so
+already-applied and unrelated lines are not revived. The API remains the active
+pending source, and an explicit selected rescan targets only the recovered WUD
+container IDs. The “rescan all pending updates” action likewise deduplicates and
+watches only IDs represented by current pending entries. Recovery never triggers
+a global WUD watch or changes the file.
+
 WUDup polls WUD's API directly for WebUI release-note notifications. Set
 `WUDUP_LEGACY_SCRIPTS=false` only after removing legacy WUD command triggers and
 recreating the stack. In that mode, managed script sync installs no WUD command

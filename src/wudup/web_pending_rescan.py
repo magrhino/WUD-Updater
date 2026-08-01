@@ -119,12 +119,25 @@ def _pending_rescan_all(settings: WebSettings) -> PendingRescanResponse:
     refresh = web_wud_refresh.refresh_wud_pending_source(
         settings,
         include_wud_metadata=True,
-        watch_all=True,
+        force=True,
         api_source=True,
     )
-    result = refresh.watch_result
-    if result is None:
-        raise RuntimeError("WUD rescan did not return a watch result")
+    source = refresh.source
+    snapshot = source.wud_snapshot or web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+    container_ids = _pending_source_container_ids(source)
+    if not snapshot.status.metadata_available or not container_ids:
+        result = web_wud_api.WudApiWatchResult(
+            snapshot=snapshot,
+            watched=False,
+            requested_count=len(container_ids),
+            watched_count=0,
+        )
+    else:
+        result = web_wud_api.watch_containers(settings, container_ids)
     return PendingRescanResponse(
         status=_pending_rescan_status(result, skipped=()),
         audit_run_id=0,
@@ -134,6 +147,19 @@ def _pending_rescan_all(settings: WebSettings) -> PendingRescanResponse:
         skipped=[],
         wud_api=result.snapshot.status,
     )
+
+
+def _pending_source_container_ids(
+    source: web_pending_sources.PendingSourceResult,
+) -> tuple[str, ...]:
+    container_ids: list[str] = []
+    seen: set[str] = set()
+    for line_ids in (source.container_ids_by_line or {}).values():
+        for container_id in line_ids:
+            if container_id and container_id not in seen:
+                seen.add(container_id)
+                container_ids.append(container_id)
+    return tuple(container_ids)
 
 
 def _pending_rescan_selected(

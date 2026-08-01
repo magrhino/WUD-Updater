@@ -66,7 +66,7 @@ def test_pending_rescan_endpoint_enforces_auth_csrf_and_read_only(
     assert get_response.status_code == 405
 
 
-def test_pending_global_rescan_calls_wud_watch_refreshes_snapshot_and_audits(
+def test_pending_all_rescan_targets_pending_container_ids_and_audits(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -99,10 +99,13 @@ def test_pending_global_rescan_calls_wud_watch_refreshes_snapshot_and_audits(
     assert body["wud_api"]["metadata_available"] is True
     assert calls == [
         ("GET", "/health"),
-        ("POST", "/api/containers/watch"),
+        ("GET", "/api/containers"),
+        ("GET", "/health"),
+        ("POST", "/api/containers/docker.local.app/watch"),
         ("GET", "/health"),
         ("GET", "/api/containers"),
     ]
+    assert ("POST", "/api/containers/watch") not in calls
     with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         run = conn.execute(
             "SELECT * FROM update_runs WHERE id = ?",
@@ -237,7 +240,7 @@ def test_pending_rescan_reports_wud_watch_auth_required_on_http_error(
     monkeypatch,
 ) -> None:
     base_url = "https://wud.rescan-watch-auth.test:3000"
-    _install_wud_api(monkeypatch)
+    _install_wud_api(monkeypatch, containers=[container_payload(name="app")])
     posts: list[str] = []
 
     def raise_watch_http_error(url: str, _client_config=None, **_kwargs) -> object:
@@ -271,7 +274,7 @@ def test_pending_rescan_reports_wud_watch_auth_required_on_http_error(
     assert body["status"] == "blocked"
     assert body["wud_api"]["state"] == "auth_required"
     assert body["wud_api"]["detail"] == "WUD API watch request requires authentication"
-    assert posts == ["/api/containers/watch"]
+    assert posts == ["/api/containers/docker.local.app/watch"]
     snapshot = web_wud_api.get_snapshot(
         settings(tmp_path, base_url),
         include_containers=True,
