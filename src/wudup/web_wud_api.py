@@ -1313,7 +1313,9 @@ def _recover_pending_file_observation(
     targets: Sequence[WudTarget],
 ) -> WudApiContainer | None:
     for target in targets:
-        if not _container_matches_target(container, target):
+        if not (target.desired_tag or target.digest):
+            continue
+        if not _recovery_container_matches_target(container, target):
             continue
         if target.platform is not None and target.platform != container.platform:
             continue
@@ -1588,6 +1590,27 @@ def _container_matches_target(container: WudApiContainer, target: WudTarget) -> 
         return False
     allow_repo = target.allow_repo or not image_has_tag(target.first)
     return image_matches_resolved_target(container.image, target.first, allow_repo)
+
+
+def _recovery_container_matches_target(
+    container: WudApiContainer,
+    target: WudTarget,
+) -> bool:
+    if target.first in {container.name, container.display_name, container.id}:
+        return True
+    if not container.image:
+        return False
+    if _image_registry_key(container.image) != _image_registry_key(target.first):
+        return False
+    allow_repo = target.allow_repo or not image_has_tag(target.first)
+    return image_matches_resolved_target(container.image, target.first, allow_repo)
+
+
+def _image_registry_key(image: str) -> str:
+    if not _image_has_registry(image):
+        return ""
+    registry = strip_digest(image).partition("/")[0].lower()
+    return "" if registry in DOCKER_HUB_REGISTRIES else registry
 
 
 def _image_ref(image: Mapping[str, object]) -> str:
