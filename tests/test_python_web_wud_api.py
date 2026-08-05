@@ -1117,6 +1117,71 @@ def test_wud_api_watch_uses_longer_timeout_than_metadata_reads(
     } == {web_wud_api.WUD_API_TIMEOUT_SECONDS}
 
 
+def test_wud_api_container_watch_has_one_batch_timeout_budget(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    containers = [
+        _container_payload(name="one"),
+        _container_payload(name="two"),
+        _container_payload(name="three"),
+    ]
+    _install_wud_api(monkeypatch, containers=(200, containers))
+    clock = [0.0]
+    calls: list[tuple[str, float]] = []
+
+    def post_json(url: str, _client_config=None, *, timeout: float) -> object:
+        calls.append((urllib.parse.urlsplit(url).path, timeout))
+        clock[0] += 3.0
+        return {"status": "ok"}
+
+    monkeypatch.setattr(web_wud_api.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(web_wud_api, "_post_json", post_json)
+    monkeypatch.setattr(web_wud_api, "WUD_API_WATCH_BATCH_TIMEOUT_SECONDS", 5.0)
+
+    watch = web_wud_api.watch_containers(
+        _settings(tmp_path, "https://wud.batch-timeout.test:3000"),
+        (
+            "docker.local.one",
+            "docker.local.two",
+            "docker.local.three",
+        ),
+    )
+
+    assert watch.watched is False
+    assert watch.requested_count == 3
+    assert watch.watched_count == 2
+    assert calls == [
+        ("/api/containers/docker.local.one/watch", pytest.approx(5.0)),
+        ("/api/containers/docker.local.two/watch", pytest.approx(2.0)),
+    ]
+
+
+def test_wud_api_watch_cooldown_prunes_expired_identities(monkeypatch) -> None:
+    clock = [10.0]
+    cache_key = ("https://wud.cooldown-prune.test:3000", "fingerprint")
+    old_key = (cache_key, "docker.local.old")
+    new_key = (cache_key, "docker.local.new")
+    monkeypatch.setattr(web_wud_api.time, "monotonic", lambda: clock[0])
+
+    web_wud_api._start_watch_rate_limit_cooldown(cache_key, old_key[1])
+    clock[0] += web_wud_api.WUD_API_RATE_LIMIT_COOLDOWN_SECONDS + 1
+    web_wud_api._start_watch_rate_limit_cooldown(cache_key, new_key[1])
+
+    assert old_key not in web_wud_api._watch_rate_limit_until
+    assert new_key in web_wud_api._watch_rate_limit_until
+
+    clock[0] += web_wud_api.WUD_API_RATE_LIMIT_COOLDOWN_SECONDS + 1
+    assert (
+        web_wud_api._watch_rate_limit_cooldown_remaining(
+            cache_key,
+            "docker.local.unrelated",
+        )
+        == 0.0
+    )
+    assert new_key not in web_wud_api._watch_rate_limit_until
+
+
 def test_container_triggers_ignores_non_object_entries(
     tmp_path: Path,
     monkeypatch,

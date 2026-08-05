@@ -68,6 +68,7 @@ WUD_API_HEADERS_FILE_ENV = "WUD_API_HEADERS_FILE"
 DEFAULT_WUD_API_STARTUP_WAIT_SECONDS = 0.0
 WUD_API_TIMEOUT_SECONDS = 1.0
 WUD_API_WATCH_TIMEOUT_SECONDS = 120.0
+WUD_API_WATCH_BATCH_TIMEOUT_SECONDS = 120.0
 WUD_API_STARTUP_RETRY_INTERVAL_SECONDS = 0.5
 WUD_API_CACHE_TTL_SECONDS = 30.0
 WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS = 5.0
@@ -188,6 +189,7 @@ class WudApiWatchResult:
 
 WudApiConfigurationSnapshot = web_wud_config.WudApiConfigurationSnapshot
 WudApiCacheKey = tuple[str, str]
+WudApiWatchCooldownKey = tuple[WudApiCacheKey, str]
 WudContainerIdentity = web_wud_observation_store.WudContainerIdentity
 
 
@@ -200,7 +202,8 @@ _pending_observation_cache: dict[
     Mapping[WudContainerIdentity, _PendingObservation],
 ] = {}
 _configuration_diagnostics_cache: dict[WudApiCacheKey, WudApiConfigurationSnapshot] = {}
-_watch_rate_limit_until: dict[WudApiCacheKey, float] = {}
+_watch_rate_limit_until: dict[WudApiWatchCooldownKey, float] = {}
+_WATCH_ALL_COOLDOWN_CONTAINER_ID = "*"
 
 
 def configured_base_url(environ: Mapping[str, str]) -> str:
@@ -960,24 +963,36 @@ def _watch_paths(
         )
 
     cache_key = _cache_key(settings, base_url)
-    cooldown_remaining = _watch_rate_limit_cooldown_remaining(cache_key)
-    if cooldown_remaining > 0:
-        snapshot = get_snapshot(settings, include_containers=True, force=True)
-        detail = (
-            f"WUD API registry retry paused after HTTP 429; try again in "
-            f"{math.ceil(cooldown_remaining)} second(s)"
+    watch_items: list[tuple[str, str]] = []
+    cooldown_remaining = 0.0
+    for index, path in enumerate(paths):
+        container_id = container_ids[index] if index < len(container_ids) else ""
+        item_cooldown_remaining = _watch_rate_limit_cooldown_remaining(
+            cache_key,
+            container_id,
         )
-        if snapshot.status.detail:
-            detail = f"{snapshot.status.detail}; {detail}"
-        snapshot = replace(
+        if item_cooldown_remaining > 0:
+            cooldown_remaining = max(
+                cooldown_remaining,
+                item_cooldown_remaining,
+            )
+            continue
+        watch_items.append((path, container_id))
+
+    if not watch_items:
+        snapshot = get_snapshot(settings, include_containers=True, force=True)
+        snapshot = _with_watch_rate_limit_detail(
             snapshot,
-            status=snapshot.status.model_copy(update={"detail": detail}),
+            cooldown_remaining,
         )
         return WudApiWatchResult(
             snapshot=snapshot,
             watched=False,
             requested_count=len(paths),
             watched_count=0,
+            remaining_degraded_container_ids=(
+                _remaining_degraded_container_ids(snapshot, container_ids)
+            ),
         )
 
     preflight = get_snapshot(settings, include_containers=False, force=True)
@@ -990,30 +1005,41 @@ def _watch_paths(
         )
 
     watched_count = 0
-    for path in paths:
+    watched_all = len(watch_items) == len(paths)
+    remaining_watch_seconds = WUD_API_WATCH_BATCH_TIMEOUT_SECONDS
+    for path, requested_container_id in watch_items:
+        if remaining_watch_seconds <= 0:
+            watched_all = False
+            break
+        request_started = time.monotonic()
         try:
             payload = _post_json(
                 _join_url(normalized_base_url, path),
                 settings.wud_api_client,
-                timeout=WUD_API_WATCH_TIMEOUT_SECONDS,
+                timeout=min(
+                    WUD_API_WATCH_TIMEOUT_SECONDS,
+                    remaining_watch_seconds,
+                ),
+            )
+            remaining_watch_seconds -= max(
+                0.0,
+                time.monotonic() - request_started,
             )
             watched_count += 1
-            if _watch_response_is_rate_limited(payload, settings):
-                _start_watch_rate_limit_cooldown(cache_key)
-                snapshot = get_snapshot(
-                    settings,
-                    include_containers=True,
-                    force=True,
+            rate_limited_container_id = _watch_rate_limited_container_id(
+                payload,
+                settings,
+            )
+            if rate_limited_container_id is not None:
+                _start_watch_rate_limit_cooldown(
+                    cache_key,
+                    rate_limited_container_id or requested_container_id,
                 )
-                return WudApiWatchResult(
-                    snapshot=snapshot,
-                    watched=False,
-                    requested_count=len(paths),
-                    watched_count=watched_count,
-                    remaining_degraded_container_ids=(
-                        _remaining_degraded_container_ids(snapshot, container_ids)
-                    ),
+                cooldown_remaining = max(
+                    cooldown_remaining,
+                    WUD_API_RATE_LIMIT_COOLDOWN_SECONDS,
                 )
+                watched_all = False
         except urllib.error.HTTPError as exc:
             snapshot = _watch_http_error_snapshot(
                 settings,
@@ -1050,9 +1076,11 @@ def _watch_paths(
             )
 
     snapshot = get_snapshot(settings, include_containers=True, force=True)
+    if cooldown_remaining > 0:
+        snapshot = _with_watch_rate_limit_detail(snapshot, cooldown_remaining)
     return WudApiWatchResult(
         snapshot=snapshot,
-        watched=True,
+        watched=watched_all,
         requested_count=len(paths),
         watched_count=watched_count,
         remaining_degraded_container_ids=_remaining_degraded_container_ids(
@@ -1074,33 +1102,76 @@ def _remaining_degraded_container_ids(
     )
 
 
-def _watch_response_is_rate_limited(
+def _watch_rate_limited_container_id(
     payload: object,
     settings: WebSettings,
-) -> bool:
+) -> str | None:
     observation = _parse_container_observation(payload, settings)
-    return bool(
+    if (
         observation is not None
         and observation.degraded
         and _HTTP_429_RE.search(observation.container.error)
-    )
+    ):
+        return observation.container.id
+    return None
 
 
-def _watch_rate_limit_cooldown_remaining(cache_key: WudApiCacheKey) -> float:
+def _watch_rate_limit_cooldown_remaining(
+    cache_key: WudApiCacheKey,
+    container_id: str,
+) -> float:
     now = time.monotonic()
     with _cache_lock:
-        retry_at = _watch_rate_limit_until.get(cache_key, 0.0)
-        if retry_at <= now:
-            _watch_rate_limit_until.pop(cache_key, None)
-            return 0.0
-    return retry_at - now
+        _prune_expired_watch_rate_limits(now)
+        if container_id:
+            cooldown_keys = (
+                (cache_key, _WATCH_ALL_COOLDOWN_CONTAINER_ID),
+                (cache_key, container_id),
+            )
+        else:
+            cooldown_keys = tuple(
+                key for key in _watch_rate_limit_until if key[0] == cache_key
+            )
+        retry_at = 0.0
+        for cooldown_key in cooldown_keys:
+            item_retry_at = _watch_rate_limit_until.get(cooldown_key, 0.0)
+            retry_at = max(retry_at, item_retry_at)
+    return max(0.0, retry_at - now)
 
 
-def _start_watch_rate_limit_cooldown(cache_key: WudApiCacheKey) -> None:
+def _start_watch_rate_limit_cooldown(
+    cache_key: WudApiCacheKey,
+    container_id: str,
+) -> None:
+    cooldown_container_id = container_id or _WATCH_ALL_COOLDOWN_CONTAINER_ID
+    now = time.monotonic()
     with _cache_lock:
-        _watch_rate_limit_until[cache_key] = (
-            time.monotonic() + WUD_API_RATE_LIMIT_COOLDOWN_SECONDS
+        _prune_expired_watch_rate_limits(now)
+        _watch_rate_limit_until[(cache_key, cooldown_container_id)] = (
+            now + WUD_API_RATE_LIMIT_COOLDOWN_SECONDS
         )
+
+
+def _prune_expired_watch_rate_limits(now: float) -> None:
+    for cooldown_key, retry_at in tuple(_watch_rate_limit_until.items()):
+        if retry_at <= now:
+            _watch_rate_limit_until.pop(cooldown_key, None)
+
+
+def _with_watch_rate_limit_detail(
+    snapshot: WudApiSnapshot,
+    cooldown_remaining: float,
+) -> WudApiSnapshot:
+    detail = (
+        f"WUD API registry retry paused after HTTP 429; try again in "
+        f"{math.ceil(cooldown_remaining)} second(s)"
+    )
+    if snapshot.status.detail:
+        detail = f"{snapshot.status.detail}; {detail}"
+    return replace(
+        snapshot,
+        status=snapshot.status.model_copy(update={"detail": detail}),
+    )
 
 
 def _watch_http_error_snapshot(

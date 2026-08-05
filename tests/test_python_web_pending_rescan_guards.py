@@ -148,7 +148,7 @@ def test_pending_all_rescan_targets_pending_container_ids_and_audits(
     assert metadata["wud_api"]["state"] == "ready"
 
 
-def test_pending_all_rescan_stops_on_embedded_429_and_enforces_cooldown(
+def test_pending_all_rescan_scopes_embedded_429_cooldown_to_container(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -192,9 +192,10 @@ def test_pending_all_rescan_stops_on_embedded_429_and_enforces_cooldown(
     body = response.json()
     assert body["status"] == "partial"
     assert body["requested_count"] == 2
-    assert body["watched_count"] == 1
+    assert body["watched_count"] == 2
     assert [path for method, path in calls if method == "POST"] == [
-        "/api/containers/docker.local.bazarr/watch"
+        "/api/containers/docker.local.bazarr/watch",
+        "/api/containers/docker.local.app/watch",
     ]
     assert "1 unresolved" in body["wud_api"]["detail"]
 
@@ -206,10 +207,12 @@ def test_pending_all_rescan_stops_on_embedded_429_and_enforces_cooldown(
     )
 
     assert cooldown.status_code == 200
-    assert cooldown.json()["status"] == "blocked"
-    assert cooldown.json()["watched_count"] == 0
+    assert cooldown.json()["status"] == "partial"
+    assert cooldown.json()["watched_count"] == 1
     assert "retry paused after HTTP 429" in cooldown.json()["wud_api"]["detail"]
-    assert [call for call in calls if call[0] == "POST"] == []
+    assert [path for method, path in calls if method == "POST"] == [
+        "/api/containers/docker.local.app/watch"
+    ]
 
 
 def test_pending_all_rescan_succeeds_after_degraded_container_clears(
