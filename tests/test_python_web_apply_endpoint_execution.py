@@ -304,7 +304,7 @@ def test_apply_endpoint_uses_api_pending_source_without_editing_wud_file(
     def fake_post_json(url: str, _client_config=None, **_kwargs) -> object:
         path = urllib.parse.urlsplit(url).path
         wud_api_posts.append(path)
-        if path == "/api/containers/watch":
+        if path == "/api/containers/docker.local.app/watch":
             containers.clear()
         return {"status": "ok"}
 
@@ -367,7 +367,8 @@ def test_apply_endpoint_uses_api_pending_source_without_editing_wud_file(
     assert detail["metadata"]["pending_source"] == "api"
     assert detail["metadata"]["pending_source_configured"] == "api"
     assert detail["metadata"]["pending_source_label"] == "WUD API"
-    assert "/api/containers/watch" in wud_api_posts
+    assert wud_api_posts == ["/api/containers/docker.local.app/watch"]
+    assert "/api/containers/watch" not in wud_api_posts
     pending = client.get("/api/v1/pending").json()
     assert pending["source"]["active"] == "api"
     assert pending["count"] == 0

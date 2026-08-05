@@ -30,7 +30,6 @@ import {
   pendingGrouping,
   pendingItem,
   pendingResponse,
-  pendingRescanResponse,
   pendingSourceInfo,
   planResponse,
   releaseNoteInfo,
@@ -303,24 +302,14 @@ describe("pending view apply jobs", () => {
     expect(wrapper.find(".batch-action-bar").exists()).toBe(false);
   });
 
-  it.each([
-    ["rescans api-backed pending updates after successful apply", true],
-    ["falls back to normal pending refresh when api rescan fails", false],
-  ])("%s", async (_label, rescanSucceeds) => {
+  it("refreshes api-backed pending reads after successful apply without a second rescan", async () => {
     const { pinia, settings, updates, runs } = setupStores(true);
     updates.pending = apiBackedPendingResponse();
     const { loadPending, loadReleaseNotes } = mockPendingLifecycle(settings, updates);
     vi.spyOn(runs, "loadRuns").mockResolvedValue();
     vi.spyOn(runs, "loadRunDetail").mockResolvedValue();
     mockApplyPlan(updates);
-    const rescanPending = vi
-      .spyOn(updates, "rescanPending")
-      .mockImplementation(async () => {
-        if (!rescanSucceeds) {
-          throw new Error("selected rescan is stale");
-        }
-        return pendingRescanResponse();
-      });
+    const rescanPending = vi.spyOn(updates, "rescanPending");
     const jobStream = mockApplyJobStream();
     const wrapper = mountPendingView(pinia);
 
@@ -331,25 +320,24 @@ describe("pending view apply jobs", () => {
     jobStream.emitJob(applyJobResponse({ status: "success", run_id: 10 }));
     await flushPromises();
 
-    expect(rescanPending).toHaveBeenCalledWith("selected", [1]);
-    if (rescanSucceeds) {
-      expect(loadPending).not.toHaveBeenCalled();
-      expect(loadReleaseNotes).not.toHaveBeenCalled();
-    } else {
-      expect(loadPending).toHaveBeenCalled();
-      expect(loadReleaseNotes).toHaveBeenCalled();
-    }
+    expect(rescanPending).not.toHaveBeenCalled();
+    expect(loadPending).toHaveBeenCalledTimes(1);
+    expect(loadReleaseNotes).toHaveBeenCalledTimes(1);
   });
 
-  it("loads pending before api rescan for terminal remembered apply jobs", async () => {
+  it("reloads pending state after terminal remembered apply jobs", async () => {
     window.sessionStorage.setItem("applyJobId", "job-terminal");
     const { pinia, settings, updates, runs } = setupStores(true);
     const apiPending = apiBackedPendingResponse();
     let finishInitialPendingLoad: () => void = () => undefined;
+    let initialPendingLoad = true;
     const loadPending = vi.spyOn(updates, "loadPending").mockImplementation(async () => {
-      await new Promise<void>((resolve) => {
-        finishInitialPendingLoad = resolve;
-      });
+      if (initialPendingLoad) {
+        initialPendingLoad = false;
+        await new Promise<void>((resolve) => {
+          finishInitialPendingLoad = resolve;
+        });
+      }
       updates.pending = apiPending;
     });
     vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
@@ -368,9 +356,7 @@ describe("pending view apply jobs", () => {
         run_id: 10,
       }),
     );
-    const rescanPending = vi
-      .spyOn(updates, "rescanPending")
-      .mockResolvedValue(pendingRescanResponse());
+    const rescanPending = vi.spyOn(updates, "rescanPending");
 
     mountPendingView(pinia);
     await flushPromises();
@@ -381,8 +367,8 @@ describe("pending view apply jobs", () => {
     finishInitialPendingLoad();
     await flushPromises();
 
-    expect(loadPending).toHaveBeenCalledTimes(1);
-    expect(rescanPending).toHaveBeenCalledWith("selected", [1]);
+    expect(loadPending).toHaveBeenCalledTimes(2);
+    expect(rescanPending).not.toHaveBeenCalled();
   });
 
   it("keeps an earlier phase failure visible after a later same-phase success", async () => {

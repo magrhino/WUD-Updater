@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -69,6 +69,21 @@ class PendingSourceResult:
             detail=self.detail,
             source_hash=self.source_hash,
         )
+
+
+def container_ids_for_lines(
+    source: PendingSourceResult,
+    line_numbers: Sequence[int],
+) -> tuple[str, ...]:
+    by_line = source.container_ids_by_line or {}
+    return tuple(
+        dict.fromkeys(
+            container_id
+            for line_no in line_numbers
+            for container_id in by_line.get(line_no, ())
+            if container_id
+        )
+    )
 
 
 def configured_pending_source(environ: Mapping[str, str]) -> PendingSourceMode:

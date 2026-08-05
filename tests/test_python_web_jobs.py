@@ -215,13 +215,19 @@ def test_refresh_api_pending_source_reports_degraded_detail(
         requested_count=1,
         watched_count=0,
     )
+    watched_ids: list[tuple[str, ...]] = []
+
+    def watch_containers(
+        _settings: WebSettings,
+        container_ids,
+    ) -> web_wud_api.WudApiWatchResult:
+        watched_ids.append(tuple(container_ids))
+        return watch_result
+
     monkeypatch.setattr(
-        web_jobs.web_wud_refresh,
-        "refresh_wud_pending_source",
-        lambda *_args, **_kwargs: web_jobs.web_wud_refresh.WudPendingRefresh(
-            source=None,
-            watch_result=watch_result,
-        ),
+        web_jobs.web_wud_api,
+        "watch_containers",
+        watch_containers,
     )
     checkpoints: list[WebSettings] = []
     monkeypatch.setattr(
@@ -235,12 +241,14 @@ def test_refresh_api_pending_source_reports_degraded_detail(
         jobs,
         web_jobs.Condition(),
         "job",
+        ("docker.local.app",),
     )
 
     event = jobs["job"].progress[-1]
     assert event.phase == "wud-api-refresh"
     assert event.status == "skipped"
     assert event.message == f"WUD API pending refresh skipped. {detail}"
+    assert watched_ids == [("docker.local.app",)]
     assert checkpoints == [settings]
 
 
@@ -262,8 +270,8 @@ def test_refresh_api_pending_source_logs_unexpected_watch_error(
         raise RuntimeError("watch exploded")
 
     monkeypatch.setattr(
-        web_jobs.web_wud_refresh,
-        "refresh_wud_pending_source",
+        web_jobs.web_wud_api,
+        "watch_containers",
         fail_refresh,
     )
 
@@ -273,6 +281,7 @@ def test_refresh_api_pending_source_logs_unexpected_watch_error(
             jobs,
             web_jobs.Condition(),
             "job",
+            ("docker.local.app",),
         )
 
     event = jobs["job"].progress[-1]
@@ -310,13 +319,15 @@ def test_successful_apply_survives_pending_checkpoint_failure(
         requested_count=1,
         watched_count=1,
     )
+
+    def watch_selected(_settings, container_ids):
+        assert tuple(container_ids) == ("docker.local.app",)
+        return watch_result
+
     monkeypatch.setattr(
-        web_jobs.web_wud_refresh,
-        "refresh_wud_pending_source",
-        lambda *_args, **_kwargs: web_jobs.web_wud_refresh.WudPendingRefresh(
-            source=None,
-            watch_result=watch_result,
-        ),
+        web_jobs.web_wud_api,
+        "watch_containers",
+        watch_selected,
     )
 
     def fail_checkpoint(_settings: WebSettings) -> None:
@@ -343,6 +354,7 @@ def test_successful_apply_survives_pending_checkpoint_failure(
             web_jobs.ApplyJobRunContext(
                 pending_source_active="api",
                 pending_source_text="registry.example/acme/app:1.0.0\n",
+                pending_source_container_ids=("docker.local.app",),
             ),
             lambda *_args, **_kwargs: None,
         )
@@ -382,7 +394,7 @@ def test_apply_job_refreshes_only_api_pending_source(
             return 0
 
     def fail_refresh(*_args, **_kwargs):
-        raise AssertionError("refresh_wud_pending_source called")
+        raise AssertionError("watch_containers called")
 
     def record_schedule_update(
         _settings,
@@ -396,8 +408,8 @@ def test_apply_job_refreshes_only_api_pending_source(
 
     monkeypatch.setattr(web_jobs, "UpdateFromWudRunner", FakeRunner)
     monkeypatch.setattr(
-        web_jobs.web_wud_refresh,
-        "refresh_wud_pending_source",
+        web_jobs.web_wud_api,
+        "watch_containers",
         fail_refresh,
     )
 

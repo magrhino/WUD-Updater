@@ -11,6 +11,7 @@ from tests.web_test_helpers import (
     _csrf_headers,
     _doctor_client,
     _install_wud_api,
+    _wud_api_container,
 )
 
 
@@ -237,6 +238,38 @@ def test_doctor_endpoint_suggests_wud_api_auth_configuration(
     assert "WUD_API_AUTH_BASIC_PASSWORD_FILE" in suggestions[0]["description"]
     assert "WUD_API_HEADERS_FILE" in suggestions[0]["description"]
     assert "authentication support is added" not in suggestions[0]["description"]
+
+
+def test_doctor_warns_when_wud_metadata_contains_degraded_observations(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    degraded = _wud_api_container(
+        name="bazarr",
+        image="ghcr.io/linuxserver/bazarr",
+        update_available=False,
+    )
+    degraded["result"] = None
+    degraded["updateKind"] = {
+        "kind": "unknown",
+        "localValue": None,
+        "remoteValue": None,
+    }
+    degraded["error"] = {"message": "Request failed with status code 429"}
+    _install_wud_api(monkeypatch, containers=[degraded])
+    client = _doctor_client(
+        tmp_path,
+        {"WUD_API_BASE_URL": "https://wud.doctor-degraded.test:3000"},
+    )
+
+    response = client.post("/api/v1/doctor", headers=_csrf_headers(client))
+    check = {
+        item["code"]: item for item in response.json()["checks"]
+    }["wud-api"]
+
+    assert response.status_code == 200
+    assert check["status"] == "WARN"
+    assert "1 container observation(s) degraded" in check["detail"]
 
 
 def test_doctor_endpoint_suggests_verifying_rejected_wud_api_auth(

@@ -213,6 +213,12 @@ def _auto_update_tick(
                         ),
                         pending_source_active=pending_source.active,
                         pending_source_label=pending_source.label,
+                        pending_source_container_ids=(
+                            web_pending_sources.container_ids_for_lines(
+                                pending_source,
+                                plan.selected_line_numbers,
+                            )
+                        ),
                     ),
                 )
             except Exception:

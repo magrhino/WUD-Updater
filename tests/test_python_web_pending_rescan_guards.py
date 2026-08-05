@@ -13,6 +13,7 @@ from wudup.db import open_db
 from tests.web_test_helpers import _client, _csrf_headers, _install_wud_api
 from tests.web_wud_rescan_helpers import (
     container_payload,
+    degraded_container_payload,
     install_recording_wud_api,
     rescan_payload,
     settings,
@@ -119,6 +120,135 @@ def test_pending_all_rescan_targets_pending_container_ids_and_audits(
     assert metadata["requested_count"] == 1
     assert metadata["watched_count"] == 1
     assert metadata["wud_api"]["state"] == "ready"
+
+
+def test_pending_all_rescan_scopes_embedded_429_cooldown_to_container(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    pending = container_payload(name="app")
+    degraded = degraded_container_payload(
+        name="bazarr",
+        image="ghcr.io/linuxserver/bazarr",
+    )
+    unsupported = degraded_container_payload(
+        name="socket-proxy",
+        image="lscr.io/linuxserver/socket-proxy",
+        error="Unsupported Registry unknown",
+    )
+    containers = [pending, degraded, unsupported]
+    calls = install_recording_wud_api(
+        monkeypatch,
+        containers,
+        post_container=lambda path: degraded
+        if path == "/api/containers/docker.local.bazarr/watch"
+        else pending,
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUDUP_LEGACY_SCRIPTS": "false",
+            "WUD_API_BASE_URL": "https://wud.rescan-429.test:3000",
+        },
+    )
+    calls.clear()
+
+    response = client.post(
+        "/api/v1/pending/rescan",
+        json=rescan_payload(),
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "partial"
+    assert body["requested_count"] == 2
+    assert body["watched_count"] == 2
+    assert [path for method, path in calls if method == "POST"] == [
+        "/api/containers/docker.local.bazarr/watch",
+        "/api/containers/docker.local.app/watch",
+    ]
+    assert "1 unresolved" in body["wud_api"]["detail"]
+
+    calls.clear()
+    cooldown = client.post(
+        "/api/v1/pending/rescan",
+        json=rescan_payload(),
+        headers=_csrf_headers(client),
+    )
+
+    assert cooldown.status_code == 200
+    assert cooldown.json()["status"] == "partial"
+    assert cooldown.json()["watched_count"] == 1
+    assert "retry paused after HTTP 429" in cooldown.json()["wud_api"]["detail"]
+    assert [path for method, path in calls if method == "POST"] == [
+        "/api/containers/docker.local.app/watch"
+    ]
+
+
+def test_pending_all_rescan_succeeds_after_degraded_container_clears(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    pending = container_payload(name="app")
+    degraded = degraded_container_payload(
+        name="bazarr",
+        image="ghcr.io/linuxserver/bazarr",
+    )
+    unsupported = degraded_container_payload(
+        name="socket-proxy",
+        image="lscr.io/linuxserver/socket-proxy",
+        error="Unsupported Registry unknown",
+    )
+    cleared = container_payload(
+        name="bazarr",
+        image="ghcr.io/linuxserver/bazarr",
+        update_available=False,
+    )
+    containers = [pending, degraded, unsupported]
+
+    def post_container(path: str) -> object:
+        if path == "/api/containers/docker.local.bazarr/watch":
+            containers[1] = cleared
+            return cleared
+        return pending
+
+    calls = install_recording_wud_api(
+        monkeypatch,
+        containers,
+        post_container=post_container,
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUDUP_LEGACY_SCRIPTS": "false",
+            "WUD_API_BASE_URL": "https://wud.rescan-cleared.test:3000",
+        },
+    )
+    calls.clear()
+
+    response = client.post(
+        "/api/v1/pending/rescan",
+        json=rescan_payload(),
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["requested_count"] == 2
+    assert body["watched_count"] == 2
+    assert [path for method, path in calls if method == "POST"] == [
+        "/api/containers/docker.local.bazarr/watch",
+        "/api/containers/docker.local.app/watch",
+    ]
+    assert ("POST", "/api/containers/watch") not in calls
 
 
 def test_pending_rescan_does_not_watch_when_audit_start_fails(

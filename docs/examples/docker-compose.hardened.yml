@@ -67,6 +67,7 @@ services:
       WUD_WATCHER_LOCAL_HOST: socket-proxy-wudup
       WUD_WATCHER_LOCAL_PORT: "2375"
       WUD_WATCHER_LOCAL_WATCHEVENTS: "true"
+      WUD_REGISTRY_HUB_PUBLIC_WATCHDIGEST: "true"
       # WebUI release-note notifications poll WUD's API directly.
     volumes:
       - wud-scripts:/wud:ro
