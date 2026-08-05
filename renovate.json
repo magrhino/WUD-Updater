@@ -14,9 +14,8 @@
   "internalChecksFilter": "strict",
   "packageRules": [
     {
-      "description": "Automerge non-major Docker updates after CI",
+      "description": "Mark non-major Docker updates for merge automation",
       "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
-      "automerge": true,
       "addLabels": ["automerge"]
     }
   ],

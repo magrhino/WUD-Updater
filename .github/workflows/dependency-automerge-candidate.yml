@@ -1,0 +1,166 @@
+name: dependency auto-merge candidate
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  classify:
+    name: classify dependency PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      ${{
+        github.event.pull_request.draft == false &&
+        (
+          github.event.pull_request.user.login == 'dependabot[bot]' ||
+          github.event.pull_request.user.login == 'renovate[bot]'
+        )
+      }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Read Dependabot metadata
+        id: dependabot
+        if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      - name: Verify dependency bot provenance
+        id: provenance
+        env:
+          BOT: ${{ github.event.pull_request.user.login }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          eligible=false
+          commits_json="$(
+            gh api --paginate --slurp \
+              "repos/$GH_REPO/pulls/$PR_NUMBER/commits?per_page=100"
+          )"
+
+          if jq -e \
+            --arg bot "$BOT" \
+            '[.[][]] |
+             length == 1 and
+             all(.[];
+               .author.login == $bot and
+               .committer.login == "web-flow" and
+               .commit.verification.verified == true and
+               .commit.verification.reason == "valid"
+             )' >/dev/null <<<"$commits_json"; then
+            eligible=true
+          fi
+
+          echo "eligible=$eligible" >>"$GITHUB_OUTPUT"
+
+      - name: Verify Renovate label ownership
+        id: renovate
+        if: ${{ github.event.pull_request.user.login == 'renovate[bot]' }}
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          eligible=false
+          pr_json="$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER")"
+          events_json="$(
+            gh api --paginate --slurp \
+              "repos/$GH_REPO/issues/$PR_NUMBER/events?per_page=100"
+          )"
+
+          if jq -e \
+            --arg expected_head_sha "$EXPECTED_HEAD_SHA" \
+            '.head.sha == $expected_head_sha and
+             any(.labels[]; .name == "automerge")' \
+            >/dev/null <<<"$pr_json" &&
+            [[ "$(
+              jq -r \
+                '[.[][] |
+                  select(
+                    (.event == "labeled" or .event == "unlabeled") and
+                    .label.name == "automerge"
+                  )] |
+                 sort_by(.created_at, .id) |
+                 last |
+                 select(.event == "labeled") |
+                 .actor.login // empty' <<<"$events_json"
+            )" == 'renovate[bot]' ]]; then
+            eligible=true
+          fi
+
+          echo "eligible=$eligible" >>"$GITHUB_OUTPUT"
+
+      - name: Build candidate record
+        env:
+          BOT: ${{ github.event.pull_request.user.login }}
+          DEPENDABOT_UPDATE_TYPE: ${{ steps.dependabot.outputs.update-type }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PROVENANCE_ELIGIBLE: ${{ steps.provenance.outputs.eligible }}
+          RENOVATE_ELIGIBLE: ${{ steps.renovate.outputs.eligible }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          eligible=false
+          if [[ "$PROVENANCE_ELIGIBLE" != 'true' ]]; then
+            eligible=false
+          elif [[ "$BOT" == 'dependabot[bot]' ]]; then
+            case "$DEPENDABOT_UPDATE_TYPE" in
+              version-update:semver-minor|version-update:semver-patch)
+                eligible=true
+                ;;
+            esac
+          elif [[ "$BOT" == 'renovate[bot]' && "$RENOVATE_ELIGIBLE" == 'true' ]]; then
+            eligible=true
+          fi
+
+          jq -n \
+            --arg repository "$REPOSITORY" \
+            --arg bot "$BOT" \
+            --arg head_sha "$HEAD_SHA" \
+            --argjson pr_number "$PR_NUMBER" \
+            --argjson eligible "$eligible" \
+            '{
+              schema: 1,
+              repository: $repository,
+              pr_number: $pr_number,
+              head_sha: $head_sha,
+              bot: $bot,
+              eligible: $eligible
+            }' >candidate.json
+
+      - name: Upload candidate record
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependency-candidate-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: candidate.json
+          if-no-files-found: error
+          retention-days: 1

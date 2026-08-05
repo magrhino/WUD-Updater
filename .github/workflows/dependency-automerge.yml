@@ -4,33 +4,38 @@ on:
   push:
     branches:
       - main
-  pull_request_target:
-    branches:
-      - main
+  workflow_run:
+    workflows:
+      - dependency auto-merge candidate
+      - ci
+      - security
+      - CodeQL Advanced
     types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
-      - labeled
+      - completed
 
 permissions:
+  actions: read
   contents: read
   pull-requests: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.pull_requests[0].number || github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  enable-automerge:
-    name: enable auto-merge
+  merge-candidate:
+    name: merge eligible dependency PR
     runs-on: ubuntu-latest
     timeout-minutes: 5
     if: >-
       ${{
-        github.event_name == 'pull_request_target' &&
-        github.event.pull_request.draft == false &&
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
         (
-          github.event.pull_request.user.login == 'dependabot[bot]' ||
-          github.event.pull_request.user.login == 'renovate[bot]'
-        )
+          github.event.workflow_run.event == 'pull_request' ||
+          github.event.workflow_run.event == 'pull_request_target'
+        ) &&
+        github.event.workflow_run.pull_requests[0].number != null
       }}
 
     steps:
@@ -39,34 +44,128 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Read Dependabot metadata
-        id: dependabot
-        if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
-        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
-
-      - name: Approve and enable auto-merge
-        if: >-
-          ${{
-            (
-              github.event.pull_request.user.login == 'dependabot[bot]' &&
-              (
-                steps.dependabot.outputs.update-type == 'version-update:semver-minor' ||
-                steps.dependabot.outputs.update-type == 'version-update:semver-patch'
-              )
-            ) ||
-            (
-              github.event.pull_request.user.login == 'renovate[bot]' &&
-              contains(github.event.pull_request.labels.*.name, 'automerge')
-            )
-          }}
+      - name: Merge the verified candidate when required checks pass
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          MERGE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
         shell: bash
         run: |
           set -euo pipefail
-          gh pr review --approve "$PR_URL"
-          gh pr merge --auto --squash "$PR_URL"
+
+          pr_json="$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER")"
+          if ! jq -e \
+            --arg repository "$GH_REPO" \
+            '.state == "open" and
+             .draft == false and
+             .base.ref == "main" and
+             .head.repo.full_name == $repository and
+             (.user.login == "dependabot[bot]" or .user.login == "renovate[bot]")' \
+            >/dev/null <<<"$pr_json"; then
+            exit 0
+          fi
+
+          bot="$(jq -r '.user.login' <<<"$pr_json")"
+          head_sha="$(jq -r '.head.sha' <<<"$pr_json")"
+          candidate_name="dependency-candidate-$PR_NUMBER-$head_sha"
+          candidate_run_id="$(
+            gh api "repos/$GH_REPO/actions/artifacts?name=$candidate_name&per_page=100" \
+              --jq '[.artifacts[] | select(.expired == false)] | sort_by(.created_at) | last | .workflow_run.id // empty'
+          )"
+          if [[ -z "$candidate_run_id" ]]; then
+            exit 0
+          fi
+
+          candidate_workflow_id="$(
+            gh api "repos/$GH_REPO/actions/workflows/dependency-automerge-candidate.yml" --jq '.id'
+          )"
+          candidate_run_json="$(gh api "repos/$GH_REPO/actions/runs/$candidate_run_id")"
+          if ! jq -e \
+            --argjson workflow_id "$candidate_workflow_id" \
+            '.workflow_id == $workflow_id and
+             .name == "dependency auto-merge candidate" and
+             .event == "pull_request_target" and
+             .conclusion == "success"' \
+            >/dev/null <<<"$candidate_run_json"; then
+            exit 0
+          fi
+
+          candidate_dir="$RUNNER_TEMP/$candidate_name"
+          mkdir -p "$candidate_dir"
+          gh run download "$candidate_run_id" \
+            --repo "$GH_REPO" \
+            --name "$candidate_name" \
+            --dir "$candidate_dir"
+          if ! jq -e \
+            --arg repository "$GH_REPO" \
+            --arg bot "$bot" \
+            --arg head_sha "$head_sha" \
+            --argjson pr_number "$PR_NUMBER" \
+            '.schema == 1 and
+             .eligible == true and
+             .repository == $repository and
+             .bot == $bot and
+             .head_sha == $head_sha and
+             .pr_number == $pr_number' \
+            "$candidate_dir/candidate.json" >/dev/null; then
+            exit 0
+          fi
+
+          commits_json="$(
+            gh api --paginate --slurp \
+              "repos/$GH_REPO/pulls/$PR_NUMBER/commits?per_page=100"
+          )"
+          if ! jq -e \
+            --arg bot "$bot" \
+            '[.[][]] |
+             length == 1 and
+             all(.[];
+               .author.login == $bot and
+               .committer.login == "web-flow" and
+               .commit.verification.verified == true and
+               .commit.verification.reason == "valid"
+             )' >/dev/null <<<"$commits_json"; then
+            exit 0
+          fi
+
+          if [[ "$bot" == 'renovate[bot]' ]]; then
+            events_json="$(
+              gh api --paginate --slurp \
+                "repos/$GH_REPO/issues/$PR_NUMBER/events?per_page=100"
+            )"
+            if ! jq -e \
+              'any(.labels[]; .name == "automerge")' \
+              >/dev/null <<<"$pr_json"; then
+              exit 0
+            fi
+            if [[ "$(
+              jq -r \
+                '[.[][] |
+                  select(
+                    (.event == "labeled" or .event == "unlabeled") and
+                    .label.name == "automerge"
+                  )] |
+                 sort_by(.created_at, .id) |
+                 last |
+                 select(.event == "labeled") |
+                 .actor.login // empty' <<<"$events_json"
+            )" != 'renovate[bot]' ]]; then
+              exit 0
+            fi
+          fi
+
+          if ! gh pr checks "$PR_NUMBER" --repo "$GH_REPO" --required >/dev/null; then
+            exit 0
+          fi
+
+          merge_json="$(
+            GH_TOKEN="$MERGE_TOKEN" gh api --method PUT \
+              "repos/$GH_REPO/pulls/$PR_NUMBER/merge" \
+              -f merge_method=squash \
+              -f sha="$head_sha"
+          )"
+          jq -e '.merged == true' >/dev/null <<<"$merge_json"
 
   rebase-dependabot:
     name: rebase Dependabot PRs
