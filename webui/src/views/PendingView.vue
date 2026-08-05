@@ -242,7 +242,7 @@ const selectedRescanDisabled = computed(
   () => updates.loading || Boolean(selectedRescanDisabledMessage.value),
 );
 const pendingRescanAlertType = computed(() =>
-  updates.pendingRescan?.status === "blocked" ? "warning" : "success",
+  updates.pendingRescan?.status === "success" ? "success" : "warning",
 );
 const pendingRescanMessage = computed(() => {
   const rescan = updates.pendingRescan;
@@ -253,12 +253,12 @@ const pendingRescanMessage = computed(() => {
     const detail = rescan.wud_api.detail || "WUD API rescan is unavailable.";
     return `WUD rescan did not run: ${detail}`;
   }
-  if (rescan.scope === "all") {
-    return "WUD rescan requested.";
-  }
   const watched = pluralize(rescan.watched_count, "container");
   if (rescan.status === "partial") {
-    return `WUD rescan requested for ${watched}. ${pluralize(rescan.skipped.length, "selected entry")} skipped.`;
+    const detail = rescan.skipped.length
+      ? `${pluralize(rescan.skipped.length, "selected entry")} skipped.`
+      : rescan.wud_api.detail || "Some requested containers are still degraded.";
+    return `WUD rescan requested for ${watched}. ${detail}`;
   }
   return `WUD rescan requested for ${watched}.`;
 });
@@ -553,27 +553,7 @@ function retryPendingLoadTracked(): Promise<void> {
 }
 
 async function refreshAfterTerminalApplyJob(): Promise<void> {
-  const job = updates.applyJob;
-  if (job?.status === "success") {
-    if (!updates.pending) {
-      if (pendingLoadRetry) {
-        await pendingLoadRetry;
-      } else if (updates.loading) {
-        return;
-      } else {
-        await updates.loadPending();
-      }
-    }
-    if (updates.pending?.source.active === "api") {
-      try {
-        await updates.rescanPending("selected", job.selected_line_numbers);
-        return;
-      } catch {
-        // Fall back to the standard refresh below.
-      }
-    }
-  }
-  await loadPendingAndReleaseNotesHandler();
+  await retryPendingLoadTracked();
 }
 
 function releaseNoteStatus(note: ReleaseNoteInfo | null): string {

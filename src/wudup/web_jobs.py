@@ -18,7 +18,7 @@ from typing import Any, Protocol, cast
 from fastapi import HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 
-from . import web_file_selection_store, web_wud_api, web_wud_refresh
+from . import web_file_selection_store, web_wud_api
 from .command import CommandRunner
 from .config import UpdaterConfig
 from .db import utc_timestamp
@@ -92,6 +92,7 @@ class ApplyJobRunContext:
     pending_source_active: PendingSourceActive = "file"
     pending_source_text: str | None = None
     pending_source_label: str = ""
+    pending_source_container_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -666,6 +667,7 @@ def _handle_apply_job_run_result(
             jobs,
             apply_condition,
             job_id,
+            run_context.pending_source_container_ids,
         )
     job_status: ApplyJobStatus = "success" if status_code == 0 else "failure"
     error = _apply_job_exit_error(status_code)
@@ -723,23 +725,22 @@ def _refresh_api_pending_source_after_apply(
     jobs: dict[str, WebApplyJob],
     apply_condition: Condition,
     job_id: str,
+    container_ids: Sequence[str] = (),
 ) -> None:
     status: ApplyJobProgressStatus = "success"
     message = "WUD API pending state refreshed."
     try:
-        result = web_wud_refresh.refresh_wud_pending_source(
-            settings,
-            include_wud_metadata=True,
-            watch_all=True,
-        ).watch_result
-        if result is None:
-            raise RuntimeError("WUD API pending refresh did not return a watch result")
+        result = web_wud_api.watch_containers(settings, container_ids)
     except Exception:  # noqa: BLE001 - best-effort refresh must not fail apply.
         LOGGER.exception("WUD API pending refresh failed")
         status = "skipped"
         message = "WUD API pending refresh skipped."
     else:
-        if result.snapshot.status.state != "ready" or not result.watched:
+        if (
+            result.snapshot.status.state != "ready"
+            or not result.watched
+            or result.remaining_degraded_container_ids
+        ):
             status = "skipped"
             message = "WUD API pending refresh skipped."
             if result.snapshot.status.detail:
