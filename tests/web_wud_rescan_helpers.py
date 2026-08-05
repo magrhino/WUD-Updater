@@ -56,6 +56,32 @@ def container_payload(
     }
 
 
+def degraded_container_payload(
+    *,
+    name: str,
+    image: str,
+    error: str = "Request failed with status code 429",
+) -> dict[str, Any]:
+    payload = container_payload(name=name, image=image, update_available=False)
+    image_payload = payload["image"]
+    assert isinstance(image_payload, dict)
+    image_payload["id"] = f"sha256:{name}-local-image"
+    image_payload["digest"] = {
+        "repo": "sha256:repo-digest",
+        "watch": "sha256:watch-digest",
+    }
+    payload["result"] = None
+    payload["updateKind"] = {
+        "kind": "unknown",
+        "localValue": None,
+        "remoteValue": None,
+        "semverDiff": None,
+    }
+    payload["platform"] = {"os": "linux", "architecture": "amd64"}
+    payload["error"] = {"message": error}
+    return payload
+
+
 def install_recording_wud_api(monkeypatch, containers: list[dict[str, Any]]):
     calls: list[tuple[str, str]] = []
 

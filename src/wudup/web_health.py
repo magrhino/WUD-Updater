@@ -412,7 +412,12 @@ def _web_database_doctor_check(settings: WebSettings) -> DoctorDataCheck:
 
 def _web_wud_api_doctor_check(settings: WebSettings) -> DoctorDataCheck:
     snapshot = web_wud_api.get_snapshot(settings, include_containers=True)
-    status = "PASS" if snapshot.status.metadata_available else "WARN"
+    status = (
+        "PASS"
+        if snapshot.status.metadata_available
+        and snapshot.degraded_container_count == 0
+        else "WARN"
+    )
     if snapshot.status.state == "auth_required":
         detail = snapshot.status.detail or "WUD API metadata requires authentication"
         suggestions = (_wud_api_auth_suggestion(settings),)

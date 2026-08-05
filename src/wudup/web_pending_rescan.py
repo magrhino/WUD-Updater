@@ -128,7 +128,12 @@ def _pending_rescan_all(settings: WebSettings) -> PendingRescanResponse:
         include_containers=True,
         force=True,
     )
-    container_ids = _pending_source_container_ids(source)
+    retryable_container_ids = snapshot.retryable_degraded_container_ids
+    container_ids = tuple(
+        dict.fromkeys(
+            (*retryable_container_ids, *_pending_source_container_ids(source))
+        )
+    )
     if not snapshot.status.metadata_available or not container_ids:
         result = web_wud_api.WudApiWatchResult(
             snapshot=snapshot,
@@ -139,7 +144,10 @@ def _pending_rescan_all(settings: WebSettings) -> PendingRescanResponse:
     else:
         result = web_wud_api.watch_containers(settings, container_ids)
     return PendingRescanResponse(
-        status=_pending_rescan_status(result, skipped=()),
+        status=_pending_rescan_status(
+            result,
+            skipped=(),
+        ),
         audit_run_id=0,
         scope="all",
         requested_count=result.requested_count,
@@ -248,7 +256,10 @@ def _pending_rescan_selected(
 
     result = web_wud_api.watch_containers(settings, container_ids)
     return PendingRescanResponse(
-        status=_pending_rescan_status(result, skipped=skipped),
+        status=_pending_rescan_status(
+            result,
+            skipped=skipped,
+        ),
         audit_run_id=0,
         scope="selected",
         requested_count=len(selected),
@@ -291,7 +302,11 @@ def _pending_rescan_status(
         return "blocked"
     if not result.watched and result.watched_count == 0:
         return "blocked"
+    if not result.watched:
+        return "partial"
     if result.watched_count < result.requested_count:
+        return "partial"
+    if result.remaining_degraded_container_ids:
         return "partial"
     if skipped:
         return "partial"

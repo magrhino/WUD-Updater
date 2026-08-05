@@ -71,8 +71,10 @@ WUD_API_WATCH_TIMEOUT_SECONDS = 120.0
 WUD_API_STARTUP_RETRY_INTERVAL_SECONDS = 0.5
 WUD_API_CACHE_TTL_SECONDS = 30.0
 WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS = 5.0
+WUD_API_RATE_LIMIT_COOLDOWN_SECONDS = 60.0
 WUD_API_USER_AGENT = "wudup-webui-wud-api/1.0"
 _HEADER_NAME_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
+_HTTP_429_RE = re.compile(r"(?:^|\D)429(?:\D|$)")
 _UNSUPPORTED_REGISTRY_ERROR_PREFIX = "unsupported registry "
 LOGGER = logging.getLogger(__name__)
 
@@ -153,6 +155,7 @@ class WudApiSnapshot:
     status: WudApiStatus
     containers: tuple[WudApiContainer, ...] = ()
     hidden_update_candidates: tuple[WudApiContainer, ...] = ()
+    retryable_degraded_container_ids: tuple[str, ...] = ()
     degraded_container_count: int = 0
     retained_update_count: int = 0
     recovered_update_count: int = 0
@@ -180,6 +183,7 @@ class WudApiWatchResult:
     watched: bool
     requested_count: int = 0
     watched_count: int = 0
+    remaining_degraded_container_ids: tuple[str, ...] = ()
 
 
 WudApiConfigurationSnapshot = web_wud_config.WudApiConfigurationSnapshot
@@ -196,6 +200,7 @@ _pending_observation_cache: dict[
     Mapping[WudContainerIdentity, _PendingObservation],
 ] = {}
 _configuration_diagnostics_cache: dict[WudApiCacheKey, WudApiConfigurationSnapshot] = {}
+_watch_rate_limit_until: dict[WudApiCacheKey, float] = {}
 
 
 def configured_base_url(environ: Mapping[str, str]) -> str:
@@ -563,6 +568,11 @@ def watch_containers(
     settings: WebSettings,
     container_ids: Sequence[str],
 ) -> WudApiWatchResult:
+    container_ids = tuple(
+        dict.fromkeys(
+            container_id for container_id in container_ids if container_id
+        )
+    )
     paths = tuple(
         f"/api/containers/{urllib.parse.quote(container_id, safe='')}/watch"
         for container_id in container_ids
@@ -574,7 +584,7 @@ def watch_containers(
             requested_count=0,
             watched_count=0,
         )
-    return _watch_paths(settings, paths)
+    return _watch_paths(settings, paths, container_ids=container_ids)
 
 
 def metadata_response_by_line(
@@ -812,6 +822,7 @@ def _refresh_snapshot_serialized(
     (
         containers,
         hidden_update_candidates,
+        retryable_degraded_container_ids,
         degraded_container_count,
         retained_update_count,
         recovered_update_count,
@@ -825,9 +836,16 @@ def _refresh_snapshot_serialized(
     )
     detail = f"{len(containers)} WUD update metadata item(s) available"
     if degraded_container_count:
+        unresolved_count = max(
+            0,
+            degraded_container_count
+            - retained_update_count
+            - recovered_update_count,
+        )
         detail = (
             f"{detail}; {degraded_container_count} container observation(s) degraded; "
-            f"{retained_update_count} last-known-good update(s) retained"
+            f"{retained_update_count} last-known-good update(s) retained; "
+            f"{unresolved_count} unresolved"
         )
     if recovered_update_count:
         detail = (
@@ -848,6 +866,7 @@ def _refresh_snapshot_serialized(
         metadata_checked=True,
         containers=containers,
         hidden_update_candidates=hidden_update_candidates,
+        retryable_degraded_container_ids=retryable_degraded_container_ids,
         degraded_container_count=degraded_container_count,
         retained_update_count=retained_update_count,
         recovered_update_count=recovered_update_count,
@@ -911,6 +930,8 @@ def _refresh_configuration_diagnostics(
 def _watch_paths(
     settings: WebSettings,
     paths: Sequence[str],
+    *,
+    container_ids: Sequence[str] = (),
 ) -> WudApiWatchResult:
     checked_at = _utc_timestamp()
     checked_monotonic = time.monotonic()
@@ -933,6 +954,30 @@ def _watch_paths(
             watched=False,
             requested_count=len(paths),
             watched_count=0,
+            remaining_degraded_container_ids=(
+                _remaining_degraded_container_ids(snapshot, container_ids)
+            ),
+        )
+
+    cache_key = _cache_key(settings, base_url)
+    cooldown_remaining = _watch_rate_limit_cooldown_remaining(cache_key)
+    if cooldown_remaining > 0:
+        snapshot = get_snapshot(settings, include_containers=True, force=True)
+        detail = (
+            f"WUD API registry retry paused after HTTP 429; try again in "
+            f"{math.ceil(cooldown_remaining)} second(s)"
+        )
+        if snapshot.status.detail:
+            detail = f"{snapshot.status.detail}; {detail}"
+        snapshot = replace(
+            snapshot,
+            status=snapshot.status.model_copy(update={"detail": detail}),
+        )
+        return WudApiWatchResult(
+            snapshot=snapshot,
+            watched=False,
+            requested_count=len(paths),
+            watched_count=0,
         )
 
     preflight = get_snapshot(settings, include_containers=False, force=True)
@@ -947,12 +992,28 @@ def _watch_paths(
     watched_count = 0
     for path in paths:
         try:
-            _post_json(
+            payload = _post_json(
                 _join_url(normalized_base_url, path),
                 settings.wud_api_client,
                 timeout=WUD_API_WATCH_TIMEOUT_SECONDS,
             )
             watched_count += 1
+            if _watch_response_is_rate_limited(payload, settings):
+                _start_watch_rate_limit_cooldown(cache_key)
+                snapshot = get_snapshot(
+                    settings,
+                    include_containers=True,
+                    force=True,
+                )
+                return WudApiWatchResult(
+                    snapshot=snapshot,
+                    watched=False,
+                    requested_count=len(paths),
+                    watched_count=watched_count,
+                    remaining_degraded_container_ids=(
+                        _remaining_degraded_container_ids(snapshot, container_ids)
+                    ),
+                )
         except urllib.error.HTTPError as exc:
             snapshot = _watch_http_error_snapshot(
                 settings,
@@ -988,12 +1049,58 @@ def _watch_paths(
                 watched_count=watched_count,
             )
 
+    snapshot = get_snapshot(settings, include_containers=True, force=True)
     return WudApiWatchResult(
-        snapshot=get_snapshot(settings, include_containers=True, force=True),
+        snapshot=snapshot,
         watched=True,
         requested_count=len(paths),
         watched_count=watched_count,
+        remaining_degraded_container_ids=_remaining_degraded_container_ids(
+            snapshot,
+            container_ids,
+        ),
     )
+
+
+def _remaining_degraded_container_ids(
+    snapshot: WudApiSnapshot,
+    requested_container_ids: Sequence[str],
+) -> tuple[str, ...]:
+    degraded = set(snapshot.retryable_degraded_container_ids)
+    return tuple(
+        container_id
+        for container_id in requested_container_ids
+        if container_id in degraded
+    )
+
+
+def _watch_response_is_rate_limited(
+    payload: object,
+    settings: WebSettings,
+) -> bool:
+    observation = _parse_container_observation(payload, settings)
+    return bool(
+        observation is not None
+        and observation.degraded
+        and _HTTP_429_RE.search(observation.container.error)
+    )
+
+
+def _watch_rate_limit_cooldown_remaining(cache_key: WudApiCacheKey) -> float:
+    now = time.monotonic()
+    with _cache_lock:
+        retry_at = _watch_rate_limit_until.get(cache_key, 0.0)
+        if retry_at <= now:
+            _watch_rate_limit_until.pop(cache_key, None)
+            return 0.0
+    return retry_at - now
+
+
+def _start_watch_rate_limit_cooldown(cache_key: WudApiCacheKey) -> None:
+    with _cache_lock:
+        _watch_rate_limit_until[cache_key] = (
+            time.monotonic() + WUD_API_RATE_LIMIT_COOLDOWN_SECONDS
+        )
 
 
 def _watch_http_error_snapshot(
@@ -1080,6 +1187,7 @@ def _snapshot(
     metadata_checked: bool = False,
     containers: Sequence[WudApiContainer] = (),
     hidden_update_candidates: Sequence[WudApiContainer] = (),
+    retryable_degraded_container_ids: Sequence[str] = (),
     degraded_container_count: int = 0,
     retained_update_count: int = 0,
     recovered_update_count: int = 0,
@@ -1094,6 +1202,7 @@ def _snapshot(
         ),
         containers=tuple(containers),
         hidden_update_candidates=tuple(hidden_update_candidates),
+        retryable_degraded_container_ids=tuple(retryable_degraded_container_ids),
         degraded_container_count=degraded_container_count,
         retained_update_count=retained_update_count,
         recovered_update_count=recovered_update_count,
@@ -1277,10 +1386,10 @@ def _retain_previous_observation(
     containers: list[WudApiContainer],
     pending_observations: dict[WudContainerIdentity, _PendingObservation],
 ) -> bool:
-    identity = _container_identity(container)
-    previous_observation = previous.get(identity) if identity is not None else None
-    if previous_observation is None:
+    match = _previous_observation_for_container(container, previous)
+    if match is None:
         return False
+    identity, previous_observation = match
 
     retained = previous_observation.container
     retained = replace(
@@ -1296,6 +1405,27 @@ def _retain_previous_observation(
         observed_at=previous_observation.observed_at,
     )
     return True
+
+
+def _previous_observation_for_container(
+    container: WudApiContainer,
+    previous: Mapping[WudContainerIdentity, _PendingObservation],
+) -> tuple[WudContainerIdentity, _PendingObservation] | None:
+    identity = _container_identity(container)
+    if identity is None:
+        return None
+    exact = previous.get(identity)
+    if exact is not None:
+        return identity, exact
+    if container.local_digest or not container.local_image_id:
+        return None
+    matches = [
+        (previous_identity, observation)
+        for previous_identity, observation in previous.items()
+        if previous_identity[:5] == identity[:5]
+        and previous_identity[6] == identity[6]
+    ]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _pending_file_recovery_targets(settings: WebSettings) -> tuple[WudTarget, ...]:
@@ -1385,6 +1515,7 @@ def _reconcile_container_observations(
 ) -> tuple[
     tuple[WudApiContainer, ...],
     tuple[WudApiContainer, ...],
+    tuple[str, ...],
     int,
     int,
     int,
@@ -1393,6 +1524,8 @@ def _reconcile_container_observations(
 ]:
     containers: list[WudApiContainer] = []
     hidden_update_candidates: list[WudApiContainer] = []
+    retryable_degraded_container_ids: list[str] = []
+    seen_retryable_container_ids: set[str] = set()
     pending_observations: dict[WudContainerIdentity, _PendingObservation] = {}
     degraded_container_count = 0
     retained_update_count = 0
@@ -1407,6 +1540,13 @@ def _reconcile_container_observations(
             continue
 
         container = observation.container
+        if (
+            observation.degraded
+            and container.id
+            and container.id not in seen_retryable_container_ids
+        ):
+            seen_retryable_container_ids.add(container.id)
+            retryable_degraded_container_ids.append(container.id)
         if observation.unsupported or observation.degraded:
             (
                 recovery_targets,
@@ -1444,6 +1584,7 @@ def _reconcile_container_observations(
     return (
         tuple(containers),
         tuple(hidden_update_candidates),
+        tuple(retryable_degraded_container_ids),
         degraded_container_count,
         retained_update_count,
         recovered_update_count,

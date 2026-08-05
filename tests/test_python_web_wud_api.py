@@ -117,6 +117,37 @@ def _container_payload(
     }
 
 
+def _production_degraded_payload(
+    *,
+    name: str = "bazarr",
+    image: str = "ghcr.io/linuxserver/bazarr",
+    image_id: str = "sha256:stable-image",
+    error: str = "Request failed with status code 429",
+) -> dict[str, Any]:
+    payload = _container_payload(
+        name=name,
+        image=image,
+        update_available=False,
+        platform={"os": "linux", "architecture": "amd64"},
+    )
+    image_payload = payload["image"]
+    assert isinstance(image_payload, dict)
+    image_payload["id"] = image_id
+    image_payload["digest"] = {
+        "repo": "sha256:repo-digest",
+        "watch": "sha256:watch-digest",
+    }
+    payload["result"] = None
+    payload["updateKind"] = {
+        "kind": "unknown",
+        "localValue": None,
+        "remoteValue": None,
+        "semverDiff": None,
+    }
+    payload["error"] = {"message": error}
+    return payload
+
+
 def test_wud_api_persisted_container_round_trips_without_transient_fields() -> None:
     container = web_wud_api.WudApiContainer(
         id="docker.local.app",
@@ -199,6 +230,134 @@ def test_wud_api_snapshot_reads_update_metadata(tmp_path: Path, monkeypatch) -> 
     assert container.update_kind == "tag"
     assert container.semver_diff == "minor"
     assert snapshot.hidden_update_candidates == ()
+
+
+def test_wud_api_snapshot_tracks_only_retryable_degraded_container_ids(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    unsupported = _production_degraded_payload(
+        name="socket-proxy",
+        image="lscr.io/linuxserver/socket-proxy",
+        error="Unsupported Registry unknown",
+    )
+    _install_wud_api(
+        monkeypatch,
+        containers=[
+            _container_payload(name="app"),
+            _production_degraded_payload(),
+            unsupported,
+        ],
+    )
+
+    snapshot = web_wud_api.get_snapshot(
+        _settings(
+            tmp_path,
+            "https://wud.retryable-degraded.test:3000",
+            {"WUDUP_LEGACY_SCRIPTS": "false"},
+        ),
+        include_containers=True,
+        force=True,
+    )
+
+    assert snapshot.retryable_degraded_container_ids == (
+        "docker.local.bazarr",
+    )
+    assert snapshot.degraded_container_count == 1
+    assert snapshot.retained_update_count == 0
+    assert snapshot.recovered_update_count == 0
+    assert "1 unresolved" in snapshot.status.detail
+    assert "1 unsupported container observation(s) ignored" in snapshot.status.detail
+
+
+def test_wud_api_retains_unique_last_good_when_current_digest_is_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    healthy = _container_payload(
+        name="bazarr",
+        image="ghcr.io/linuxserver/bazarr",
+        platform={"os": "linux", "architecture": "amd64"},
+    )
+    healthy_image = healthy["image"]
+    assert isinstance(healthy_image, dict)
+    healthy_image["id"] = "sha256:stable-image"
+    containers = [healthy]
+    _install_wud_api(monkeypatch, containers=containers)
+    settings = _settings(
+        tmp_path,
+        "https://wud.missing-current-digest.test:3000",
+        {"WUDUP_LEGACY_SCRIPTS": "false"},
+    )
+
+    web_wud_api.get_snapshot(settings, include_containers=True, force=True)
+    containers[:] = [_production_degraded_payload()]
+    degraded = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+
+    assert degraded.retained_update_count == 1
+    assert degraded.containers[0].remote_tag == "1.1.0"
+    assert degraded.retryable_degraded_container_ids == (
+        "docker.local.bazarr",
+    )
+    cache_key = web_wud_api._cache_key(settings, settings.wud_api_base_url)
+    cached_identities = tuple(web_wud_api._pending_observation_cache[cache_key])
+    assert len(cached_identities) == 1
+    assert cached_identities[0][5] == "sha256:local"
+
+
+@pytest.mark.parametrize(
+    ("case", "image_id", "digest"),
+    [
+        ("image", "sha256:replacement-image", None),
+        (
+            "digest",
+            "sha256:stable-image",
+            {"value": "sha256:replacement-digest"},
+        ),
+    ],
+)
+def test_wud_api_does_not_retain_last_good_across_changed_local_identity(
+    tmp_path: Path,
+    monkeypatch,
+    case: str,
+    image_id: str,
+    digest: object,
+) -> None:
+    healthy = _container_payload(
+        name="bazarr",
+        image="ghcr.io/linuxserver/bazarr",
+        platform={"os": "linux", "architecture": "amd64"},
+    )
+    healthy_image = healthy["image"]
+    assert isinstance(healthy_image, dict)
+    healthy_image["id"] = "sha256:stable-image"
+    containers = [healthy]
+    _install_wud_api(monkeypatch, containers=containers)
+    settings = _settings(
+        tmp_path,
+        f"https://wud.changed-local-identity-{case}.test:3000",
+        {"WUDUP_LEGACY_SCRIPTS": "false"},
+    )
+    web_wud_api.get_snapshot(settings, include_containers=True, force=True)
+
+    current = _production_degraded_payload(image_id=image_id)
+    current_image = current["image"]
+    assert isinstance(current_image, dict)
+    if digest is not None:
+        current_image["digest"] = digest
+    containers[:] = [current]
+    degraded = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+
+    assert degraded.containers == ()
+    assert degraded.retained_update_count == 0
 
 
 def test_wud_api_forced_refreshes_serialize_last_good_reconciliation(
@@ -649,6 +808,7 @@ def test_wud_api_recovers_cold_start_update_from_matching_pending_file(
         "1 WUD update metadata item(s) available; "
         "1 container observation(s) degraded; "
         "0 last-known-good update(s) retained; "
+        "0 unresolved; "
         "1 pending-file update(s) recovered"
     )
 

@@ -141,7 +141,7 @@ def test_pending_selected_rescan_targets_cold_start_recovered_container(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "success"
+    assert body["status"] == "partial"
     assert body["requested_count"] == 1
     assert body["watched_count"] == 1
     assert [path for method, path in calls if method == "POST"] == [

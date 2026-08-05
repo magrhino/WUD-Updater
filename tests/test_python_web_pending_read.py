@@ -301,7 +301,8 @@ def test_pending_endpoint_preserves_updates_across_degraded_wud_rows(
     assert degraded_body["source"]["detail"] == (
         "17 WUD update metadata item(s) available; "
         "9 container observation(s) degraded; "
-        "9 last-known-good update(s) retained"
+        "9 last-known-good update(s) retained; "
+        "0 unresolved"
     )
     retained = [
         item
