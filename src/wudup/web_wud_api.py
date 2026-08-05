@@ -1313,38 +1313,39 @@ def _recover_pending_file_observation(
     targets: Sequence[WudTarget],
 ) -> WudApiContainer | None:
     for target in targets:
-        if not (target.desired_tag or target.digest):
-            continue
-        if not _recovery_container_matches_target(container, target):
-            continue
-        if target.platform is not None and target.platform != container.platform:
-            continue
-        if target.desired_tag and target.desired_tag == container.local_tag:
-            continue
-        if (
-            not target.desired_tag
-            and target.digest
-            and target.digest == normalize_digest(container.local_digest)
-        ):
+        if not _pending_file_target_is_recoverable(container, target):
             continue
 
-        update_kind = container.update_kind
-        if target.desired_tag:
-            update_kind = "tag"
-        elif target.digest:
-            update_kind = "digest"
-        return replace(
-            container,
-            remote_tag=target.desired_tag,
-            remote_digest=target.digest,
-            update_kind=update_kind,
-            error=(
-                container.error
-                or "WUD update result is unavailable; pending update recovered "
-                "from WUD_OUT_FILE"
+        return cast(
+            WudApiContainer,
+            replace(
+                container,
+                remote_tag=target.desired_tag,
+                remote_digest=target.digest,
+                update_kind="tag" if target.desired_tag else "digest",
+                error=(
+                    container.error
+                    or "WUD update result is unavailable; pending update recovered "
+                    "from WUD_OUT_FILE"
+                ),
             ),
         )
     return None
+
+
+def _pending_file_target_is_recoverable(
+    container: WudApiContainer,
+    target: WudTarget,
+) -> bool:
+    if not (target.desired_tag or target.digest):
+        return False
+    if not _recovery_container_matches_target(container, target):
+        return False
+    if target.platform is not None and target.platform != container.platform:
+        return False
+    if target.desired_tag:
+        return target.desired_tag != container.local_tag
+    return target.digest != normalize_digest(container.local_digest)
 
 
 def _reconcile_container_observations(
