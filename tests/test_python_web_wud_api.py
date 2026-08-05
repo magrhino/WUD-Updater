@@ -542,7 +542,7 @@ def test_wud_api_checkpoint_waits_for_active_refresh(
     assert len(_persisted_observations(settings)) == 1
 
 
-def test_wud_api_ignores_unrelated_unsupported_registry_observation(
+def test_wud_api_ignores_unsupported_registry_observation_with_pending_target(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -558,9 +558,14 @@ def test_wud_api_ignores_unrelated_unsupported_registry_observation(
         monkeypatch,
         containers=[_container_payload(name="app"), unsupported],
     )
+    settings = _settings(tmp_path, "https://wud.unsupported.test:3000")
+    settings.config.wud_out_file.write_text(
+        "linuxserver/socket-proxy:1.0.0 tag=1.1.0\n",
+        encoding="utf-8",
+    )
 
     snapshot = web_wud_api.get_snapshot(
-        _settings(tmp_path, "https://wud.unsupported.test:3000"),
+        settings,
         include_containers=True,
         force=True,
     )
@@ -569,6 +574,7 @@ def test_wud_api_ignores_unrelated_unsupported_registry_observation(
     assert snapshot.containers[0].name == "app"
     assert snapshot.degraded_container_count == 0
     assert snapshot.retained_update_count == 0
+    assert snapshot.recovered_update_count == 0
     assert snapshot.status.detail == (
         "1 WUD update metadata item(s) available; "
         "1 unsupported container observation(s) ignored"

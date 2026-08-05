@@ -1365,14 +1365,14 @@ def _reconcile_degraded_observation(
     ):
         return recovery_targets, 1, 1, 0, 0
 
+    if observation.unsupported:
+        return recovery_targets, 0, 0, 0, 1
     if recovery_targets is None:
         recovery_targets = _pending_file_recovery_targets(settings)
     recovered = _recover_pending_file_observation(container, recovery_targets)
     if recovered is not None:
         containers.append(recovered)
         return recovery_targets, 1, 0, 1, 0
-    if observation.unsupported:
-        return recovery_targets, 0, 0, 0, 1
     return recovery_targets, 1, 0, 0, 0
 
 
