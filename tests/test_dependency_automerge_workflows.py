@@ -53,6 +53,16 @@ class DependencyAutomergeWorkflowTests(unittest.TestCase):
 
         self.assertIn("workflow_run", workflow["on"])
         self.assertNotIn("pull_request_target", workflow["on"])
+        self.assertEqual(workflow["permissions"], {})
+        self.assertEqual(
+            workflow["jobs"]["merge-candidate"]["permissions"],
+            {
+                "actions": "read",
+                "contents": "read",
+                "pull-requests": "read",
+            },
+        )
+        self.assertNotIn("permissions", workflow["jobs"]["rebase-dependabot"])
         self.assertNotIn("actions/checkout@", text)
         self.assertNotIn("gh pr review", text)
         self.assertNotIn("--auto", text)
