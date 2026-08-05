@@ -12,5 +12,13 @@
   "minimumReleaseAge": "7 days",
   "prCreation": "not-pending",
   "internalChecksFilter": "strict",
+  "packageRules": [
+    {
+      "description": "Automerge non-major Docker updates after CI",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true,
+      "addLabels": ["automerge"]
+    }
+  ],
   "pinDigests": true
 }

@@ -1,0 +1,97 @@
+name: dependency auto-merge
+
+on:
+  push:
+    branches:
+      - main
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - labeled
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  enable-automerge:
+    name: enable auto-merge
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      ${{
+        github.event_name == 'pull_request_target' &&
+        github.event.pull_request.draft == false &&
+        (
+          github.event.pull_request.user.login == 'dependabot[bot]' ||
+          github.event.pull_request.user.login == 'renovate[bot]'
+        )
+      }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Read Dependabot metadata
+        id: dependabot
+        if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      - name: Approve and enable auto-merge
+        if: >-
+          ${{
+            (
+              github.event.pull_request.user.login == 'dependabot[bot]' &&
+              (
+                steps.dependabot.outputs.update-type == 'version-update:semver-minor' ||
+                steps.dependabot.outputs.update-type == 'version-update:semver-patch'
+              )
+            ) ||
+            (
+              github.event.pull_request.user.login == 'renovate[bot]' &&
+              contains(github.event.pull_request.labels.*.name, 'automerge')
+            )
+          }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh pr review --approve "$PR_URL"
+          gh pr merge --auto --squash "$PR_URL"
+
+  rebase-dependabot:
+    name: rebase Dependabot PRs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ github.event_name == 'push' }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Rebase outdated Dependabot PRs
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh pr list \
+            --author 'dependabot[bot]' \
+            --base main \
+            --json mergeStateStatus,number \
+            --jq '.[] | select(.mergeStateStatus == "BEHIND") | .number' |
+          while read -r pr_number; do
+            gh pr comment "$pr_number" --body '@dependabot rebase'
+          done
