@@ -2,6 +2,8 @@
 services:
   wud:
     image: getwud/wud:latest
+    environment:
+      WUD_REGISTRY_HUB_PUBLIC_WATCHDIGEST: "true"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - wud-scripts:/wud:ro
