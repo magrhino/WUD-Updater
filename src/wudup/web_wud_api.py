@@ -1348,6 +1348,34 @@ def _pending_file_target_is_recoverable(
     return target.digest != normalize_digest(container.local_digest)
 
 
+def _reconcile_degraded_observation(
+    observation: _WudContainerObservation,
+    settings: WebSettings,
+    previous: Mapping[WudContainerIdentity, _PendingObservation],
+    containers: list[WudApiContainer],
+    pending_observations: dict[WudContainerIdentity, _PendingObservation],
+    recovery_targets: tuple[WudTarget, ...] | None,
+) -> tuple[tuple[WudTarget, ...] | None, int, int, int, int]:
+    container = observation.container
+    if _retain_previous_observation(
+        container,
+        previous,
+        containers,
+        pending_observations,
+    ):
+        return recovery_targets, 1, 1, 0, 0
+
+    if recovery_targets is None:
+        recovery_targets = _pending_file_recovery_targets(settings)
+    recovered = _recover_pending_file_observation(container, recovery_targets)
+    if recovered is not None:
+        containers.append(recovered)
+        return recovery_targets, 1, 0, 1, 0
+    if observation.unsupported:
+        return recovery_targets, 0, 0, 0, 1
+    return recovery_targets, 1, 0, 0, 0
+
+
 def _reconcile_container_observations(
     payload: Sequence[object],
     settings: WebSettings,
@@ -1380,30 +1408,24 @@ def _reconcile_container_observations(
 
         container = observation.container
         if observation.unsupported or observation.degraded:
-            retained = _retain_previous_observation(
-                container,
+            (
+                recovery_targets,
+                degraded_delta,
+                retained_delta,
+                recovered_delta,
+                unsupported_delta,
+            ) = _reconcile_degraded_observation(
+                observation,
+                settings,
                 previous,
                 containers,
                 pending_observations,
+                recovery_targets,
             )
-            if retained:
-                degraded_container_count += 1
-                retained_update_count += 1
-            else:
-                if recovery_targets is None:
-                    recovery_targets = _pending_file_recovery_targets(settings)
-                recovered = _recover_pending_file_observation(
-                    container,
-                    recovery_targets,
-                )
-                if recovered is not None:
-                    containers.append(recovered)
-                    degraded_container_count += 1
-                    recovered_update_count += 1
-                elif observation.unsupported:
-                    unsupported_container_count += 1
-                else:
-                    degraded_container_count += 1
+            degraded_container_count += degraded_delta
+            retained_update_count += retained_delta
+            recovered_update_count += recovered_delta
+            unsupported_container_count += unsupported_delta
             continue
 
         if observation.update_available:
