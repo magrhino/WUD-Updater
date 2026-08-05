@@ -553,6 +553,9 @@ function retryPendingLoadTracked(): Promise<void> {
 }
 
 async function refreshAfterTerminalApplyJob(): Promise<void> {
+  if (pendingLoadRetry) {
+    await pendingLoadRetry;
+  }
   await retryPendingLoadTracked();
 }
 

@@ -325,15 +325,19 @@ describe("pending view apply jobs", () => {
     expect(loadReleaseNotes).toHaveBeenCalledTimes(1);
   });
 
-  it("coalesces the pending reload for terminal remembered apply jobs", async () => {
+  it("reloads pending state after terminal remembered apply jobs", async () => {
     window.sessionStorage.setItem("applyJobId", "job-terminal");
     const { pinia, settings, updates, runs } = setupStores(true);
     const apiPending = apiBackedPendingResponse();
     let finishInitialPendingLoad: () => void = () => undefined;
+    let initialPendingLoad = true;
     const loadPending = vi.spyOn(updates, "loadPending").mockImplementation(async () => {
-      await new Promise<void>((resolve) => {
-        finishInitialPendingLoad = resolve;
-      });
+      if (initialPendingLoad) {
+        initialPendingLoad = false;
+        await new Promise<void>((resolve) => {
+          finishInitialPendingLoad = resolve;
+        });
+      }
       updates.pending = apiPending;
     });
     vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
@@ -363,7 +367,7 @@ describe("pending view apply jobs", () => {
     finishInitialPendingLoad();
     await flushPromises();
 
-    expect(loadPending).toHaveBeenCalledTimes(1);
+    expect(loadPending).toHaveBeenCalledTimes(2);
     expect(rescanPending).not.toHaveBeenCalled();
   });
 
