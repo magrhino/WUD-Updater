@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.56.8](https://github.com/magrhino/wudup/compare/v0.56.7...v0.56.8) (2026-08-05)
+
+
+### Bug Fixes
+
+* **wud:** heal api-backed pending state after updates ([#577](https://github.com/magrhino/wudup/issues/577)) ([8f745c4](https://github.com/magrhino/wudup/commit/8f745c4d796c2fb8c449d47c9469b59276dda0e3))
+
 ## [0.56.7](https://github.com/magrhino/wudup/compare/v0.56.6...v0.56.7) (2026-08-05)
 
 
