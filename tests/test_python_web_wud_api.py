@@ -542,7 +542,7 @@ def test_wud_api_checkpoint_waits_for_active_refresh(
     assert len(_persisted_observations(settings)) == 1
 
 
-def test_wud_api_ignores_unrelated_unsupported_registry_observation(
+def test_wud_api_ignores_unsupported_registry_observation_with_pending_target(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -558,9 +558,14 @@ def test_wud_api_ignores_unrelated_unsupported_registry_observation(
         monkeypatch,
         containers=[_container_payload(name="app"), unsupported],
     )
+    settings = _settings(tmp_path, "https://wud.unsupported.test:3000")
+    settings.config.wud_out_file.write_text(
+        "linuxserver/socket-proxy:1.0.0 tag=1.1.0\n",
+        encoding="utf-8",
+    )
 
     snapshot = web_wud_api.get_snapshot(
-        _settings(tmp_path, "https://wud.unsupported.test:3000"),
+        settings,
         include_containers=True,
         force=True,
     )
@@ -569,6 +574,7 @@ def test_wud_api_ignores_unrelated_unsupported_registry_observation(
     assert snapshot.containers[0].name == "app"
     assert snapshot.degraded_container_count == 0
     assert snapshot.retained_update_count == 0
+    assert snapshot.recovered_update_count == 0
     assert snapshot.status.detail == (
         "1 WUD update metadata item(s) available; "
         "1 unsupported container observation(s) ignored"
@@ -605,6 +611,173 @@ def test_wud_api_retains_prior_update_when_registry_becomes_unsupported(
     assert degraded.containers[0].remote_tag == "1.1.0"
     assert degraded.degraded_container_count == 1
     assert degraded.retained_update_count == 1
+
+
+def test_wud_api_recovers_cold_start_update_from_matching_pending_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    target_digest = f"sha256:{'a' * 64}"
+    degraded = _container_payload(name="app", update_available=False)
+    degraded["result"] = None
+    degraded["error"] = {"message": "registry lookup failed"}
+    _install_wud_api(monkeypatch, containers=[degraded])
+    settings = _settings(tmp_path, "https://wud.pending-recovery.test:3000")
+    settings.config.wud_out_file.write_text(
+        "registry.example/acme/app:1.0.0 "
+        f"tag=1.1.0 sha256={target_digest}\n",
+        encoding="utf-8",
+    )
+
+    snapshot = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+
+    assert len(snapshot.containers) == 1
+    recovered = snapshot.containers[0]
+    assert recovered.id == "docker.local.app"
+    assert recovered.remote_tag == "1.1.0"
+    assert recovered.remote_digest == target_digest
+    assert recovered.update_kind == "tag"
+    assert recovered.error == "registry lookup failed"
+    assert snapshot.degraded_container_count == 1
+    assert snapshot.retained_update_count == 0
+    assert snapshot.recovered_update_count == 1
+    assert snapshot.status.detail == (
+        "1 WUD update metadata item(s) available; "
+        "1 container observation(s) degraded; "
+        "0 last-known-good update(s) retained; "
+        "1 pending-file update(s) recovered"
+    )
+
+
+def test_wud_api_pending_file_recovery_requires_matching_registry(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    degraded = _container_payload(
+        name="app",
+        image="registry-b.example/acme/app",
+        update_available=False,
+    )
+    degraded["result"] = None
+    degraded["error"] = {"message": "registry lookup failed"}
+    _install_wud_api(monkeypatch, containers=[degraded])
+    settings = _settings(tmp_path, "https://wud.pending-recovery-registry.test:3000")
+    settings.config.wud_out_file.write_text(
+        "registry-a.example/acme/app:1.0.0 tag=1.1.0\n",
+        encoding="utf-8",
+    )
+
+    snapshot = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+
+    assert snapshot.containers == ()
+    assert snapshot.recovered_update_count == 0
+
+
+def test_wud_api_pending_file_recovery_treats_docker_hub_alias_as_default(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    degraded = _container_payload(
+        name="app",
+        image="acme/app",
+        update_available=False,
+    )
+    degraded["result"] = None
+    degraded["error"] = {"message": "registry lookup failed"}
+    _install_wud_api(monkeypatch, containers=[degraded])
+    settings = _settings(tmp_path, "https://wud.pending-recovery-docker-hub.test:3000")
+    settings.config.wud_out_file.write_text(
+        "docker.io/acme/app:1.0.0 tag=1.1.0\n",
+        encoding="utf-8",
+    )
+
+    snapshot = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+
+    assert len(snapshot.containers) == 1
+    assert snapshot.containers[0].remote_tag == "1.1.0"
+    assert snapshot.recovered_update_count == 1
+
+
+def test_wud_api_pending_file_recovery_ignores_entry_without_update_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    degraded = _container_payload(name="app", update_available=False)
+    degraded["result"] = None
+    degraded["error"] = {"message": "registry lookup failed"}
+    _install_wud_api(monkeypatch, containers=[degraded])
+    settings = _settings(tmp_path, "https://wud.pending-recovery-bare.test:3000")
+    settings.config.wud_out_file.write_text(
+        "registry.example/acme/app:1.0.0\n",
+        encoding="utf-8",
+    )
+
+    snapshot = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+
+    assert snapshot.containers == ()
+    assert snapshot.recovered_update_count == 0
+
+
+def test_wud_api_does_not_recover_applied_or_legacy_disabled_pending_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    degraded = _container_payload(name="app", update_available=False)
+    degraded["result"] = None
+    degraded["error"] = {"message": "registry lookup failed"}
+    _install_wud_api(monkeypatch, containers=[degraded])
+
+    applied_settings = _settings(
+        tmp_path,
+        "https://wud.pending-recovery-applied.test:3000",
+    )
+    applied_settings.config.wud_out_file.write_text(
+        "registry.example/acme/app:1.0.0 tag=1.0.0\n",
+        encoding="utf-8",
+    )
+    applied = web_wud_api.get_snapshot(
+        applied_settings,
+        include_containers=True,
+        force=True,
+    )
+
+    disabled_root = tmp_path / "disabled"
+    disabled_root.mkdir()
+    disabled_settings = _settings(
+        disabled_root,
+        "https://wud.pending-recovery-disabled.test:3000",
+        {"WUDUP_LEGACY_SCRIPTS": "false"},
+    )
+    disabled_settings.config.wud_out_file.write_text(
+        "registry.example/acme/app:1.0.0 tag=1.1.0\n",
+        encoding="utf-8",
+    )
+    disabled = web_wud_api.get_snapshot(
+        disabled_settings,
+        include_containers=True,
+        force=True,
+    )
+
+    assert applied.containers == ()
+    assert applied.recovered_update_count == 0
+    assert disabled.containers == ()
+    assert disabled.recovered_update_count == 0
 
 
 def test_wud_api_snapshot_reads_hidden_update_candidates_from_update_kind_delta(
