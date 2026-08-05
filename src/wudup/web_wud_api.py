@@ -963,21 +963,11 @@ def _watch_paths(
         )
 
     cache_key = _cache_key(settings, base_url)
-    watch_items: list[tuple[str, str]] = []
-    cooldown_remaining = 0.0
-    for index, path in enumerate(paths):
-        container_id = container_ids[index] if index < len(container_ids) else ""
-        item_cooldown_remaining = _watch_rate_limit_cooldown_remaining(
-            cache_key,
-            container_id,
-        )
-        if item_cooldown_remaining > 0:
-            cooldown_remaining = max(
-                cooldown_remaining,
-                item_cooldown_remaining,
-            )
-            continue
-        watch_items.append((path, container_id))
+    watch_items, cooldown_remaining = _watch_items_after_cooldown(
+        cache_key,
+        paths,
+        container_ids,
+    )
 
     if not watch_items:
         snapshot = get_snapshot(settings, include_containers=True, force=True)
@@ -1088,6 +1078,29 @@ def _watch_paths(
             container_ids,
         ),
     )
+
+
+def _watch_items_after_cooldown(
+    cache_key: WudApiCacheKey,
+    paths: Sequence[str],
+    container_ids: Sequence[str],
+) -> tuple[list[tuple[str, str]], float]:
+    watch_items: list[tuple[str, str]] = []
+    cooldown_remaining = 0.0
+    for index, path in enumerate(paths):
+        container_id = container_ids[index] if index < len(container_ids) else ""
+        item_cooldown_remaining = _watch_rate_limit_cooldown_remaining(
+            cache_key,
+            container_id,
+        )
+        if item_cooldown_remaining > 0:
+            cooldown_remaining = max(
+                cooldown_remaining,
+                item_cooldown_remaining,
+            )
+            continue
+        watch_items.append((path, container_id))
+    return watch_items, cooldown_remaining
 
 
 def _remaining_degraded_container_ids(

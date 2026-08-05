@@ -1162,6 +1162,7 @@ def test_wud_api_watch_cooldown_prunes_expired_identities(monkeypatch) -> None:
     cache_key = ("https://wud.cooldown-prune.test:3000", "fingerprint")
     old_key = (cache_key, "docker.local.old")
     new_key = (cache_key, "docker.local.new")
+    monkeypatch.setattr(web_wud_api, "_watch_rate_limit_until", {})
     monkeypatch.setattr(web_wud_api.time, "monotonic", lambda: clock[0])
 
     web_wud_api._start_watch_rate_limit_cooldown(cache_key, old_key[1])

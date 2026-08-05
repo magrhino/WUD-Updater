@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import urllib.parse
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -82,7 +83,12 @@ def degraded_container_payload(
     return payload
 
 
-def install_recording_wud_api(monkeypatch, containers: list[dict[str, Any]]):
+def install_recording_wud_api(
+    monkeypatch,
+    containers: list[dict[str, Any]],
+    *,
+    post_container: Callable[[str], object] | None = None,
+):
     calls: list[tuple[str, str]] = []
 
     def fake_request_json(url: str, _client_config=None) -> object:
@@ -97,6 +103,8 @@ def install_recording_wud_api(monkeypatch, containers: list[dict[str, Any]]):
     def fake_post_json(url: str, _client_config=None, **_kwargs) -> object:
         path = urllib.parse.urlsplit(url).path
         calls.append(("POST", path))
+        if post_container is not None:
+            return post_container(path)
         return {"status": "ok"}
 
     monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)

@@ -20,32 +20,6 @@ from tests.web_wud_rescan_helpers import (
 )
 
 
-def _install_stateful_rescan_api(
-    monkeypatch,
-    containers,
-    post_container,
-) -> list[tuple[str, str]]:
-    calls: list[tuple[str, str]] = []
-
-    def request_json(url: str, _client_config=None) -> object:
-        path = urllib.parse.urlsplit(url).path
-        calls.append(("GET", path))
-        if path == "/health":
-            return {"status": "ok"}
-        if path == "/api/containers":
-            return containers
-        raise AssertionError(f"unexpected WUD API URL: {url}")
-
-    def post_json(url: str, _client_config=None, **_kwargs) -> object:
-        path = urllib.parse.urlsplit(url).path
-        calls.append(("POST", path))
-        return post_container(path)
-
-    monkeypatch.setattr(web_wud_api, "_request_json", request_json)
-    monkeypatch.setattr(web_wud_api, "_post_json", post_json)
-    return calls
-
-
 def test_pending_rescan_endpoint_enforces_auth_csrf_and_read_only(
     tmp_path: Path,
     monkeypatch,
@@ -163,10 +137,10 @@ def test_pending_all_rescan_scopes_embedded_429_cooldown_to_container(
         error="Unsupported Registry unknown",
     )
     containers = [pending, degraded, unsupported]
-    calls = _install_stateful_rescan_api(
+    calls = install_recording_wud_api(
         monkeypatch,
         containers,
-        lambda path: degraded
+        post_container=lambda path: degraded
         if path == "/api/containers/docker.local.bazarr/watch"
         else pending,
     )
@@ -242,7 +216,11 @@ def test_pending_all_rescan_succeeds_after_degraded_container_clears(
             return cleared
         return pending
 
-    calls = _install_stateful_rescan_api(monkeypatch, containers, post_container)
+    calls = install_recording_wud_api(
+        monkeypatch,
+        containers,
+        post_container=post_container,
+    )
     client = _client(
         tmp_path,
         {
