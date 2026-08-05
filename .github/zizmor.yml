@@ -2,6 +2,8 @@ rules:
   dangerous-triggers:
     ignore:
       - release-please.yml:3
+      - dependency-automerge.yml:3
+      - dependency-automerge-candidate.yml:3
   unpinned-uses:
     config:
       policies:
