@@ -138,15 +138,7 @@ def _sanitize_support_bundle_response(
 
 def _restore_trusted_literal_values(trusted: Any, sanitized: Any) -> None:
     if isinstance(trusted, BaseModel) and isinstance(sanitized, dict):
-        serialized = trusted.model_dump(mode="json")
-        for name, field in type(trusted).model_fields.items():
-            if name not in sanitized:
-                continue
-            value = getattr(trusted, name)
-            if _is_literal_annotation(field.annotation):
-                sanitized[name] = serialized[name]
-            else:
-                _restore_trusted_literal_values(value, sanitized[name])
+        _restore_model_literal_values(trusted, sanitized)
         return
     if isinstance(trusted, (list, tuple)) and isinstance(sanitized, list):
         for trusted_item, sanitized_item in zip(trusted, sanitized, strict=True):
@@ -156,6 +148,21 @@ def _restore_trusted_literal_values(trusted: Any, sanitized: Any) -> None:
         for key, trusted_item in trusted.items():
             if key in sanitized:
                 _restore_trusted_literal_values(trusted_item, sanitized[key])
+
+
+def _restore_model_literal_values(
+    trusted: BaseModel,
+    sanitized: dict[str, Any],
+) -> None:
+    serialized = trusted.model_dump(mode="json")
+    for name, field in type(trusted).model_fields.items():
+        if name not in sanitized:
+            continue
+        value = getattr(trusted, name)
+        if _is_literal_annotation(field.annotation):
+            sanitized[name] = serialized[name]
+        else:
+            _restore_trusted_literal_values(value, sanitized[name])
 
 
 def _is_literal_annotation(annotation: Any) -> bool:
