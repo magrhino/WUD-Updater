@@ -1611,7 +1611,14 @@ def _reconcile_degraded_observation(
     containers: list[WudApiContainer],
     pending_observations: dict[WudContainerIdentity, _PendingObservation],
     recovery_targets: tuple[WudTarget, ...] | None,
-) -> tuple[tuple[WudTarget, ...] | None, int, int, int, int]:
+) -> tuple[
+    tuple[WudTarget, ...] | None,
+    int,
+    int,
+    int,
+    int,
+    WudApiObservationOutcome,
+]:
     container = observation.container
     if _retain_previous_observation(
         container,
@@ -1619,17 +1626,17 @@ def _reconcile_degraded_observation(
         containers,
         pending_observations,
     ):
-        return recovery_targets, 1, 1, 0, 0
+        return recovery_targets, 1, 1, 0, 0, "retained"
 
     if observation.unsupported:
-        return recovery_targets, 0, 0, 0, 1
+        return recovery_targets, 0, 0, 0, 1, "unsupported_ignored"
     if recovery_targets is None:
         recovery_targets = _pending_file_recovery_targets(settings)
     recovered = _recover_pending_file_observation(container, recovery_targets)
     if recovered is not None:
         containers.append(recovered)
-        return recovery_targets, 1, 0, 1, 0
-    return recovery_targets, 1, 0, 0, 0
+        return recovery_targets, 1, 0, 1, 0, "recovered"
+    return recovery_targets, 1, 0, 0, 0, "unresolved"
 
 
 def _reconcile_container_observations(
@@ -1685,6 +1692,7 @@ def _reconcile_container_observations(
                 retained_delta,
                 recovered_delta,
                 unsupported_delta,
+                outcome,
             ) = _reconcile_degraded_observation(
                 observation,
                 settings,
@@ -1697,15 +1705,6 @@ def _reconcile_container_observations(
             retained_update_count += retained_delta
             recovered_update_count += recovered_delta
             unsupported_container_count += unsupported_delta
-            outcome: WudApiObservationOutcome
-            if retained_delta:
-                outcome = "retained"
-            elif recovered_delta:
-                outcome = "recovered"
-            elif unsupported_delta:
-                outcome = "unsupported_ignored"
-            else:
-                outcome = "unresolved"
             observation_diagnostics.append(
                 _observation_diagnostic(observation, outcome, settings)
             )
