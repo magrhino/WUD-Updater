@@ -913,16 +913,21 @@ export const useUpdatesStore = defineStore("updates", () => {
         await auth.ensureCsrf(),
       );
     });
-    await loadPending({ freshAfterCurrent: true });
-    pendingRescan.value = response;
+    const rescanResponse = response;
+    if (rescanResponse === null) {
+      throw new Error("Pending rescan did not return a response");
+    }
+    pendingRescan.value = rescanResponse;
+    try {
+      await loadPending({ freshAfterCurrent: true });
+    } finally {
+      pendingRescan.value = rescanResponse;
+    }
     await loadReleaseNotes().catch(() => undefined);
     await loadSecurityScans().catch(() => undefined);
     refreshReleaseNotes().catch(() => undefined);
     await runs.loadRuns().catch(() => undefined);
-    if (response === null) {
-      throw new Error("Pending rescan did not return a response");
-    }
-    return response;
+    return rescanResponse;
   }
 
   function clearPlan(): void {

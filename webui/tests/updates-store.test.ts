@@ -1005,6 +1005,41 @@ describe("updates store", () => {
     );
   });
 
+  it("retains a successful rescan when the pending reload fails", async () => {
+    const rescan = pendingRescanResponse();
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/v1/pending/rescan") {
+        return Promise.resolve(jsonResponse(rescan));
+      }
+      if (url === "/api/v1/pending") {
+        return Promise.resolve(
+          jsonResponse({ detail: "Pending reload failed" }, 503),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-rescan");
+    useConnectionStore();
+    useSettingsStore();
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pending = pendingResponse();
+
+    await expect(updates.rescanPending("selected", [1])).rejects.toThrow(
+      "Pending reload failed",
+    );
+
+    expect(updates.pendingRescan).toEqual(rescan);
+    expect(updates.error).toBe("Pending reload failed");
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/api/v1/pending/rescan",
+      "/api/v1/pending",
+    ]);
+  });
+
   it("skips dependent refreshes when pending rescan fails", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
