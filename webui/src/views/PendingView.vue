@@ -121,10 +121,11 @@ const {
 
 let clearPreflightHandler: () => void = () => undefined;
 let loadPendingAndReleaseNotesHandler: (
-  options?: { preserveCleanup?: boolean },
+  options?: {
+    preserveCleanup?: boolean;
+    freshAfterCurrent?: boolean;
+  },
 ) => Promise<void> = async () => undefined;
-let pendingLoadRetry: Promise<void> | null = null;
-let pendingStatusRetry: Promise<void> | null = null;
 const showReleaseNotificationModal = ref(false);
 const releaseNotificationSource = ref<ReleaseNotificationSource | null>(null);
 const securityScanRefreshReadOnlyMessage =
@@ -544,47 +545,10 @@ loadPendingAndReleaseNotesHandler = (options = {}) =>
   loadPendingAndReleaseNotes(options);
 useRouteRefresh(() => updates.loadPending());
 
-function retryPendingLoadTracked(): Promise<void> {
-  if (pendingLoadRetry) {
-    return pendingLoadRetry;
-  }
-  const retry = (async () => {
-    if (pendingStatusRetry) {
-      await pendingStatusRetry;
-    }
-    await retryPendingLoad();
-  })().finally(() => {
-    if (pendingLoadRetry === retry) {
-      pendingLoadRetry = null;
-    }
-  });
-  pendingLoadRetry = retry;
-  return retry;
-}
-
-function retryPendingStatusTracked(): Promise<void> {
-  if (pendingStatusRetry) {
-    return pendingStatusRetry;
-  }
-  if (pendingLoadRetry) {
-    return pendingLoadRetry;
-  }
-  const retry = updates
-    .loadPending()
-    .catch(() => undefined)
-    .finally(() => {
-      if (pendingStatusRetry === retry) {
-        pendingStatusRetry = null;
-      }
-    });
-  pendingStatusRetry = retry;
-  return retry;
-}
-
 async function retryPendingStatus(): Promise<void> {
   pendingStatusMessage.value = "";
   pendingStatusError.value = "";
-  await retryPendingStatusTracked();
+  await updates.loadPending().catch(() => undefined);
   if (updates.error) {
     pendingStatusError.value = `Pending status refresh failed: ${updates.error}`;
     return;
@@ -599,10 +563,9 @@ function viewIssueDump(): void {
 }
 
 async function refreshAfterTerminalApplyJob(): Promise<void> {
-  if (pendingLoadRetry) {
-    await pendingLoadRetry;
-  }
-  await retryPendingLoadTracked();
+  await loadPendingAndReleaseNotesHandler({ freshAfterCurrent: true }).catch(
+    () => undefined,
+  );
 }
 
 function releaseNoteStatus(note: ReleaseNoteInfo | null): string {
@@ -681,7 +644,10 @@ async function refreshPendingMetadataFromStatus(): Promise<void> {
     await connection.loadStatus({ silent: true });
     const sourceHash = connection.status?.source_hash ?? "";
     if (sourceHash && sourceHash !== (updates.pending?.source_hash ?? "")) {
-      await loadPendingAndReleaseNotesHandler({ preserveCleanup: true });
+      await loadPendingAndReleaseNotesHandler({
+        preserveCleanup: true,
+        freshAfterCurrent: true,
+      });
       return;
     }
     const checkedAt = connection.status?.wud_api.last_checked_at ?? "";
@@ -694,7 +660,7 @@ async function refreshPendingMetadataFromStatus(): Promise<void> {
 }
 
 onMounted(() => {
-  runInBackground(retryPendingLoadTracked());
+  runInBackground(retryPendingLoad());
   runInBackground(settings.loadPendingSafetyCues());
   runInBackground(reconnectObservedApplyJob());
   pendingMetadataRefreshInterval.value = globalThis.setInterval(() => {
@@ -1062,7 +1028,7 @@ onBeforeUnmount(() => {
     >
       <strong>Pending updates did not load</strong>
       <span>Check the WebUI API connection, then try again.</span>
-      <n-button size="small" secondary :loading="updates.loading" @click="retryPendingLoadTracked">
+      <n-button size="small" secondary :loading="updates.loading" @click="retryPendingLoad">
         Retry pending load
       </n-button>
     </div>

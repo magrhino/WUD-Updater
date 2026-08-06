@@ -253,7 +253,10 @@ describe("pending view selection actions", () => {
       await flushPromises();
 
       expect(refreshPendingMetadata).not.toHaveBeenCalled();
-      expect(lifecycle.loadPending).toHaveBeenCalledWith({ preserveCleanup: true });
+      expect(lifecycle.loadPending).toHaveBeenCalledWith({
+        preserveCleanup: true,
+        freshAfterCurrent: true,
+      });
     } finally {
       wrapper.unmount();
       vi.useRealTimers();
@@ -434,7 +437,10 @@ describe("pending view selection actions", () => {
     expect(cleanupPending).toHaveBeenCalledWith("cleanup-test", [
       { line_no: 1, raw: "repo/old:latest" },
     ]);
-    expect(loadPending).toHaveBeenCalled();
+    expect(loadPending).toHaveBeenCalledWith({
+      preserveCleanup: true,
+      freshAfterCurrent: true,
+    });
     expect(loadReleaseNotes).toHaveBeenCalled();
     expect(refreshReleaseNotes).toHaveBeenCalled();
     expect(loadRuns).toHaveBeenCalled();
@@ -838,7 +844,10 @@ describe("pending view selection actions", () => {
     expect(removeSelectedPending).toHaveBeenCalledWith("removal-test", [
       { line_no: 1, raw: item.raw },
     ]);
-    expect(loadPending).toHaveBeenCalled();
+    expect(loadPending).toHaveBeenCalledWith({
+      preserveCleanup: true,
+      freshAfterCurrent: true,
+    });
     expect(loadReleaseNotes).toHaveBeenCalled();
     expect(refreshReleaseNotes).toHaveBeenCalled();
     expect(loadRuns).toHaveBeenCalled();

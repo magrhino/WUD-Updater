@@ -19,6 +19,7 @@ import {
 } from "../src/stores/updates";
 import { useRunsStore } from "../src/stores/runs";
 import {
+  deferred,
   jsonRequestBody,
   jsonResponse,
   mockFetch,
@@ -260,6 +261,67 @@ describe("updates store", () => {
     await updates.loadPending();
 
     expect(updates.pendingCleanup).toBeNull();
+  });
+
+  it("coalesces pending loads and one fresh trailing reload", async () => {
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    let activeRequests = 0;
+    let maxActiveRequests = 0;
+    const pendingRequest = (request: { promise: Promise<Response> }) => {
+      activeRequests += 1;
+      maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+      return request.promise.finally(() => {
+        activeRequests -= 1;
+      });
+    };
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => pendingRequest(first))
+      .mockImplementationOnce(() => pendingRequest(second));
+    vi.stubGlobal("fetch", fetchMock);
+    useConnectionStore();
+    useSettingsStore();
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pendingCleanup = {
+      status: "success",
+      audit_run_id: 12,
+      removed_count: 0,
+      removed: [],
+    };
+
+    const initial = updates.loadPending({ preserveCleanup: true });
+    const joined = updates.loadPending({ preserveCleanup: true });
+    const trailing = updates.loadPending({
+      preserveCleanup: true,
+      freshAfterCurrent: true,
+    });
+    const joinedTrailing = updates.loadPending({
+      preserveCleanup: true,
+      freshAfterCurrent: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(updates.loading).toBe(true);
+
+    first.resolve(
+      jsonResponse({ ...pendingResponse(), source_hash: "first-generation" }),
+    );
+    await initial;
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(activeRequests).toBe(1);
+    second.resolve(
+      jsonResponse({ ...pendingResponse(), source_hash: "second-generation" }),
+    );
+    await Promise.all([joined, trailing, joinedTrailing]);
+
+    expect(maxActiveRequests).toBe(1);
+    expect(updates.pending?.source_hash).toBe("second-generation");
+    expect(updates.pendingCleanup?.audit_run_id).toBe(12);
+    expect(updates.loading).toBe(false);
   });
 
   it("refreshes pending WUD metadata in place and clears release-note display", async () => {

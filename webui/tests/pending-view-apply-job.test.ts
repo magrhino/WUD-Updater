@@ -322,6 +322,7 @@ describe("pending view apply jobs", () => {
 
     expect(rescanPending).not.toHaveBeenCalled();
     expect(loadPending).toHaveBeenCalledTimes(1);
+    expect(loadPending).toHaveBeenCalledWith({ freshAfterCurrent: true });
     expect(loadReleaseNotes).toHaveBeenCalledTimes(1);
   });
 
@@ -329,15 +330,7 @@ describe("pending view apply jobs", () => {
     window.sessionStorage.setItem("applyJobId", "job-terminal");
     const { pinia, settings, updates, runs } = setupStores(true);
     const apiPending = apiBackedPendingResponse();
-    let finishInitialPendingLoad: () => void = () => undefined;
-    let initialPendingLoad = true;
     const loadPending = vi.spyOn(updates, "loadPending").mockImplementation(async () => {
-      if (initialPendingLoad) {
-        initialPendingLoad = false;
-        await new Promise<void>((resolve) => {
-          finishInitialPendingLoad = resolve;
-        });
-      }
       updates.pending = apiPending;
     });
     vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
@@ -361,13 +354,8 @@ describe("pending view apply jobs", () => {
     mountPendingView(pinia);
     await flushPromises();
 
-    expect(loadPending).toHaveBeenCalledTimes(1);
-    expect(rescanPending).not.toHaveBeenCalled();
-
-    finishInitialPendingLoad();
-    await flushPromises();
-
     expect(loadPending).toHaveBeenCalledTimes(2);
+    expect(loadPending).toHaveBeenLastCalledWith({ freshAfterCurrent: true });
     expect(rescanPending).not.toHaveBeenCalled();
   });
 

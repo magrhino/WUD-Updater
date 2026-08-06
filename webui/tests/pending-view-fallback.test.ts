@@ -464,7 +464,7 @@ describe("pending view fallback and release notes", () => {
     expect(router.currentRoute.value.name).toBe("issue-dump");
   });
 
-  it("deduplicates degraded pending status retries and reports success", async () => {
+  it("refreshes degraded pending status without mutation side effects", async () => {
     const { pinia, auth, settings, updates } = setupStores(false);
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf");
     updates.pending = {
@@ -482,139 +482,21 @@ describe("pending view fallback and release notes", () => {
     await flushPromises();
     expect(lifecycle.loadPending).toHaveBeenCalledTimes(1);
 
-    let resolveRetry!: () => void;
-    const retryPending = new Promise<void>((resolve) => {
-      resolveRetry = resolve;
-    });
-    lifecycle.loadPending.mockImplementation(() => retryPending);
     const retry = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Retry pending status"));
 
     await retry?.trigger("click");
-    await retry?.trigger("click");
+    await flushPromises();
 
     expect(lifecycle.loadPending).toHaveBeenCalledTimes(2);
     expect(ensureCsrf).not.toHaveBeenCalled();
     expect(lifecycle.loadReleaseNotes).toHaveBeenCalledTimes(1);
     expect(lifecycle.loadSecurityScans).toHaveBeenCalledTimes(1);
     expect(lifecycle.refreshReleaseNotes).toHaveBeenCalledTimes(1);
-    resolveRetry();
-    await flushPromises();
-    expect(lifecycle.loadReleaseNotes).toHaveBeenCalledTimes(1);
-    expect(lifecycle.loadSecurityScans).toHaveBeenCalledTimes(1);
-    expect(lifecycle.refreshReleaseNotes).toHaveBeenCalledTimes(1);
-    expect(ensureCsrf).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain(
       "Pending status refreshed. WUD metadata remains degraded.",
     );
-  });
-
-  it("reuses an active general pending reload for status retry", async () => {
-    const { pinia, auth, settings, updates } = setupStores(false);
-    const ensureCsrf = vi.spyOn(auth, "ensureCsrf");
-    updates.pending = {
-      ...pendingResponse(),
-      source: pendingSourceInfo({
-        configured: "api",
-        active: "api",
-        fresh: false,
-        degraded: true,
-        detail: "WUD observations are degraded",
-      }),
-    };
-    const lifecycle = mockPendingLifecycle(settings, updates);
-    let resolveGeneral!: () => void;
-    lifecycle.loadPending.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveGeneral = resolve;
-        }),
-    );
-    const wrapper = mountPendingView(pinia);
-    await nextTick();
-    expect(lifecycle.loadPending).toHaveBeenCalledTimes(1);
-
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Retry pending status"))
-      ?.trigger("click");
-
-    expect(lifecycle.loadPending).toHaveBeenCalledTimes(1);
-    resolveGeneral();
-    await flushPromises();
-    expect(lifecycle.loadReleaseNotes).toHaveBeenCalledTimes(1);
-    expect(lifecycle.loadSecurityScans).toHaveBeenCalledTimes(1);
-    expect(lifecycle.refreshReleaseNotes).toHaveBeenCalledTimes(1);
-    expect(ensureCsrf).not.toHaveBeenCalled();
-  });
-
-  it("waits for an active status GET before starting a general pending reload", async () => {
-    const { pinia, auth, settings, updates } = setupStores(false);
-    const ensureCsrf = vi.spyOn(auth, "ensureCsrf");
-    updates.pending = {
-      ...pendingResponse(),
-      source: pendingSourceInfo({
-        configured: "api",
-        active: "api",
-        fresh: false,
-        degraded: true,
-        detail: "WUD observations are degraded",
-      }),
-    };
-    const lifecycle = mockPendingLifecycle(settings, updates);
-    const wrapper = mountPendingView(pinia);
-    await flushPromises();
-    expect(lifecycle.loadPending).toHaveBeenCalledTimes(1);
-
-    let activeLoads = 0;
-    let maxActiveLoads = 0;
-    const pendingResolvers: Array<() => void> = [];
-    lifecycle.loadPending.mockImplementation(
-      () =>
-        new Promise<void>((resolve) => {
-          activeLoads += 1;
-          maxActiveLoads = Math.max(maxActiveLoads, activeLoads);
-          pendingResolvers.push(() => {
-            activeLoads -= 1;
-            resolve();
-          });
-        }),
-    );
-
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Retry pending status"))
-      ?.trigger("click");
-    expect(lifecycle.loadPending).toHaveBeenCalledTimes(2);
-    expect(activeLoads).toBe(1);
-    expect(lifecycle.loadReleaseNotes).toHaveBeenCalledTimes(1);
-    expect(lifecycle.loadSecurityScans).toHaveBeenCalledTimes(1);
-    expect(lifecycle.refreshReleaseNotes).toHaveBeenCalledTimes(1);
-    expect(ensureCsrf).not.toHaveBeenCalled();
-
-    updates.pending = null;
-    updates.error = "Pending unavailable";
-    await nextTick();
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Retry pending load"))
-      ?.trigger("click");
-
-    expect(lifecycle.loadPending).toHaveBeenCalledTimes(2);
-    pendingResolvers.shift()?.();
-    await flushPromises();
-    expect(lifecycle.loadPending).toHaveBeenCalledTimes(3);
-    expect(activeLoads).toBe(1);
-    expect(maxActiveLoads).toBe(1);
-
-    pendingResolvers.shift()?.();
-    await flushPromises();
-    expect(activeLoads).toBe(0);
-    expect(lifecycle.loadReleaseNotes).toHaveBeenCalledTimes(2);
-    expect(lifecycle.loadSecurityScans).toHaveBeenCalledTimes(2);
-    expect(lifecycle.refreshReleaseNotes).toHaveBeenCalledTimes(2);
-    expect(ensureCsrf).not.toHaveBeenCalled();
   });
 
   it("shows degraded pending status retry failures inline", async () => {
