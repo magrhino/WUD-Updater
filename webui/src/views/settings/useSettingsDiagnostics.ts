@@ -11,6 +11,7 @@ export function useSettingsDiagnostics() {
   const connection = useConnectionStore();
   const { copy, isSupported: isClipboardSupported } = useClipboard();
   const diagnosticsDownloading = ref(false);
+  const diagnosticsText = ref("");
   const diagnosticsMessage = ref("");
   const diagnosticsError = ref("");
 
@@ -20,7 +21,9 @@ export function useSettingsDiagnostics() {
     diagnosticsDownloading.value = true;
     try {
       const bundle = await connection.diagnosticsSupportBundle();
-      return JSON.stringify(bundle, null, 2);
+      const text = JSON.stringify(bundle, null, 2);
+      diagnosticsText.value = text;
+      return text;
     } catch (error_) {
       diagnosticsError.value = diagnosticsOperationError(
         error_,
@@ -32,9 +35,18 @@ export function useSettingsDiagnostics() {
     }
   }
 
+  async function refreshSupportBundle(): Promise<void> {
+    const text = await loadSupportBundleText();
+    if (text !== null) {
+      diagnosticsMessage.value = "Issue dump loaded.";
+    }
+  }
+
   async function copySupportBundle(): Promise<void> {
     try {
-      const text = await loadSupportBundleText();
+      diagnosticsMessage.value = "";
+      diagnosticsError.value = "";
+      const text = diagnosticsText.value || (await loadSupportBundleText());
       if (text === null) {
         return;
       }
@@ -54,7 +66,9 @@ export function useSettingsDiagnostics() {
   async function downloadSupportBundle(): Promise<void> {
     let url: string | null = null;
     try {
-      const text = await loadSupportBundleText();
+      diagnosticsMessage.value = "";
+      diagnosticsError.value = "";
+      const text = diagnosticsText.value || (await loadSupportBundleText());
       if (text === null) {
         return;
       }
@@ -85,9 +99,11 @@ export function useSettingsDiagnostics() {
 
   return {
     diagnosticsDownloading,
+    diagnosticsText,
     diagnosticsMessage,
     diagnosticsError,
     isClipboardSupported,
+    refreshSupportBundle,
     copySupportBundle,
     downloadSupportBundle,
   };
