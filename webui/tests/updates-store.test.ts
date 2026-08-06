@@ -266,6 +266,7 @@ describe("updates store", () => {
   it("coalesces pending loads and one fresh trailing reload", async () => {
     const first = deferred<Response>();
     const second = deferred<Response>();
+    const competing = deferred<Response>();
     let activeRequests = 0;
     let maxActiveRequests = 0;
     const pendingRequest = (request: { promise: Promise<Response> }) => {
@@ -278,7 +279,8 @@ describe("updates store", () => {
     const fetchMock = vi
       .fn()
       .mockImplementationOnce(() => pendingRequest(first))
-      .mockImplementationOnce(() => pendingRequest(second));
+      .mockImplementationOnce(() => pendingRequest(second))
+      .mockImplementationOnce(() => pendingRequest(competing));
     vi.stubGlobal("fetch", fetchMock);
     useConnectionStore();
     useSettingsStore();
@@ -292,6 +294,9 @@ describe("updates store", () => {
     };
 
     const initial = updates.loadPending({ preserveCleanup: true });
+    const joinedDuringHandoff = initial.then(() =>
+      updates.loadPending({ preserveCleanup: true }),
+    );
     const joined = updates.loadPending({ preserveCleanup: true });
     const trailing = updates.loadPending({
       preserveCleanup: true,
@@ -316,7 +321,10 @@ describe("updates store", () => {
     second.resolve(
       jsonResponse({ ...pendingResponse(), source_hash: "second-generation" }),
     );
-    await Promise.all([joined, trailing, joinedTrailing]);
+    competing.resolve(
+      jsonResponse({ ...pendingResponse(), source_hash: "competing-generation" }),
+    );
+    await Promise.all([joined, trailing, joinedTrailing, joinedDuringHandoff]);
 
     expect(maxActiveRequests).toBe(1);
     expect(updates.pending?.source_hash).toBe("second-generation");

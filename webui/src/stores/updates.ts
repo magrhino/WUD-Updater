@@ -208,7 +208,7 @@ export const useUpdatesStore = defineStore("updates", () => {
   function startPendingLoad(options: PendingLoadOptions): Promise<void> {
     const load = loadWithState(() => reloadPending(options)).finally(() => {
       if (pendingLoadInFlight === load) {
-        pendingLoadInFlight = null;
+        pendingLoadInFlight = pendingLoadTrailing;
       }
     });
     pendingLoadInFlight = load;
