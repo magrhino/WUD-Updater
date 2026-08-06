@@ -82,7 +82,7 @@ WUD_API_USER_AGENT = "wudup-webui-wud-api/1.0"
 _HEADER_NAME_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 _HTTP_429_RE = re.compile(r"(?:^|\D)429(?:\D|$)")
 _HTTP_STATUS_DETAIL_RE = re.compile(
-    r"\b(?:HTTP(?:\s+status)?|status(?:\s+code)?)\s*[:=]?\s*([1-5]\d{2})\b",
+    r"\b(?:HTTP(?:\s+status)?|status(?:\s+code)?)\s*(?:[:=]\s*)?([1-5]\d{2})\b",
     re.IGNORECASE,
 )
 _HTTP_URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
