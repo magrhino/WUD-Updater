@@ -1248,12 +1248,53 @@ export interface LogTail {
 // Diagnostics
 // ---------------------------------------------------------------------------
 
+export type WudApiObservationOutcome =
+  | "retained"
+  | "recovered"
+  | "unresolved"
+  | "unsupported_ignored";
+
+export type WudApiObservationReasonCode =
+  | "malformed_observation"
+  | "missing_image"
+  | "invalid_update_flag"
+  | "reported_error"
+  | "missing_scan_result"
+  | "unsupported_registry";
+
+export interface WudApiObservationDiagnostic {
+  outcome: WudApiObservationOutcome;
+  reason_code: WudApiObservationReasonCode;
+  container_id: string;
+  name: string;
+  image: string;
+  watcher: string;
+  registry: string;
+  update_available: boolean | null;
+  usable_result: boolean;
+  retryable: boolean;
+  error: string;
+}
+
+export interface WudApiObservationDiagnostics {
+  counts: {
+    available: number;
+    degraded: number;
+    retained: number;
+    recovered: number;
+    unresolved: number;
+    unsupported_ignored: number;
+  };
+  items: WudApiObservationDiagnostic[];
+}
+
 export interface DiagnosticsSupportBundleResponse {
   wudup_version: string;
   wud_updater_version?: string;
   settings: SettingsResponse;
   doctor_result: DoctorResponse;
   wud_api_diagnostics: WudApiConfigurationDiagnostics;
+  wud_api_observations: WudApiObservationDiagnostics;
   pending_summary: PendingResponse;
   last_run_status: RunSummary | null;
   diagnostics_warnings: string[];

@@ -212,6 +212,11 @@ __all__ = (
     "WudApiConfigurationDiagnostics",
     "WudApiDiagnosticEndpointStatus",
     "WudApiLogDiagnostics",
+    "WudApiObservationCounts",
+    "WudApiObservationDiagnostic",
+    "WudApiObservationDiagnostics",
+    "WudApiObservationOutcome",
+    "WudApiObservationReason",
     "WudApiRegistryDiagnostics",
     "WudApiStoreDiagnostics",
     "WudApiState",
@@ -240,6 +245,20 @@ PendingMetadataRefreshStatus = Literal["ready", "stale"]
 DoctorCheckStatus = Literal["PASS", "WARN", "FAIL"]
 
 WudApiState = Literal["ready", "unavailable", "auth_required", "error"]
+WudApiObservationOutcome = Literal[
+    "retained",
+    "recovered",
+    "unresolved",
+    "unsupported_ignored",
+]
+WudApiObservationReason = Literal[
+    "malformed_observation",
+    "missing_image",
+    "invalid_update_flag",
+    "reported_error",
+    "missing_scan_result",
+    "unsupported_registry",
+]
 
 ApplyJobStatus = Literal["queued", "running", "success", "failure"]
 
@@ -536,6 +555,34 @@ class WudApiConfigurationDiagnostics(BaseModel):
         default_factory=WudApiDiagnosticEndpointStatus
     )
     registries: list[WudApiRegistryDiagnostics] = Field(default_factory=list)
+
+
+class WudApiObservationDiagnostic(BaseModel):
+    outcome: WudApiObservationOutcome
+    reason_code: WudApiObservationReason
+    container_id: str = ""
+    name: str = ""
+    image: str = ""
+    registry: str = ""
+    watcher: str = ""
+    update_available: bool | None = None
+    usable_result: bool = False
+    retryable: bool = False
+    error: str = ""
+
+
+class WudApiObservationCounts(BaseModel):
+    available: int = 0
+    degraded: int = 0
+    retained: int = 0
+    recovered: int = 0
+    unresolved: int = 0
+    unsupported_ignored: int = 0
+
+
+class WudApiObservationDiagnostics(BaseModel):
+    counts: WudApiObservationCounts = Field(default_factory=WudApiObservationCounts)
+    items: list[WudApiObservationDiagnostic] = Field(default_factory=list)
 
 
 class PendingItem(BaseModel):
@@ -1366,6 +1413,9 @@ class DiagnosticsSupportBundleResponse(BaseModel):
     doctor_result: DoctorResponse
     wud_api_diagnostics: WudApiConfigurationDiagnostics = Field(
         default_factory=WudApiConfigurationDiagnostics
+    )
+    wud_api_observations: WudApiObservationDiagnostics = Field(
+        default_factory=WudApiObservationDiagnostics
     )
     pending_summary: PendingResponse
     last_run_status: RunSummary | None

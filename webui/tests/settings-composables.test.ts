@@ -18,6 +18,7 @@ import {
   pendingResponse,
   settingsResponse,
   wudApiConfigurationDiagnostics,
+  wudApiObservationDiagnostics,
 } from "./helpers/fixtures";
 
 const clipboardCopy = vi.hoisted(() => vi.fn());
@@ -35,6 +36,7 @@ function supportBundle(): DiagnosticsSupportBundleResponse {
     settings: settingsResponse(),
     doctor_result: doctorResponse(),
     wud_api_diagnostics: wudApiConfigurationDiagnostics(),
+    wud_api_observations: wudApiObservationDiagnostics(),
     pending_summary: pendingResponse(),
     last_run_status: null,
     diagnostics_warnings: [],

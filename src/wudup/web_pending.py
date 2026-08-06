@@ -323,6 +323,22 @@ def pending_response(
     include_wud_metadata: bool = True,
     force_api: bool = False,
 ) -> PendingResponse:
+    response, _snapshot = pending_response_with_snapshot(
+        settings,
+        include_grouping=include_grouping,
+        include_wud_metadata=include_wud_metadata,
+        force_api=force_api,
+    )
+    return response
+
+
+def pending_response_with_snapshot(
+    settings: WebSettings,
+    *,
+    include_grouping: bool = True,
+    include_wud_metadata: bool = True,
+    force_api: bool = False,
+) -> tuple[PendingResponse, web_wud_api.WudApiSnapshot | None]:
     try:
         source = web_wud_refresh.refresh_wud_pending_source(
             settings,
@@ -403,17 +419,20 @@ def pending_response(
         )
         for target in parsed.targets
     ]
-    return PendingResponse(
-        source_file=source.source_file,
-        source=source.response_source(),
-        source_hash=source.source_hash,
-        exists=source.exists,
-        count=len(items),
-        items=items,
-        grouping=grouping,
-        snoozed_candidates=snoozed_candidates,
-        wud_api=_wud_api_status(source.wud_snapshot),
-        warnings=list(source.warnings),
+    return (
+        PendingResponse(
+            source_file=source.source_file,
+            source=source.response_source(),
+            source_hash=source.source_hash,
+            exists=source.exists,
+            count=len(items),
+            items=items,
+            grouping=grouping,
+            snoozed_candidates=snoozed_candidates,
+            wud_api=_wud_api_status(source.wud_snapshot),
+            warnings=list(source.warnings),
+        ),
+        source.wud_snapshot,
     )
 
 

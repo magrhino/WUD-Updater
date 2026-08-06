@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import json
+import urllib.parse
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
-from wudup import web_settings
+from wudup import web_pending, web_settings, web_wud_api
 from wudup.db import open_db
+from wudup.web_models import (
+    WudApiObservationCounts,
+    WudApiObservationDiagnostic,
+    WudApiObservationDiagnostics,
+)
 
 from tests.web_test_helpers import (
     WUD_API_AUTH_CONFIG_KEY,
@@ -17,6 +24,7 @@ from tests.web_test_helpers import (
     _install_wud_api,
     _insert_run,
     _store_web_setting,
+    _wud_api_container,
 )
 
 
@@ -175,6 +183,299 @@ def test_diagnostics_support_bundle_includes_sanitized_wud_api_diagnostics(
         == "<redacted>"
     )
     assert redaction_value not in serialized
+
+
+def test_diagnostics_support_bundle_includes_wud_observation_issue_dump(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    available = [
+        _wud_api_container(
+            name=f"available-{index}",
+            image=f"registry.example/acme/available-{index}",
+        )
+        for index in range(7)
+    ]
+    degraded = []
+    for index in range(5):
+        row = _wud_api_container(
+            name=f"degraded-{index}",
+            image=f"ghcr.io/acme/degraded-{index}",
+            update_available=False,
+            update_kind="unknown",
+        )
+        row["result"] = None
+        row["error"] = {"message": "Request failed with status code 429"}
+        row["labels"] = {"debug.raw": "raw-payload-marker"}
+        row["rawOnly"] = "raw-payload-marker"
+        degraded.append(row)
+    unsupported = []
+    for index in range(9):
+        row = _wud_api_container(
+            name=f"unsupported-{index}",
+            image=f"registry-{index}.example/acme/unsupported",
+            update_available=False,
+            update_kind="unknown",
+        )
+        row["result"] = None
+        row["error"] = {"message": "Unsupported Registry unknown"}
+        unsupported.append(row)
+    _install_wud_api(
+        monkeypatch,
+        containers=[*available, *degraded, *unsupported],
+    )
+
+    body, _doctor_codes, serialized = _build_support_bundle(
+        tmp_path,
+        wud_api_base_url="https://wud.support-observations.test:3000",
+    )
+
+    observations = body["wud_api_observations"]
+    assert observations["counts"] == {
+        "available": 7,
+        "degraded": 5,
+        "retained": 0,
+        "recovered": 0,
+        "unresolved": 5,
+        "unsupported_ignored": 9,
+    }
+    assert len(observations["items"]) == 14
+    assert [item["outcome"] for item in observations["items"]].count(
+        "unresolved"
+    ) == 5
+    assert [item["outcome"] for item in observations["items"]].count(
+        "unsupported_ignored"
+    ) == 9
+    assert observations["items"][0] == {
+        "outcome": "unresolved",
+        "reason_code": "reported_error",
+        "container_id": "docker.local.degraded-0",
+        "name": "degraded-0",
+        "image": "ghcr.io/acme/degraded-0:1.0",
+        "registry": "ghcr.io",
+        "watcher": "local",
+        "update_available": False,
+        "usable_result": False,
+        "retryable": True,
+        "error": "WUD registry request failed with HTTP status 429",
+    }
+    assert body["pending_summary"]["wud_api"]["detail"] == (
+        "7 WUD update metadata item(s) available; "
+        "5 container observation(s) degraded; "
+        "0 last-known-good update(s) retained; "
+        "5 unresolved; "
+        "9 unsupported container observation(s) ignored"
+    )
+    assert "raw-payload-marker" not in serialized
+    assert "rawOnly" not in serialized
+    assert "labels" not in observations["items"][0]
+
+
+def test_diagnostics_support_bundle_redacts_wud_observation_details(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret = "wud-observation-secret"
+    headers_file = tmp_path / "wud-api-headers.json"
+    headers_file.write_text(json.dumps({"X-Api-Key": secret}), encoding="utf-8")
+    degraded = _wud_api_container(
+        name="degraded",
+        image="private.example/acme/degraded",
+        update_available=False,
+        update_kind="unknown",
+    )
+    degraded["id"] = f"docker.local.{secret}"
+    degraded["result"] = None
+    degraded["error"] = {
+        "message": (
+            "Authorization: Bearer wud-owned-bearer-secret; "
+            "Proxy-Authorization: Basic d3VkOnNlY3JldA==; "
+            f"Request failed with status code 401 for {secret} at "
+            f"{tmp_path / 'private' / 'registry'} via "
+            "https://alice:s3cr3t@registry.example/v2?token=opaque-secret"
+        )
+    }
+    degraded["labels"] = {"debug.raw": "observation-label-marker"}
+    custom_credentials = _wud_api_container(
+        name="custom-credentials",
+        image="private.example/acme/custom-credentials",
+        update_available=False,
+        update_kind="unknown",
+    )
+    custom_credentials["result"] = None
+    custom_credentials["error"] = {
+        "message": (
+            "registry failure api_key=unknown-api-key "
+            "token: unknown-token password=unknown-password "
+            "X-Custom-Auth: unknown-header-secret"
+        )
+    }
+    _install_wud_api(monkeypatch, containers=[degraded, custom_credentials])
+    client = _doctor_client(
+        tmp_path,
+        {
+            "WUD_API_BASE_URL": "https://wud.support-redaction.test:3000",
+            "WUD_API_HEADERS_FILE": str(headers_file),
+        },
+    )
+
+    response = client.get("/api/v1/diagnostics/support-bundle")
+
+    assert response.status_code == 200
+    body = response.json()
+    serialized = json.dumps(body["wud_api_observations"])
+    item = body["wud_api_observations"]["items"][0]
+    assert item["reason_code"] == "reported_error"
+    assert secret not in serialized
+    assert str(tmp_path) not in serialized
+    assert "observation-label-marker" not in serialized
+    assert "alice" not in serialized
+    assert "s3cr3t" not in serialized
+    assert "opaque-secret" not in serialized
+    assert "wud-owned-bearer-secret" not in serialized
+    assert "d3VkOnNlY3JldA==" not in serialized
+    assert "unknown-api-key" not in serialized
+    assert "unknown-token" not in serialized
+    assert "unknown-password" not in serialized
+    assert "unknown-header-secret" not in serialized
+    assert item["error"] == "WUD registry request failed with HTTP status 401"
+    assert body["wud_api_observations"]["items"][1]["error"] == (
+        "WUD reported a container observation error"
+    )
+    assert "<redacted>" in serialized
+
+
+def test_diagnostics_support_bundle_preserves_observation_literals_during_redaction(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    headers_file = tmp_path / "wud-api-headers.json"
+    headers_file.write_text(
+        json.dumps({"X-Outcome": "retained", "X-Reason": "error"}),
+        encoding="utf-8",
+    )
+    _install_wud_api(monkeypatch)
+    observations = WudApiObservationDiagnostics(
+        counts=WudApiObservationCounts(
+            available=1,
+            degraded=1,
+            retained=1,
+        ),
+        items=[
+            WudApiObservationDiagnostic(
+                outcome="retained",
+                reason_code="reported_error",
+                container_id="docker.local.retained",
+                error="retained registry error",
+            )
+        ],
+    )
+
+    def observation_diagnostics(_settings, *, snapshot=None):
+        assert snapshot is not None
+        return observations
+
+    monkeypatch.setattr(
+        web_wud_api,
+        "get_observation_diagnostics",
+        observation_diagnostics,
+    )
+    client = _doctor_client(
+        tmp_path,
+        {
+            "WUD_API_BASE_URL": "https://wud.literal-redaction.test:3000",
+            "WUD_API_HEADERS_FILE": str(headers_file),
+        },
+    )
+
+    response = client.get("/api/v1/diagnostics/support-bundle")
+
+    assert response.status_code == 200
+    item = response.json()["wud_api_observations"]["items"][0]
+    assert item["outcome"] == "retained"
+    assert item["reason_code"] == "reported_error"
+    assert item["container_id"] == "docker.local.<redacted>"
+    assert item["error"] == "<redacted> registry <redacted>"
+
+
+def test_diagnostics_support_bundle_uses_one_wud_snapshot_generation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    clock = SimpleNamespace(now=0.0)
+    first_generation = [
+        _wud_api_container(
+            name="first-generation",
+            image="registry.example/first-generation",
+        )
+    ]
+    second_generation = [
+        _wud_api_container(name="second-a", image="registry.example/second-a"),
+        _wud_api_container(name="second-b", image="registry.example/second-b"),
+    ]
+    _install_wud_api(monkeypatch, containers=first_generation)
+    installed_request_json = web_wud_api._request_json
+    container_calls = 0
+
+    def sequential_request_json(url: str, client_config=None):
+        nonlocal container_calls
+        if urllib.parse.urlsplit(url).path == "/api/containers":
+            generation = (
+                first_generation if container_calls == 0 else second_generation
+            )
+            container_calls += 1
+            return generation
+        return installed_request_json(url, client_config)
+
+    monkeypatch.setattr(web_wud_api.time, "monotonic", lambda: clock.now)
+    monkeypatch.setattr(web_wud_api, "_request_json", sequential_request_json)
+    source_captured = False
+    original_pending_response = web_pending.pending_response_with_snapshot
+
+    def tracked_pending_response(*args, **kwargs):
+        nonlocal source_captured
+        result = original_pending_response(*args, **kwargs)
+        source_captured = True
+        return result
+
+    monkeypatch.setattr(
+        web_pending,
+        "pending_response_with_snapshot",
+        tracked_pending_response,
+    )
+    original_configuration_diagnostics = (
+        web_wud_api.get_configuration_diagnostics
+    )
+
+    def expiring_configuration_diagnostics(settings, *, force=False):
+        result = original_configuration_diagnostics(settings, force=force)
+        if source_captured:
+            clock.now = web_wud_api.WUD_API_CACHE_TTL_SECONDS + 0.1
+        return result
+
+    monkeypatch.setattr(
+        web_wud_api,
+        "get_configuration_diagnostics",
+        expiring_configuration_diagnostics,
+    )
+    client = _doctor_client(
+        tmp_path,
+        {
+            "WUD_API_BASE_URL": "https://wud.single-generation.test:3000",
+            "WUD_PENDING_SOURCE": "api",
+        },
+    )
+
+    response = client.get("/api/v1/diagnostics/support-bundle")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert container_calls == 1
+    assert body["pending_summary"]["count"] == 1
+    assert body["pending_summary"]["items"][0]["image"].endswith(
+        "first-generation:1.0"
+    )
+    assert body["wud_api_observations"]["counts"]["available"] == 1
 
 
 @pytest.mark.parametrize(

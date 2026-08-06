@@ -153,6 +153,10 @@ export type {
   RunLogResponse,
   LogTail,
   // Diagnostics
+  WudApiObservationOutcome,
+  WudApiObservationReasonCode,
+  WudApiObservationDiagnostic,
+  WudApiObservationDiagnostics,
   DiagnosticsSupportBundleResponse,
   // Service policies, snoozes, and tag exclusions
   ServicePolicyUpdateMode,

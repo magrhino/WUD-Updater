@@ -7,9 +7,10 @@ import sqlite3
 from collections.abc import Sequence
 from contextlib import closing
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, get_args, get_origin
 
 from fastapi import HTTPException, Request
+from pydantic import BaseModel
 
 from . import __version__
 from . import web_jobs, web_pending, web_runs, web_settings, web_wud_api
@@ -44,7 +45,14 @@ def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundle
     settings_resp = web_settings.settings_response(settings, request)
     doctor_result = doctor_response(settings, web_doctor_result(settings, request))
 
-    pending = web_pending.pending_response(settings, include_grouping=True)
+    pending, wud_snapshot = web_pending.pending_response_with_snapshot(
+        settings,
+        include_grouping=True,
+    )
+    wud_api_observations = web_wud_api.get_observation_diagnostics(
+        settings,
+        snapshot=wud_snapshot,
+    )
     for item in pending.items:
         item.raw = ""
     if pending.grouping:
@@ -97,6 +105,7 @@ def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundle
         settings=settings_resp,
         doctor_result=doctor_result,
         wud_api_diagnostics=web_wud_api.get_configuration_diagnostics(settings),
+        wud_api_observations=wud_api_observations,
         pending_summary=pending,
         last_run_status=last_run,
         diagnostics_warnings=diagnostics_warnings,
@@ -106,12 +115,55 @@ def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundle
     extra_secrets = web_settings.release_notification_webhook_redaction_values(
         settings,
     )
-    return DiagnosticsSupportBundleResponse.model_validate(
-        _sanitize_support_bundle_value_with_secrets(
-            settings,
-            bundle.model_dump(mode="json"),
-            extra_secrets,
-        )
+    return _sanitize_support_bundle_response(
+        settings,
+        bundle,
+        extra_secrets,
+    )
+
+
+def _sanitize_support_bundle_response(
+    settings: WebSettings,
+    bundle: DiagnosticsSupportBundleResponse,
+    extra_secrets: Sequence[str],
+) -> DiagnosticsSupportBundleResponse:
+    sanitized = _sanitize_support_bundle_value_with_secrets(
+        settings,
+        bundle.model_dump(mode="json"),
+        extra_secrets,
+    )
+    _restore_trusted_literal_values(bundle, sanitized)
+    return DiagnosticsSupportBundleResponse.model_validate(sanitized)
+
+
+def _restore_trusted_literal_values(trusted: Any, sanitized: Any) -> None:
+    if isinstance(trusted, BaseModel) and isinstance(sanitized, dict):
+        serialized = trusted.model_dump(mode="json")
+        for name, field in type(trusted).model_fields.items():
+            if name not in sanitized:
+                continue
+            value = getattr(trusted, name)
+            if _is_literal_annotation(field.annotation):
+                sanitized[name] = serialized[name]
+            else:
+                _restore_trusted_literal_values(value, sanitized[name])
+        return
+    if isinstance(trusted, (list, tuple)) and isinstance(sanitized, list):
+        for trusted_item, sanitized_item in zip(trusted, sanitized, strict=True):
+            _restore_trusted_literal_values(trusted_item, sanitized_item)
+        return
+    if isinstance(trusted, dict) and isinstance(sanitized, dict):
+        for key, trusted_item in trusted.items():
+            if key in sanitized:
+                _restore_trusted_literal_values(trusted_item, sanitized[key])
+
+
+def _is_literal_annotation(annotation: Any) -> bool:
+    if get_origin(annotation) is Literal:
+        return True
+    args = get_args(annotation)
+    return bool(args) and type(None) in args and all(
+        _is_literal_annotation(arg) for arg in args if arg is not type(None)
     )
 
 
