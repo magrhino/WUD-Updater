@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import json
-import urllib.parse
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -402,8 +400,8 @@ def test_diagnostics_support_bundle_uses_one_wud_snapshot_generation(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    clock = SimpleNamespace(now=0.0)
-    first_generation = [
+    now = 0.0
+    containers = [
         _wud_api_container(
             name="first-generation",
             image="registry.example/first-generation",
@@ -413,50 +411,34 @@ def test_diagnostics_support_bundle_uses_one_wud_snapshot_generation(
         _wud_api_container(name="second-a", image="registry.example/second-a"),
         _wud_api_container(name="second-b", image="registry.example/second-b"),
     ]
-    _install_wud_api(monkeypatch, containers=first_generation)
-    installed_request_json = web_wud_api._request_json
-    container_calls = 0
-
-    def sequential_request_json(url: str, client_config=None):
-        nonlocal container_calls
-        if urllib.parse.urlsplit(url).path == "/api/containers":
-            generation = (
-                first_generation if container_calls == 0 else second_generation
-            )
-            container_calls += 1
-            return generation
-        return installed_request_json(url, client_config)
-
-    monkeypatch.setattr(web_wud_api.time, "monotonic", lambda: clock.now)
-    monkeypatch.setattr(web_wud_api, "_request_json", sequential_request_json)
-    source_captured = False
+    _install_wud_api(monkeypatch, containers=containers)
+    monkeypatch.setattr(web_wud_api.time, "monotonic", lambda: now)
+    captured_snapshot = None
     original_pending_response = web_pending.pending_response_with_snapshot
 
-    def tracked_pending_response(*args, **kwargs):
-        nonlocal source_captured
-        result = original_pending_response(*args, **kwargs)
-        source_captured = True
-        return result
+    def expire_after_pending(*args, **kwargs):
+        nonlocal captured_snapshot, now
+        response, captured_snapshot = original_pending_response(*args, **kwargs)
+        assert captured_snapshot is not None
+        containers[:] = second_generation
+        now = web_wud_api.WUD_API_CACHE_TTL_SECONDS + 0.1
+        return response, captured_snapshot
 
     monkeypatch.setattr(
         web_pending,
         "pending_response_with_snapshot",
-        tracked_pending_response,
+        expire_after_pending,
     )
-    original_configuration_diagnostics = (
-        web_wud_api.get_configuration_diagnostics
-    )
+    original_observation_diagnostics = web_wud_api.get_observation_diagnostics
 
-    def expiring_configuration_diagnostics(settings, *, force=False):
-        result = original_configuration_diagnostics(settings, force=force)
-        if source_captured:
-            clock.now = web_wud_api.WUD_API_CACHE_TTL_SECONDS + 0.1
-        return result
+    def tracked_observation_diagnostics(settings, *, snapshot=None):
+        assert snapshot is captured_snapshot
+        return original_observation_diagnostics(settings, snapshot=snapshot)
 
     monkeypatch.setattr(
         web_wud_api,
-        "get_configuration_diagnostics",
-        expiring_configuration_diagnostics,
+        "get_observation_diagnostics",
+        tracked_observation_diagnostics,
     )
     client = _doctor_client(
         tmp_path,
@@ -470,7 +452,6 @@ def test_diagnostics_support_bundle_uses_one_wud_snapshot_generation(
 
     assert response.status_code == 200
     body = response.json()
-    assert container_calls == 1
     assert body["pending_summary"]["count"] == 1
     assert body["pending_summary"]["items"][0]["image"].endswith(
         "first-generation:1.0"
