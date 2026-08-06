@@ -897,22 +897,24 @@ def _refresh_snapshot_serialized(
             f"{detail}; {unsupported_container_count} unsupported container "
             "observation(s) ignored"
         )
-    snapshot = _snapshot(
-        "ready",
-        available=True,
-        metadata_available=True,
-        checked_at=checked_at,
-        detail=detail,
-        checked_monotonic=checked_monotonic,
-        metadata_checked=True,
-        containers=containers,
-        hidden_update_candidates=hidden_update_candidates,
-        retryable_degraded_container_ids=retryable_degraded_container_ids,
-        degraded_container_count=degraded_container_count,
-        retained_update_count=retained_update_count,
-        recovered_update_count=recovered_update_count,
+    snapshot = replace(
+        _snapshot(
+            "ready",
+            available=True,
+            metadata_available=True,
+            checked_at=checked_at,
+            detail=detail,
+            checked_monotonic=checked_monotonic,
+            metadata_checked=True,
+            containers=containers,
+            hidden_update_candidates=hidden_update_candidates,
+            retryable_degraded_container_ids=retryable_degraded_container_ids,
+            degraded_container_count=degraded_container_count,
+            retained_update_count=retained_update_count,
+            recovered_update_count=recovered_update_count,
+        ),
         unsupported_container_count=unsupported_container_count,
-        observation_diagnostics=observation_diagnostics,
+        observation_diagnostics=tuple(observation_diagnostics),
     )
     _store_snapshot(
         cache_key,
@@ -1315,8 +1317,6 @@ def _snapshot(
     degraded_container_count: int = 0,
     retained_update_count: int = 0,
     recovered_update_count: int = 0,
-    unsupported_container_count: int = 0,
-    observation_diagnostics: Sequence[WudApiObservationDiagnostic] = (),
 ) -> WudApiSnapshot:
     return WudApiSnapshot(
         status=WudApiStatus(
@@ -1332,8 +1332,6 @@ def _snapshot(
         degraded_container_count=degraded_container_count,
         retained_update_count=retained_update_count,
         recovered_update_count=recovered_update_count,
-        unsupported_container_count=unsupported_container_count,
-        observation_diagnostics=tuple(observation_diagnostics),
         metadata_checked=metadata_checked,
         checked_monotonic=checked_monotonic,
     )
