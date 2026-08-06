@@ -16,7 +16,7 @@ const {
   refreshSupportBundle,
   copySupportBundle,
   downloadSupportBundle,
-} = useSettingsDiagnostics();
+} = useSettingsDiagnostics({ reuseLoadedText: true });
 
 useRouteRefresh(refreshSupportBundle);
 

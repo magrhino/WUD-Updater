@@ -138,6 +138,15 @@ describe("settings composables", () => {
     );
   });
 
+  it("loads fresh diagnostics for sequential settings actions", async () => {
+    const { connection, diagnostics } = mountDiagnosticsHarness();
+
+    await diagnostics.copySupportBundle();
+    await diagnostics.copySupportBundle();
+
+    expect(connection.diagnosticsSupportBundle).toHaveBeenCalledTimes(2);
+  });
+
   it("surfaces DOM failures while downloading diagnostics", async () => {
     const createObjectURL = vi.fn(() => {
       throw new Error("Object URL unavailable");

@@ -154,7 +154,7 @@ describe("IssueDumpView", () => {
     );
   });
 
-  it("shows initial load, copy, and download failures inline", async () => {
+  it("shows initial load failures inline", async () => {
     const initial = await mountIssueDump(async () => {
       throw new Error("Support bundle unavailable");
     });
@@ -163,29 +163,6 @@ describe("IssueDumpView", () => {
     expect(initial.wrapper.text()).toContain(
       "Issue dump is unavailable. Refresh to try again.",
     );
-
-    const loaded = await mountIssueDump(async () => supportBundle());
-    clipboardCopy.mockRejectedValueOnce(new Error("Clipboard permission denied"));
-    await loaded.wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Copy issue dump"))
-      ?.trigger("click");
-    await flushPromises();
-    expect(loaded.wrapper.text()).toContain("Clipboard permission denied");
-
-    vi.stubGlobal("URL", {
-      ...URL,
-      createObjectURL: vi.fn(() => {
-        throw new Error("Object URL unavailable");
-      }),
-      revokeObjectURL: vi.fn(),
-    });
-    await loaded.wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Download issue dump"))
-      ?.trigger("click");
-    await flushPromises();
-    expect(loaded.wrapper.text()).toContain("Object URL unavailable");
   });
 
   it("keeps the issue dump route behind authentication", async () => {

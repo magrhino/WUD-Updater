@@ -7,7 +7,9 @@ function diagnosticsOperationError(error_: unknown, fallback: string): string {
   return error_ instanceof Error ? error_.message : fallback;
 }
 
-export function useSettingsDiagnostics() {
+export function useSettingsDiagnostics(
+  options: { reuseLoadedText?: boolean } = {},
+) {
   const connection = useConnectionStore();
   const { copy, isSupported: isClipboardSupported } = useClipboard();
   const diagnosticsDownloading = ref(false);
@@ -46,7 +48,9 @@ export function useSettingsDiagnostics() {
     try {
       diagnosticsMessage.value = "";
       diagnosticsError.value = "";
-      const text = diagnosticsText.value || (await loadSupportBundleText());
+      const text =
+        (options.reuseLoadedText && diagnosticsText.value) ||
+        (await loadSupportBundleText());
       if (text === null) {
         return;
       }
@@ -68,7 +72,9 @@ export function useSettingsDiagnostics() {
     try {
       diagnosticsMessage.value = "";
       diagnosticsError.value = "";
-      const text = diagnosticsText.value || (await loadSupportBundleText());
+      const text =
+        (options.reuseLoadedText && diagnosticsText.value) ||
+        (await loadSupportBundleText());
       if (text === null) {
         return;
       }
