@@ -1,3 +1,3 @@
 """Python package for WUDup commands."""
 
-__version__ = "0.56.8"
+__version__ = "0.57.0"
