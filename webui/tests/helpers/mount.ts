@@ -110,6 +110,7 @@ export const naiveStubs: Record<string, Component> = {
       disabled: Boolean,
       loading: Boolean,
       title: String,
+      type: String,
     },
     emits: ["click"],
     setup(props, { attrs, emit, slots }) {
@@ -119,6 +120,7 @@ export const naiveStubs: Record<string, Component> = {
           {
             ...attrs,
             type: props.attrType || "button",
+            "data-button-type": props.type,
             disabled: props.disabled || props.loading,
             title: props.title,
             onClick: (event: MouseEvent) => emit("click", event),

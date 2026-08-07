@@ -39,6 +39,7 @@ import type {
   UpdateTargetItem,
   UpdateTargetsResponse,
   WudApiConfigurationDiagnostics,
+  WudApiObservationDiagnostics,
   WudApiStatus,
   WudContainerMetadata,
 } from "../../src/api/client";
@@ -183,6 +184,37 @@ export function wudApiConfigurationDiagnostics(
         configuration: {
           auth: "<redacted>",
         },
+      },
+    ],
+    ...overrides,
+  };
+}
+
+export function wudApiObservationDiagnostics(
+  overrides: Partial<WudApiObservationDiagnostics> = {},
+): WudApiObservationDiagnostics {
+  return {
+    counts: {
+      available: 1,
+      degraded: 1,
+      retained: 0,
+      recovered: 0,
+      unresolved: 1,
+      unsupported_ignored: 0,
+    },
+    items: [
+      {
+        outcome: "unresolved",
+        reason_code: "reported_error",
+        container_id: "docker.local.app",
+        name: "app",
+        image: "example/app:1.0",
+        watcher: "local",
+        registry: "hub",
+        update_available: null,
+        usable_result: false,
+        retryable: true,
+        error: "registry request failed",
       },
     ],
     ...overrides,

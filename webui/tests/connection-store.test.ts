@@ -35,40 +35,8 @@ import {
   tagExclusion,
   updateTargetsResponse,
   wudApiConfigurationDiagnostics,
+  wudApiObservationDiagnostics,
 } from "./helpers/fixtures";
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
-function mockFetch(body: unknown = {}): ReturnType<typeof vi.fn> {
-  const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(body)));
-  vi.stubGlobal("fetch", fetchMock);
-  return fetchMock;
-}
-
-function jsonRequestBody(call: unknown[]): unknown {
-  const body = (call[1] as RequestInit).body;
-  if (typeof body !== "string") {
-    throw new TypeError("Expected request body to be a string");
-  }
-  return JSON.parse(body);
-}
-
-function deferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}
-
-
 import {
   deferred,
   jsonRequestBody,
@@ -175,26 +143,37 @@ describe("connection store", () => {
     expect(errorMessage({ message: "object message" })).toBe("Request failed");
   });
 
-  it("loads diagnostics support bundle without csrf", async () => {
+  it("single-flights diagnostics support bundle loads without csrf", async () => {
     const bundlePayload = {
       wudup_version: "0.24.2",
       settings: settingsResponse(),
       doctor_result: doctorResponse(),
       wud_api_diagnostics: wudApiConfigurationDiagnostics(),
+      wud_api_observations: wudApiObservationDiagnostics(),
       pending_summary: pendingResponse(),
       last_run_status: null,
       diagnostics_warnings: [],
       discovery_warnings: [],
       log_tail: null,
     };
-    const fetchMock = mockFetch(bundlePayload);
+    const request = deferred<Response>();
+    const fetchMock = vi.fn(() => request.promise);
+    vi.stubGlobal("fetch", fetchMock);
     const connection = useConnectionStore();
 
-    const response = await connection.diagnosticsSupportBundle();
+    const first = connection.diagnosticsSupportBundle();
+    const second = connection.diagnosticsSupportBundle();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(connection.loading).toBe(true);
+
+    request.resolve(jsonResponse(bundlePayload));
+    const [firstResponse, secondResponse] = await Promise.all([first, second]);
 
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/diagnostics/support-bundle");
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBeUndefined();
-    expect(response.wudup_version).toBe("0.24.2");
+    expect(firstResponse).toEqual(secondResponse);
+    expect(firstResponse.wudup_version).toBe("0.24.2");
     expect(connection.loading).toBe(false);
     expect(connection.error).toBe("");
   });

@@ -250,12 +250,13 @@ def test_wud_api_snapshot_tracks_only_retryable_degraded_container_ids(
         ],
     )
 
+    settings = _settings(
+        tmp_path,
+        "https://wud.retryable-degraded.test:3000",
+        {"WUDUP_LEGACY_SCRIPTS": "false"},
+    )
     snapshot = web_wud_api.get_snapshot(
-        _settings(
-            tmp_path,
-            "https://wud.retryable-degraded.test:3000",
-            {"WUDUP_LEGACY_SCRIPTS": "false"},
-        ),
+        settings,
         include_containers=True,
         force=True,
     )
@@ -268,6 +269,103 @@ def test_wud_api_snapshot_tracks_only_retryable_degraded_container_ids(
     assert snapshot.recovered_update_count == 0
     assert "1 unresolved" in snapshot.status.detail
     assert "1 unsupported container observation(s) ignored" in snapshot.status.detail
+    diagnostics = web_wud_api.get_observation_diagnostics(settings)
+    assert diagnostics.counts.model_dump() == {
+        "available": 1,
+        "degraded": 1,
+        "retained": 0,
+        "recovered": 0,
+        "unresolved": 1,
+        "unsupported_ignored": 1,
+    }
+    assert [item.model_dump() for item in diagnostics.items] == [
+        {
+            "outcome": "unresolved",
+            "reason_code": "reported_error",
+            "container_id": "docker.local.bazarr",
+            "name": "bazarr",
+            "image": "ghcr.io/linuxserver/bazarr:1.0.0",
+            "registry": "ghcr.io",
+            "watcher": "local",
+            "update_available": False,
+            "usable_result": False,
+            "retryable": True,
+            "error": "WUD registry request failed with HTTP status 429",
+        },
+        {
+            "outcome": "unsupported_ignored",
+            "reason_code": "unsupported_registry",
+            "container_id": "docker.local.socket-proxy",
+            "name": "socket-proxy",
+            "image": "lscr.io/linuxserver/socket-proxy:1.0.0",
+            "registry": "lscr.io",
+            "watcher": "local",
+            "update_available": False,
+            "usable_result": False,
+            "retryable": False,
+            "error": "Unsupported registry",
+        },
+    ]
+
+
+def test_wud_api_observation_diagnostics_classify_malformed_rows(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    missing_image = {
+        "id": "docker.local.missing-image",
+        "name": "missing-image",
+        "watcher": "local",
+        "image": {},
+        "updateAvailable": False,
+        "rawOnlyMarker": "must-not-leak",
+    }
+    invalid_flag = _container_payload(name="invalid-flag")
+    invalid_flag["updateAvailable"] = "true"
+    missing_result = _container_payload(
+        name="missing-result",
+        update_available=False,
+    )
+    missing_result["result"] = None
+    _install_wud_api(
+        monkeypatch,
+        containers=(
+            200,
+            ["not-an-object", missing_image, invalid_flag, missing_result],
+        ),
+    )
+    settings = _settings(
+        tmp_path,
+        "https://wud.observation-reasons.test:3000",
+        {"WUDUP_LEGACY_SCRIPTS": "false"},
+    )
+
+    snapshot = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+
+    assert snapshot.degraded_container_count == 4
+    assert [item.reason_code for item in snapshot.observation_diagnostics] == [
+        "malformed_observation",
+        "missing_image",
+        "invalid_update_flag",
+        "missing_scan_result",
+    ]
+    assert all(
+        item.outcome == "unresolved"
+        for item in snapshot.observation_diagnostics
+    )
+    assert [item.retryable for item in snapshot.observation_diagnostics] == [
+        False,
+        False,
+        True,
+        True,
+    ]
+    assert "must-not-leak" not in json.dumps(
+        [item.model_dump() for item in snapshot.observation_diagnostics]
+    )
 
 
 def test_wud_api_retains_unique_last_good_when_current_digest_is_missing(
@@ -770,6 +868,10 @@ def test_wud_api_retains_prior_update_when_registry_becomes_unsupported(
     assert degraded.containers[0].remote_tag == "1.1.0"
     assert degraded.degraded_container_count == 1
     assert degraded.retained_update_count == 1
+    diagnostic = degraded.observation_diagnostics[0]
+    assert diagnostic.outcome == "retained"
+    assert diagnostic.reason_code == "unsupported_registry"
+    assert diagnostic.retryable is False
 
 
 def test_wud_api_recovers_cold_start_update_from_matching_pending_file(
@@ -811,6 +913,10 @@ def test_wud_api_recovers_cold_start_update_from_matching_pending_file(
         "0 unresolved; "
         "1 pending-file update(s) recovered"
     )
+    diagnostic = snapshot.observation_diagnostics[0]
+    assert diagnostic.outcome == "recovered"
+    assert diagnostic.reason_code == "reported_error"
+    assert diagnostic.retryable is True
 
 
 def test_wud_api_pending_file_recovery_requires_matching_registry(

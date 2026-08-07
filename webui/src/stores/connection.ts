@@ -20,6 +20,8 @@ export const useConnectionStore = defineStore("connection", () => {
   const doctor = ref<DoctorResponse | null>(null);
   const loading = ref(false);
   const error = ref("");
+  let diagnosticsSupportBundlePromise: Promise<DiagnosticsSupportBundleResponse> | null =
+    null;
 
   async function loadWithState(work: () => Promise<void>): Promise<void> {
     await runWithStoreState(loading, error, work);
@@ -54,15 +56,26 @@ export const useConnectionStore = defineStore("connection", () => {
     return response;
   }
 
-  async function diagnosticsSupportBundle(): Promise<DiagnosticsSupportBundleResponse> {
-    let response: DiagnosticsSupportBundleResponse | null = null;
-    await loadWithState(async () => {
-      response = await webApi.diagnosticsSupportBundle();
-    });
-    if (response === null) {
-      throw new Error("Diagnostics support bundle did not return a response");
+  function diagnosticsSupportBundle(): Promise<DiagnosticsSupportBundleResponse> {
+    if (diagnosticsSupportBundlePromise !== null) {
+      return diagnosticsSupportBundlePromise;
     }
-    return response;
+    const load = (async () => {
+      let response: DiagnosticsSupportBundleResponse | null = null;
+      await loadWithState(async () => {
+        response = await webApi.diagnosticsSupportBundle();
+      });
+      if (response === null) {
+        throw new Error("Diagnostics support bundle did not return a response");
+      }
+      return response;
+    })().finally(() => {
+      if (diagnosticsSupportBundlePromise === load) {
+        diagnosticsSupportBundlePromise = null;
+      }
+    });
+    diagnosticsSupportBundlePromise = load;
+    return load;
   }
 
   async function stateOperation(

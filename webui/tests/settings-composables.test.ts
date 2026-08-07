@@ -18,6 +18,7 @@ import {
   pendingResponse,
   settingsResponse,
   wudApiConfigurationDiagnostics,
+  wudApiObservationDiagnostics,
 } from "./helpers/fixtures";
 
 const clipboardCopy = vi.hoisted(() => vi.fn());
@@ -35,6 +36,7 @@ function supportBundle(): DiagnosticsSupportBundleResponse {
     settings: settingsResponse(),
     doctor_result: doctorResponse(),
     wud_api_diagnostics: wudApiConfigurationDiagnostics(),
+    wud_api_observations: wudApiObservationDiagnostics(),
     pending_summary: pendingResponse(),
     last_run_status: null,
     diagnostics_warnings: [],
@@ -134,6 +136,15 @@ describe("settings composables", () => {
     expect(diagnostics.diagnosticsError.value).toBe(
       "Clipboard permission denied",
     );
+  });
+
+  it("loads fresh diagnostics for sequential settings actions", async () => {
+    const { connection, diagnostics } = mountDiagnosticsHarness();
+
+    await diagnostics.copySupportBundle();
+    await diagnostics.copySupportBundle();
+
+    expect(connection.diagnosticsSupportBundle).toHaveBeenCalledTimes(2);
   });
 
   it("surfaces DOM failures while downloading diagnostics", async () => {

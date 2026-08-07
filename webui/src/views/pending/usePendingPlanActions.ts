@@ -183,7 +183,10 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
     );
     showRemovalModal.value = false;
     await Promise.all([
-      loadPendingAndReleaseNotes({ preserveCleanup: true }),
+      loadPendingAndReleaseNotes({
+        preserveCleanup: true,
+        freshAfterCurrent: true,
+      }),
       runs.loadRuns(),
     ]);
   }
@@ -209,7 +212,10 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
     showPreflightModal.value = false;
     options.clearUpdateIntent();
     await Promise.all([
-      loadPendingAndReleaseNotes({ preserveCleanup: true }),
+      loadPendingAndReleaseNotes({
+        preserveCleanup: true,
+        freshAfterCurrent: true,
+      }),
       runs.loadRuns(),
     ]);
   }
@@ -240,7 +246,10 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
   }
 
   async function loadPendingAndReleaseNotes(
-    requestOptions: { preserveCleanup?: boolean } = {},
+    requestOptions: {
+      preserveCleanup?: boolean;
+      freshAfterCurrent?: boolean;
+    } = {},
   ): Promise<void> {
     await updates.loadPending(requestOptions);
     await updates.loadReleaseNotes().catch(() => undefined);

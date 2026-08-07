@@ -47,6 +47,11 @@ from .web_models import (
     WudApiConfigurationDiagnostics,
     WudApiDiagnosticEndpointStatus as WudApiDiagnosticEndpointStatus,
     WudApiLogDiagnostics as WudApiLogDiagnostics,
+    WudApiObservationCounts,
+    WudApiObservationDiagnostic,
+    WudApiObservationDiagnostics,
+    WudApiObservationOutcome,
+    WudApiObservationReason,
     WudApiRegistryDiagnostics as WudApiRegistryDiagnostics,
     WudApiState,
     WudApiStatus,
@@ -76,6 +81,11 @@ WUD_API_RATE_LIMIT_COOLDOWN_SECONDS = 60.0
 WUD_API_USER_AGENT = "wudup-webui-wud-api/1.0"
 _HEADER_NAME_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 _HTTP_429_RE = re.compile(r"(?:^|\D)429(?:\D|$)")
+_HTTP_STATUS_DETAIL_RE = re.compile(
+    r"\b(?:HTTP(?:\s+status)?|status(?:\s+code)?)\s*(?:[:=]\s*)?([1-5]\d{2})\b",
+    re.IGNORECASE,
+)
+_HTTP_URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
 _UNSUPPORTED_REGISTRY_ERROR_PREFIX = "unsupported registry "
 LOGGER = logging.getLogger(__name__)
 
@@ -160,6 +170,8 @@ class WudApiSnapshot:
     degraded_container_count: int = 0
     retained_update_count: int = 0
     recovered_update_count: int = 0
+    unsupported_container_count: int = 0
+    observation_diagnostics: tuple[WudApiObservationDiagnostic, ...] = ()
     metadata_checked: bool = False
     checked_monotonic: float = 0.0
 
@@ -167,7 +179,8 @@ class WudApiSnapshot:
 @dataclass(frozen=True)
 class _WudContainerObservation:
     container: WudApiContainer
-    update_available: bool
+    update_available: bool | None
+    usable_scan_result: bool
     degraded: bool
     unsupported: bool
 
@@ -536,6 +549,30 @@ def get_configuration_diagnostics(
     return _refresh_configuration_diagnostics(settings).diagnostics
 
 
+def get_observation_diagnostics(
+    settings: WebSettings,
+    *,
+    snapshot: WudApiSnapshot | None = None,
+) -> WudApiObservationDiagnostics:
+    active_snapshot = snapshot or get_snapshot(settings, include_containers=True)
+    return WudApiObservationDiagnostics(
+        counts=WudApiObservationCounts(
+            available=len(active_snapshot.containers),
+            degraded=active_snapshot.degraded_container_count,
+            retained=active_snapshot.retained_update_count,
+            recovered=active_snapshot.recovered_update_count,
+            unresolved=max(
+                0,
+                active_snapshot.degraded_container_count
+                - active_snapshot.retained_update_count
+                - active_snapshot.recovered_update_count,
+            ),
+            unsupported_ignored=active_snapshot.unsupported_container_count,
+        ),
+        items=list(active_snapshot.observation_diagnostics),
+    )
+
+
 def _snapshot_cache_ttl(snapshot: WudApiSnapshot) -> float:
     if snapshot.status.state in {"unavailable", "error"} or snapshot.degraded_container_count:
         return WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS
@@ -830,6 +867,7 @@ def _refresh_snapshot_serialized(
         retained_update_count,
         recovered_update_count,
         unsupported_container_count,
+        observation_diagnostics,
         pending_observations,
     ) = _reconcile_container_observations(
         payload,
@@ -859,20 +897,24 @@ def _refresh_snapshot_serialized(
             f"{detail}; {unsupported_container_count} unsupported container "
             "observation(s) ignored"
         )
-    snapshot = _snapshot(
-        "ready",
-        available=True,
-        metadata_available=True,
-        checked_at=checked_at,
-        detail=detail,
-        checked_monotonic=checked_monotonic,
-        metadata_checked=True,
-        containers=containers,
-        hidden_update_candidates=hidden_update_candidates,
-        retryable_degraded_container_ids=retryable_degraded_container_ids,
-        degraded_container_count=degraded_container_count,
-        retained_update_count=retained_update_count,
-        recovered_update_count=recovered_update_count,
+    snapshot = replace(
+        _snapshot(
+            "ready",
+            available=True,
+            metadata_available=True,
+            checked_at=checked_at,
+            detail=detail,
+            checked_monotonic=checked_monotonic,
+            metadata_checked=True,
+            containers=containers,
+            hidden_update_candidates=hidden_update_candidates,
+            retryable_degraded_container_ids=retryable_degraded_container_ids,
+            degraded_container_count=degraded_container_count,
+            retained_update_count=retained_update_count,
+            recovered_update_count=recovered_update_count,
+        ),
+        unsupported_container_count=unsupported_container_count,
+        observation_diagnostics=tuple(observation_diagnostics),
     )
     _store_snapshot(
         cache_key,
@@ -1569,7 +1611,14 @@ def _reconcile_degraded_observation(
     containers: list[WudApiContainer],
     pending_observations: dict[WudContainerIdentity, _PendingObservation],
     recovery_targets: tuple[WudTarget, ...] | None,
-) -> tuple[tuple[WudTarget, ...] | None, int, int, int, int]:
+) -> tuple[
+    tuple[WudTarget, ...] | None,
+    int,
+    int,
+    int,
+    int,
+    WudApiObservationOutcome,
+]:
     container = observation.container
     if _retain_previous_observation(
         container,
@@ -1577,17 +1626,17 @@ def _reconcile_degraded_observation(
         containers,
         pending_observations,
     ):
-        return recovery_targets, 1, 1, 0, 0
+        return recovery_targets, 1, 1, 0, 0, "retained"
 
     if observation.unsupported:
-        return recovery_targets, 0, 0, 0, 1
+        return recovery_targets, 0, 0, 0, 1, "unsupported_ignored"
     if recovery_targets is None:
         recovery_targets = _pending_file_recovery_targets(settings)
     recovered = _recover_pending_file_observation(container, recovery_targets)
     if recovered is not None:
         containers.append(recovered)
-        return recovery_targets, 1, 0, 1, 0
-    return recovery_targets, 1, 0, 0, 0
+        return recovery_targets, 1, 0, 1, 0, "recovered"
+    return recovery_targets, 1, 0, 0, 0, "unresolved"
 
 
 def _reconcile_container_observations(
@@ -1604,6 +1653,7 @@ def _reconcile_container_observations(
     int,
     int,
     int,
+    tuple[WudApiObservationDiagnostic, ...],
     Mapping[WudContainerIdentity, _PendingObservation],
 ]:
     containers: list[WudApiContainer] = []
@@ -1615,12 +1665,16 @@ def _reconcile_container_observations(
     retained_update_count = 0
     recovered_update_count = 0
     unsupported_container_count = 0
+    observation_diagnostics: list[WudApiObservationDiagnostic] = []
     recovery_targets: tuple[WudTarget, ...] | None = None
 
     for raw in payload:
         observation = _parse_container_observation(raw, settings)
         if observation is None:
             degraded_container_count += 1
+            observation_diagnostics.append(
+                _malformed_observation_diagnostic(raw, settings)
+            )
             continue
 
         container = observation.container
@@ -1638,6 +1692,7 @@ def _reconcile_container_observations(
                 retained_delta,
                 recovered_delta,
                 unsupported_delta,
+                outcome,
             ) = _reconcile_degraded_observation(
                 observation,
                 settings,
@@ -1650,6 +1705,9 @@ def _reconcile_container_observations(
             retained_update_count += retained_delta
             recovered_update_count += recovered_delta
             unsupported_container_count += unsupported_delta
+            observation_diagnostics.append(
+                _observation_diagnostic(observation, outcome, settings)
+            )
             continue
 
         if observation.update_available:
@@ -1673,6 +1731,7 @@ def _reconcile_container_observations(
         retained_update_count,
         recovered_update_count,
         unsupported_container_count,
+        tuple(observation_diagnostics),
         pending_observations,
     )
 
@@ -1695,7 +1754,10 @@ def _parse_container_observation(
     )
     return _WudContainerObservation(
         container=container,
-        update_available=update_available is True,
+        update_available=(
+            update_available if isinstance(update_available, bool) else None
+        ),
+        usable_scan_result=usable_scan_result,
         unsupported=unsupported,
         degraded=(
             not unsupported
@@ -1706,6 +1768,85 @@ def _parse_container_observation(
             )
         ),
     )
+
+
+def _malformed_observation_diagnostic(
+    raw: object,
+    settings: WebSettings,
+) -> WudApiObservationDiagnostic:
+    if not isinstance(raw, dict):
+        return WudApiObservationDiagnostic(
+            outcome="unresolved",
+            reason_code="malformed_observation",
+        )
+
+    image = _object(raw.get("image"))
+    update_available = raw.get("updateAvailable")
+    registry = _registry_host(_path_string(image, "registry", "url"))
+    return WudApiObservationDiagnostic(
+        outcome="unresolved",
+        reason_code="missing_image",
+        container_id=_diagnostic_text(settings, _string(raw.get("id"))),
+        name=_diagnostic_text(settings, _string(raw.get("name"))),
+        registry=_diagnostic_text(settings, registry),
+        watcher=_diagnostic_text(settings, _string(raw.get("watcher"))),
+        update_available=(
+            update_available if isinstance(update_available, bool) else None
+        ),
+        error=_diagnostic_error_text(settings, _error_message(raw.get("error"))),
+    )
+
+
+def _observation_diagnostic(
+    observation: _WudContainerObservation,
+    outcome: WudApiObservationOutcome,
+    settings: WebSettings,
+) -> WudApiObservationDiagnostic:
+    container = observation.container
+    return WudApiObservationDiagnostic(
+        outcome=outcome,
+        reason_code=_observation_reason_code(observation),
+        container_id=_diagnostic_text(settings, container.id),
+        name=_diagnostic_text(settings, container.name),
+        image=_diagnostic_text(settings, container.image),
+        registry=_diagnostic_text(
+            settings,
+            _image_registry_key(container.image) or "docker.io",
+        ),
+        watcher=_diagnostic_text(settings, container.watcher),
+        update_available=observation.update_available,
+        usable_result=observation.usable_scan_result,
+        retryable=observation.degraded and bool(container.id),
+        error=_diagnostic_error_text(settings, container.error),
+    )
+
+
+def _observation_reason_code(
+    observation: _WudContainerObservation,
+) -> WudApiObservationReason:
+    if observation.unsupported:
+        return "unsupported_registry"
+    if observation.update_available is None:
+        return "invalid_update_flag"
+    if observation.container.error:
+        return "reported_error"
+    return "missing_scan_result"
+
+
+def _diagnostic_text(settings: WebSettings, value: str) -> str:
+    return _sanitize_detail(settings, value)
+
+
+def _diagnostic_error_text(settings: WebSettings, value: str) -> str:
+    sanitized = _sanitize_detail(settings, value)
+    if not sanitized:
+        return ""
+    if sanitized.casefold().startswith(_UNSUPPORTED_REGISTRY_ERROR_PREFIX):
+        return "Unsupported registry"
+    status = _HTTP_STATUS_DETAIL_RE.search(sanitized)
+    if status is not None:
+        return f"WUD registry request failed with HTTP status {status.group(1)}"
+    return "WUD reported a container observation error"
 
 
 def _has_usable_scan_result(
@@ -1967,8 +2108,51 @@ def _error_message(value: object) -> str:
 def _sanitize_detail(settings: WebSettings, value: str) -> str:
     if not value:
         return ""
-    sanitized = _redact_sensitive_text(settings, value)
+    sanitized = _scrub_http_url_secrets(value)
+    sanitized = _redact_sensitive_text(settings, sanitized)
     return _redact_unknown_absolute_paths(sanitized)
+
+
+def _scrub_http_url_secrets(value: str) -> str:
+    return _HTTP_URL_RE.sub(_scrub_http_url_match, value)
+
+
+def _scrub_http_url_match(match: re.Match[str]) -> str:
+    candidate = match.group(0)
+    trailing = ""
+    while candidate and candidate[-1] in ".,;!?)]}":
+        trailing = candidate[-1] + trailing
+        candidate = candidate[:-1]
+    try:
+        parsed = urllib.parse.urlsplit(candidate)
+        if (
+            parsed.username is None
+            and parsed.password is None
+            and not parsed.query
+            and not parsed.fragment
+        ):
+            return f"{candidate}{trailing}"
+        hostname = parsed.hostname
+        if not hostname:
+            raise ValueError("URL host is unavailable")
+        host = f"[{hostname}]" if ":" in hostname else hostname
+        port = parsed.port
+    except ValueError:
+        scheme = candidate.partition("://")[0]
+        return f"{scheme}://<redacted>{trailing}"
+    netloc = f"{host}:{port}" if port is not None else host
+    return (
+        urllib.parse.urlunsplit(
+            (
+                parsed.scheme,
+                netloc,
+                parsed.path,
+                "<redacted>" if parsed.query else "",
+                "<redacted>" if parsed.fragment else "",
+            )
+        )
+        + trailing
+    )
 
 
 def _utc_timestamp() -> str:

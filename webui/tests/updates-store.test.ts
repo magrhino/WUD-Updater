@@ -19,6 +19,7 @@ import {
 } from "../src/stores/updates";
 import { useRunsStore } from "../src/stores/runs";
 import {
+  deferred,
   jsonRequestBody,
   jsonResponse,
   mockFetch,
@@ -260,6 +261,75 @@ describe("updates store", () => {
     await updates.loadPending();
 
     expect(updates.pendingCleanup).toBeNull();
+  });
+
+  it("coalesces pending loads and one fresh trailing reload", async () => {
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    const competing = deferred<Response>();
+    let activeRequests = 0;
+    let maxActiveRequests = 0;
+    const pendingRequest = (request: { promise: Promise<Response> }) => {
+      activeRequests += 1;
+      maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+      return request.promise.finally(() => {
+        activeRequests -= 1;
+      });
+    };
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => pendingRequest(first))
+      .mockImplementationOnce(() => pendingRequest(second))
+      .mockImplementationOnce(() => pendingRequest(competing));
+    vi.stubGlobal("fetch", fetchMock);
+    useConnectionStore();
+    useSettingsStore();
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pendingCleanup = {
+      status: "success",
+      audit_run_id: 12,
+      removed_count: 0,
+      removed: [],
+    };
+
+    const initial = updates.loadPending({ preserveCleanup: true });
+    const joinedDuringHandoff = initial.then(() =>
+      updates.loadPending({ preserveCleanup: true }),
+    );
+    const joined = updates.loadPending({ preserveCleanup: true });
+    const trailing = updates.loadPending({
+      preserveCleanup: true,
+      freshAfterCurrent: true,
+    });
+    const joinedTrailing = updates.loadPending({
+      preserveCleanup: true,
+      freshAfterCurrent: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(updates.loading).toBe(true);
+
+    first.resolve(
+      jsonResponse({ ...pendingResponse(), source_hash: "first-generation" }),
+    );
+    await initial;
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(activeRequests).toBe(1);
+    second.resolve(
+      jsonResponse({ ...pendingResponse(), source_hash: "second-generation" }),
+    );
+    competing.resolve(
+      jsonResponse({ ...pendingResponse(), source_hash: "competing-generation" }),
+    );
+    await Promise.all([joined, trailing, joinedTrailing, joinedDuringHandoff]);
+
+    expect(maxActiveRequests).toBe(1);
+    expect(updates.pending?.source_hash).toBe("second-generation");
+    expect(updates.pendingCleanup?.audit_run_id).toBe(12);
+    expect(updates.loading).toBe(false);
   });
 
   it("refreshes pending WUD metadata in place and clears release-note display", async () => {
@@ -941,6 +1011,41 @@ describe("updates store", () => {
     expect(new Set(urls.slice(4))).toEqual(
       new Set(["/api/v1/release-notes/refresh", "/api/v1/runs"]),
     );
+  });
+
+  it("retains a successful rescan when the pending reload fails", async () => {
+    const rescan = pendingRescanResponse();
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/v1/pending/rescan") {
+        return Promise.resolve(jsonResponse(rescan));
+      }
+      if (url === "/api/v1/pending") {
+        return Promise.resolve(
+          jsonResponse({ detail: "Pending reload failed" }, 503),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-rescan");
+    useConnectionStore();
+    useSettingsStore();
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pending = pendingResponse();
+
+    await expect(updates.rescanPending("selected", [1])).rejects.toThrow(
+      "Pending reload failed",
+    );
+
+    expect(updates.pendingRescan).toEqual(rescan);
+    expect(updates.error).toBe("Pending reload failed");
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/api/v1/pending/rescan",
+      "/api/v1/pending",
+    ]);
   });
 
   it("skips dependent refreshes when pending rescan fails", async () => {

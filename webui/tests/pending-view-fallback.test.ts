@@ -416,8 +416,8 @@ describe("pending view fallback and release notes", () => {
     expect(wrapper.find('[role="table"]').exists()).toBe(true);
   });
 
-  it("shows degraded pending source warning for auto fallback", () => {
-    const { pinia, settings, updates } = setupStores(true);
+  it("keeps issue dump and retry actions available for degraded read-only sources", async () => {
+    const { pinia, settings, updates } = setupStores(false);
     updates.pending = {
       ...pendingResponse(),
       source: pendingSourceInfo({
@@ -429,12 +429,105 @@ describe("pending view fallback and release notes", () => {
       }),
     };
     mockPendingLifecycle(settings, updates);
-    const wrapper = mountPendingView(pinia);
+    const router = createWudRouter(createMemoryHistory());
+    await router.push({ name: "pending" });
+    await router.isReady();
+    const routerPush = vi.spyOn(router, "push");
+    const wrapper = mountWithApp(PendingView, { pinia, router });
+    await flushPromises();
 
     expect(wrapper.text()).toContain(
       "WUD API is unavailable: connection refused",
     );
     expect(wrapper.find('[role="status"]').exists()).toBe(true);
+    const viewDump = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("View issue dump"));
+    const retry = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Retry pending status"));
+    expect(viewDump?.attributes("data-button-type")).toBe("primary");
+    expect(viewDump?.attributes("disabled")).toBeUndefined();
+    expect(retry?.attributes("data-button-type")).not.toBe("primary");
+    expect(retry?.attributes("disabled")).toBeUndefined();
+    expect(
+      wrapper
+        .findAll("button")
+        .find((button) => button.text().includes("Rescan WUD"))
+        ?.attributes("disabled"),
+    ).toBeDefined();
+
+    await viewDump?.trigger("click");
+    expect(routerPush).toHaveBeenCalledWith({ name: "issue-dump" });
+    await routerPush.mock.results.at(-1)?.value;
+
+    expect(router.currentRoute.value.name).toBe("issue-dump");
+  });
+
+  it("refreshes degraded pending status without mutation side effects", async () => {
+    const { pinia, auth, settings, updates } = setupStores(false);
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf");
+    updates.pending = {
+      ...pendingResponse(),
+      source: pendingSourceInfo({
+        configured: "api",
+        active: "api",
+        fresh: false,
+        degraded: true,
+        detail: "WUD observations are degraded",
+      }),
+    };
+    const lifecycle = mockPendingLifecycle(settings, updates);
+    const wrapper = mountPendingView(pinia);
+    await flushPromises();
+    expect(lifecycle.loadPending).toHaveBeenCalledTimes(1);
+
+    const retry = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Retry pending status"));
+
+    await retry?.trigger("click");
+    await flushPromises();
+
+    expect(lifecycle.loadPending).toHaveBeenCalledTimes(2);
+    expect(ensureCsrf).not.toHaveBeenCalled();
+    expect(lifecycle.loadReleaseNotes).toHaveBeenCalledTimes(1);
+    expect(lifecycle.loadSecurityScans).toHaveBeenCalledTimes(1);
+    expect(lifecycle.refreshReleaseNotes).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain(
+      "Pending status refreshed. WUD metadata remains degraded.",
+    );
+  });
+
+  it("shows degraded pending status retry failures inline", async () => {
+    const { pinia, settings, updates } = setupStores(false);
+    updates.pending = {
+      ...pendingResponse(),
+      source: pendingSourceInfo({
+        configured: "api",
+        active: "api",
+        fresh: false,
+        degraded: true,
+        detail: "WUD observations are degraded",
+      }),
+    };
+    const lifecycle = mockPendingLifecycle(settings, updates);
+    const wrapper = mountPendingView(pinia);
+    await flushPromises();
+    lifecycle.loadPending.mockImplementationOnce(async () => {
+      updates.error = "WUD API timed out";
+      throw new Error("WUD API timed out");
+    });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Retry pending status"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain(
+      "Pending status refresh failed: WUD API timed out",
+    );
   });
 
   it("shows safety cues in the mobile pending file order fallback", () => {

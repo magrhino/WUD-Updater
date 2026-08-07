@@ -64,6 +64,11 @@ export const APPLY_JOB_RECOVERY_MESSAGE =
 const PENDING_RESCAN_SELECTION_REQUIRED_MESSAGE =
   "Select at least one pending update to rescan.";
 
+type PendingLoadOptions = {
+  preserveCleanup?: boolean;
+  freshAfterCurrent?: boolean;
+};
+
 const APPLY_JOB_STORAGE_KEY = "applyJobId";
 const RETAG_GITHUB_LATEST_FALLBACK_STORAGE_KEY = "retagGithubLatestFallback";
 const TERMINAL_APPLY_JOB_STATUSES = new Set<ApplyJobResponse["status"]>([
@@ -192,15 +197,54 @@ export const useUpdatesStore = defineStore("updates", () => {
   const securityScansLoading = ref(false);
   const securityScansError = ref("");
   const error = ref("");
+  let pendingLoadInFlight: Promise<void> | null = null;
+  let pendingLoadTrailing: Promise<void> | null = null;
+  let pendingLoadTrailingPreservesCleanup = true;
 
   async function loadWithState(work: () => Promise<void>): Promise<void> {
     await runWithStoreState(loading, error, work);
   }
 
-  async function loadPending(
-    options: { preserveCleanup?: boolean } = {},
-  ): Promise<void> {
-    await loadWithState(() => reloadPending(options));
+  function startPendingLoad(options: PendingLoadOptions): Promise<void> {
+    const load = loadWithState(() => reloadPending(options)).finally(() => {
+      if (pendingLoadInFlight === load) {
+        pendingLoadInFlight = pendingLoadTrailing;
+      }
+    });
+    pendingLoadInFlight = load;
+    return load;
+  }
+
+  function loadPending(options: PendingLoadOptions = {}): Promise<void> {
+    const active = pendingLoadInFlight;
+    if (active === null) {
+      return startPendingLoad(options);
+    }
+    if (!options.freshAfterCurrent) {
+      return pendingLoadTrailing ?? active;
+    }
+
+    pendingLoadTrailingPreservesCleanup &&= options.preserveCleanup === true;
+    if (pendingLoadTrailing !== null) {
+      return pendingLoadTrailing;
+    }
+
+    const trailing = active
+      .catch(() => undefined)
+      .then(() => {
+        const preserveCleanup = pendingLoadTrailingPreservesCleanup;
+        pendingLoadTrailing = null;
+        pendingLoadTrailingPreservesCleanup = true;
+        return startPendingLoad({ preserveCleanup });
+      })
+      .finally(() => {
+        if (pendingLoadTrailing === trailing) {
+          pendingLoadTrailing = null;
+          pendingLoadTrailingPreservesCleanup = true;
+        }
+      });
+    pendingLoadTrailing = trailing;
+    return trailing;
   }
 
   async function refreshPendingMetadata(): Promise<void> {
@@ -225,7 +269,10 @@ export const useUpdatesStore = defineStore("updates", () => {
     );
     if (response.requires_pending_reload) {
       clearReleaseNoteDisplay();
-      await reloadPending({ preserveCleanup: true });
+      await loadPending({
+        preserveCleanup: true,
+        freshAfterCurrent: true,
+      });
       return;
     }
     if (pending.value !== current) {
@@ -865,17 +912,22 @@ export const useUpdatesStore = defineStore("updates", () => {
         rescanLinesFor(scope, lineNumbers),
         await auth.ensureCsrf(),
       );
-      pendingRescan.value = response;
-      setPending(await webApi.pending());
     });
+    const rescanResponse = response;
+    if (rescanResponse === null) {
+      throw new Error("Pending rescan did not return a response");
+    }
+    pendingRescan.value = rescanResponse;
+    try {
+      await loadPending({ freshAfterCurrent: true });
+    } finally {
+      pendingRescan.value = rescanResponse;
+    }
     await loadReleaseNotes().catch(() => undefined);
     await loadSecurityScans().catch(() => undefined);
     refreshReleaseNotes().catch(() => undefined);
     await runs.loadRuns().catch(() => undefined);
-    if (response === null) {
-      throw new Error("Pending rescan did not return a response");
-    }
-    return response;
+    return rescanResponse;
   }
 
   function clearPlan(): void {
@@ -884,7 +936,7 @@ export const useUpdatesStore = defineStore("updates", () => {
   }
 
   async function reloadPending(
-    options: { preserveCleanup?: boolean } = {},
+    options: Pick<PendingLoadOptions, "preserveCleanup"> = {},
   ): Promise<void> {
     plan.value = null;
     pendingRemovalPlan.value = null;

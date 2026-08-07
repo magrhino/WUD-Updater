@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { ShieldCheck } from "@lucide/vue";
 import {
   NAlert,
@@ -51,12 +52,15 @@ import { usePendingSearchState } from "./pending/usePendingSearchState";
 import { usePendingSelectionState } from "./pending/usePendingSelectionState";
 
 const updates = useUpdatesStore();
+const router = useRouter();
 const auth = useAuthStore();
 const connection = useConnectionStore();
 const runs = useRunsStore();
 const settings = useSettingsStore();
 const isMobile = useDataCardsBreakpoint();
 const applyJobPanelRef = ref<PendingApplyJobPanelRef | null>(null);
+const pendingStatusMessage = ref("");
+const pendingStatusError = ref("");
 
 const pendingItems = computed(() => updates.pending?.items ?? []);
 const {
@@ -117,9 +121,11 @@ const {
 
 let clearPreflightHandler: () => void = () => undefined;
 let loadPendingAndReleaseNotesHandler: (
-  options?: { preserveCleanup?: boolean },
+  options?: {
+    preserveCleanup?: boolean;
+    freshAfterCurrent?: boolean;
+  },
 ) => Promise<void> = async () => undefined;
-let pendingLoadRetry: Promise<void> | null = null;
 const showReleaseNotificationModal = ref(false);
 const releaseNotificationSource = ref<ReleaseNotificationSource | null>(null);
 const securityScanRefreshReadOnlyMessage =
@@ -539,24 +545,27 @@ loadPendingAndReleaseNotesHandler = (options = {}) =>
   loadPendingAndReleaseNotes(options);
 useRouteRefresh(() => updates.loadPending());
 
-function retryPendingLoadTracked(): Promise<void> {
-  if (pendingLoadRetry) {
-    return pendingLoadRetry;
+async function retryPendingStatus(): Promise<void> {
+  pendingStatusMessage.value = "";
+  pendingStatusError.value = "";
+  await updates.loadPending().catch(() => undefined);
+  if (updates.error) {
+    pendingStatusError.value = `Pending status refresh failed: ${updates.error}`;
+    return;
   }
-  const retry = retryPendingLoad().finally(() => {
-    if (pendingLoadRetry === retry) {
-      pendingLoadRetry = null;
-    }
-  });
-  pendingLoadRetry = retry;
-  return retry;
+  pendingStatusMessage.value = pendingSourceDegraded.value
+    ? "Pending status refreshed. WUD metadata remains degraded."
+    : "Pending status refreshed.";
+}
+
+function viewIssueDump(): void {
+  void router.push({ name: "issue-dump" });
 }
 
 async function refreshAfterTerminalApplyJob(): Promise<void> {
-  if (pendingLoadRetry) {
-    await pendingLoadRetry;
-  }
-  await retryPendingLoadTracked();
+  await loadPendingAndReleaseNotesHandler({ freshAfterCurrent: true }).catch(
+    () => undefined,
+  );
 }
 
 function releaseNoteStatus(note: ReleaseNoteInfo | null): string {
@@ -635,7 +644,10 @@ async function refreshPendingMetadataFromStatus(): Promise<void> {
     await connection.loadStatus({ silent: true });
     const sourceHash = connection.status?.source_hash ?? "";
     if (sourceHash && sourceHash !== (updates.pending?.source_hash ?? "")) {
-      await loadPendingAndReleaseNotesHandler({ preserveCleanup: true });
+      await loadPendingAndReleaseNotesHandler({
+        preserveCleanup: true,
+        freshAfterCurrent: true,
+      });
       return;
     }
     const checkedAt = connection.status?.wud_api.last_checked_at ?? "";
@@ -648,7 +660,7 @@ async function refreshPendingMetadataFromStatus(): Promise<void> {
 }
 
 onMounted(() => {
-  runInBackground(retryPendingLoadTracked());
+  runInBackground(retryPendingLoad());
   runInBackground(settings.loadPendingSafetyCues());
   runInBackground(reconnectObservedApplyJob());
   pendingMetadataRefreshInterval.value = globalThis.setInterval(() => {
@@ -809,6 +821,40 @@ onBeforeUnmount(() => {
       role="status"
     >
       {{ pendingSourceWarning }}
+      <n-flex
+        inline
+        class="inline-actions recovery-actions"
+        align="center"
+        :size="8"
+      >
+        <n-button size="small" type="primary" @click="viewIssueDump">
+          View issue dump
+        </n-button>
+        <n-button
+          size="small"
+          secondary
+          :loading="updates.loading"
+          @click="retryPendingStatus"
+        >
+          Retry pending status
+        </n-button>
+      </n-flex>
+    </n-alert>
+    <n-alert
+      v-if="pendingStatusMessage"
+      type="success"
+      :show-icon="false"
+      role="status"
+    >
+      {{ pendingStatusMessage }}
+    </n-alert>
+    <n-alert
+      v-if="pendingStatusError"
+      type="error"
+      :show-icon="false"
+      role="alert"
+    >
+      {{ pendingStatusError }}
     </n-alert>
 
     <CoreUpdateTourPanel
@@ -982,7 +1028,7 @@ onBeforeUnmount(() => {
     >
       <strong>Pending updates did not load</strong>
       <span>Check the WebUI API connection, then try again.</span>
-      <n-button size="small" secondary :loading="updates.loading" @click="retryPendingLoadTracked">
+      <n-button size="small" secondary :loading="updates.loading" @click="retryPendingLoad">
         Retry pending load
       </n-button>
     </div>
