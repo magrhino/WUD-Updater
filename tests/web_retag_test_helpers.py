@@ -123,6 +123,7 @@ def _make_retag_fixture(
     env: dict[str, str] | None = None,
     image: str = "repo/app@sha256:old",
     label_value: str = "^latest$$",
+    retag_digest_pins: bool = False,
 ) -> _RetagFixture:
     fake_env, fake_root = _fake_docker_env(tmp_path)
     client = _client(
@@ -155,6 +156,8 @@ def _make_retag_fixture(
         target_digest="sha256:old",
         final_image="repo/app@sha256:old",
     )
+    if retag_digest_pins:
+        _set_retag_digest_pins(tmp_path)
     return _RetagFixture(client=client, compose_dir=compose_dir, fake_root=fake_root)
 
 
@@ -279,6 +282,22 @@ def _seed_known_image(
                 provenance_confidence="verified",
             ),
         )
+
+
+def _set_retag_digest_pins(tmp_path: Path, enabled: bool = True) -> None:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        init_db(conn)
+        conn.execute(
+            """
+            INSERT INTO web_settings(key, value, updated_at)
+            VALUES ('retag.digest_pins', ?, '2026-08-08T00:00:00+00:00')
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = excluded.updated_at
+            """,
+            ("true" if enabled else "false",),
+        )
+        conn.commit()
 
 
 def _write_compose(

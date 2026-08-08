@@ -137,7 +137,7 @@ def test_retag_github_latest_fallback_refresh_enables_cached_candidate(
     assert item["retag_available"] is True
     assert item["retag_reason"] == "eligible"
     assert item["proposed_tag"] == "v1.2.3"
-    assert item["final_image"] == f"ghcr.io/acme/app@{digest}"
+    assert item["final_image"] == "ghcr.io/acme/app:v1.2.3"
     assert item["candidate_source"] == "github-latest"
     assert "will update latest tracking to v1.2.3" in item["candidate_warning"]
     assert item["candidate_link_label"] == "GitHub release"
@@ -211,8 +211,8 @@ def test_retag_github_latest_fallback_keys_duplicate_services_by_target_id(
     assert len({item["target_id"] for item in items}) == 2
     assert [item["proposed_tag"] for item in items] == ["v2.1.0", "v3.4.0"]
     assert [item["final_image"] for item in items] == [
-        f"ghcr.io/acme/app@{app_digest}",
-        f"ghcr.io/acme/worker@{worker_digest}",
+        "ghcr.io/acme/app:v2.1.0",
+        "ghcr.io/acme/worker:v3.4.0",
     ]
     assert all(item["candidate_source"] == "github-latest" for item in items)
 
@@ -232,17 +232,21 @@ def test_retag_github_latest_fallback_keys_duplicate_services_by_target_id(
     updates = [
         update
         for stack in plan["stacks"]
-        for update in stack["digest_pin_updates"]
+        for update in stack["tag_updates"]
     ]
     assert {update["target_id"] for update in updates} == {
         item["target_id"] for item in items
     }
     assert {
-        (update["source_image"], update["resolved_tag"], update["planned_digest"])
+        (update["source_image"], update["target_tag"], update["final_image"])
         for update in updates
     } == {
-        ("ghcr.io/acme/app:latest", "v2.1.0", app_digest),
-        ("ghcr.io/acme/worker:latest", "v3.4.0", worker_digest),
+        ("ghcr.io/acme/app:latest", "v2.1.0", "ghcr.io/acme/app:v2.1.0"),
+        (
+            "ghcr.io/acme/worker:latest",
+            "v3.4.0",
+            "ghcr.io/acme/worker:v3.4.0",
+        ),
     }
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
@@ -380,10 +384,9 @@ def test_retag_preview_uses_cached_selected_github_latest_candidate(
     plan = job["plan"]
     assert plan["status"] == "ready"
     assert plan["can_apply"] is True
-    update = plan["stacks"][0]["digest_pin_updates"][0]
-    assert update["resolved_tag"] == "v1.2.3"
-    assert update["planned_digest"] == digest
-    assert update["final_image"] == f"ghcr.io/acme/app@{digest}"
+    update = plan["stacks"][0]["tag_updates"][0]
+    assert update["target_tag"] == "v1.2.3"
+    assert update["final_image"] == "ghcr.io/acme/app:v1.2.3"
     assert resolved_images == ["ghcr.io/acme/app:v1.2.3"]
     calls = _fake_docker_calls(fake_root)
     assert calls.count("config --format json") == 1
@@ -463,9 +466,9 @@ def test_retag_preview_keeps_selected_tag_after_cached_candidate_changes(
     plan = job["plan"]
     assert plan["status"] == "ready"
     assert plan["can_apply"] is True
-    update = plan["stacks"][0]["digest_pin_updates"][0]
-    assert update["resolved_tag"] == "v1.0.0"
-    assert update["planned_digest"] == old_digest
+    update = plan["stacks"][0]["tag_updates"][0]
+    assert update["target_tag"] == "v1.0.0"
+    assert update["final_image"] == "ghcr.io/acme/app:v1.0.0"
 
 
 def test_retag_apply_rejects_plan_when_fallback_flag_changes(
@@ -583,7 +586,7 @@ def test_retag_github_latest_fallback_uses_v_stripped_docker_tag(
     assert item["retag_available"] is True
     assert item["retag_reason"] == "eligible"
     assert item["proposed_tag"] == "1.2.3"
-    assert item["final_image"] == f"ghcr.io/acme/app@{digest}"
+    assert item["final_image"] == "ghcr.io/acme/app:1.2.3"
     assert "release tag v1.2.3 resolved as Docker tag 1.2.3" in item[
         "candidate_warning"
     ]
@@ -644,7 +647,7 @@ def test_retag_github_latest_fallback_uses_v_prefixed_docker_tag(
     assert item["retag_available"] is True
     assert item["retag_reason"] == "eligible"
     assert item["proposed_tag"] == "v1.2.3"
-    assert item["final_image"] == f"ghcr.io/acme/app@{digest}"
+    assert item["final_image"] == "ghcr.io/acme/app:v1.2.3"
     assert "release tag 1.2.3 resolved as Docker tag v1.2.3" in item[
         "candidate_warning"
     ]
@@ -708,7 +711,7 @@ def test_retag_github_latest_fallback_uses_lsio_release_tag(
     assert item["retag_available"] is True
     assert item["retag_reason"] == "eligible"
     assert item["proposed_tag"] == "5.1.0-ls1"
-    assert item["final_image"] == f"ghcr.io/linuxserver/radarr@{digest}"
+    assert item["final_image"] == "ghcr.io/linuxserver/radarr:5.1.0-ls1"
     assert "will update latest tracking to 5.1.0-ls1" in item["candidate_warning"]
     assert item["candidate_link_label"] == "LSIO release"
     assert item["candidate_link_url"].endswith("/5.1.0-ls1")

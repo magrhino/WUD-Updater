@@ -14,21 +14,25 @@ const {
   onboardingChecklistEntry,
   composeIgnorePathsEntry,
   digestPinUpdatesEntry,
+  retagDigestPinsEntry,
   themePreferenceValue,
   onboardingChecklistValue,
   composeIgnorePathsValue,
   digestPinUpdatesValue,
+  retagDigestPinsValue,
   preferencesMessage,
   preferencesError,
   preferencesDisabledReason,
   preferenceControlsDisabled,
   composeIgnorePathsEditable,
   digestPinUpdatesEditable,
+  retagDigestPinsEditable,
   preferencesDirty,
   preferenceSaveDisabled,
   themePreferenceOptions,
   onboardingChecklistOptions,
   digestPinUpdatesOptions,
+  retagDigestPinsOptions,
   coreUpdateTourStatus,
   coreUpdateTourStep,
   managedSourceLabel,
@@ -138,6 +142,10 @@ const {
               <div>
                 <strong class="wrap-anywhere">Digest-pin updates</strong>
                 <span class="wrap-anywhere">
+                  Pins resolved digests during standard update plans. Retags
+                  use the separate preference below.
+                </span>
+                <span class="wrap-anywhere">
                   Source:
                   {{ managedSourceLabel(digestPinUpdatesEntry) }}
                 </span>
@@ -157,6 +165,27 @@ const {
                 >
                   {{ digestPinUpdatesEntry.disabled_reason }}
                 </n-alert>
+              </div>
+            </div>
+            <div class="settings-preference-row">
+              <div>
+                <strong class="wrap-anywhere">Retag digest pins</strong>
+                <span class="wrap-anywhere">
+                  Disabled writes the selected <code>image:tag</code>. Enabled
+                  resolves that tag and writes <code>image@sha256</code>.
+                </span>
+                <span class="wrap-anywhere">
+                  Source:
+                  {{ managedSourceLabel(retagDigestPinsEntry) }}
+                </span>
+              </div>
+              <div class="settings-preference-controls">
+                <n-select
+                  v-model:value="retagDigestPinsValue"
+                  :options="retagDigestPinsOptions"
+                  :disabled="preferenceControlsDisabled || !retagDigestPinsEditable"
+                  aria-label="Retag digest pins"
+                />
               </div>
             </div>
           </div>

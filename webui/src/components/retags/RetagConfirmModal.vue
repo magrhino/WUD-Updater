@@ -12,11 +12,12 @@ import {
 
 import type { RetagPlanResponse } from "../../api/client";
 import {
-  digestPinSummary,
   labelRewriteSummary,
   planStatusType,
   pluralize,
   retagPlanSourceFile,
+  retagUpdateModeLabel,
+  retagUpdateSummary,
 } from "../../views/retags/display";
 
 const props = defineProps<{
@@ -41,7 +42,10 @@ const applyErrorAlert = ref<HTMLElement | null>(null);
 
 const retagPlanUpdates = computed(() =>
   (props.plan?.stacks ?? []).flatMap((stack) =>
-    stack.digest_pin_updates.map((update) => ({ stack, update })),
+    [...(stack.tag_updates ?? []), ...stack.digest_pin_updates].map((update) => ({
+      stack,
+      update,
+    })),
   ),
 );
 
@@ -168,7 +172,10 @@ watch(
             <span>{{ stack.stack }}</span>
             <strong>{{ update.service_key }}</strong>
             <em>
-              <code>{{ digestPinSummary(update) }}</code>
+              <n-tag size="small" type="info">
+                {{ retagUpdateModeLabel(update) }}
+              </n-tag>
+              <code>{{ retagUpdateSummary(update) }}</code>
               <span>{{ labelRewriteSummary(update) }}</span>
             </em>
           </div>

@@ -11,11 +11,12 @@ import PreflightModalShell from "../preflight/PreflightModalShell.vue";
 import PreflightNoticeList from "../preflight/PreflightNoticeList.vue";
 import PreflightProgressDisplay from "../preflight/PreflightProgressDisplay.vue";
 import {
-  digestPinSummary,
   labelRewriteSummary,
   planStatusType,
   pluralize,
   retagPlanSourceFile,
+  retagUpdateModeLabel,
+  retagUpdateSummary,
 } from "../../views/retags/display";
 
 type RetagDuplicateServiceTarget = {
@@ -134,7 +135,10 @@ const metrics = computed<PreflightMetric[]>(() => {
 
 const retagPlanUpdates = computed(() =>
   (props.plan?.stacks ?? []).flatMap((stack) =>
-    stack.digest_pin_updates.map((update) => ({ stack, update })),
+    [...(stack.tag_updates ?? []), ...stack.digest_pin_updates].map((update) => ({
+      stack,
+      update,
+    })),
   ),
 );
 
@@ -245,7 +249,10 @@ const uniqueWarnings = computed(() => [...new Set(warnings.value)]);
           <span>{{ stack.stack }}</span>
           <strong>{{ update.service_key }}</strong>
           <em>
-            <code>{{ digestPinSummary(update) }}</code>
+            <n-tag size="small" type="info">
+              {{ retagUpdateModeLabel(update) }}
+            </n-tag>
+            <code>{{ retagUpdateSummary(update) }}</code>
             <span>{{ labelRewriteSummary(update) }}</span>
           </em>
         </div>

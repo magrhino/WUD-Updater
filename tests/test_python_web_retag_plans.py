@@ -32,7 +32,8 @@ def test_retag_plan_helpers_render_ordered_stacks_and_stable_ids(
     stacks = retag_plan_stacks(selected)
     assert [stack.stack for stack in stacks] == ["alpha", "bravo"]
     assert stacks[0].services == ["web"]
-    assert stacks[1].digest_pin_updates[0].service_key == "bravo/api"
+    assert stacks[1].tag_updates[0].service_key == "bravo/api"
+    assert stacks[1].digest_pin_updates == []
 
     plan = RetagPlanResponse(
         plan_id="",

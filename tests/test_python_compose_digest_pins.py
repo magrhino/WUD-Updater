@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest import mock
 
 from compose_rewrite_helpers import ComposeRewriteTestCase
 from wudup.compose_rewrite import (
     apply_compose_digest_pins,
+    apply_compose_retag_updates,
     render_compose_digest_pins,
+    render_compose_retag_updates,
 )
 from wudup.updater_models import (
     ComposeTagRewriteError,
@@ -15,6 +18,52 @@ from wudup.updater_models import (
 
 
 class ComposeDigestPinTests(ComposeRewriteTestCase):
+    def test_render_retag_writes_selected_tag_and_removes_digest_marker(
+        self,
+    ) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    # wudup.resolved-tag=1.0\n"
+            "    image: repo/app@sha256:old\n"
+            "    labels:\n"
+            "    - wud.tag.include=^latest$$\n"
+        )
+        update = replace(
+            self.digest_pin_update(old_image="repo/app@sha256:old"),
+            final_image="repo/app:2.0",
+            marker="",
+        )
+
+        rendered, applied = render_compose_retag_updates(
+            compose_file,
+            (update,),
+            stack_name="stack",
+        )
+
+        self.assertEqual(applied[0].final_image, "repo/app:2.0")
+        self.assertIn("image: repo/app:2.0", rendered)
+        self.assertIn("wud.tag.include=^2\\.0$$", rendered)
+        self.assertNotIn("wudup.resolved-tag", rendered)
+
+    def test_apply_retag_writes_selected_tag_file(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n  app:\n    image: repo/app@sha256:old\n"
+        )
+        update = replace(
+            self.digest_pin_update(old_image="repo/app@sha256:old"),
+            final_image="repo/app:2.0",
+            marker="",
+        )
+
+        applied = apply_compose_retag_updates(compose_file, (update,))
+
+        self.assertEqual(applied[0].final_image, "repo/app:2.0")
+        self.assertIn(
+            "image: repo/app:2.0",
+            compose_file.read_text(encoding="utf-8"),
+        )
+
     def test_render_empty_updates_returns_source_without_applied_updates(self) -> None:
         original = "services:\n  app:\n    image: repo/app:1.0\n"
         compose_file = self.write_compose(original)

@@ -274,6 +274,18 @@ def test_settings_reports_effective_non_secret_configuration(
         "configured": False,
         "sensitive": False,
     }
+    assert managed["retag_digest_pins"] == {
+        "key": "retag_digest_pins",
+        "value": "false",
+        "default_value": "false",
+        "source": "default",
+        "editable": True,
+        "allowed_values": ["false", "true"],
+        "restart_required": False,
+        "disabled_reason": "",
+        "configured": False,
+        "sensitive": False,
+    }
     assert managed["release_notes_enabled"] == {
         "key": "release_notes_enabled",
         "value": "false",
@@ -802,6 +814,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
                 "onboarding_checklist": "dismissed",
                 "compose_ignore_paths": "old, archive/disabled",
                 "digest_pin_updates": "true",
+                "retag_digest_pins": "true",
                 "release_notes_enabled": "true",
                 "release_notifications_delivery_mode": (
                     settings_module.DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE
@@ -828,6 +841,8 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert managed["compose_ignore_paths"]["source"] == "configured"
     assert managed["digest_pin_updates"]["value"] == "true"
     assert managed["digest_pin_updates"]["source"] == "configured"
+    assert managed["retag_digest_pins"]["value"] == "true"
+    assert managed["retag_digest_pins"]["source"] == "configured"
     assert managed["release_notes_enabled"]["value"] == "true"
     assert managed["release_notes_enabled"]["source"] == "configured"
     assert managed["release_notifications_delivery_mode"]["value"] == (
@@ -856,6 +871,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         ).fetchone()
         digest_pin_updates = conn.execute(
             "SELECT value FROM web_settings WHERE key = 'compose.digest_pin_updates'"
+        ).fetchone()
+        retag_digest_pins = conn.execute(
+            "SELECT value FROM web_settings WHERE key = 'retag.digest_pins'"
         ).fetchone()
         release_notes_enabled = conn.execute(
             "SELECT value FROM web_settings WHERE key = 'release_notes.enabled'"
@@ -913,6 +931,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert onboarding["value"]
     assert compose_ignore_paths["value"] == "old, archive/disabled"
     assert digest_pin_updates["value"] == "true"
+    assert retag_digest_pins["value"] == "true"
     assert release_notes_enabled["value"] == "true"
     assert release_notifications_delivery_mode["value"] == (
         settings_module.DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE
@@ -936,6 +955,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
             "release_notifications_mode",
             "release_notifications_resend_policy",
             "release_notifications_verbosity",
+            "retag_digest_pins",
             "theme_preference",
         ]
     }
@@ -944,6 +964,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         "onboarding_checklist": "visible",
         "compose_ignore_paths": "",
         "digest_pin_updates": "false",
+        "retag_digest_pins": "false",
         "release_notes_enabled": "false",
         "release_notifications_delivery_mode": (
             settings_module.DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE
@@ -959,6 +980,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         "onboarding_checklist": "dismissed",
         "compose_ignore_paths": "old, archive/disabled",
         "digest_pin_updates": "true",
+        "retag_digest_pins": "true",
         "release_notes_enabled": "true",
         "release_notifications_delivery_mode": (
             settings_module.DEFAULT_RELEASE_NOTIFICATIONS_DELIVERY_MODE

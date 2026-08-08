@@ -11,6 +11,7 @@ import {
   settingRows,
   sourceLabel,
   sourceTagType,
+  RETAG_DIGEST_PINS_LABELS,
   THEME_PREFERENCE_LABELS,
 } from "../src/views/settings/settingsDisplay";
 import { settingsResponse } from "./helpers/fixtures";
@@ -60,6 +61,13 @@ describe("settings display helpers", () => {
       { label: "System theme", value: "system" },
       { label: "Light theme", value: "light" },
       { label: "Dark theme", value: "dark" },
+    ]);
+    const retagDigestPinsEntry = settingsResponse().managed.find(
+      (entry) => entry.key === "retag_digest_pins",
+    );
+    expect(managedOptions(retagDigestPinsEntry, RETAG_DIGEST_PINS_LABELS)).toEqual([
+      { label: "Use selected tags", value: "false" },
+      { label: "Pin resolved digests", value: "true" },
     ]);
     expect(coreUpdateTourStatusLabel("completed")).toBe("Completed");
     expect(coreUpdateTourStepLabel("runs_history")).toBe("History");

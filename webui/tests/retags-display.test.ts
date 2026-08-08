@@ -14,6 +14,8 @@ import {
   reasonTagType,
   retagPlanContextLabel,
   retagPlanSourceFile,
+  retagUpdateModeLabel,
+  retagUpdateSummary,
   searchableText,
   runtimeStateDetail,
   runtimeStateLabel,
@@ -148,6 +150,24 @@ describe("retag display helpers", () => {
     expect(retagPlanSourceFile(twoStackPlan)).toBe("2 Compose files");
     expect(retagPlanSourceFile(emptyPlan)).toBe("Retag plan");
     expect(digestPinSummary(update)).toBe("repo/app:latest -> repo/app@sha256:abc123");
+    expect(retagUpdateSummary(update)).toBe(
+      "repo/app:latest -> repo/app@sha256:abc123",
+    );
+    expect(retagUpdateModeLabel(update)).toBe("Digest pin");
+    expect(
+      retagUpdateSummary({
+        target_id: "media/app",
+        service_key: "media/app",
+        stack: "media",
+        service: "app",
+        source_image: "repo/app:latest",
+        target_tag: "1.1",
+        final_image: "repo/app:1.1",
+        label_key: "wud.tag.include",
+        label_value: String.raw`^1\.1$$`,
+        label_rewrites: [],
+      }),
+    ).toBe("repo/app:latest -> repo/app:1.1");
     expect(labelRewriteSummary(update)).toBe(
       String.raw`wud.tag.include: ^latest$$ -> ^1\.1$$`,
     );

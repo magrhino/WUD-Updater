@@ -141,7 +141,10 @@ def create_app(
     )
     web_pending.configure(effective_config_loader=web_settings._effective_config)
     web_plans.configure(effective_config_loader=web_settings._effective_config)
-    web_retags.configure(effective_config_loader=web_settings._effective_config)
+    web_retags.configure(
+        effective_config_loader=web_settings._effective_config,
+        retag_digest_pins_loader=web_settings._effective_retag_digest_pins,
+    )
 
     app.add_api_route(
         "/healthz",

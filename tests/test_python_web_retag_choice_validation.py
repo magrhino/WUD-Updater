@@ -119,7 +119,7 @@ def test_retag_plan_accepts_duplicate_service_keys_with_target_ids(
     assert {
         update["target_id"]
         for stack in plan["stacks"]
-        for update in stack["digest_pin_updates"]
+        for update in stack["tag_updates"]
     } == expected_target_ids
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 

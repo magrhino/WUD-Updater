@@ -16,11 +16,12 @@ from .web_models import (
     RetagPlanLabelRewrite,
     RetagPlanResponse,
     RetagPlanStack,
+    RetagPlanTagUpdate,
     RetagRuntimeState,
 )
 
 
-RETAG_PLAN_VERSION = 2
+RETAG_PLAN_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class RetagPlanUpdate:
     stack: ComposeStack
     update: DigestPinUpdate
     provenance: DigestTagProvenance
+    digest_pin: bool = False
     runtime_state: RetagRuntimeState = "unknown"
     allow_start: bool = False
     known_image_service_key_ambiguous: bool = False
@@ -81,12 +83,21 @@ def retag_plan_stacks(
                         for service in item.update.services
                     }
                 ),
+                tag_updates=[
+                    retag_plan_tag_update(item)
+                    for item in sorted(
+                        stack_updates,
+                        key=lambda value: (value.service_key, value.target_id),
+                    )
+                    if not item.digest_pin
+                ],
                 digest_pin_updates=[
                     retag_plan_digest_update(item)
                     for item in sorted(
                         stack_updates,
                         key=lambda value: (value.service_key, value.target_id),
                     )
+                    if item.digest_pin
                 ],
             )
         )
@@ -113,6 +124,24 @@ def retag_plan_digest_update(
         label_value=update.label_value,
         label_rewrites=list(item.label_rewrites),
         digest_provenance=asdict(item.provenance),
+    )
+
+
+def retag_plan_tag_update(
+    item: RetagPlanUpdate,
+) -> RetagPlanTagUpdate:
+    update = item.update
+    return RetagPlanTagUpdate(
+        target_id=item.target_id,
+        service_key=item.service_key,
+        stack=item.stack.name,
+        service=retag_update_service(item),
+        source_image=update.old_image,
+        target_tag=update.resolved_tag,
+        final_image=update.final_image,
+        label_key=update.label_key,
+        label_value=update.label_value,
+        label_rewrites=list(item.label_rewrites),
     )
 
 
@@ -148,6 +177,7 @@ def retag_plan_id(
                 "resolved_tag": item.update.resolved_tag,
                 "planned_digest": item.update.planned_digest,
                 "final_image": item.update.final_image,
+                "digest_pin": item.digest_pin,
                 "label_value": item.update.label_value,
                 "provenance": asdict(item.provenance),
                 "runtime_state": item.runtime_state,
