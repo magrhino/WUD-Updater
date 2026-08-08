@@ -192,7 +192,8 @@ def test_retag_plan_rejects_unknown_target_id(tmp_path: Path) -> None:
     assert response.status_code == 422
     assert (
         response.json()["detail"]
-        == "retag choices reference unknown target(s): non-existent-target-id"
+        == "retag targets changed; reload retag targets before retrying. "
+        "Affected service(s): stack/app"
     )
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fixture.fake_root))
 
