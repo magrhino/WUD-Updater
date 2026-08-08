@@ -63,7 +63,10 @@ def validated_retag_choice_map(
                 failures["unknown_services"],
             ),
             (
-                "retag choices reference unknown target(s)",
+                (
+                    "retag targets changed; reload retag targets before retrying. "
+                    "Affected service(s)"
+                ),
                 failures["unknown_targets"],
             ),
             (
@@ -91,7 +94,7 @@ def _resolve_choice_key(
     if target_id:
         service_key = service_key_by_target_id.get(target_id)
         if service_key is None:
-            failures["unknown_targets"].append(target_id)
+            failures["unknown_targets"].append(item.service_key)
             return None
         if service_key != item.service_key:
             failures["mismatches"].append(f"{item.service_key} ({target_id})")
