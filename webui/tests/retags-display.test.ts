@@ -168,6 +168,7 @@ describe("retag display helpers", () => {
       label_rewrites: [],
     };
     expect(retagUpdateSummary(tagUpdate)).toBe("repo/app:latest -> repo/app:1.1");
+    expect(retagUpdateModeLabel(tagUpdate)).toBe("Selected tag");
     expect(retagPlanStackUpdates(plan.stacks[0])).toEqual([update]);
     expect(
       retagPlanStackUpdates({

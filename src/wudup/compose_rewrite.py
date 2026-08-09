@@ -492,24 +492,12 @@ def _render_compose_retag_updates(
                 update.label_value,
             )
             service_config["image"] = update.final_image
-            if update.marker:
-                service_config.yaml_set_comment_before_after_key(
-                    "image",
-                    before=update.marker,
-                )
-            else:
-                marker_tag = _service_resolved_tag_marker(
-                    services,
-                    service,
-                    service_config,
-                )
-                if marker_tag:
-                    _remove_service_resolved_tag_marker(
-                        services,
-                        service,
-                        service_config,
-                        f"{DIGEST_PIN_MARKER_PREFIX}{marker_tag}",
-                    )
+            _update_service_resolved_tag_marker(
+                services,
+                service,
+                service_config,
+                update.marker,
+            )
             counts[id(update)] += 1
 
     applied = tuple(
@@ -1131,6 +1119,25 @@ def _service_resolved_tag_marker(
             f"Service {service} resolved-tag marker has invalid tag {tag}."
         )
     return tag
+
+
+def _update_service_resolved_tag_marker(
+    services: CommentedMap,
+    service: str,
+    service_config: CommentedMap,
+    marker: str,
+) -> None:
+    if marker:
+        service_config.yaml_set_comment_before_after_key("image", before=marker)
+        return
+    marker_tag = _service_resolved_tag_marker(services, service, service_config)
+    if marker_tag:
+        _remove_service_resolved_tag_marker(
+            services,
+            service,
+            service_config,
+            f"{DIGEST_PIN_MARKER_PREFIX}{marker_tag}",
+        )
 
 
 def _remove_service_resolved_tag_marker(

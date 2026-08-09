@@ -526,6 +526,11 @@ function createRetagApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
       const rewrite = labelRewriteSummary(update);
       const summary = retagUpdateSummary(update);
       const digestPin = "planned_digest" in update;
+      let digestPinLabel = "";
+      if (digestPin) {
+        digestPinLabel =
+          rewrite === "No label rewrite" ? summary : `${summary}; ${rewrite}`;
+      }
       return {
         key:
           update.target_id ||
@@ -535,12 +540,7 @@ function createRetagApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
         scopeLabel: stack.stack || "Retag",
         serviceLabel: update.service_key,
         tagRewriteLabel: digestPin ? "" : summary,
-        digestPinLabel:
-          digestPin
-            ? rewrite === "No label rewrite"
-              ? summary
-              : `${summary}; ${rewrite}`
-            : "",
+        digestPinLabel,
         composeImage: update.source_image,
         targetImage: update.final_image,
       };
