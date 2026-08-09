@@ -81,6 +81,8 @@ MANAGED_COMPOSE_IGNORE_PATHS_KEY = "compose_ignore_paths"
 MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY = "compose.ignore_paths"
 MANAGED_DIGEST_PIN_UPDATES_KEY = "digest_pin_updates"
 MANAGED_DIGEST_PIN_UPDATES_DB_KEY = "compose.digest_pin_updates"
+MANAGED_RETAG_DIGEST_PINS_KEY = "retag_digest_pins"
+MANAGED_RETAG_DIGEST_PINS_DB_KEY = "retag.digest_pins"
 RELEASE_NOTES_ENABLED_ENV = "WUD_RELEASE_NOTES_ENABLED"
 MANAGED_RELEASE_NOTES_ENABLED_KEY = "release_notes_enabled"
 MANAGED_RELEASE_NOTES_ENABLED_DB_KEY = "release_notes.enabled"
@@ -116,11 +118,13 @@ DISCORD_WEBHOOK_ENV_NAMES = ("DISCORD_WEBHOOK",)
 THEME_PREFERENCE_VALUES = ("system", "light", "dark")
 ONBOARDING_CHECKLIST_VALUES = ("visible", "dismissed")
 DIGEST_PIN_UPDATES_VALUES = ("false", "true")
+RETAG_DIGEST_PINS_VALUES = ("false", "true")
 RELEASE_NOTES_ENABLED_VALUES = ("false", "true")
 RELEASE_NOTIFICATIONS_MODE_VALUES = ("digest", "per_container")
 RELEASE_NOTIFICATIONS_RESEND_POLICY_VALUES = ("remote_change", "cooldown")
 RELEASE_NOTIFICATIONS_VERBOSITY_VALUES = ("summary", "full")
 DEFAULT_RELEASE_NOTES_ENABLED = False
+DEFAULT_RETAG_DIGEST_PINS = False
 DEFAULT_RELEASE_NOTIFICATIONS_MODE = "digest"
 DEFAULT_RELEASE_NOTIFICATIONS_RESEND_POLICY = "remote_change"
 DEFAULT_RELEASE_NOTIFICATIONS_COOLDOWN_SECONDS = 86_400
@@ -129,6 +133,7 @@ _MANAGED_SETTING_ALLOWED_VALUES = {
     MANAGED_THEME_PREFERENCE_KEY: THEME_PREFERENCE_VALUES,
     MANAGED_ONBOARDING_CHECKLIST_KEY: ONBOARDING_CHECKLIST_VALUES,
     MANAGED_DIGEST_PIN_UPDATES_KEY: DIGEST_PIN_UPDATES_VALUES,
+    MANAGED_RETAG_DIGEST_PINS_KEY: RETAG_DIGEST_PINS_VALUES,
     MANAGED_RELEASE_NOTES_ENABLED_KEY: RELEASE_NOTES_ENABLED_VALUES,
     MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_KEY: (
         RELEASE_NOTIFICATIONS_DELIVERY_MODE_VALUES
@@ -145,6 +150,7 @@ _MANAGED_SETTING_DB_KEYS = {
     MANAGED_THEME_PREFERENCE_KEY: MANAGED_THEME_PREFERENCE_DB_KEY,
     MANAGED_COMPOSE_IGNORE_PATHS_KEY: MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY,
     MANAGED_DIGEST_PIN_UPDATES_KEY: MANAGED_DIGEST_PIN_UPDATES_DB_KEY,
+    MANAGED_RETAG_DIGEST_PINS_KEY: MANAGED_RETAG_DIGEST_PINS_DB_KEY,
     MANAGED_RELEASE_NOTES_ENABLED_KEY: MANAGED_RELEASE_NOTES_ENABLED_DB_KEY,
     MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_KEY: (
         MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_DB_KEY
@@ -346,6 +352,38 @@ def _stored_digest_pin_updates(settings: WebSettings) -> bool:
             detail=_safe_exception_detail(
                 settings,
                 f"stored {MANAGED_DIGEST_PIN_UPDATES_KEY} is invalid",
+                exc,
+            ),
+        ) from exc
+
+
+def _effective_retag_digest_pins(settings: WebSettings) -> bool:
+    try:
+        with closing(_connect_readonly_db(settings)) as conn:
+            value = _web_setting(conn, MANAGED_RETAG_DIGEST_PINS_DB_KEY)
+    except ReadOnlyDatabaseMissing:
+        return DEFAULT_RETAG_DIGEST_PINS
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read retag digest-pin setting",
+                exc,
+            ),
+        ) from exc
+    try:
+        return parse_bool_env(
+            MANAGED_RETAG_DIGEST_PINS_KEY,
+            value,
+            default=DEFAULT_RETAG_DIGEST_PINS,
+        )
+    except ConfigError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                f"stored {MANAGED_RETAG_DIGEST_PINS_KEY} is invalid",
                 exc,
             ),
         ) from exc
@@ -584,13 +622,14 @@ def _managed_settings_db_values(conn: sqlite3.Connection) -> dict[str, str]:
         """
         SELECT key, value
         FROM web_settings
-        WHERE key IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        WHERE key IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             MANAGED_THEME_PREFERENCE_DB_KEY,
             ONBOARDING_DISMISSED_AT_KEY,
             MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY,
             MANAGED_DIGEST_PIN_UPDATES_DB_KEY,
+            MANAGED_RETAG_DIGEST_PINS_DB_KEY,
             MANAGED_RELEASE_NOTES_ENABLED_DB_KEY,
             MANAGED_RELEASE_NOTIFICATIONS_DELIVERY_MODE_DB_KEY,
             MANAGED_RELEASE_NOTIFICATIONS_MODE_DB_KEY,
@@ -612,6 +651,7 @@ def _managed_settings_entries_from_values(
         _onboarding_checklist_entry(values),
         _compose_ignore_paths_entry(values, settings),
         _digest_pin_updates_entry(values, settings),
+        _retag_digest_pins_entry(values),
         _release_notes_enabled_entry(values, settings),
         *_release_notification_entries(values, settings),
     ]
@@ -699,6 +739,26 @@ def _digest_pin_updates_entry(
         allowed_values=list(DIGEST_PIN_UPDATES_VALUES),
         restart_required=False,
         disabled_reason=digest_disabled_reason,
+    )
+
+
+def _retag_digest_pins_entry(
+    values: Mapping[str, str],
+) -> ManagedSettingEntry:
+    configured = MANAGED_RETAG_DIGEST_PINS_DB_KEY in values
+    enabled = parse_bool_env(
+        MANAGED_RETAG_DIGEST_PINS_KEY,
+        values.get(MANAGED_RETAG_DIGEST_PINS_DB_KEY, ""),
+        default=DEFAULT_RETAG_DIGEST_PINS,
+    )
+    return ManagedSettingEntry(
+        key=MANAGED_RETAG_DIGEST_PINS_KEY,
+        value=_format_bool(enabled),
+        default_value=_format_bool(DEFAULT_RETAG_DIGEST_PINS),
+        source="configured" if configured else "default",
+        editable=True,
+        allowed_values=list(RETAG_DIGEST_PINS_VALUES),
+        restart_required=False,
     )
 
 

@@ -138,6 +138,7 @@ __all__ = (
     "RetagPlanResponse",
     "RetagPlanStack",
     "RetagPlanStatus",
+    "RetagPlanTagUpdate",
     "RetagPreviewJobResponse",
     "RetagRuntimeState",
     "RunDetail",
@@ -804,12 +805,27 @@ class RetagPlanDigestPinUpdate(BaseModel):
     label_rewrites: list[RetagPlanLabelRewrite] = Field(default_factory=list)
     digest_provenance: DigestTagProvenance | None = None
 
+
+class RetagPlanTagUpdate(BaseModel):
+    target_id: str = ""
+    service_key: str
+    stack: str
+    service: str
+    source_image: str
+    target_tag: str
+    final_image: str
+    label_key: str
+    label_value: str
+    label_rewrites: list[RetagPlanLabelRewrite] = Field(default_factory=list)
+
+
 class RetagPlanStack(BaseModel):
     stack: str
     directory: str
     compose_file: str
     project_directory: str
     services: list[str] = Field(default_factory=list)
+    tag_updates: list[RetagPlanTagUpdate] = Field(default_factory=list)
     digest_pin_updates: list[RetagPlanDigestPinUpdate] = Field(default_factory=list)
 
 class RetagPlanResponse(BaseModel):

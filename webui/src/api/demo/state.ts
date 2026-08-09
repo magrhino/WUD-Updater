@@ -782,7 +782,7 @@ export class DemoApiState {
       progress: [
         {
           job_id: previewJobId,
-          phase: "compose-digest-pin",
+          phase: "compose-retag",
           status: plan.issues.length ? "failure" : "success",
           message: plan.issues.length
             ? "Demo retag preview found an invalid selection."
@@ -858,7 +858,7 @@ export class DemoApiState {
         services: updates
           .filter((update) => update.stack === stack.stack)
           .map((update) => update.service),
-        digest_pin_updates: updates.filter(
+        tag_updates: updates.filter(
           (update) =>
             update.stack === stack.stack &&
             fixtures.retagTargets.items.some(
@@ -869,8 +869,9 @@ export class DemoApiState {
                 item.project_directory === stack.project_directory,
             ),
         ),
+        digest_pin_updates: [],
       }))
-      .filter((stack) => stack.digest_pin_updates.length > 0);
+      .filter((stack) => stack.tag_updates.length > 0);
     const selectedCount = updates.length;
     let status: RetagPlanResponse["status"] = "empty";
     if (selectedCount > 0) {
@@ -881,7 +882,7 @@ export class DemoApiState {
         selectedCount === 0
           ? "demo-retag-empty"
           : `demo-retag-${updates
-              .map((update) => `${demoIdPart(update.service_key)}-${demoIdPart(update.resolved_tag)}`)
+              .map((update) => `${demoIdPart(update.service_key)}-${demoIdPart(update.target_tag)}`)
               .join("-")}`,
       status,
       can_apply: false,
@@ -899,7 +900,7 @@ export class DemoApiState {
   private retagPlanUpdate(
     item: RetagTargetItem,
     choice: RetagChoiceRequest,
-  ): RetagPlanResponse["stacks"][number]["digest_pin_updates"][number] {
+  ): RetagPlanResponse["stacks"][number]["tag_updates"][number] {
     const tag = this.retagTargetTag(item, choice);
     const finalImage = this.retagFinalImage(item, tag);
     return {
@@ -908,11 +909,8 @@ export class DemoApiState {
       stack: item.stack,
       service: item.service,
       source_image: item.image,
-      resolved_tag: tag,
-      planned_digest: item.digest_provenance?.target_digest ?? "",
+      target_tag: tag,
       final_image: finalImage,
-      watch_tag: item.tracking_tag,
-      marker: item.target_id || item.service_key,
       label_key: item.label_key,
       label_value: item.label_value,
       label_rewrites: item.label_key
@@ -931,7 +929,6 @@ export class DemoApiState {
             },
           ]
         : [],
-      digest_provenance: item.digest_provenance ?? null,
     };
   }
 

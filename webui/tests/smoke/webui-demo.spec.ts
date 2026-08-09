@@ -162,6 +162,7 @@ test("static demo renders retag review fixtures", async ({ page }) => {
     page.getByRole("heading", { name: "Review retag preview" }),
   ).toBeVisible();
   await expect(page.getByText("1 service ready to retag.")).toBeVisible();
+  await expect(page.getByText("Selected tag", { exact: true })).toBeVisible();
   await expect(
     page
       .getByLabel("Review retag preview")
@@ -200,6 +201,7 @@ test("static demo mobile layout stays within the viewport", async ({ page }) => 
       "The public static demo is read-only. Run WUDup locally to apply changes.",
     ).first(),
   ).toBeVisible();
+  await expect(page.getByText("Retag digest pins", { exact: true })).toBeVisible();
   await expectTouchTargetHeight(page, "Download support bundle");
   await expectTouchTargetHeight(page, "Copy");
 

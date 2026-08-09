@@ -10,6 +10,7 @@ import {
   managedSourceLabel,
   managedOptions,
   ONBOARDING_CHECKLIST_LABELS,
+  RETAG_DIGEST_PINS_LABELS,
   THEME_PREFERENCE_LABELS,
 } from "./settingsDisplay";
 import { useSettingsSafety } from "./useSettingsSafety";
@@ -33,11 +34,15 @@ export function useManagedPreferences() {
   const digestPinUpdatesEntry = computed(() =>
     managedEntries.value.find((entry) => entry.key === "digest_pin_updates"),
   );
+  const retagDigestPinsEntry = computed(() =>
+    managedEntries.value.find((entry) => entry.key === "retag_digest_pins"),
+  );
 
   const themePreferenceValue = ref("system");
   const onboardingChecklistValue = ref("visible");
   const composeIgnorePathsValue = ref("");
   const digestPinUpdatesValue = ref("false");
+  const retagDigestPinsValue = ref("false");
   const preferencesMessage = ref("");
   const preferencesError = ref("");
 
@@ -50,6 +55,9 @@ export function useManagedPreferences() {
   const digestPinUpdatesEditable = computed(
     () => digestPinUpdatesEntry.value?.editable === true,
   );
+  const retagDigestPinsEditable = computed(
+    () => retagDigestPinsEntry.value?.editable === true,
+  );
   const preferencesDirty = computed(
     () =>
       themePreferenceValue.value !==
@@ -61,7 +69,10 @@ export function useManagedPreferences() {
           (composeIgnorePathsEntry.value?.value ?? "")) ||
       (digestPinUpdatesEditable.value &&
         digestPinUpdatesValue.value !==
-          (digestPinUpdatesEntry.value?.value ?? "false")),
+          (digestPinUpdatesEntry.value?.value ?? "false")) ||
+      (retagDigestPinsEditable.value &&
+        retagDigestPinsValue.value !==
+          (retagDigestPinsEntry.value?.value ?? "false")),
   );
   const preferenceSaveDisabled = computed(
     () => preferenceControlsDisabled.value || !preferencesDirty.value,
@@ -74,6 +85,9 @@ export function useManagedPreferences() {
   );
   const digestPinUpdatesOptions = computed(() =>
     managedOptions(digestPinUpdatesEntry.value, DIGEST_PIN_UPDATES_LABELS),
+  );
+  const retagDigestPinsOptions = computed(() =>
+    managedOptions(retagDigestPinsEntry.value, RETAG_DIGEST_PINS_LABELS),
   );
   const coreUpdateTourStatus = computed(() =>
     coreUpdateTourStatusLabel(settings.coreUpdateTour?.status),
@@ -88,6 +102,7 @@ export function useManagedPreferences() {
       onboardingChecklistEntry.value?.value ?? "visible";
     composeIgnorePathsValue.value = composeIgnorePathsEntry.value?.value ?? "";
     digestPinUpdatesValue.value = digestPinUpdatesEntry.value?.value ?? "false";
+    retagDigestPinsValue.value = retagDigestPinsEntry.value?.value ?? "false";
   }
 
   function resetPreferenceForm(): void {
@@ -125,6 +140,13 @@ export function useManagedPreferences() {
         (digestPinUpdatesEntry.value?.value ?? "false")
     ) {
       values.digest_pin_updates = digestPinUpdatesValue.value;
+    }
+    if (
+      retagDigestPinsEditable.value &&
+      retagDigestPinsValue.value !==
+        (retagDigestPinsEntry.value?.value ?? "false")
+    ) {
+      values.retag_digest_pins = retagDigestPinsValue.value;
     }
     if (!Object.keys(values).length) {
       return;
@@ -208,21 +230,25 @@ export function useManagedPreferences() {
     onboardingChecklistEntry,
     composeIgnorePathsEntry,
     digestPinUpdatesEntry,
+    retagDigestPinsEntry,
     themePreferenceValue,
     onboardingChecklistValue,
     composeIgnorePathsValue,
     digestPinUpdatesValue,
+    retagDigestPinsValue,
     preferencesMessage,
     preferencesError,
     preferencesDisabledReason,
     preferenceControlsDisabled,
     composeIgnorePathsEditable,
     digestPinUpdatesEditable,
+    retagDigestPinsEditable,
     preferencesDirty,
     preferenceSaveDisabled,
     themePreferenceOptions,
     onboardingChecklistOptions,
     digestPinUpdatesOptions,
+    retagDigestPinsOptions,
     coreUpdateTourStatus,
     coreUpdateTourStep,
     managedSourceLabel,

@@ -514,12 +514,26 @@ export interface RetagPlanDigestPinUpdate {
   digest_provenance?: DigestTagProvenance | null;
 }
 
+export interface RetagPlanTagUpdate {
+  target_id: string;
+  service_key: string;
+  stack: string;
+  service: string;
+  source_image: string;
+  target_tag: string;
+  final_image: string;
+  label_key: string;
+  label_value: string;
+  label_rewrites: RetagPlanLabelRewrite[];
+}
+
 export interface RetagPlanStack {
   stack: string;
   directory: string;
   compose_file: string;
   project_directory: string;
   services: string[];
+  tag_updates: RetagPlanTagUpdate[];
   digest_pin_updates: RetagPlanDigestPinUpdate[];
 }
 

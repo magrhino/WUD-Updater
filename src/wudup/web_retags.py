@@ -12,7 +12,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from threading import Condition, Lock
 from typing import Any
@@ -27,8 +27,10 @@ from .compose_rewrite import (
     WUD_TAG_INCLUDE_LABEL,
     _backup_compose,
     apply_compose_digest_pins,
+    apply_compose_retag_updates,
     compose_unescape_dollars,
     render_compose_digest_pins,
+    render_compose_retag_updates,
 )
 from .config import ConfigError, UpdaterConfig
 from .db import (
@@ -40,7 +42,7 @@ from .db import (
     upsert_known_image,
     utc_timestamp,
 )
-from .digest_provenance import DigestTagProvenance, digest_from_image
+from .digest_provenance import DigestTagProvenance
 from .digest_verifier import DigestVerifier
 from .docker_cli import DockerCli
 from .images import (
@@ -101,6 +103,7 @@ from .web_retag_plans import (
     retag_plan_id as _retag_plan_id,
     retag_plan_stacks as _retag_plan_stacks,
     retag_plan_status as _retag_plan_status,
+    retag_plan_tag_update as _retag_plan_tag_update,
     retag_update_service as _retag_update_service,
 )
 from .wud_file import WudTarget
@@ -183,12 +186,22 @@ class EffectiveConfigLoader(Protocol):
     def __call__(self, settings: WebSettings) -> UpdaterConfig: ...
 
 
+class RetagDigestPinsLoader(Protocol):
+    def __call__(self, settings: WebSettings) -> bool: ...
+
+
 _effective_config_loader: EffectiveConfigLoader | None = None
+_retag_digest_pins_loader: RetagDigestPinsLoader | None = None
 
 
-def configure(*, effective_config_loader: EffectiveConfigLoader) -> None:
-    global _effective_config_loader
+def configure(
+    *,
+    effective_config_loader: EffectiveConfigLoader,
+    retag_digest_pins_loader: RetagDigestPinsLoader,
+) -> None:
+    global _effective_config_loader, _retag_digest_pins_loader
     _effective_config_loader = effective_config_loader
+    _retag_digest_pins_loader = retag_digest_pins_loader
 
 
 def initialize_retag_preview_state(state: Any) -> None:
@@ -501,6 +514,7 @@ def build_retag_plan(
         settings,
         choices,
         records_by_target_id,
+        digest_pins=_retag_digest_pins(settings),
     )
 
     selected, preview_issues = _preview_retag_updates(settings, selected)
@@ -526,6 +540,8 @@ def _selected_retag_plan_updates(
     settings: WebSettings,
     choices: Mapping[str, RetagChoiceRequest],
     records_by_target_id: Mapping[str, _RetagTargetRecord],
+    *,
+    digest_pins: bool,
 ) -> tuple[list[_RetagPlanUpdate], list[RetagPlanIssue]]:
     selected: list[_RetagPlanUpdate] = []
     issues: list[RetagPlanIssue] = []
@@ -547,6 +563,7 @@ def _selected_retag_plan_updates(
             record,
             target_tag=choice.target_tag,
             allow_start=choice.allow_start,
+            digest_pins=digest_pins,
         )
         if issue is not None:
             issues.append(issue)
@@ -577,6 +594,7 @@ def _retag_plan_update_for_choice(
     *,
     target_tag: str | None = None,
     allow_start: bool = False,
+    digest_pins: bool,
 ) -> tuple[_RetagPlanUpdate | None, RetagPlanIssue | None]:
     item = record.item
     provenance = record.provenance
@@ -596,6 +614,7 @@ def _retag_plan_update_for_choice(
                 record,
                 target_tag=manual_tag,
                 allow_start=allow_start,
+                digest_pins=digest_pins,
             )
     if not item.retag_available or provenance is None:
         return None, RetagPlanIssue(
@@ -627,6 +646,12 @@ def _retag_plan_update_for_choice(
             stack=item.stack,
             service=item.service,
         )
+    if not digest_pins:
+        update = replace(
+            update,
+            final_image=update.resolved_image,
+            marker="",
+        )
     return (
         _RetagPlanUpdate(
             target_id=item.target_id,
@@ -637,6 +662,7 @@ def _retag_plan_update_for_choice(
             runtime_state=item.runtime_state,
             allow_start=allow_start,
             known_image_service_key_ambiguous=record.service_key_ambiguous,
+            digest_pin=digest_pins,
         ),
         None,
     )
@@ -649,6 +675,7 @@ def _manual_retag_plan_update_for_choice(
     *,
     target_tag: str,
     allow_start: bool = False,
+    digest_pins: bool,
 ) -> tuple[_RetagPlanUpdate | None, RetagPlanIssue | None]:
     item = record.item
     if target_tag == "latest":
@@ -707,6 +734,12 @@ def _manual_retag_plan_update_for_choice(
         planned_digest=digest,
         services=(item.service,),
     )
+    if not digest_pins:
+        update = replace(
+            update,
+            final_image=update.resolved_image,
+            marker="",
+        )
     return (
         _RetagPlanUpdate(
             target_id=item.target_id,
@@ -717,6 +750,7 @@ def _manual_retag_plan_update_for_choice(
             runtime_state=item.runtime_state,
             allow_start=allow_start,
             known_image_service_key_ambiguous=record.service_key_ambiguous,
+            digest_pin=digest_pins,
         ),
         None,
     )
@@ -789,6 +823,7 @@ def _retag_target_records(
     else:
         active_github_latest_by_target_id = {}
     records: list[_RetagTargetRecord] = []
+    digest_pins = _retag_digest_pins(settings)
     running_service_keys = _running_retag_compose_service_keys(settings)
     for stack in stacks:
         for service_image in stack.service_images:
@@ -818,6 +853,7 @@ def _retag_target_records(
                     runtime_state=runtime_state,
                     service_key_ambiguous=service_key_ambiguous,
                     github_latest_fallback=github_latest_fallback,
+                    digest_pins=digest_pins,
                 )
             )
 
@@ -1213,6 +1249,7 @@ def _retag_target_record(
     runtime_state: RetagRuntimeState,
     service_key_ambiguous: bool,
     github_latest_fallback: bool,
+    digest_pins: bool,
 ) -> _RetagTargetRecord:
     service_key = _retag_service_key(stack.name, service_image.service)
     provenance = None if known is None else known.digest_provenance
@@ -1240,6 +1277,7 @@ def _retag_target_record(
         github_latest_fallback=github_latest_fallback,
         allow_source_image_match=github_latest_provenance,
         runtime_state=runtime_state,
+        digest_pins=digest_pins,
     )
     return _RetagTargetRecord(
         item=item,
@@ -1277,7 +1315,12 @@ def _preview_retag_stack(
     issues: list[RetagPlanIssue] = []
     updated: list[_RetagPlanUpdate] = []
     try:
-        _rendered, applied = render_compose_digest_pins(
+        renderer = (
+            render_compose_digest_pins
+            if stack_updates[0].digest_pin
+            else render_compose_retag_updates
+        )
+        _rendered, applied = renderer(
             stack.directory / stack.file,
             tuple(item.update for item in stack_updates),
             stack_name=stack.name,
@@ -1349,6 +1392,7 @@ def _retag_update_with_label_rewrites(
         runtime_state=item.runtime_state,
         allow_start=item.allow_start,
         known_image_service_key_ambiguous=item.known_image_service_key_ambiguous,
+        digest_pin=item.digest_pin,
         label_rewrites=tuple(
             RetagPlanLabelRewrite(
                 service=rewrite.service,
@@ -1556,15 +1600,20 @@ def _apply_retag_updates(
                 jobs,
                 apply_condition,
                 job_id,
-                "compose-digest-pin",
+                "compose-retag",
                 "running",
-                f"[{stack.name}] Writing retag Compose metadata.",
+                f"[{stack.name}] Writing selected retag to Compose.",
                 stack=stack.name,
                 services=services,
             )
             compose_path = stack.directory / stack.file
             backup = _backup_compose(compose_path)
-            applied = apply_compose_digest_pins(
+            applier = (
+                apply_compose_digest_pins
+                if stack_updates[0].digest_pin
+                else apply_compose_retag_updates
+            )
+            applied = applier(
                 compose_path,
                 tuple(item.update for item in stack_updates),
                 stack_name=stack.name,
@@ -1575,9 +1624,9 @@ def _apply_retag_updates(
                 jobs,
                 apply_condition,
                 job_id,
-                "compose-digest-pin",
+                "compose-retag",
                 "success",
-                f"[{stack.name}] Compose retag metadata was written.",
+                f"[{stack.name}] Selected retag was written to Compose.",
                 stack=stack.name,
                 services=services,
             )
@@ -1920,21 +1969,16 @@ def _record_successful_retag_known_images(
                 conn,
                 service_key=item.service_key,
                 image=item.update.final_image,
-                digest=digest_from_image(item.update.final_image),
+                digest=item.update.planned_digest,
                 metadata_json=_json_object(
                     {
                         "source": "webui",
                         "operation": "retag",
                     }
                 ),
-                digest_provenance=DigestTagProvenance(
-                    source_image=item.update.old_image,
-                    resolved_tag=item.update.resolved_tag,
-                    watch_tag=item.update.watch_tag,
-                    target_digest=item.update.planned_digest,
-                    final_image=item.update.final_image,
-                    provenance_source="retag",
-                    provenance_confidence="verified",
+                digest_provenance=_retag_digest_provenance(
+                    item,
+                    confidence="verified",
                 ),
             )
 
@@ -2006,14 +2050,9 @@ def _finish_retag_audit_run(
                 target_image=item.update.final_image,
                 status=item_status,
                 metadata_json=_json_object(event_metadata),
-                digest_provenance=DigestTagProvenance(
-                    source_image=item.update.old_image,
-                    resolved_tag=item.update.resolved_tag,
-                    watch_tag=item.update.watch_tag,
-                    target_digest=item.update.planned_digest,
-                    final_image=item.update.final_image,
-                    provenance_source="retag",
-                    provenance_confidence=(
+                digest_provenance=_retag_digest_provenance(
+                    item,
+                    confidence=(
                         "verified" if item_status == "success" else "planned"
                     ),
                 ),
@@ -2043,14 +2082,39 @@ def _retag_audit_metadata(
         "services": [item.service_key for item in build.updates],
         "targets": [item.target_id for item in build.updates],
         "external_recreate_required": False,
+        "retag_digest_pins": any(item.digest_pin for item in build.updates),
+        "tag_updates": [
+            _retag_plan_tag_update(item).model_dump(mode="json")
+            for item in build.updates
+            if not item.digest_pin
+        ],
         "digest_pin_updates": [
             _retag_plan_digest_update(item).model_dump(mode="json")
             for item in build.updates
+            if item.digest_pin
         ],
     }
     if error:
         metadata["error"] = error
     return metadata
+
+
+def _retag_digest_provenance(
+    item: _RetagPlanUpdate,
+    *,
+    confidence: str,
+) -> DigestTagProvenance | None:
+    if not item.digest_pin:
+        return None
+    return DigestTagProvenance(
+        source_image=item.update.old_image,
+        resolved_tag=item.update.resolved_tag,
+        watch_tag=item.update.watch_tag,
+        target_digest=item.update.planned_digest,
+        final_image=item.update.final_image,
+        provenance_source="retag",
+        provenance_confidence=confidence,
+    )
 
 
 def _safe_retag_apply_error(settings: WebSettings, exc: BaseException) -> str:
@@ -2137,6 +2201,12 @@ def _effective_config(settings: WebSettings) -> UpdaterConfig:
         ) from exc
 
 
+def _retag_digest_pins(settings: WebSettings) -> bool:
+    if _retag_digest_pins_loader is None:
+        return False
+    return _retag_digest_pins_loader(settings)
+
+
 def _retag_target_item(
     *,
     target_id: str,
@@ -2152,6 +2222,7 @@ def _retag_target_item(
     github_latest_fallback: bool,
     allow_source_image_match: bool,
     runtime_state: RetagRuntimeState,
+    digest_pins: bool,
 ) -> RetagTargetItem:
     label_value = _label_value(service_image.labels, WUD_TAG_INCLUDE_LABEL)
     tracking_tag, tracking_tag_source = _tracking_tag(
@@ -2172,7 +2243,13 @@ def _retag_target_item(
     if retag_available:
         choices.append(SWITCH_TO_CONCRETE_CHOICE)
     proposed_tag = "" if provenance is None else provenance.resolved_tag
-    final_image = "" if provenance is None else provenance.final_image
+    final_image = ""
+    if provenance is not None:
+        final_image = (
+            provenance.final_image
+            if digest_pins
+            else image_with_tag(service_image.image, provenance.resolved_tag)
+        )
     candidate_source = "provenance" if provenance is not None else ""
     candidate_warning = ""
     candidate_link_label = ""

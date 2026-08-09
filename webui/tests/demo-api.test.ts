@@ -310,7 +310,7 @@ describe("demo web API", () => {
     ];
 
     const plan = await api.createRetagPlan(choices, "csrf");
-    const update = plan.stacks.flatMap((stack) => stack.digest_pin_updates)[0];
+    const update = plan.stacks.flatMap((stack) => stack.tag_updates)[0];
     expect(update).toMatchObject({
       service_key: target?.service_key,
       target_id: targetId,
@@ -319,7 +319,7 @@ describe("demo web API", () => {
 
     const preview = await api.startRetagPreview(choices, "csrf");
     const previewUpdate = preview.plan?.stacks.flatMap(
-      (stack) => stack.digest_pin_updates,
+      (stack) => stack.tag_updates,
     )[0];
     expect(previewUpdate).toMatchObject({
       service_key: target?.service_key,

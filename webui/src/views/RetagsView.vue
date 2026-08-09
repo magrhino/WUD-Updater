@@ -32,12 +32,13 @@ import {
 } from "../utils/retagChoices";
 import {
   compareRetagTargets,
-  digestPinSummary,
   labelRewriteSummary,
   composeLocation,
   pluralize,
   retagPlanContextLabel,
   retagPlanSourceFile,
+  retagPlanStackUpdates,
+  retagUpdateSummary,
   searchableText,
 } from "./retags/display";
 import {
@@ -100,9 +101,9 @@ const retagApplyJobProgressPhases: ApplyJobProgressPhase[] = [
     waitingMessage: "Waiting to revalidate the selected retag plan.",
   },
   {
-    key: "compose-digest-pin",
+    key: "compose-retag",
     label: "Write Compose",
-    waitingMessage: "Waiting to write retag Compose metadata.",
+    waitingMessage: "Waiting to write the selected tag or digest pin.",
   },
   {
     key: "pull",
@@ -249,7 +250,10 @@ const applyDisabled = computed(
 const retagPlanStacks = computed(() => updates.retagPlan?.stacks ?? []);
 const retagPlanUpdates = computed(() =>
   retagPlanStacks.value.flatMap((stack) =>
-    stack.digest_pin_updates.map((update) => ({ stack, update })),
+    retagPlanStackUpdates(stack).map((update) => ({
+      stack,
+      update,
+    })),
   ),
 );
 const retagPreviewError = computed(
@@ -518,8 +522,15 @@ function createRetagApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
     return null;
   }
   const lines = plan.stacks.flatMap((stack) =>
-    stack.digest_pin_updates.map((update) => {
+    retagPlanStackUpdates(stack).map((update) => {
       const rewrite = labelRewriteSummary(update);
+      const summary = retagUpdateSummary(update);
+      const digestPin = "planned_digest" in update;
+      let digestPinLabel = "";
+      if (digestPin) {
+        digestPinLabel =
+          rewrite === "No label rewrite" ? summary : `${summary}; ${rewrite}`;
+      }
       return {
         key:
           update.target_id ||
@@ -528,11 +539,8 @@ function createRetagApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
         stackName: stack.stack,
         scopeLabel: stack.stack || "Retag",
         serviceLabel: update.service_key,
-        tagRewriteLabel: "",
-        digestPinLabel:
-          rewrite === "No label rewrite"
-            ? digestPinSummary(update)
-            : `${digestPinSummary(update)}; ${rewrite}`,
+        tagRewriteLabel: digestPin ? "" : summary,
+        digestPinLabel,
         composeImage: update.source_image,
         targetImage: update.final_image,
       };

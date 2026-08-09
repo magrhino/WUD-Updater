@@ -1,6 +1,8 @@
 import type {
   RetagPlanDigestPinUpdate,
   RetagPlanResponse,
+  RetagPlanStack,
+  RetagPlanTagUpdate,
   RetagTargetItem,
 } from "../../api/client";
 import { retagRuntimeChoiceWarning } from "../../utils/retagChoices";
@@ -19,7 +21,7 @@ const reasonLabels: Record<string, string> = {
 };
 
 const reasonDetails: Record<string, string> = {
-  eligible: "A concrete tag and digest-pinned final image are available.",
+  eligible: "A concrete target tag is available.",
   "missing-provenance": "No stored digest provenance is available for this service.",
   "not-latest-tracking": "This service already tracks a concrete tag.",
   "missing-concrete-tag": "Stored provenance does not include a concrete tag.",
@@ -202,7 +204,25 @@ export function digestPinSummary(update: RetagPlanDigestPinUpdate): string {
   return `${update.source_image} -> ${update.final_image}`;
 }
 
-export function labelRewriteSummary(update: RetagPlanDigestPinUpdate): string {
+export type RetagPlanImageUpdate =
+  | RetagPlanDigestPinUpdate
+  | RetagPlanTagUpdate;
+
+export function retagPlanStackUpdates(
+  stack: RetagPlanStack,
+): RetagPlanImageUpdate[] {
+  return stack.tag_updates?.length ? stack.tag_updates : stack.digest_pin_updates;
+}
+
+export function retagUpdateSummary(update: RetagPlanImageUpdate): string {
+  return `${update.source_image} -> ${update.final_image}`;
+}
+
+export function retagUpdateModeLabel(update: RetagPlanImageUpdate): string {
+  return "planned_digest" in update ? "Digest pin" : "Selected tag";
+}
+
+export function labelRewriteSummary(update: RetagPlanImageUpdate): string {
   if (!update.label_rewrites.length) {
     return "No label rewrite";
   }

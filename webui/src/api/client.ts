@@ -65,6 +65,7 @@ export type {
   RetagPlanIssue,
   RetagPlanLabelRewrite,
   RetagPlanDigestPinUpdate,
+  RetagPlanTagUpdate,
   RetagPlanStack,
   RetagPlanResponse,
   RetagPreviewJobResponse,

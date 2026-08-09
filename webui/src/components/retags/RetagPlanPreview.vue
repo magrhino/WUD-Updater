@@ -4,10 +4,12 @@ import { NAlert, NTag } from "naive-ui";
 
 import type { RetagPlanResponse } from "../../api/client";
 import {
-  digestPinSummary,
   labelRewriteSummary,
   planLocation,
   planStatusType,
+  retagPlanStackUpdates,
+  retagUpdateModeLabel,
+  retagUpdateSummary,
 } from "../../views/retags/display";
 
 defineProps<{
@@ -68,14 +70,17 @@ defineProps<{
         </div>
         <ul class="retag-plan-update-list">
           <li
-            v-for="(update, index) in stack.digest_pin_updates"
+            v-for="(update, index) in retagPlanStackUpdates(stack)"
             :key="`${stack.directory}-${stack.compose_file}-${stack.project_directory}-${update.service_key}-${index}`"
           >
             <div>
               <strong>{{ update.service_key }}</strong>
               <span class="wrap-anywhere">{{ update.service }}</span>
+              <n-tag size="small" type="info" :bordered="false">
+                {{ retagUpdateModeLabel(update) }}
+              </n-tag>
             </div>
-            <code class="wrap-anywhere">{{ digestPinSummary(update) }}</code>
+            <code class="wrap-anywhere">{{ retagUpdateSummary(update) }}</code>
             <span class="wrap-anywhere">{{ labelRewriteSummary(update) }}</span>
           </li>
         </ul>

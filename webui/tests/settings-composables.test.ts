@@ -125,6 +125,23 @@ describe("settings composables", () => {
     expect(updateCoreUpdateTour).not.toHaveBeenCalled();
   });
 
+  it("saves retag digest pins as an explicit opt-in preference", async () => {
+    const { preferences, settings } = mountManagedPreferencesHarness(true);
+    const updateManagedSettings = vi
+      .spyOn(settings, "updateManagedSettings")
+      .mockResolvedValue({
+        managed: settingsResponse().managed,
+        audit_run_id: 78,
+      });
+
+    preferences.retagDigestPinsValue.value = "true";
+    await preferences.saveManagedPreferences();
+
+    expect(updateManagedSettings).toHaveBeenCalledWith({
+      retag_digest_pins: "true",
+    });
+  });
+
   it("surfaces clipboard failures while copying diagnostics", async () => {
     clipboardCopy.mockRejectedValue(new Error("Clipboard permission denied"));
     const { connection, diagnostics } = mountDiagnosticsHarness();

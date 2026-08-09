@@ -13,6 +13,7 @@ from tests.web_retag_test_helpers import (
     _make_retag_fixture,
     _patch_digest_resolution_map,
     _seed_known_image,
+    _set_retag_digest_pins,
     _switch_choice,
     _wait_run_status,
     _write_compose,
@@ -57,7 +58,8 @@ def test_retag_plan_and_apply_rewrites_pulls_recreates_and_audits(
     assert plan["selected_count"] == 1
     assert plan["external_recreate_required"] is False
     assert plan["stacks"][0]["services"] == ["app"]
-    assert plan["stacks"][0]["digest_pin_updates"][0]["resolved_tag"] == "2.0"
+    assert plan["stacks"][0]["tag_updates"][0]["target_tag"] == "2.0"
+    assert plan["stacks"][0]["digest_pin_updates"][0]["final_image"] == "repo/app:2.0"
 
     apply_response = _apply_retag_plan(client, headers, plan)
 
@@ -65,8 +67,8 @@ def test_retag_plan_and_apply_rewrites_pulls_recreates_and_audits(
     job = _wait_apply_job(client, apply_response.json()["job_id"])
     assert job["status"] == "success"
     content = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "# wudup.resolved-tag=2.0" in content
-    assert "image: repo/app@sha256:old" in content
+    assert "# wudup.resolved-tag=" not in content
+    assert "image: repo/app:2.0" in content
     assert "wud.tag.include=^2\\.0$$" in content
     calls = _fake_docker_calls(fixture.fake_root)
     assert "compose -f docker-compose.yml pull app" in calls
@@ -91,11 +93,39 @@ def test_retag_plan_and_apply_rewrites_pulls_recreates_and_audits(
     assert event["stack_name"] == "stack"
     assert event["service_name"] == "app"
     assert event["status"] == "success"
-    assert event["target_image"] == "repo/app@sha256:old"
-    assert event["digest_provenance_source"] == "retag"
-    assert known["image"] == "repo/app@sha256:old"
-    assert known["digest_provenance_source"] == "retag"
-    assert known["digest_watch_tag"] == "2.0"
+    assert event["target_image"] == "repo/app:2.0"
+    assert event["digest_provenance_source"] == ""
+    assert known["image"] == "repo/app:2.0"
+    assert known["digest_provenance_source"] == ""
+    assert known["digest_watch_tag"] == ""
+
+
+def test_retag_digest_pin_setting_preserves_digest_rewrites(tmp_path: Path) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+        },
+        retag_digest_pins=True,
+    )
+    headers = _csrf_headers(fixture.client)
+    plan = _create_retag_plan(fixture.client, headers)
+
+    assert plan["stacks"][0]["tag_updates"] == []
+    assert plan["stacks"][0]["digest_pin_updates"][0]["resolved_tag"] == "2.0"
+
+    apply_response = _apply_retag_plan(fixture.client, headers, plan)
+    assert apply_response.status_code == 202
+    job = _wait_apply_job(fixture.client, apply_response.json()["job_id"])
+    assert job["status"] == "success"
+    content = (fixture.compose_dir / "docker-compose.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "# wudup.resolved-tag=2.0" in content
+    assert "image: repo/app@sha256:old" in content
+    assert "wud.tag.include=^2\\.0$$" in content
 
 
 def test_retag_apply_rejects_stale_manual_target_change(
@@ -691,6 +721,7 @@ def test_retag_apply_records_partial_stack_success_when_later_stack_fails(
         target_digest="sha256:old",
         final_image="repo/bravo@sha256:old",
     )
+    _set_retag_digest_pins(tmp_path)
     (fake_root / "stacks" / "bravo" / "pull_fail").write_text(
         "pull failed\n",
         encoding="utf-8",

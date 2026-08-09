@@ -73,6 +73,17 @@ tag so WUD keeps watching the resolved tag. If the tag digest moves, cannot be
 resolved, cannot be verified locally, or the Compose metadata cannot be written
 safely, the update fails closed and the pending line is restored.
 
+## WebUI Retag Digest Pins
+
+WebUI retags write the tag approved in the preview as `repo/app:<tag>` by
+default. To retain digest-pinned retags, enable **Retag digest pins** under
+Settings → Preferences. The preview then identifies the change as a digest pin
+and the apply writes `repo/app@sha256:<digest>` with the resolved-tag marker.
+
+This preference only controls the Retags workflow. It is separate from
+`WUD_DIGEST_PIN_UPDATES`, which controls approved tag updates in standard update
+plans.
+
 ## Live Probe
 
 The repository includes a Docker-gated live probe for checking registry behavior

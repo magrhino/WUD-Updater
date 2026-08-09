@@ -365,6 +365,25 @@ def apply_compose_digest_pins(
     return applied
 
 
+def apply_compose_retag_updates(
+    compose_path: Path,
+    updates: Sequence[DigestPinUpdate],
+    *,
+    stack_name: str = "",
+) -> tuple[AppliedDigestPinUpdate, ...]:
+    """Write retagged images plus exact WUD tag tracking metadata."""
+
+    rendered, applied = render_compose_retag_updates(
+        compose_path,
+        updates,
+        stack_name=stack_name,
+    )
+    if updates and not rendered:
+        raise ComposeTagRewriteError("Compose retag rewrite produced no output.")
+    _atomic_replace_compose(compose_path, rendered, prefix="retag")
+    return applied
+
+
 def apply_compose_digest_unpins(
     compose_path: Path,
     updates: Sequence[DigestUnpinUpdate],
@@ -392,6 +411,37 @@ def render_compose_digest_pins(
     stack_name: str = "",
 ) -> tuple[str, tuple[AppliedDigestPinUpdate, ...]]:
     """Return Compose YAML with digest-pin image and watch metadata applied."""
+
+    return _render_compose_retag_updates(
+        compose_path,
+        updates,
+        label_rewrite_approvals=label_rewrite_approvals,
+        stack_name=stack_name,
+    )
+
+
+def render_compose_retag_updates(
+    compose_path: Path,
+    updates: Sequence[DigestPinUpdate],
+    *,
+    stack_name: str = "",
+) -> tuple[str, tuple[AppliedDigestPinUpdate, ...]]:
+    """Return Compose YAML with tag retags and WUD watch metadata applied."""
+
+    return _render_compose_retag_updates(
+        compose_path,
+        updates,
+        stack_name=stack_name,
+    )
+
+
+def _render_compose_retag_updates(
+    compose_path: Path,
+    updates: Sequence[DigestPinUpdate],
+    *,
+    label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval] = (),
+    stack_name: str = "",
+) -> tuple[str, tuple[AppliedDigestPinUpdate, ...]]:
 
     if not updates:
         return compose_path.read_text(encoding="utf-8"), ()
@@ -442,9 +492,11 @@ def render_compose_digest_pins(
                 update.label_value,
             )
             service_config["image"] = update.final_image
-            service_config.yaml_set_comment_before_after_key(
-                "image",
-                before=update.marker,
+            _update_service_resolved_tag_marker(
+                services,
+                service,
+                service_config,
+                update.marker,
             )
             counts[id(update)] += 1
 
@@ -1067,6 +1119,25 @@ def _service_resolved_tag_marker(
             f"Service {service} resolved-tag marker has invalid tag {tag}."
         )
     return tag
+
+
+def _update_service_resolved_tag_marker(
+    services: CommentedMap,
+    service: str,
+    service_config: CommentedMap,
+    marker: str,
+) -> None:
+    if marker:
+        service_config.yaml_set_comment_before_after_key("image", before=marker)
+        return
+    marker_tag = _service_resolved_tag_marker(services, service, service_config)
+    if marker_tag:
+        _remove_service_resolved_tag_marker(
+            services,
+            service,
+            service_config,
+            f"{DIGEST_PIN_MARKER_PREFIX}{marker_tag}",
+        )
 
 
 def _remove_service_resolved_tag_marker(

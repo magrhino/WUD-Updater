@@ -355,6 +355,8 @@ export function settingsResponse(
         "visible",
         "dismissed",
       ]),
+      managedSettingEntry("digest_pin_updates", "false", ["false", "true"]),
+      managedSettingEntry("retag_digest_pins", "false", ["false", "true"]),
       managedSettingEntry("release_notes_enabled", "false", ["false", "true"]),
       managedSettingEntry(
         "release_notifications_delivery_mode",
@@ -927,6 +929,7 @@ export function retagPlanResponse(
         compose_file: "docker-compose.yml",
         project_directory: "/docker/media",
         services: ["app"],
+        tag_updates: [],
         digest_pin_updates: [
           {
             target_id: "media/app",

@@ -85,6 +85,11 @@ export const DIGEST_PIN_UPDATES_LABELS: Record<string, string> = {
   true: "Enabled",
 };
 
+export const RETAG_DIGEST_PINS_LABELS: Record<string, string> = {
+  false: "Use selected tags",
+  true: "Pin resolved digests",
+};
+
 export const RELEASE_NOTIFICATION_DELIVERY_MODE_LABELS: Record<
   ReleaseNotificationDeliveryMode,
   string

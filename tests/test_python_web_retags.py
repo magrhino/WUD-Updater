@@ -31,7 +31,7 @@ from wudup.digest_provenance import DigestTagProvenance
 from wudup.digest_verifier import DigestResolveResult
 
 
-def test_retag_targets_endpoint_returns_eligible_digest_pinned_service(
+def test_retag_targets_endpoint_returns_eligible_tagged_service(
     tmp_path: Path,
 ) -> None:
     fixture = _make_retag_fixture(tmp_path)
@@ -56,7 +56,7 @@ def test_retag_targets_endpoint_returns_eligible_digest_pinned_service(
     assert item["label_key"] == "wud.tag.include"
     assert item["label_value"] == "^latest$$"
     assert item["proposed_tag"] == "2.0"
-    assert item["final_image"] == "repo/app@sha256:old"
+    assert item["final_image"] == "repo/app:2.0"
     assert item["retag_available"] is True
     assert item["retag_reason"] == "eligible"
     assert item["choices"] == ["keep-current", "switch-to-concrete"]
@@ -199,7 +199,7 @@ def test_retag_targets_endpoint_marks_stale_known_provenance(
     assert item["retag_available"] is False
     assert item["retag_reason"] == "stale-provenance"
     assert item["proposed_tag"] == "2.0"
-    assert item["final_image"] == "repo/app@sha256:old"
+    assert item["final_image"] == "repo/app:2.0"
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
@@ -708,14 +708,12 @@ def test_retag_plan_manual_target_allows_non_latest_service(
     body = response.json()
     assert body["status"] == "ready"
     assert body["can_apply"] is True
-    update = body["stacks"][0]["digest_pin_updates"][0]
+    update = body["stacks"][0]["tag_updates"][0]
     assert update["service_key"] == "stack/app"
     assert update["source_image"] == "repo/app:1.0"
-    assert update["resolved_tag"] == "3.0"
-    assert update["planned_digest"] == digest
-    assert update["final_image"] == f"repo/app@{digest}"
+    assert update["target_tag"] == "3.0"
+    assert update["final_image"] == "repo/app:3.0"
     assert update["label_value"] == "^3\\.0$$"
-    assert update["digest_provenance"]["provenance_source"] == "manual"
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
@@ -745,11 +743,9 @@ def test_retag_plan_manual_target_overrides_automatch_candidate(
     )
 
     assert manual_plan["plan_id"] != auto_plan["plan_id"]
-    update = manual_plan["stacks"][0]["digest_pin_updates"][0]
-    assert update["resolved_tag"] == "3.0"
-    assert update["planned_digest"] == digest
-    assert update["digest_provenance"]["resolved_tag"] == "3.0"
-    assert update["digest_provenance"]["provenance_source"] == "manual"
+    update = manual_plan["stacks"][0]["tag_updates"][0]
+    assert update["target_tag"] == "3.0"
+    assert update["final_image"] == "repo/app:3.0"
 
 
 @pytest.mark.parametrize(
@@ -836,7 +832,7 @@ def test_retag_plan_sanitizes_compose_preview_errors(
 
     monkeypatch.setattr(
         web_retags_module,
-        "render_compose_digest_pins",
+        "render_compose_retag_updates",
         fail_preview,
     )
 
