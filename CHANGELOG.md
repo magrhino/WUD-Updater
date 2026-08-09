@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.57.1](https://github.com/magrhino/wudup/compare/v0.57.0...v0.57.1) (2026-08-09)
+
+
+### Bug Fixes
+
+* **retags:** clarify stale target errors ([#585](https://github.com/magrhino/wudup/issues/585)) ([f83e017](https://github.com/magrhino/wudup/commit/f83e017c097f5bad6ff0e6150584551878ae1279))
+* **retags:** default retags to selected tags ([#587](https://github.com/magrhino/wudup/issues/587)) ([2fe37ec](https://github.com/magrhino/wudup/commit/2fe37ec5adb751101fe854fcb73caf5974098ed8))
+
 ## [0.57.0](https://github.com/magrhino/wudup/compare/v0.56.8...v0.57.0) (2026-08-07)
 
 
