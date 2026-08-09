@@ -91,13 +91,13 @@ def retag_plan_stacks(
                     )
                     if not item.digest_pin
                 ],
+                # Older clients only read this field; keep it as a compatibility view.
                 digest_pin_updates=[
                     retag_plan_digest_update(item)
                     for item in sorted(
                         stack_updates,
                         key=lambda value: (value.service_key, value.target_id),
                     )
-                    if item.digest_pin
                 ],
             )
         )

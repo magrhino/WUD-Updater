@@ -16,6 +16,7 @@ import {
   planStatusType,
   pluralize,
   retagPlanSourceFile,
+  retagPlanStackUpdates,
   retagUpdateModeLabel,
   retagUpdateSummary,
 } from "../../views/retags/display";
@@ -42,7 +43,7 @@ const applyErrorAlert = ref<HTMLElement | null>(null);
 
 const retagPlanUpdates = computed(() =>
   (props.plan?.stacks ?? []).flatMap((stack) =>
-    [...(stack.tag_updates ?? []), ...stack.digest_pin_updates].map((update) => ({
+    retagPlanStackUpdates(stack).map((update) => ({
       stack,
       update,
     })),

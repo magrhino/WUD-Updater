@@ -1,6 +1,7 @@
 import type {
   RetagPlanDigestPinUpdate,
   RetagPlanResponse,
+  RetagPlanStack,
   RetagPlanTagUpdate,
   RetagTargetItem,
 } from "../../api/client";
@@ -206,6 +207,12 @@ export function digestPinSummary(update: RetagPlanDigestPinUpdate): string {
 export type RetagPlanImageUpdate =
   | RetagPlanDigestPinUpdate
   | RetagPlanTagUpdate;
+
+export function retagPlanStackUpdates(
+  stack: RetagPlanStack,
+): RetagPlanImageUpdate[] {
+  return stack.tag_updates?.length ? stack.tag_updates : stack.digest_pin_updates;
+}
 
 export function retagUpdateSummary(update: RetagPlanImageUpdate): string {
   return `${update.source_image} -> ${update.final_image}`;

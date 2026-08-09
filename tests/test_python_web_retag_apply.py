@@ -59,7 +59,7 @@ def test_retag_plan_and_apply_rewrites_pulls_recreates_and_audits(
     assert plan["external_recreate_required"] is False
     assert plan["stacks"][0]["services"] == ["app"]
     assert plan["stacks"][0]["tag_updates"][0]["target_tag"] == "2.0"
-    assert plan["stacks"][0]["digest_pin_updates"] == []
+    assert plan["stacks"][0]["digest_pin_updates"][0]["final_image"] == "repo/app:2.0"
 
     apply_response = _apply_retag_plan(client, headers, plan)
 

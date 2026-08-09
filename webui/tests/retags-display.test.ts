@@ -14,6 +14,7 @@ import {
   reasonTagType,
   retagPlanContextLabel,
   retagPlanSourceFile,
+  retagPlanStackUpdates,
   retagUpdateModeLabel,
   retagUpdateSummary,
   searchableText,
@@ -154,20 +155,26 @@ describe("retag display helpers", () => {
       "repo/app:latest -> repo/app@sha256:abc123",
     );
     expect(retagUpdateModeLabel(update)).toBe("Digest pin");
+    const tagUpdate = {
+      target_id: "media/app",
+      service_key: "media/app",
+      stack: "media",
+      service: "app",
+      source_image: "repo/app:latest",
+      target_tag: "1.1",
+      final_image: "repo/app:1.1",
+      label_key: "wud.tag.include",
+      label_value: String.raw`^1\.1$$`,
+      label_rewrites: [],
+    };
+    expect(retagUpdateSummary(tagUpdate)).toBe("repo/app:latest -> repo/app:1.1");
+    expect(retagPlanStackUpdates(plan.stacks[0])).toEqual([update]);
     expect(
-      retagUpdateSummary({
-        target_id: "media/app",
-        service_key: "media/app",
-        stack: "media",
-        service: "app",
-        source_image: "repo/app:latest",
-        target_tag: "1.1",
-        final_image: "repo/app:1.1",
-        label_key: "wud.tag.include",
-        label_value: String.raw`^1\.1$$`,
-        label_rewrites: [],
+      retagPlanStackUpdates({
+        ...plan.stacks[0],
+        tag_updates: [tagUpdate],
       }),
-    ).toBe("repo/app:latest -> repo/app:1.1");
+    ).toEqual([tagUpdate]);
     expect(labelRewriteSummary(update)).toBe(
       String.raw`wud.tag.include: ^latest$$ -> ^1\.1$$`,
     );

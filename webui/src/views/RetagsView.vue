@@ -37,6 +37,7 @@ import {
   pluralize,
   retagPlanContextLabel,
   retagPlanSourceFile,
+  retagPlanStackUpdates,
   retagUpdateSummary,
   searchableText,
 } from "./retags/display";
@@ -249,7 +250,7 @@ const applyDisabled = computed(
 const retagPlanStacks = computed(() => updates.retagPlan?.stacks ?? []);
 const retagPlanUpdates = computed(() =>
   retagPlanStacks.value.flatMap((stack) =>
-    [...(stack.tag_updates ?? []), ...stack.digest_pin_updates].map((update) => ({
+    retagPlanStackUpdates(stack).map((update) => ({
       stack,
       update,
     })),
@@ -521,7 +522,7 @@ function createRetagApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
     return null;
   }
   const lines = plan.stacks.flatMap((stack) =>
-    [...(stack.tag_updates ?? []), ...stack.digest_pin_updates].map((update) => {
+    retagPlanStackUpdates(stack).map((update) => {
       const rewrite = labelRewriteSummary(update);
       const summary = retagUpdateSummary(update);
       const digestPin = "planned_digest" in update;

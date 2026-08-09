@@ -7,6 +7,7 @@ import {
   labelRewriteSummary,
   planLocation,
   planStatusType,
+  retagPlanStackUpdates,
   retagUpdateModeLabel,
   retagUpdateSummary,
 } from "../../views/retags/display";
@@ -69,7 +70,7 @@ defineProps<{
         </div>
         <ul class="retag-plan-update-list">
           <li
-            v-for="(update, index) in [...(stack.tag_updates ?? []), ...stack.digest_pin_updates]"
+            v-for="(update, index) in retagPlanStackUpdates(stack)"
             :key="`${stack.directory}-${stack.compose_file}-${stack.project_directory}-${update.service_key}-${index}`"
           >
             <div>
