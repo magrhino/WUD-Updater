@@ -648,15 +648,15 @@ async function refreshPendingMetadataFromStatus(): Promise<void> {
     await connection.loadStatus({ silent: true });
     const sourceHash = connection.status?.source_hash ?? "";
     if (sourceHash && sourceHash !== (updates.pending?.source_hash ?? "")) {
-      await loadPendingAndReleaseNotesHandler({
-        preserveCleanup: true,
-        freshAfterCurrent: true,
-      });
+      await updates.refreshPendingMetadata(selectedLineNumbers.value);
+      await updates.loadReleaseNotes().catch(() => undefined);
+      await updates.loadSecurityScans().catch(() => undefined);
+      updates.refreshReleaseNotes().catch(() => undefined);
       return;
     }
     const checkedAt = connection.status?.wud_api.last_checked_at ?? "";
     if (checkedAt && checkedAt !== updates.pendingWudMetadataCheckedAt) {
-      await updates.refreshPendingMetadata();
+      await updates.refreshPendingMetadata(selectedLineNumbers.value);
     }
   } finally {
     pendingMetadataRefreshInFlight.value = false;

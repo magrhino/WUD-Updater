@@ -200,6 +200,7 @@ class DryRunPlanSource:
     fallback_reason: str = ""
     detail: str = ""
     source_hash: str = ""
+    source_ids_by_line: Mapping[int, str] = field(default_factory=dict)
     metadata_status_by_line: Mapping[int, PendingMetadataStatus] = field(
         default_factory=dict
     )

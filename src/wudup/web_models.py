@@ -1663,6 +1663,7 @@ class PendingMetadataRefreshResponse(BaseModel):
     status: PendingMetadataRefreshStatus
     requires_pending_reload: bool
     source_hash: str
+    source: PendingSourceInfo
     wud_api: WudApiStatus
     items: list[PendingMetadataRefreshItem] = Field(default_factory=list)
 

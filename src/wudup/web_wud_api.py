@@ -169,6 +169,7 @@ assert not (
 class WudApiSnapshot:
     status: WudApiStatus
     containers: tuple[WudApiContainer, ...] = ()
+    unresolved_containers: tuple[WudApiContainer, ...] = ()
     hidden_update_candidates: tuple[WudApiContainer, ...] = ()
     retryable_degraded_container_ids: tuple[str, ...] = ()
     degraded_container_count: int = 0
@@ -865,6 +866,7 @@ def _refresh_snapshot_serialized(
     cache_key = _cache_key(settings, base_url)
     (
         containers,
+        unresolved_containers,
         hidden_update_candidates,
         retryable_degraded_container_ids,
         degraded_container_count,
@@ -917,6 +919,7 @@ def _refresh_snapshot_serialized(
             retained_update_count=retained_update_count,
             recovered_update_count=recovered_update_count,
         ),
+        unresolved_containers=unresolved_containers,
         unsupported_container_count=unsupported_container_count,
         observation_diagnostics=tuple(observation_diagnostics),
     )
@@ -1654,6 +1657,7 @@ def _reconcile_container_observations(
 ) -> tuple[
     tuple[WudApiContainer, ...],
     tuple[WudApiContainer, ...],
+    tuple[WudApiContainer, ...],
     tuple[str, ...],
     int,
     int,
@@ -1663,6 +1667,7 @@ def _reconcile_container_observations(
     Mapping[WudContainerIdentity, _PendingObservation],
 ]:
     containers: list[WudApiContainer] = []
+    unresolved_containers: list[WudApiContainer] = []
     hidden_update_candidates: list[WudApiContainer] = []
     retryable_degraded_container_ids: list[str] = []
     seen_retryable_container_ids: set[str] = set()
@@ -1714,6 +1719,8 @@ def _reconcile_container_observations(
             observation_diagnostics.append(
                 _observation_diagnostic(observation, outcome, settings)
             )
+            if outcome == "unresolved":
+                unresolved_containers.append(container)
             continue
 
         if observation.update_available:
@@ -1731,6 +1738,7 @@ def _reconcile_container_observations(
 
     return (
         tuple(containers),
+        tuple(unresolved_containers),
         tuple(hidden_update_candidates),
         tuple(retryable_degraded_container_ids),
         degraded_container_count,

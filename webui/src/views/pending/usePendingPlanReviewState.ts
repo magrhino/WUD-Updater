@@ -87,21 +87,26 @@ export function usePendingPlanReviewState(
       ? "Apply starts a server-side job, streams the live log, and writes a run record you can verify afterward."
       : "Read-only mode keeps Apply disabled. You can still preview impact now, then enable browser mutations server-side when you are ready to apply.",
   );
-  const selectedTagOverrideError = computed(() =>
-    options.tagOverrideErrorForLines(options.selectedLineNumbers.value),
-  );
   const pendingSourceAllowsFileEdits = computed(
     () => (updates.pending?.source?.active ?? "file") === "file",
   );
-  const selectedFreshCount = computed(() => {
+  const selectedFreshLineNumbers = computed(() => {
     const byLine = new Map(
       (updates.pending?.items ?? []).map((item) => [item.line_no, item]),
     );
-    return options.selectedSelections.value.filter(
-      (selection) =>
-        pendingMetadataStatus(byLine.get(selection.line_no) ?? {}) === "fresh",
-    ).length;
+    return options.selectedSelections.value
+      .filter(
+        (selection) =>
+          pendingMetadataStatus(byLine.get(selection.line_no) ?? {}) === "fresh",
+      )
+      .map((selection) => selection.line_no);
   });
+  const selectedFreshCount = computed(
+    () => selectedFreshLineNumbers.value.length,
+  );
+  const selectedTagOverrideError = computed(() =>
+    options.tagOverrideErrorForLines(selectedFreshLineNumbers.value),
+  );
   const selectedBlockedMetadataCount = computed(
     () => options.selectedSelections.value.length - selectedFreshCount.value,
   );

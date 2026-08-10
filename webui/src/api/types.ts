@@ -244,6 +244,7 @@ export interface PendingMetadataRefreshResponse {
   status: PendingMetadataRefreshStatus;
   requires_pending_reload: boolean;
   source_hash: string;
+  source: PendingSourceInfo;
   wud_api: WudApiStatus;
   items: PendingMetadataRefreshItem[];
 }

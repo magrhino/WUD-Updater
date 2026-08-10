@@ -9,7 +9,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from . import web_wud_api
-from .images import normalize_digest, strip_digest, tag_value_valid
+from .images import (
+    image_has_tag,
+    image_matches_resolved_target,
+    normalize_digest,
+    strip_digest,
+    tag_value_valid,
+)
 from .plan_models import DryRunPlanSource
 from .web_auth import WebConfigError
 from .web_models import (
@@ -74,6 +80,7 @@ class PendingSourceResult:
             fallback_reason=self.fallback_reason,
             detail=self.detail,
             source_hash=self.source_hash,
+            source_ids_by_line=self.source_ids_by_line or {},
             metadata_status_by_line=self.metadata_status_by_line or {},
         )
 
@@ -113,7 +120,11 @@ def resolve_pending_source(
         return _file_source(settings, configured=mode, include_wud_metadata=include_wud_metadata)
 
     api_result = _api_source(settings, configured=mode, force=force_api)
-    if mode == "api" or not api_result.degraded:
+    api_metadata_available = bool(
+        api_result.wud_snapshot
+        and api_result.wud_snapshot.status.metadata_available
+    )
+    if mode == "api" or api_metadata_available:
         return api_result
 
     return _file_source(
@@ -208,7 +219,10 @@ def _api_source(
             warnings=(f"WUD API pending source degraded: {detail}",),
         )
 
-    lines = api_pending_lines(snapshot.containers)
+    lines = api_pending_lines(
+        snapshot.containers,
+        unresolved_containers=snapshot.unresolved_containers,
+    )
     text = _pending_text(line.raw for line in lines)
     parsed, source_hash = _parse_pending_source_text(text)
     metadata_by_line = {
@@ -292,6 +306,8 @@ class ApiPendingLine:
 
 def api_pending_lines(
     containers: tuple[web_wud_api.WudApiContainer, ...],
+    *,
+    unresolved_containers: tuple[web_wud_api.WudApiContainer, ...] = (),
 ) -> tuple[ApiPendingLine, ...]:
     by_raw: dict[str, ApiPendingLine] = {}
     for container in sorted(containers, key=_container_sort_key):
@@ -333,7 +349,59 @@ def api_pending_lines(
                 container_ids=container_ids,
                 source_ids=source_ids,
             )
+    related_containers = (
+        *containers,
+        *(
+            replace(container, metadata_status="retained")
+            for container in unresolved_containers
+        ),
+    )
+    for raw in sorted(by_raw):
+        existing = by_raw[raw]
+        for container in sorted(related_containers, key=_container_sort_key):
+            if not _container_can_share_apply_scope(container, existing.container):
+                continue
+            source_ids = tuple(
+                sorted(
+                    dict.fromkeys(
+                        (*existing.source_ids, _container_source_id(container))
+                    )
+                )
+            )
+            container_ids = tuple(
+                sorted(
+                    dict.fromkeys(
+                        (*existing.container_ids, *_container_ids(container))
+                    )
+                )
+            )
+            by_raw[raw] = replace(
+                existing,
+                container=replace(
+                    existing.container,
+                    metadata_status=_least_fresh_metadata_status(
+                        existing.container.metadata_status,
+                        container.metadata_status,
+                    ),
+                ),
+                container_ids=container_ids,
+                source_ids=source_ids,
+            )
+            existing = by_raw[raw]
     return tuple(by_raw[raw] for raw in sorted(by_raw))
+
+
+def _container_can_share_apply_scope(
+    unresolved: web_wud_api.WudApiContainer,
+    pending: web_wud_api.WudApiContainer,
+) -> bool:
+    if not unresolved.image or not pending.image:
+        return False
+    return image_matches_resolved_target(
+        unresolved.image,
+        pending.image,
+        allow_repo=not image_has_tag(pending.image),
+    )
 
 
 def _least_fresh_metadata_status(

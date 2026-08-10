@@ -492,6 +492,7 @@ def pending_metadata_response(
         status="ready",
         requires_pending_reload=False,
         source_hash=source.source_hash,
+        source=source.response_source(),
         wud_api=_wud_api_status(source.wud_snapshot),
         items=items,
     )
@@ -504,6 +505,7 @@ def _stale_pending_metadata_response(
         status="stale",
         requires_pending_reload=True,
         source_hash=source.source_hash,
+        source=source.response_source(),
         wud_api=_wud_api_status(source.wud_snapshot),
         items=[],
     )
