@@ -19,7 +19,7 @@
     "test:smoke:demo": "npm run build:demo && npm run assert:demo-dist && PLAYWRIGHT_WEBUI_DEMO=true PLAYWRIGHT_WEBUI_DEMO_BASE_PATH=/wudup PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 PLAYWRIGHT_WEB_SERVER_COMMAND=\"npm run preview:demo\" playwright test tests/smoke/webui-demo.spec.ts"
   },
   "dependencies": {
-    "@lucide/vue": "^1.27.0",
+    "@lucide/vue": "^1.28.0",
     "@vueuse/core": "^14.4.0",
     "naive-ui": "^2.42.0",
     "pinia": "^3.0.0",
@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@csstools/postcss-global-data": "^4.0.0",
-    "@playwright/test": "^1.62.0",
+    "@playwright/test": "^1.62.1",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vitest/coverage-v8": "^4.1.10",
     "@vue/test-utils": "^2.4.11",
