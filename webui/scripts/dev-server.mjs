@@ -51,6 +51,7 @@ const backend = spawn(
       PYTHONPATH: pythonPath,
       PATH: `${fakeDockerBin}${pathSeparator}${process.env.PATH ?? ""}`,
       FAKE_DOCKER_ROOT: fakeDockerRoot,
+      WUD_PENDING_SOURCE: process.env.WUD_PENDING_SOURCE ?? "file",
       WUD_WEB_DEV_NO_AUTH: "true",
       WUD_WEB_MUTATIONS_ENABLED: "true",
       WUD_WEB_RESTART_CONTAINER: "demo-wudup",
