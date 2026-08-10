@@ -399,6 +399,7 @@ const {
   planDigestPinLabelRewrites,
   planDigestUnpinUpdates,
   planLines,
+  planStatusLabel,
   preflightDigestPinNotice,
   preflightDigestUnpinNotice,
   preflightServiceImpactLabel,
@@ -550,12 +551,12 @@ async function retryPendingStatus(): Promise<void> {
   pendingStatusError.value = "";
   await updates.loadPending().catch(() => undefined);
   if (updates.error) {
-    pendingStatusError.value = `Pending status refresh failed: ${updates.error}`;
+    pendingStatusError.value = `WUD status check failed: ${updates.error}`;
     return;
   }
   pendingStatusMessage.value = pendingSourceDegraded.value
-    ? "Pending status refreshed. WUD metadata remains degraded."
-    : "Pending status refreshed.";
+    ? "WUD status checked. Some update metadata is still unavailable."
+    : "WUD status checked. Update metadata is current.";
 }
 
 function viewIssueDump(): void {
@@ -836,7 +837,7 @@ onBeforeUnmount(() => {
           :loading="updates.loading"
           @click="retryPendingStatus"
         >
-          Retry pending status
+          Check WUD status again
         </n-button>
       </n-flex>
     </n-alert>
@@ -1071,6 +1072,7 @@ onBeforeUnmount(() => {
       :plan-digest-pin-label-rewrites="planDigestPinLabelRewrites"
       :plan-digest-unpin-updates="planDigestUnpinUpdates"
       :plan-lines="planLines"
+      :plan-status-label="planStatusLabel"
       :preflight-digest-pin-notice="preflightDigestPinNotice"
       :preflight-digest-unpin-notice="preflightDigestUnpinNotice"
       :preflight-service-impact-label="preflightServiceImpactLabel"

@@ -323,7 +323,7 @@ describe("pending view fallback and release notes", () => {
     expect(readiness.exists()).toBe(true);
     expect(readiness.text()).toContain("Apply readiness");
     expect(readiness.text()).toContain("Ready");
-    expect(readiness.text()).toContain("8 checks passed");
+    expect(readiness.text()).toContain("9 checks passed");
     expect(readiness.text()).toContain("Docker reachable");
     expect(readiness.text()).toContain("Selected services matched");
     expect(readiness.find(".apply-readiness-passed").exists()).toBe(true);
@@ -379,13 +379,13 @@ describe("pending view fallback and release notes", () => {
     const readiness = dialog.find(".apply-readiness");
     expect(readiness.exists()).toBe(true);
     expect(readiness.text()).toContain("Blocked");
-    expect(readiness.text()).toContain("7 checks passed");
+    expect(readiness.text()).toContain("8 checks passed");
     expect(readiness.text()).toContain("Logs writable");
     expect(readiness.text()).toContain("/logs is not a directory");
     expect(readiness.find(".apply-readiness-passed").exists()).toBe(true);
     expect(readiness.findAll(".apply-readiness-row")).toHaveLength(1);
     expect(readiness.text()).not.toContain("docker-daemon-info");
-    expect(dialog.text()).toContain("Fix the failed apply readiness check");
+    expect(dialog.text()).toContain("Logs writable: /logs is not a directory");
 
     const applyButton = dialog
       .findAll("button")
@@ -394,6 +394,43 @@ describe("pending view fallback and release notes", () => {
     await applyButton?.trigger("click");
 
     expect(applyPlan).not.toHaveBeenCalled();
+  });
+
+  it("explains when degraded WUD metadata blocks apply", async () => {
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse({
+        can_apply: false,
+        source: pendingSourceInfo({
+          active: "api",
+          configured: "api",
+          fresh: false,
+          degraded: true,
+        }),
+        apply_preflight: failedApplyPreflight(
+          "wud-metadata-current",
+          "WUD could not verify all update metadata. Wait for a successful WUD scan, then check WUD status again.",
+        ),
+      });
+    });
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview media plan"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.find("#preflight-modal-title").text()).toBe("Apply blocked");
+    expect(dialog.text()).toContain("Apply blocked");
+    expect(dialog.text()).toContain("WUD metadata current");
+    expect(dialog.text()).toContain(
+      "Wait for a successful WUD scan, then check WUD status again.",
+    );
+    expect(dialog.text()).toContain("Plan issues0");
   });
 
   it("falls back to pending file order when grouping is unavailable", () => {
@@ -445,7 +482,7 @@ describe("pending view fallback and release notes", () => {
       .find((button) => button.text().includes("View issue dump"));
     const retry = wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Retry pending status"));
+      .find((button) => button.text().includes("Check WUD status again"));
     expect(viewDump?.attributes("data-button-type")).toBe("primary");
     expect(viewDump?.attributes("disabled")).toBeUndefined();
     expect(retry?.attributes("data-button-type")).not.toBe("primary");
@@ -484,7 +521,7 @@ describe("pending view fallback and release notes", () => {
 
     const retry = wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Retry pending status"));
+      .find((button) => button.text().includes("Check WUD status again"));
 
     await retry?.trigger("click");
     await flushPromises();
@@ -495,7 +532,7 @@ describe("pending view fallback and release notes", () => {
     expect(lifecycle.loadSecurityScans).toHaveBeenCalledTimes(1);
     expect(lifecycle.refreshReleaseNotes).toHaveBeenCalledTimes(1);
     expect(wrapper.text()).toContain(
-      "Pending status refreshed. WUD metadata remains degraded.",
+      "WUD status checked. Some update metadata is still unavailable.",
     );
   });
 
@@ -521,12 +558,12 @@ describe("pending view fallback and release notes", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Retry pending status"))
+      .find((button) => button.text().includes("Check WUD status again"))
       ?.trigger("click");
     await flushPromises();
 
     expect(wrapper.text()).toContain(
-      "Pending status refresh failed: WUD API timed out",
+      "WUD status check failed: WUD API timed out",
     );
   });
 

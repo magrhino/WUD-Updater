@@ -431,6 +431,21 @@ def test_apply_endpoint_rejects_degraded_api_last_good_source(
     assert plan["source"]["active"] == "api"
     assert plan["source"]["degraded"] is True
     assert plan["can_apply"] is False
+    metadata_check = next(
+        check
+        for check in plan["apply_preflight"]["checks"]
+        if check["code"] == "wud-metadata-current"
+    )
+    assert metadata_check == {
+        "status": "FAIL",
+        "code": "wud-metadata-current",
+        "label": "WUD metadata current",
+        "detail": (
+            "WUD could not verify all update metadata. Wait for a successful WUD "
+            "scan, then check WUD status again."
+        ),
+        "source_check_codes": ["wud-api-observations"],
+    }
 
     apply_response = client.post(
         "/api/v1/jobs",

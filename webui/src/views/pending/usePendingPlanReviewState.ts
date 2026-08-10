@@ -117,13 +117,22 @@ export function usePendingPlanReviewState(
     return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to remove selected entries.";
   });
   const planAlertType = computed(() => {
-    if (updates.plan?.status === "blocked") {
+    if (
+      updates.plan?.status === "blocked" ||
+      (updates.plan?.status === "ready" && !updates.plan.can_apply)
+    ) {
       return "error";
     }
     if (updates.plan?.status === "empty") {
       return "warning";
     }
     return "info";
+  });
+  const planStatusLabel = computed(() => {
+    if (updates.plan?.status === "ready" && !updates.plan.can_apply) {
+      return "Apply blocked";
+    }
+    return updates.plan?.status ?? "";
   });
   const planContextLabel = computed(() => {
     return pendingPlanContextLabel(
@@ -137,6 +146,9 @@ export function usePendingPlanReviewState(
     }
     if (updates.plan.status === "blocked") {
       return "Plan blocked";
+    }
+    if (!updates.plan.can_apply) {
+      return "Apply blocked";
     }
     if (updates.plan.status === "empty") {
       return "No changes to apply";
@@ -161,6 +173,9 @@ export function usePendingPlanReviewState(
     }
     if (updates.plan.status === "empty") {
       return "No selected services need changes.";
+    }
+    if (!updates.plan.can_apply && updates.plan.apply_preflight.failures) {
+      return `${pluralize(updates.plan.apply_preflight.failures, "failed check")} must be fixed before applying.`;
     }
     const serviceCount =
       updates.plan.summary.service_count ||
@@ -341,7 +356,12 @@ export function usePendingPlanReviewState(
       return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to apply updates.";
     }
     if (!updates.plan.apply_preflight.ok) {
-      return "Fix the failed apply readiness check before applying updates.";
+      const failed = updates.plan.apply_preflight.checks.find(
+        (check) => check.status === "FAIL",
+      );
+      return failed?.detail
+        ? `${failed.label}: ${failed.detail}`
+        : "Fix the failed apply readiness check before applying updates.";
     }
     return "This plan cannot be applied.";
   });
@@ -561,6 +581,7 @@ export function usePendingPlanReviewState(
     planDigestPinLabelRewrites,
     planDigestUnpinUpdates,
     planLines,
+    planStatusLabel,
     preflightDigestPinNotice,
     preflightDigestUnpinNotice,
     preflightServiceImpactLabel,

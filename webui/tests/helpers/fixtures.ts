@@ -1138,6 +1138,9 @@ export function applyPreflightResponse(
       applyPreflightCheck("mutations-enabled", "Mutations enabled", [
         "webui-mutation-gate",
       ]),
+      applyPreflightCheck("wud-metadata-current", "WUD metadata current", [
+        "wud-api-observations",
+      ]),
       applyPreflightCheck("bind-mounts-safe", "Bind mounts safe", [
         "bind-mount-path-invalid",
       ]),

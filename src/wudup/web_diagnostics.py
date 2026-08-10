@@ -209,6 +209,7 @@ def apply_preflight_response(
             missing_detail="Log directory readiness was not reported.",
         ),
         _mutation_apply_preflight_check(settings),
+        _wud_metadata_apply_preflight_check(plan),
         _bind_mount_apply_preflight_check(settings, plan),
         _selected_services_apply_preflight_check(settings, plan),
     ]
@@ -370,6 +371,26 @@ def _mutation_apply_preflight_check(settings: WebSettings) -> ApplyPreflightChec
         label="Mutations enabled",
         detail="Set WUD_WEB_MUTATIONS_ENABLED=true on the server to apply updates.",
         source_check_codes=["webui-mutation-gate"],
+    )
+
+
+def _wud_metadata_apply_preflight_check(plan: DryRunPlan) -> ApplyPreflightCheck:
+    if plan.source.active != "api" or not plan.source.degraded:
+        return ApplyPreflightCheck(
+            status="PASS",
+            code="wud-metadata-current",
+            label="WUD metadata current",
+            source_check_codes=["wud-api-observations"],
+        )
+    return ApplyPreflightCheck(
+        status="FAIL",
+        code="wud-metadata-current",
+        label="WUD metadata current",
+        detail=(
+            "WUD could not verify all update metadata. Wait for a successful WUD "
+            "scan, then check WUD status again."
+        ),
+        source_check_codes=["wud-api-observations"],
     )
 
 

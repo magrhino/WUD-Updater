@@ -66,6 +66,7 @@ defineProps<{
   planDigestPinLabelRewrites: PlanDigestPinLabelRewriteView[];
   planDigestUnpinUpdates: PlanDigestUnpinUpdateView[];
   planLines: PlanLineView[];
+  planStatusLabel: string;
   preflightDigestPinNotice: string;
   preflightDigestUnpinNotice: string;
   preflightServiceImpactLabel: string;
@@ -94,7 +95,7 @@ const emit = defineEmits<{
     :title="preflightTitle"
     :summary="preflightSummary"
     :impact-label="preflightServiceImpactLabel"
-    :status-label="plan.status"
+    :status-label="planStatusLabel"
     :status-type="planAlertType"
     @close="emit('close')"
   >
@@ -103,7 +104,7 @@ const emit = defineEmits<{
         { label: 'Targets', value: plan.summary.target_count },
         { label: 'Matched', value: plan.summary.matched_target_count },
         { label: 'Stacks', value: plan.summary.stack_count },
-        { label: 'Issues', value: plan.summary.issue_count },
+        { label: 'Plan issues', value: plan.summary.issue_count },
       ]"
     />
 
@@ -189,7 +190,7 @@ const emit = defineEmits<{
       <n-alert
         v-if="preflightTagRewriteNotice"
         class="preflight-block"
-        type="warning"
+        type="info"
       >
         {{ preflightTagRewriteNotice }}
       </n-alert>
