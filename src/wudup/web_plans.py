@@ -418,24 +418,12 @@ def submit_apply_job(
     pending_source: web_pending_sources.PendingSourceResult,
 ) -> ApplyJobResponse:
     tag_stream_updates = web_jobs.tag_stream_updates_from_plan(plan)
-    stream_tag_overrides = tuple(
-        TagOverride(line_no=line_no, tag=selected_tag)
-        for line_no, selected_tag in sorted(
-            {
-                item.line_no: item.selected_tag
-                for item in tag_stream_updates
-            }.items()
-        )
-    )
     return web_jobs._submit_apply_job_state(
         request.app.state,
         settings,
         plan,
         allow_tag_updates=payload.allow_tag_updates,
-        tag_overrides=(
-            *tag_overrides_from_payload(payload),
-            *stream_tag_overrides,
-        ),
+        tag_overrides=tag_overrides_from_payload(payload),
         tag_stream_updates=tag_stream_updates,
         digest_pin_label_rewrite_approvals=(
             digest_pin_label_rewrite_approvals_from_payload(payload)

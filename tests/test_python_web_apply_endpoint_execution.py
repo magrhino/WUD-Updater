@@ -829,6 +829,67 @@ def test_apply_endpoint_applies_stream_image_and_label_as_one_plan(
     assert wud_file.read_text(encoding="utf-8") == ""
 
 
+def test_apply_endpoint_preserves_stream_only_for_candidate_service(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text(
+        "n8nio/runners:2.33.5-distroless tag=2.34.4\n",
+        encoding="utf-8",
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "jarvis",
+        [
+            (
+                "distroless",
+                "n8nio/runners:2.33.5-distroless",
+                "cid-distroless",
+            ),
+            ("default", "n8nio/runners:2.33.5", "cid-default"),
+        ],
+    )
+    for image in (
+        "n8nio_runners_2.34.4-distroless.after_id",
+        "n8nio_runners_2.34.4.after_id",
+    ):
+        (fake_root / "images" / image).write_text("new\n", encoding="utf-8")
+    headers = _csrf_headers(client)
+    payload = {
+        "line_numbers": [1],
+        "allow_tag_updates": True,
+        "tag_stream_decisions": [{"line_no": 1, "decision": "preserve"}],
+    }
+    plan = client.post("/api/v1/plans", json=payload, headers=headers).json()
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={"plan_id": plan["plan_id"], **payload, "confirmation": "apply"},
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert plan["status"] == "ready"
+    assert len(plan["stacks"][0]["tag_stream_updates"]) == 1
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    rendered = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "image: n8nio/runners:2.34.4-distroless" in rendered
+    assert "image: n8nio/runners:2.34.4" in rendered
+    assert rendered.count(r"wud.tag.include=^\d+\.\d+\.\d+-distroless$$") == 1
+    assert wud_file.read_text(encoding="utf-8") == ""
+
+
 def test_apply_endpoint_coalesces_duplicate_stream_entries(tmp_path: Path) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
     client = _client(

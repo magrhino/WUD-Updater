@@ -182,7 +182,46 @@ class _RunnerMatchingMixin:
             all_matches,
             matches,
         )
-        return matches, skipped_tags
+        return self._apply_tag_stream_updates(matches), skipped_tags
+
+    def _apply_tag_stream_updates(self, matches: Sequence[Match]) -> list[Match]:
+        selected_tags = {
+            (
+                update.line_no,
+                update.stack,
+                update.stack_directory,
+                update.compose_file,
+                update.service,
+                update.current_tag,
+                update.reported_tag,
+            ): update.selected_tag
+            for update in self.options.tag_stream_updates
+        }
+        if not selected_tags:
+            return list(matches)
+
+        return [
+            replace(
+                match,
+                target=replace(match.target, desired_tag=selected_tag),
+            )
+            if (
+                selected_tag := selected_tags.get(
+                    (
+                        match.target.line_no,
+                        match.stack.name,
+                        str(match.stack.directory.resolve(strict=False)),
+                        match.stack.file,
+                        match.service,
+                        image_tag(match.compose_image),
+                        match.target.desired_tag,
+                    )
+                )
+            )
+            is not None
+            else match
+            for match in matches
+        ]
 
     def _prefilter_targets(
         self,
