@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -10,8 +11,17 @@ from tests.web_test_helpers import (
     _fake_docker_calls,
     _fake_docker_env,
     _make_fake_stack,
+    _manifest_index_digest,
+    _write_fake_manifest,
 )
-from wudup.tag_streams import pending_tag_stream_hint, tag_stream_include_regex
+from wudup.compose import ComposeStack, ServiceImage
+from wudup.tag_streams import (
+    pending_tag_stream_hint,
+    plan_tag_stream_changes,
+    tag_stream_include_regex,
+)
+from wudup.updater_models import Match, TagStreamDecision
+from wudup.wud_file import parse_wud_text
 
 
 def _stream_client(
@@ -99,6 +109,108 @@ def test_verified_distroless_change_requires_explicit_decision(tmp_path: Path) -
     calls = _fake_docker_calls(fake_root)
     assert "manifest inspect n8nio/runners:2.34.4-distroless" in calls
     assert "manifest inspect n8nio/runners:2.34.4" in calls
+
+
+def test_stream_decision_only_rewrites_candidate_services(tmp_path: Path) -> None:
+    _fake_env, fake_root = _fake_docker_env(tmp_path)
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "jarvis",
+        [
+            ("distroless", "n8nio/runners:2.33.5-distroless", "cid-distroless"),
+            ("default", "n8nio/runners:2.33.5", "cid-default"),
+        ],
+    )
+    images = (
+        "n8nio/runners:2.33.5-distroless",
+        "n8nio/runners:2.33.5",
+    )
+    stack = ComposeStack(
+        index=0,
+        directory=compose_dir,
+        file="docker-compose.yml",
+        name="jarvis",
+        images=images,
+        service_images=(
+            ServiceImage("distroless", images[0]),
+            ServiceImage("default", images[1]),
+        ),
+    )
+    target = parse_wud_text(
+        "n8nio/runners:2.33.5-distroless tag=2.34.4\n"
+    ).targets[0]
+    matches = tuple(
+        Match(
+            stack=stack,
+            target=target,
+            resolved=image,
+            compose_image=image,
+            service=service,
+        )
+        for service, image in zip(("distroless", "default"), images, strict=True)
+    )
+
+    result = plan_tag_stream_changes(
+        mock.Mock(),
+        matches,
+        decisions=(TagStreamDecision(line_no=1, decision="preserve"),),
+    )
+
+    assert [update.service for update in result.updates_by_stack[0]] == ["distroless"]
+    assert {match.service: match.target.desired_tag for match in result.matches} == {
+        "distroless": "2.34.4-distroless",
+        "default": "2.34.4",
+    }
+
+
+def test_unapproved_stream_label_reports_deferred_digest_validation(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_DIGEST_PIN_UPDATES": "true",
+            **fake_env,
+        },
+    )
+    (tmp_path / "state" / "images.todo").write_text(
+        "n8nio/runners:2.33.5-distroless tag=2.34.4\n",
+        encoding="utf-8",
+    )
+    _write_fake_manifest(
+        fake_root,
+        "docker.io/n8nio/runners:2.34.4-distroless",
+        _manifest_index_digest("sha256:index", "sha256:child"),
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "jarvis",
+        [("task-runner", "n8nio/runners:2.33.5-distroless", "cid-task-runner")],
+    )
+    compose_path = compose_dir / "docker-compose.yml"
+    compose_path.write_text(
+        compose_path.read_text(encoding="utf-8").replace(
+            "    image: n8nio/runners:2.33.5-distroless\n",
+            "    image: n8nio/runners:2.33.5-distroless\n"
+            "    labels:\n"
+            "      wud.tag.include: ^stable-.+$$\n",
+        ),
+        encoding="utf-8",
+    )
+
+    response = _plan(
+        client,
+        {"tag_stream_decisions": [{"line_no": 1, "decision": "preserve"}]},
+    )
+
+    assert response.status_code == 200
+    codes = {issue["code"] for issue in response.json()["issues"]}
+    assert "compose-tag-stream-label-rewrite-unapproved" in codes
+    assert "compose-digest-pin-validation-deferred" in codes
 
 
 @pytest.mark.parametrize(

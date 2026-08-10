@@ -314,7 +314,17 @@ def _digest_pin_render_issues(
 ]:
     issues: list[DryRunPlanIssue] = []
     if any(not update.approved for update in tag_stream_updates):
-        return {}, issues
+        return {}, [
+            DryRunPlanIssue(
+                severity="error",
+                code="compose-digest-pin-validation-deferred",
+                message=(
+                    "Compose digest-pin validation is deferred until every tag "
+                    "stream label rewrite in this stack is approved."
+                ),
+                stack=stack.name,
+            )
+        ]
     try:
         _rendered, applied = render_compose_digest_pins(
             stack.directory / stack.file,

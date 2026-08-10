@@ -59,6 +59,7 @@ class _VerifiedTagStreamChange:
     reported: TagStreamParts
     reported_tag: str
     alternate_tag: str
+    matches: tuple[Match, ...]
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,7 @@ class _TagStreamLinePlan:
     issues: tuple[DryRunPlanIssue, ...] = ()
     updates: tuple[tuple[int, TagStreamUpdate], ...] = ()
     used_approvals: tuple[TagStreamLabelRewriteApproval, ...] = ()
+    selected_matches: tuple[Match, ...] = ()
 
 
 def parse_tag_stream(tag: str) -> TagStreamParts | None:
@@ -128,6 +130,7 @@ def plan_tag_stream_changes(
     selected_tags_by_line: dict[int, str] = {}
     updates_by_stack: dict[int, list[TagStreamUpdate]] = {}
     verified_lines: set[int] = set()
+    selected_matches: set[Match] = set()
     used_approvals: set[TagStreamLabelRewriteApproval] = set()
     manifest_cache: dict[str, bool] = {}
 
@@ -149,6 +152,7 @@ def plan_tag_stream_changes(
         for stack_index, stream_update in line_plan.updates:
             updates_by_stack.setdefault(stack_index, []).append(stream_update)
         used_approvals.update(line_plan.used_approvals)
+        selected_matches.update(line_plan.selected_matches)
 
     unused_decisions = sorted(set(decision_by_line) - verified_lines)
     if unused_decisions:
@@ -171,7 +175,9 @@ def plan_tag_stream_changes(
                 desired_tag=selected_tags_by_line.get(
                     match.target.line_no,
                     match.target.desired_tag,
-                ),
+                )
+                if match in selected_matches
+                else match.target.desired_tag,
             ),
         )
         for match in matches
@@ -231,7 +237,7 @@ def _plan_tag_stream_line(
                     ),
                     line_no=line_no,
                     details={
-                        "current_tag": image_tag(line_matches[0].compose_image),
+                        "current_tag": image_tag(change.matches[0].compose_image),
                         "reported_tag": change.reported_tag,
                         "current_stream": change.current.stream,
                         "reported_stream": change.reported.stream,
@@ -244,7 +250,7 @@ def _plan_tag_stream_line(
         )
     return _plan_decided_tag_stream_change(
         line_no,
-        line_matches,
+        change.matches,
         change,
         decision,
         label_rewrite_approvals,
@@ -261,7 +267,7 @@ def _verified_tag_stream_change(
     candidates = _line_candidates(line_matches, reported_tag)
     if not candidates:
         return None, ()
-    if len({candidate[1] for candidate in candidates}) != 1:
+    if len({candidate[2] for candidate in candidates}) != 1:
         return None, (
             DryRunPlanIssue(
                 severity="error",
@@ -273,12 +279,13 @@ def _verified_tag_stream_change(
                 line_no=line_no,
             ),
         )
-    current, alternate_tag = candidates[0]
+    _match, current, alternate_tag = candidates[0]
     reported = parse_tag_stream(reported_tag)
     if reported is None:
         return None, ()
     alternate_images = {
-        image_with_tag(match.compose_image, alternate_tag) for match in line_matches
+        image_with_tag(match.compose_image, alternate_tag)
+        for match, _current, _alternate_tag in candidates
     }
     if not all(
         _manifest_exists(docker, image, manifest_cache)
@@ -305,6 +312,7 @@ def _verified_tag_stream_change(
             reported=reported,
             reported_tag=reported_tag,
             alternate_tag=alternate_tag,
+            matches=tuple(candidate[0] for candidate in candidates),
         ),
         (),
     )
@@ -391,14 +399,15 @@ def _plan_decided_tag_stream_change(
         issues=tuple(issues),
         updates=tuple(updates),
         used_approvals=tuple(used_approvals),
+        selected_matches=tuple(line_matches),
     )
 
 
 def _line_candidates(
     matches: Sequence[Match],
     reported_tag: str,
-) -> list[tuple[TagStreamParts, str]]:
-    candidates: list[tuple[TagStreamParts, str]] = []
+) -> list[tuple[Match, TagStreamParts, str]]:
+    candidates: list[tuple[Match, TagStreamParts, str]] = []
     for match in matches:
         current_tag = image_tag(match.compose_image)
         hint = pending_tag_stream_hint(
@@ -412,7 +421,9 @@ def _line_candidates(
         reported = parse_tag_stream(reported_tag)
         if current is None or reported is None:
             continue
-        candidates.append((current, f"{reported.version}{current.suffix}"))
+        candidates.append(
+            (match, current, f"{reported.version}{current.suffix}")
+        )
     return candidates
 
 

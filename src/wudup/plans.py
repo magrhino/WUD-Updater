@@ -280,7 +280,11 @@ class _PlanBuilder(_UpdateScopeMixin):
                 tag_stream_result.selected_tags_by_line,
             )
             parsed = self._apply_tag_overrides(parsed)
-            matches = _replace_match_targets(matches, parsed)
+            matches = _replace_match_targets(
+                matches,
+                parsed,
+                preserve_desired_tag_lines=tag_stream_result.selected_tags_by_line,
+            )
             self._filter_digest_unpin_updates(matches)
             if any(item.selection_id for item in normalized_selections):
                 digest_unpin_issues = tuple(
@@ -1071,10 +1075,23 @@ def _apply_selected_tags(
 def _replace_match_targets(
     matches: Sequence[Match],
     parsed: ParsedWudFile,
+    *,
+    preserve_desired_tag_lines: Mapping[int, str] | None = None,
 ) -> list[Match]:
     targets_by_line = {target.line_no: target for target in parsed.targets}
+    preserved_lines = preserve_desired_tag_lines or {}
     return [
-        replace(match, target=targets_by_line.get(match.target.line_no, match.target))
+        replace(
+            match,
+            target=(
+                replace(
+                    targets_by_line.get(match.target.line_no, match.target),
+                    desired_tag=match.target.desired_tag,
+                )
+                if match.target.line_no in preserved_lines
+                else targets_by_line.get(match.target.line_no, match.target)
+            ),
+        )
         for match in matches
     ]
 
