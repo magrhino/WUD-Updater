@@ -561,6 +561,63 @@ describe("webApi", () => {
     });
   });
 
+  it("serializes populated tag stream decisions and label approvals", async () => {
+    const fetchMock = mockFetch({});
+    const decisions = [{ line_no: 4, decision: "preserve" as const }];
+    const approvals = [
+      {
+        line_no: 4,
+        stack: "jarvis",
+        service: "task-runner",
+        label_key: "wud.tag.include",
+        current_label_value: "^stable-.+$",
+        selected_tag: "2.34.4-distroless",
+        proposed_label_value: String.raw`^\d+\.\d+\.\d+-distroless$$`,
+      },
+    ];
+
+    await webApi.createPlan(
+      [4],
+      true,
+      [],
+      [],
+      "csrf",
+      [],
+      decisions,
+      approvals,
+    );
+    await webApi.applyPlan(
+      "plan-id",
+      [4],
+      true,
+      [],
+      [],
+      "csrf",
+      [],
+      decisions,
+      approvals,
+    );
+
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      line_numbers: [4],
+      allow_tag_updates: true,
+      tag_overrides: [],
+      tag_stream_decisions: decisions,
+      tag_stream_label_rewrite_approvals: approvals,
+      digest_pin_label_rewrite_approvals: [],
+    });
+    expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual({
+      plan_id: "plan-id",
+      line_numbers: [4],
+      allow_tag_updates: true,
+      tag_overrides: [],
+      tag_stream_decisions: decisions,
+      tag_stream_label_rewrite_approvals: approvals,
+      digest_pin_label_rewrite_approvals: [],
+      confirmation: "apply",
+    });
+  });
+
   it("serializes pending rescan payload exactly", async () => {
     const fetchMock = mockFetch({});
 
