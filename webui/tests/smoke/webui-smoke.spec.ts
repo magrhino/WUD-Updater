@@ -1004,6 +1004,8 @@ test("mutation-enabled pending flow creates jobs only after confirmation", async
     selections: [stackSelection],
     allow_tag_updates: true,
     tag_overrides: [],
+    tag_stream_decisions: [],
+    tag_stream_label_rewrite_approvals: [],
     digest_pin_label_rewrite_approvals: [],
   });
   expect(applyCall?.headers["x-wud-csrf-token"]).toBe(csrfToken);
@@ -1012,6 +1014,8 @@ test("mutation-enabled pending flow creates jobs only after confirmation", async
     selections: [stackSelection],
     allow_tag_updates: true,
     tag_overrides: [],
+    tag_stream_decisions: [],
+    tag_stream_label_rewrite_approvals: [],
     digest_pin_label_rewrite_approvals: [],
     confirmation: "apply",
   });
