@@ -81,6 +81,22 @@ class DryRunPlanTagUpdate:
 
 
 @dataclass(frozen=True)
+class DryRunPlanTagStreamUpdate:
+    line_no: int
+    service: str
+    current_tag: str
+    reported_tag: str
+    selected_tag: str
+    decision: str
+    label_key: str
+    current_label_value: str
+    proposed_label_value: str
+    proposed_label_regex: str
+    approved: bool
+    reason: str
+
+
+@dataclass(frozen=True)
 class DryRunPlanDigestPinUpdate:
     source_image: str
     resolved_tag: str
@@ -143,6 +159,7 @@ class DryRunPlanStack:
     force_recreate: bool
     up_no_deps: bool
     tag_updates: tuple[DryRunPlanTagUpdate, ...] = ()
+    tag_stream_updates: tuple[DryRunPlanTagStreamUpdate, ...] = ()
     digest_pin_updates: tuple[DryRunPlanDigestPinUpdate, ...] = ()
     digest_unpin_updates: tuple[DryRunPlanDigestUnpinUpdate, ...] = ()
     actions: tuple[DryRunPlanAction, ...] = ()
@@ -243,6 +260,13 @@ class PendingGroupingItem:
     platform_variant: str = ""
     diagnostic: UnmatchedDiagnostic | None = None
     digest_provenance: DigestTagProvenance | None = None
+    tag_stream: "PendingTagStream | None" = None
+
+
+@dataclass(frozen=True)
+class PendingTagStream:
+    current_stream: str
+    reported_stream: str
 
 
 @dataclass(frozen=True)

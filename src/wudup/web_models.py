@@ -93,6 +93,7 @@ __all__ = (
     "PendingSourceMode",
     "PendingSnoozedCandidate",
     "PendingStackGroup",
+    "PendingTagStream",
     "PendingUpdateRecord",
     "PlanAction",
     "PlanCleanup",
@@ -110,6 +111,7 @@ __all__ = (
     "PlanStatus",
     "PlanSummary",
     "PlanTagUpdate",
+    "PlanTagStreamUpdate",
     "PlanTarget",
     "ReadyResponse",
     "ReleaseNoteInfo",
@@ -199,6 +201,8 @@ __all__ = (
     "TagExclusionStatus",
     "TagExclusionStatusFilter",
     "TagOverrideRequest",
+    "TagStreamDecisionRequest",
+    "TagStreamLabelRewriteApprovalRequest",
     "UpdateTargetItem",
     "UpdateTargetsResponse",
     "UpdateTargetsStatus",
@@ -586,6 +590,11 @@ class WudApiObservationDiagnostics(BaseModel):
     items: list[WudApiObservationDiagnostic] = Field(default_factory=list)
 
 
+class PendingTagStream(BaseModel):
+    current_stream: str
+    reported_stream: str
+
+
 class PendingItem(BaseModel):
     line_no: int
     raw: str
@@ -605,6 +614,7 @@ class PendingItem(BaseModel):
     wud_metadata: WudContainerMetadata | None = None
     source: PendingSourceActive = "file"
     source_id: str = ""
+    tag_stream: PendingTagStream | None = None
 
 
 class PendingDiagnostic(BaseModel):
@@ -1443,6 +1453,21 @@ class TagOverrideRequest(BaseModel):
     line_no: LineNumber
     tag: str = Field(min_length=1, max_length=128)
 
+
+class TagStreamDecisionRequest(BaseModel):
+    line_no: LineNumber
+    decision: Literal["preserve", "switch"]
+
+
+class TagStreamLabelRewriteApprovalRequest(BaseModel):
+    line_no: LineNumber
+    stack: str = Field(min_length=1, max_length=256)
+    service: str = Field(min_length=1, max_length=256)
+    label_key: str = Field(min_length=1, max_length=256)
+    current_label_value: str = Field(min_length=1, max_length=512)
+    selected_tag: str = Field(min_length=1, max_length=128)
+    proposed_label_value: str = Field(min_length=1, max_length=512)
+
 class DigestPinLabelRewriteApprovalRequest(BaseModel):
     stack: str = Field(min_length=1, max_length=256)
     service: str = Field(min_length=1, max_length=256)
@@ -1460,6 +1485,10 @@ class PlanRequest(BaseModel):
     selections: list[PlanSelectionRequest] = Field(default_factory=list)
     allow_tag_updates: bool = False
     tag_overrides: list[TagOverrideRequest] = Field(default_factory=list)
+    tag_stream_decisions: list[TagStreamDecisionRequest] = Field(default_factory=list)
+    tag_stream_label_rewrite_approvals: list[
+        TagStreamLabelRewriteApprovalRequest
+    ] = Field(default_factory=list)
     digest_pin_label_rewrite_approvals: list[
         DigestPinLabelRewriteApprovalRequest
     ] = Field(default_factory=list)
@@ -1517,6 +1546,21 @@ class PlanTagUpdate(BaseModel):
     new_image: str
     services: list[str] = Field(default_factory=list)
 
+
+class PlanTagStreamUpdate(BaseModel):
+    line_no: int
+    service: str
+    current_tag: str
+    reported_tag: str
+    selected_tag: str
+    decision: Literal["preserve", "switch"]
+    label_key: str
+    current_label_value: str
+    proposed_label_value: str
+    proposed_label_regex: str
+    approved: bool
+    reason: str
+
 class PlanDigestPinLabelRewrite(BaseModel):
     service: str
     label_key: str
@@ -1571,6 +1615,7 @@ class PlanStack(BaseModel):
     force_recreate: bool
     up_no_deps: bool
     tag_updates: list[PlanTagUpdate] = Field(default_factory=list)
+    tag_stream_updates: list[PlanTagStreamUpdate] = Field(default_factory=list)
     digest_pin_updates: list[PlanDigestPinUpdate] = Field(default_factory=list)
     digest_unpin_updates: list[PlanDigestUnpinUpdate] = Field(default_factory=list)
     actions: list[PlanAction] = Field(default_factory=list)
@@ -1715,6 +1760,10 @@ class ApplyPlanRequest(BaseModel):
     selections: list[PlanSelectionRequest] = Field(default_factory=list)
     allow_tag_updates: bool = False
     tag_overrides: list[TagOverrideRequest] = Field(default_factory=list)
+    tag_stream_decisions: list[TagStreamDecisionRequest] = Field(default_factory=list)
+    tag_stream_label_rewrite_approvals: list[
+        TagStreamLabelRewriteApprovalRequest
+    ] = Field(default_factory=list)
     digest_pin_label_rewrite_approvals: list[
         DigestPinLabelRewriteApprovalRequest
     ] = Field(default_factory=list)

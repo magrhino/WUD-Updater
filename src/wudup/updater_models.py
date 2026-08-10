@@ -54,6 +54,7 @@ class UpdaterOptions:
     ] = ()
     update_selections: tuple["UpdateSelection", ...] = ()
     completed_update_selections: tuple["CompletedUpdateSelection", ...] = ()
+    tag_stream_updates: tuple["TagStreamUpdate", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,40 @@ class TagUpdate:
     desired_tag: str
     new_image: str
     services: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TagStreamDecision:
+    line_no: int
+    decision: str
+
+
+@dataclass(frozen=True)
+class TagStreamLabelRewriteApproval:
+    line_no: int
+    stack: str
+    service: str
+    label_key: str
+    current_label_value: str
+    selected_tag: str
+    proposed_label_value: str
+
+
+@dataclass(frozen=True)
+class TagStreamUpdate:
+    line_no: int
+    stack: str
+    service: str
+    current_tag: str
+    reported_tag: str
+    selected_tag: str
+    decision: str
+    label_key: str
+    current_label_value: str
+    proposed_label_value: str
+    proposed_label_regex: str
+    approved: bool
+    reason: str
 
 
 @dataclass(frozen=True)

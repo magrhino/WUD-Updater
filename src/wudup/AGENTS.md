@@ -31,6 +31,7 @@ Prefer small modules with one clear reason to change:
 | Updater CLI facade and runner orchestration | `updater.py` | Preserve `UpdateFromWudRunner` and `run_update_from_wud`; helper APIs belong in their owning modules, not facade re-exports. |
 | Updater dataclasses, typed records, exceptions | `updater_models.py` | Preserve dataclass options, defaults, and custom exception classes. |
 | Compose YAML tag/digest/exclusion rewrites | `compose_rewrite.py` | Preserve fail-closed YAML handling, atomic writes, file mode/owner, and cleanup. |
+| Docker tag-stream parsing and WebUI decision planning | `tag_streams.py` | Keep detection strict, manifest-verified, LinuxServer-aware, and free of GET-time registry calls. |
 
 If the exact owner does not exist yet, create the narrowest reasonable module instead of growing `web.py`, `updater.py`, or a giant test file.
 

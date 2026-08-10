@@ -31,6 +31,8 @@ from .updater_models import (
     DigestPinUpdate,
     DigestUnpinUpdate,
     TagExclusionUpdate,
+    TagStreamLabelRewriteApproval,
+    TagStreamUpdate,
     TagUpdate,
 )
 
@@ -265,9 +267,22 @@ def _validate_service_resolved_tag_marker(
 def apply_compose_tag_updates(
     compose_path: Path,
     updates: Sequence[TagUpdate],
+    *,
+    tag_stream_updates: Sequence[TagStreamUpdate] = (),
+    stack_name: str = "",
 ) -> tuple[AppliedTagUpdate, ...]:
     if not updates:
         return ()
+
+    if tag_stream_updates:
+        rendered, applied = render_compose_tag_stream_updates(
+            compose_path,
+            updates,
+            tag_stream_updates=tag_stream_updates,
+            stack_name=stack_name,
+        )
+        _atomic_replace_compose(compose_path, rendered, prefix="tag-stream")
+        return applied
 
     source, _yaml, _parsed, services = _load_compose_yaml(compose_path)
     line_offsets = _line_start_offsets(source)
@@ -324,6 +339,167 @@ def apply_compose_tag_updates(
 
     _atomic_replace_compose(compose_path, rendered, prefix="tag")
     return applied
+
+
+def plan_compose_tag_stream_update(
+    compose_path: Path,
+    *,
+    line_no: int,
+    stack_name: str,
+    service: str,
+    current_image: str,
+    current_tag: str,
+    reported_tag: str,
+    selected_tag: str,
+    decision: str,
+    proposed_label_regex: str,
+    approvals: Sequence[TagStreamLabelRewriteApproval] = (),
+) -> TagStreamUpdate:
+    """Inspect one service and return its exact stream-label rewrite plan."""
+
+    _source, _yaml, _parsed, services = _load_compose_yaml(compose_path)
+    service_config = _rewrite_service_config(
+        services,
+        service,
+        direct_image_required=True,
+    )
+    _validate_service_image(service, service_config.get("image"), current_image)
+    _prepare_service_labels(services, service, service_config)
+    current_label_value = compose_unescape_dollars(
+        _get_service_label_value(service_config, WUD_TAG_INCLUDE_LABEL)
+    )
+    proposed_label_value = compose_escape_dollars(proposed_label_regex)
+
+    if not current_label_value:
+        approved, reason = True, "label-added"
+    elif current_label_value == proposed_label_regex:
+        approved, reason = True, "label-matches"
+    elif current_label_value == exact_tags_regex((current_tag,)) or (
+        tag_value_valid(current_label_value) and current_label_value == current_tag
+    ):
+        approved, reason = True, "exact-tag-normalized"
+    else:
+        approved = any(
+            _tag_stream_label_rewrite_approval_matches(
+                approval,
+                line_no=line_no,
+                stack_name=stack_name,
+                service=service,
+                current_label_value=current_label_value,
+                selected_tag=selected_tag,
+                proposed_label_value=proposed_label_value,
+            )
+            for approval in approvals
+        )
+        reason = "approved" if approved else "approval-required"
+
+    return TagStreamUpdate(
+        line_no=line_no,
+        stack=stack_name,
+        service=service,
+        current_tag=current_tag,
+        reported_tag=reported_tag,
+        selected_tag=selected_tag,
+        decision=decision,
+        label_key=WUD_TAG_INCLUDE_LABEL,
+        current_label_value=current_label_value,
+        proposed_label_value=proposed_label_value,
+        proposed_label_regex=proposed_label_regex,
+        approved=approved,
+        reason=reason,
+    )
+
+
+def render_compose_tag_stream_updates(
+    compose_path: Path,
+    updates: Sequence[TagUpdate],
+    *,
+    tag_stream_updates: Sequence[TagStreamUpdate],
+    stack_name: str = "",
+) -> tuple[str, tuple[AppliedTagUpdate, ...]]:
+    """Render tag image and WUD stream-label changes into one document."""
+
+    source, yaml, parsed, services = _load_compose_yaml(compose_path, width=4096)
+    line_offsets = _line_start_offsets(source)
+    counts = {id(update): 0 for update in updates}
+    seen_spans: set[tuple[int, int]] = set()
+    stream_by_service: dict[str, TagStreamUpdate] = {}
+    for stream_update in tag_stream_updates:
+        if stream_update.stack != stack_name:
+            raise ComposeTagRewriteError(
+                f"Tag stream update targets stack {stream_update.stack}, expected {stack_name}."
+            )
+        if not stream_update.approved:
+            raise ComposeTagRewriteError(
+                f"Service {stream_update.service} tag stream label rewrite is not approved."
+            )
+        if stream_update.service in stream_by_service:
+            raise ComposeTagRewriteError(
+                f"Service {stream_update.service} has more than one tag stream update."
+            )
+        stream_by_service[stream_update.service] = stream_update
+
+    rewritten_services: set[str] = set()
+    for update in updates:
+        _require_update_services(update.old_image, update.services)
+        for service in update.services:
+            service_config = _rewrite_service_config(
+                services,
+                service,
+                direct_image_required=True,
+            )
+            _validate_service_image(service, service_config.get("image"), update.old_image)
+            _unique_image_span(
+                services,
+                service,
+                update.old_image,
+                source,
+                line_offsets,
+                seen_spans,
+                selected_image=update.old_image,
+            )
+            stream_update = stream_by_service.get(service)
+            if stream_update is not None:
+                if stream_update.selected_tag != update.desired_tag:
+                    raise ComposeTagRewriteError(
+                        f"Service {service} tag stream selected {stream_update.selected_tag}, "
+                        f"expected {update.desired_tag}."
+                    )
+                _prepare_service_labels(services, service, service_config)
+                current_label = compose_unescape_dollars(
+                    _get_service_label_value(service_config, stream_update.label_key)
+                )
+                if current_label != stream_update.current_label_value:
+                    raise ComposeTagRewriteError(
+                        f"Service {service} {stream_update.label_key} changed since planning."
+                    )
+                _set_service_label_value(
+                    service_config,
+                    stream_update.label_key,
+                    stream_update.proposed_label_value,
+                )
+                rewritten_services.add(service)
+            service_config["image"] = update.new_image
+            counts[id(update)] += 1
+
+    missing = sorted(set(stream_by_service) - rewritten_services)
+    if missing:
+        raise ComposeTagRewriteError(
+            "Tag stream update did not match selected service(s): " + ", ".join(missing)
+        )
+    applied = tuple(
+        AppliedTagUpdate(
+            old_image=update.old_image,
+            desired_tag=update.desired_tag,
+            new_image=update.new_image,
+            services=update.services,
+            replacements=counts[id(update)],
+        )
+        for update in updates
+    )
+    if any(item.replacements < 1 for item in applied):
+        raise ComposeTagRewriteError("Compose tag stream rewrite produced no output.")
+    return _dump_compose_yaml(yaml, parsed), applied
 
 
 def apply_compose_tag_exclusions(
@@ -1320,6 +1496,27 @@ def _digest_pin_label_rewrite_approval_matches(
         and approval.label_key == label_key
         and approval.current_label_value == current_label_value
         and approval.planned_tag == planned_tag
+        and approval.proposed_label_value == proposed_label_value
+    )
+
+
+def _tag_stream_label_rewrite_approval_matches(
+    approval: TagStreamLabelRewriteApproval,
+    *,
+    line_no: int,
+    stack_name: str,
+    service: str,
+    current_label_value: str,
+    selected_tag: str,
+    proposed_label_value: str,
+) -> bool:
+    return (
+        approval.line_no == line_no
+        and approval.stack == stack_name
+        and approval.service == service
+        and approval.label_key == WUD_TAG_INCLUDE_LABEL
+        and approval.current_label_value == current_label_value
+        and approval.selected_tag == selected_tag
         and approval.proposed_label_value == proposed_label_value
     )
 

@@ -99,6 +99,11 @@ class StackLifecycleExecutor(
             digest_pin_updates
         )
         compose_tag_updates = (*tag_updates, *digest_pin_tag_updates)
+        tag_stream_updates = tuple(
+            update
+            for update in self.options.tag_stream_updates
+            if update.stack == stack.name
+        )
         return _StackUpdateState(
             stack=stack,
             matches=matches,
@@ -110,6 +115,7 @@ class StackLifecycleExecutor(
             digest_pin_updates=digest_pin_updates,
             digest_unpin_updates=digest_unpin_updates,
             compose_tag_updates=compose_tag_updates,
+            tag_stream_updates=tag_stream_updates,
         )
 
     def _log_stack_scope(self, stack: ComposeStack, scope: UpdateScope) -> None:

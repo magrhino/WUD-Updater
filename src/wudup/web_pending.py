@@ -33,6 +33,7 @@ from .db import (
 from .file_ops import OwnerConfig
 from .images import image_tag, repo_key
 from .plan_matching import pending_target_key
+from .tag_streams import pending_tag_stream_hint
 from .plans import (
     DryRunPlanCleanup,
     DryRunPlanCleanupItem,
@@ -67,6 +68,7 @@ from .web_models import (
     PendingRemovalRequest,
     PendingResponse,
     PendingStackGroup,
+    PendingTagStream,
     UpdateTargetItem,
     UpdateTargetsResponse,
     WebSettings,
@@ -416,6 +418,11 @@ def pending_response_with_snapshot(
             wud_metadata=wud_metadata_by_line.get(target.line_no),
             source=source.active,
             source_id=source_ids_by_line.get(target.line_no, ""),
+            tag_stream=_pending_tag_stream(
+                target.repo,
+                image_tag(target.first),
+                target.desired_tag,
+            ),
         )
         for target in parsed.targets
     ]
@@ -731,6 +738,32 @@ def _pending_grouped_item(
         wud_metadata=wud_metadata_by_line.get(item.line_no),
         source=source,
         source_id=source_ids_by_line.get(item.line_no, ""),
+        tag_stream=(
+            None
+            if item.tag_stream is None
+            else PendingTagStream(
+                current_stream=item.tag_stream.current_stream,
+                reported_stream=item.tag_stream.reported_stream,
+            )
+        ),
+    )
+
+
+def _pending_tag_stream(
+    image_repo: str,
+    current_tag: str,
+    reported_tag: str,
+) -> PendingTagStream | None:
+    hint = pending_tag_stream_hint(
+        image_repo=image_repo,
+        current_tag=current_tag,
+        reported_tag=reported_tag,
+    )
+    if hint is None:
+        return None
+    return PendingTagStream(
+        current_stream=hint.current_stream,
+        reported_stream=hint.reported_stream,
     )
 
 

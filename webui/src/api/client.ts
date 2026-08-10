@@ -89,6 +89,8 @@ export type {
   PlanTarget,
   PlanLine,
   PlanTagUpdate,
+  PlanTagStreamUpdate,
+  TagStreamDecision,
   DigestPinLabelRewriteApprovalRequest,
   PlanDigestPinLabelRewrite,
   PlanDigestPinUpdate,
@@ -102,6 +104,8 @@ export type {
   ApplyPreflightCheck,
   ApplyPreflightResponse,
   TagOverrideRequest,
+  TagStreamDecisionRequest,
+  TagStreamLabelRewriteApprovalRequest,
   PlanSelectionRequest,
   PlanResponse,
   // Jobs
@@ -237,6 +241,8 @@ import type {
   SelfUpdatePrepareRequest,
   ContainerRestartResponse,
   TagOverrideRequest,
+  TagStreamDecisionRequest,
+  TagStreamLabelRewriteApprovalRequest,
   PlanSelectionRequest,
   DigestPinLabelRewriteApprovalRequest,
   PlanResponse,
@@ -705,6 +711,8 @@ const plansApi = {
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
     csrfToken: string,
     selections: PlanSelectionRequest[] = [],
+    tagStreamDecisions: TagStreamDecisionRequest[] = [],
+    tagStreamLabelRewriteApprovals: TagStreamLabelRewriteApprovalRequest[] = [],
   ) =>
     apiRequest<PlanResponse>("/plans", {
       method: "POST",
@@ -715,6 +723,8 @@ const plansApi = {
           : { line_numbers: lineNumbers }),
         allow_tag_updates: allowTagUpdates,
         tag_overrides: tagOverrides,
+        tag_stream_decisions: tagStreamDecisions,
+        tag_stream_label_rewrite_approvals: tagStreamLabelRewriteApprovals,
         digest_pin_label_rewrite_approvals: digestPinLabelRewriteApprovals,
       }),
     }),
@@ -726,6 +736,8 @@ const plansApi = {
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
     csrfToken: string,
     selections: PlanSelectionRequest[] = [],
+    tagStreamDecisions: TagStreamDecisionRequest[] = [],
+    tagStreamLabelRewriteApprovals: TagStreamLabelRewriteApprovalRequest[] = [],
   ) =>
     apiRequest<ApplyJobResponse>("/jobs", {
       method: "POST",
@@ -737,6 +749,8 @@ const plansApi = {
           : { line_numbers: lineNumbers }),
         allow_tag_updates: allowTagUpdates,
         tag_overrides: tagOverrides,
+        tag_stream_decisions: tagStreamDecisions,
+        tag_stream_label_rewrite_approvals: tagStreamLabelRewriteApprovals,
         digest_pin_label_rewrite_approvals: digestPinLabelRewriteApprovals,
         confirmation: "apply",
       }),
@@ -749,6 +763,8 @@ const plansApi = {
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
     csrfToken: string,
     selections: PlanSelectionRequest[] = [],
+    tagStreamDecisions: TagStreamDecisionRequest[] = [],
+    tagStreamLabelRewriteApprovals: TagStreamLabelRewriteApprovalRequest[] = [],
   ) =>
     apiRequest<ApplyJobResponse>("/plans/apply", {
       method: "POST",
@@ -760,6 +776,8 @@ const plansApi = {
           : { line_numbers: lineNumbers }),
         allow_tag_updates: allowTagUpdates,
         tag_overrides: tagOverrides,
+        tag_stream_decisions: tagStreamDecisions,
+        tag_stream_label_rewrite_approvals: tagStreamLabelRewriteApprovals,
         digest_pin_label_rewrite_approvals: digestPinLabelRewriteApprovals,
         confirmation: "apply",
       }),

@@ -13,6 +13,8 @@ from wudup.updater import (
     UpdateFromWudRunner,
 )
 from wudup.updater_models import (
+    TagOverride,
+    TagStreamUpdate,
     UpdaterOptions,
 )
 
@@ -338,6 +340,65 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
         self.assertLess(
             event_keys.index(("pull", "failure")),
             event_keys.index(("completion", "failure")),
+        )
+
+    def test_tag_stream_pull_failure_restores_image_and_label_together(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:1.2.3-distroless tag=1.3.0\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack(
+            "app",
+            [("app", "repo/app:1.2.3-distroless", "cid-app")],
+        )
+        compose_file = stack_dir / "docker-compose.yml"
+        original = compose_file.read_text(encoding="utf-8")
+        self.set_image_state("repo/app:1.2.3-distroless", "old", "sha256:old")
+        (self.fake_root / "stacks" / "app" / "pull_fail").write_text(
+            "",
+            encoding="utf-8",
+        )
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            allow_tag_updates=True,
+            no_color=True,
+            tag_overrides=(TagOverride(1, "1.3.0-distroless"),),
+            tag_stream_updates=(
+                TagStreamUpdate(
+                    line_no=1,
+                    stack="app",
+                    service="app",
+                    current_tag="1.2.3-distroless",
+                    reported_tag="1.3.0",
+                    selected_tag="1.3.0-distroless",
+                    decision="preserve",
+                    label_key="wud.tag.include",
+                    current_label_value="",
+                    proposed_label_value=r"^\d+\.\d+\.\d+-distroless$$",
+                    proposed_label_regex=r"^\d+\.\d+\.\d+-distroless$",
+                    approved=True,
+                    reason="label-added",
+                ),
+            ),
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            status = runner.run()
+
+        self.assertEqual(status, 1)
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:1.2.3-distroless tag=1.3.0\n",
         )
     def test_tag_update_with_digest_checks_rewritten_tag(self) -> None:
         self.wud_file.write_text(

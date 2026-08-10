@@ -31,6 +31,8 @@ from .plans import (
 from .updater_models import (
     DigestPinLabelRewriteApproval,
     TagOverride,
+    TagStreamDecision,
+    TagStreamLabelRewriteApproval,
     UpdateSelection,
 )
 from .web_auth import _safe_exception_detail, _settings
@@ -99,6 +101,10 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
                     selections=payload.selections,
                     allow_tag_updates=payload.allow_tag_updates,
                     tag_overrides=payload.tag_overrides,
+                    tag_stream_decisions=payload.tag_stream_decisions,
+                    tag_stream_label_rewrite_approvals=(
+                        payload.tag_stream_label_rewrite_approvals
+                    ),
                     digest_pin_label_rewrite_approvals=(
                         payload.digest_pin_label_rewrite_approvals
                     ),
@@ -221,6 +227,10 @@ def build_web_plan(
         ),
         allow_tag_updates=payload.allow_tag_updates,
         tag_overrides=tag_overrides_from_payload(payload),
+        tag_stream_decisions=tag_stream_decisions_from_payload(payload),
+        tag_stream_label_rewrite_approvals=(
+            tag_stream_label_rewrite_approvals_from_payload(payload)
+        ),
         digest_pin_label_rewrite_approvals=(
             digest_pin_label_rewrite_approvals_from_payload(payload)
         ),
@@ -262,6 +272,65 @@ def update_selections_from_payload(
         )
         for item in payload.selections
     )
+
+
+def tag_stream_decisions_from_payload(
+    payload: PlanRequest | ApplyPlanRequest,
+) -> tuple[TagStreamDecision, ...]:
+    decisions: list[TagStreamDecision] = []
+    seen: set[int] = set()
+    for item in payload.tag_stream_decisions:
+        if item.line_no in seen:
+            raise PlanInputError(
+                f"tag_stream_decisions line {item.line_no} was provided more than once"
+            )
+        decisions.append(
+            TagStreamDecision(line_no=item.line_no, decision=item.decision)
+        )
+        seen.add(item.line_no)
+    return tuple(decisions)
+
+
+def tag_stream_label_rewrite_approvals_from_payload(
+    payload: PlanRequest | ApplyPlanRequest,
+) -> tuple[TagStreamLabelRewriteApproval, ...]:
+    approvals: list[TagStreamLabelRewriteApproval] = []
+    seen: set[tuple[int, str, str, str, str, str, str]] = set()
+    for item in payload.tag_stream_label_rewrite_approvals:
+        key = (
+            item.line_no,
+            item.stack,
+            item.service,
+            item.label_key,
+            item.current_label_value,
+            item.selected_tag,
+            item.proposed_label_value,
+        )
+        if key in seen:
+            raise PlanInputError(
+                "tag_stream_label_rewrite_approvals contains a duplicate approval"
+            )
+        if item.label_key != "wud.tag.include":
+            raise PlanInputError(
+                "tag_stream_label_rewrite_approvals can only approve wud.tag.include"
+            )
+        if not tag_value_valid(item.selected_tag):
+            raise PlanInputError(
+                "tag_stream_label_rewrite_approvals has an invalid selected tag"
+            )
+        approvals.append(
+            TagStreamLabelRewriteApproval(
+                line_no=item.line_no,
+                stack=item.stack,
+                service=item.service,
+                label_key=item.label_key,
+                current_label_value=item.current_label_value,
+                selected_tag=item.selected_tag,
+                proposed_label_value=item.proposed_label_value,
+            )
+        )
+        seen.add(key)
+    return tuple(approvals)
 
 
 def digest_pin_label_rewrite_approvals_from_payload(
@@ -344,12 +413,26 @@ def submit_apply_job(
     *,
     pending_source: web_pending_sources.PendingSourceResult,
 ) -> ApplyJobResponse:
+    tag_stream_updates = web_jobs.tag_stream_updates_from_plan(plan)
+    stream_tag_overrides = tuple(
+        TagOverride(line_no=line_no, tag=selected_tag)
+        for line_no, selected_tag in sorted(
+            {
+                item.line_no: item.selected_tag
+                for item in tag_stream_updates
+            }.items()
+        )
+    )
     return web_jobs._submit_apply_job_state(
         request.app.state,
         settings,
         plan,
         allow_tag_updates=payload.allow_tag_updates,
-        tag_overrides=tuple(tag_overrides_from_payload(payload)),
+        tag_overrides=(
+            *tag_overrides_from_payload(payload),
+            *stream_tag_overrides,
+        ),
+        tag_stream_updates=tag_stream_updates,
         digest_pin_label_rewrite_approvals=(
             digest_pin_label_rewrite_approvals_from_payload(payload)
         ),

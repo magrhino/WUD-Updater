@@ -1,13 +1,114 @@
 from __future__ import annotations
 
 from pathlib import Path
+import stat
+
+from ruamel.yaml import YAML
 
 from compose_rewrite_helpers import ComposeRewriteTestCase
 from wudup.compose_rewrite import apply_compose_tag_updates
-from wudup.updater_models import ComposeTagRewriteError, TagUpdate
+from wudup.updater_models import (
+    ComposeTagRewriteError,
+    TagStreamUpdate,
+    TagUpdate,
+)
 
 
 class ComposeTagUpdateTests(ComposeRewriteTestCase):
+    def test_stream_image_and_list_label_are_rewritten_atomically(self) -> None:
+        original = (
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.2.3-distroless\n"
+            "    labels:\n"
+            "      - keep=value\n"
+        )
+        compose_file = self.write_compose(original)
+        compose_file.chmod(0o640)
+
+        applied = apply_compose_tag_updates(
+            compose_file,
+            (
+                TagUpdate(
+                    old_image="repo/app:1.2.3-distroless",
+                    desired_tag="1.3.0-distroless",
+                    new_image="repo/app:1.3.0-distroless",
+                    services=("app",),
+                ),
+            ),
+            tag_stream_updates=(
+                TagStreamUpdate(
+                    line_no=1,
+                    stack="stack",
+                    service="app",
+                    current_tag="1.2.3-distroless",
+                    reported_tag="1.3.0",
+                    selected_tag="1.3.0-distroless",
+                    decision="preserve",
+                    label_key="wud.tag.include",
+                    current_label_value="",
+                    proposed_label_value=r"^\d+\.\d+\.\d+-distroless$$",
+                    proposed_label_regex=r"^\d+\.\d+\.\d+-distroless$",
+                    approved=True,
+                    reason="label-added",
+                ),
+            ),
+            stack_name="stack",
+        )
+
+        parsed = YAML(typ="safe").load(compose_file.read_text(encoding="utf-8"))
+        assert applied[0].replacements == 1
+        assert parsed["services"]["app"]["image"] == "repo/app:1.3.0-distroless"
+        assert "keep=value" in parsed["services"]["app"]["labels"]
+        assert (
+            r"wud.tag.include=^\d+\.\d+\.\d+-distroless$$"
+            in parsed["services"]["app"]["labels"]
+        )
+        assert stat.S_IMODE(compose_file.stat().st_mode) == 0o640
+
+    def test_stream_map_label_stale_value_leaves_image_and_label_unchanged(self) -> None:
+        original = (
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.2.3-distroless\n"
+            "    labels:\n"
+            "      wud.tag.include: ^custom-.+$$\n"
+        )
+        compose_file = self.write_compose(original)
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "changed since planning"):
+            apply_compose_tag_updates(
+                compose_file,
+                (
+                    TagUpdate(
+                        old_image="repo/app:1.2.3-distroless",
+                        desired_tag="1.3.0-distroless",
+                        new_image="repo/app:1.3.0-distroless",
+                        services=("app",),
+                    ),
+                ),
+                tag_stream_updates=(
+                    TagStreamUpdate(
+                        line_no=1,
+                        stack="stack",
+                        service="app",
+                        current_tag="1.2.3-distroless",
+                        reported_tag="1.3.0",
+                        selected_tag="1.3.0-distroless",
+                        decision="preserve",
+                        label_key="wud.tag.include",
+                        current_label_value="^different$",
+                        proposed_label_value=r"^\d+\.\d+\.\d+-distroless$$",
+                        proposed_label_regex=r"^\d+\.\d+\.\d+-distroless$",
+                        approved=True,
+                        reason="approved",
+                    ),
+                ),
+                stack_name="stack",
+            )
+
+        assert compose_file.read_text(encoding="utf-8") == original
+
     def test_rewrites_only_direct_service_image_source_span(self) -> None:
         original = (
             "x-template:\n"

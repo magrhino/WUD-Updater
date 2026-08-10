@@ -40,6 +40,8 @@ class _LifecycleRewriteMixin:
             state.applied_tags = compose_rewrite.apply_compose_tag_updates(
                 compose_path,
                 state.compose_tag_updates,
+                tag_stream_updates=state.tag_stream_updates,
+                stack_name=stack.name,
             )
         except ComposeTagRewriteError as exc:
             self.log.error(

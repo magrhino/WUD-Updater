@@ -108,6 +108,8 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
       allowTagUpdates: options.lineNumbersHaveTagUpdates(lineNumbers),
       tagOverrides: options.tagOverridesForLines(lineNumbers),
       digestPinLabelRewriteApprovals: [],
+      tagStreamDecisions: [],
+      tagStreamLabelRewriteApprovals: [],
     };
     options.setUpdateIntent(intent);
     try {
@@ -230,14 +232,23 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
       allowTagUpdates: options.lineNumbersHaveTagUpdates(lineNumbers),
       tagOverrides: options.tagOverridesForLines(lineNumbers),
     });
-    const job = await updates.applyPlan(
+    const applyArgs = [
       updates.plan.plan_id,
       lineNumbers,
       payload.allowTagUpdates,
       payload.tagOverrides,
       payload.digestPinLabelRewriteApprovals,
       updates.plan.selected_selections ?? [],
-    );
+    ] as const;
+    const job =
+      payload.tagStreamDecisions.length ||
+      payload.tagStreamLabelRewriteApprovals.length
+        ? await updates.applyPlan(
+            ...applyArgs,
+            payload.tagStreamDecisions,
+            payload.tagStreamLabelRewriteApprovals,
+          )
+        : await updates.applyPlan(...applyArgs);
     options.applyJobSnapshot.value = snapshot;
     options.subscribeApplyJob(job.job_id);
     showPreflightModal.value = false;

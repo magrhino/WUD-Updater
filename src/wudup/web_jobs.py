@@ -33,6 +33,7 @@ from .updater_models import (
     DigestPinUpdate,
     DigestUnpinUpdate,
     TagOverride,
+    TagStreamUpdate,
     UpdateSelection,
     UpdaterOptions,
     UpdaterProgressEvent,
@@ -160,6 +161,7 @@ def _submit_apply_job_state(
     effective_config_loader: EffectiveConfigLoader,
     auto_update_schedule_run_updater: AutoUpdateScheduleRunUpdater,
     digest_pin_label_rewrite_approvals: tuple[DigestPinLabelRewriteApproval, ...] = (),
+    tag_stream_updates: tuple[TagStreamUpdate, ...] = (),
     run_context: ApplyJobRunContext | None = None,
 ) -> ApplyJobResponse:
     apply_condition: Condition = state.web_apply_condition
@@ -197,6 +199,7 @@ def _submit_apply_job_state(
             active_run_context,
             tuple(plan.selected_selections),
             tuple(plan.completed_update_selections),
+            tag_stream_updates,
         )
         return response
 
@@ -485,6 +488,7 @@ def _run_apply_job(
     run_context: ApplyJobRunContext,
     update_selections: tuple[UpdateSelection, ...] = (),
     completed_update_selections: tuple[CompletedUpdateSelection, ...] = (),
+    tag_stream_updates: tuple[TagStreamUpdate, ...] = (),
 ) -> None:
     if run_context.start_event is not None:
         run_context.start_event.wait()
@@ -517,6 +521,7 @@ def _run_apply_job(
             ),
             allow_tag_updates=allow_tag_updates,
             tag_overrides=tag_overrides,
+            tag_stream_updates=tag_stream_updates,
             digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
             digest_pin_plan=digest_pin_plan,
             digest_unpin_plan=digest_unpin_plan,
@@ -813,6 +818,7 @@ def _apply_options(
     selection_scope: _ApplySelectionScope,
     allow_tag_updates: bool,
     tag_overrides: tuple[TagOverride, ...],
+    tag_stream_updates: tuple[TagStreamUpdate, ...] = (),
     plan_id: str,
     effective_config_loader: EffectiveConfigLoader,
     digest_pin_label_rewrite_approvals: tuple[DigestPinLabelRewriteApproval, ...] = (),
@@ -858,6 +864,7 @@ def _apply_options(
         allow_tag_updates=allow_tag_updates,
         digest_pin_updates=config.digest_pin_updates,
         tag_overrides=tag_overrides,
+        tag_stream_updates=tag_stream_updates,
         digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
         digest_pin_plan=digest_pin_plan,
         digest_unpin_plan=digest_unpin_plan,
@@ -878,6 +885,30 @@ def _apply_options(
 
 def _line_spec(line_numbers: tuple[int, ...]) -> str:
     return ",".join(str(line_no) for line_no in sorted(set(line_numbers)))
+
+
+def tag_stream_updates_from_plan(
+    plan: DryRunPlan,
+) -> tuple[TagStreamUpdate, ...]:
+    return tuple(
+        TagStreamUpdate(
+            line_no=item.line_no,
+            stack=stack.name,
+            service=item.service,
+            current_tag=item.current_tag,
+            reported_tag=item.reported_tag,
+            selected_tag=item.selected_tag,
+            decision=item.decision,
+            label_key=item.label_key,
+            current_label_value=item.current_label_value,
+            proposed_label_value=item.proposed_label_value,
+            proposed_label_regex=item.proposed_label_regex,
+            approved=item.approved,
+            reason=item.reason,
+        )
+        for stack in plan.stacks
+        for item in stack.tag_stream_updates
+    )
 
 
 def _digest_pin_updates_from_plan(

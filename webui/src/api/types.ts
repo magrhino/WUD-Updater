@@ -107,6 +107,11 @@ export interface PendingSourceInfo {
   detail: string;
 }
 
+export interface PendingTagStream {
+  current_stream: string;
+  reported_stream: string;
+}
+
 export interface PendingItem {
   line_no: number;
   raw: string;
@@ -126,6 +131,7 @@ export interface PendingItem {
   wud_metadata?: WudContainerMetadata | null;
   source: PendingSourceActive;
   source_id: string;
+  tag_stream?: PendingTagStream | null;
 }
 
 export interface PendingDiagnostic {
@@ -746,6 +752,38 @@ export interface PlanTagUpdate {
   services: string[];
 }
 
+export type TagStreamDecision = "preserve" | "switch";
+
+export interface TagStreamDecisionRequest {
+  line_no: number;
+  decision: TagStreamDecision;
+}
+
+export interface TagStreamLabelRewriteApprovalRequest {
+  line_no: number;
+  stack: string;
+  service: string;
+  label_key: string;
+  current_label_value: string;
+  selected_tag: string;
+  proposed_label_value: string;
+}
+
+export interface PlanTagStreamUpdate {
+  line_no: number;
+  service: string;
+  current_tag: string;
+  reported_tag: string;
+  selected_tag: string;
+  decision: TagStreamDecision;
+  label_key: string;
+  current_label_value: string;
+  proposed_label_value: string;
+  proposed_label_regex: string;
+  approved: boolean;
+  reason: string;
+}
+
 export interface DigestPinLabelRewriteApprovalRequest {
   stack: string;
   service: string;
@@ -813,6 +851,7 @@ export interface PlanStack {
   force_recreate: boolean;
   up_no_deps: boolean;
   tag_updates: PlanTagUpdate[];
+  tag_stream_updates: PlanTagStreamUpdate[];
   digest_pin_updates: PlanDigestPinUpdate[];
   digest_unpin_updates: PlanDigestUnpinUpdate[];
   actions: PlanAction[];

@@ -29,16 +29,6 @@ from .updater_matching import (
 )
 from .updater_lifecycle_scope import _UpdateScopeMixin
 from .updater_planning import _tag_updates
-from .updater_models import (
-    CompletedUpdateSelection,
-    DigestPinLabelRewrite,
-    DigestPinLabelRewriteApproval,
-    DigestPinUpdate,
-    DigestUnpinUpdate,
-    Match,
-    TagOverride,
-    UpdateSelection,
-)
 from .plan_actions import render_plan_actions
 from .plan_digest_unpin import recover_digest_unpin_matches
 from .plan_identity import _file_sha256, _plan_id
@@ -73,14 +63,30 @@ from .plan_models import (
     DryRunPlanStack,
     DryRunPlanSource,
     DryRunPlanSummary,
+    DryRunPlanTagStreamUpdate,
     DryRunPlanTagUpdate,
     DryRunPlanTarget,
     PendingGroupingItem,
     PendingGroupingResult,
     PendingStackGroup,
+    PendingTagStream,
     PlanFileMissing,
     PlanInputError,
     UnmatchedDiagnostic,
+)
+from .tag_streams import pending_tag_stream_hint, plan_tag_stream_changes
+from .updater_models import (
+    CompletedUpdateSelection,
+    DigestPinLabelRewrite,
+    DigestPinLabelRewriteApproval,
+    DigestPinUpdate,
+    DigestUnpinUpdate,
+    Match,
+    TagOverride,
+    TagStreamDecision,
+    TagStreamLabelRewriteApproval,
+    TagStreamUpdate,
+    UpdateSelection,
 )
 from .wud_file import (
     ParsedWudFile,
@@ -135,6 +141,10 @@ class _PlanBuilder(_UpdateScopeMixin):
     completed_update_selections: Sequence[CompletedUpdateSelection] = ()
     allow_tag_updates: bool = False
     tag_overrides: Sequence[TagOverride] = ()
+    tag_stream_decisions: Sequence[TagStreamDecision] = ()
+    tag_stream_label_rewrite_approvals: Sequence[
+        TagStreamLabelRewriteApproval
+    ] = ()
     digest_pin_label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval] = ()
     host_docker_base: Path | None = None
     command_runner: CommandRunner | None = None
@@ -156,6 +166,10 @@ class _PlanBuilder(_UpdateScopeMixin):
         dict[tuple[str, str], tuple[DigestPinLabelRewrite, ...]],
     ] = field(init=False, default_factory=dict)
     digest_unpin_updates_by_stack: dict[int, tuple[DigestUnpinUpdate, ...]] = field(
+        init=False,
+        default_factory=dict,
+    )
+    tag_stream_updates_by_stack: dict[int, tuple[TagStreamUpdate, ...]] = field(
         init=False,
         default_factory=dict,
     )
@@ -205,8 +219,6 @@ class _PlanBuilder(_UpdateScopeMixin):
             if self.source_parsed is None
             else _parsed_for_selected_lines(full_parse, selected)
         )
-        parsed = self._apply_tag_overrides(parsed)
-
         issues = [
             DryRunPlanIssue(
                 severity="warning",
@@ -215,7 +227,6 @@ class _PlanBuilder(_UpdateScopeMixin):
             )
             for warning in parsed.warnings
         ]
-        targets_by_line = {target.line_no: target for target in parsed.targets}
         skipped: list[DryRunPlanSkipped] = []
         matches: list[Match] = []
         stacks: tuple[ComposeStack, ...] = ()
@@ -245,6 +256,24 @@ class _PlanBuilder(_UpdateScopeMixin):
                 matches,
                 normalized_selections,
             )
+            tag_stream_result = plan_tag_stream_changes(
+                self.docker,
+                matches,
+                decisions=self.tag_stream_decisions,
+                label_rewrite_approvals=self.tag_stream_label_rewrite_approvals,
+                tag_overrides=self.tag_overrides,
+            )
+            matches = list(tag_stream_result.matches)
+            issues.extend(tag_stream_result.issues)
+            self.tag_stream_updates_by_stack = dict(
+                tag_stream_result.updates_by_stack
+            )
+            parsed = _apply_selected_tags(
+                parsed,
+                tag_stream_result.selected_tags_by_line,
+            )
+            parsed = self._apply_tag_overrides(parsed)
+            matches = _replace_match_targets(matches, parsed)
             self._filter_digest_unpin_updates(matches)
             if any(item.selection_id for item in normalized_selections):
                 digest_unpin_issues = tuple(
@@ -310,6 +339,7 @@ class _PlanBuilder(_UpdateScopeMixin):
                 preflight_issues(self.config, self.compose, matches, self._update_scope)
             )
 
+        targets_by_line = {target.line_no: target for target in parsed.targets}
         plan_stacks = self._plan_stacks(matches)
         targets = self._plan_targets(targets_by_line, matches, skipped)
         status = _plan_status(matches, skipped, issues)
@@ -348,6 +378,10 @@ class _PlanBuilder(_UpdateScopeMixin):
                 config=self.config,
                 allow_tag_updates=self.allow_tag_updates,
                 tag_overrides=self.tag_overrides,
+                tag_stream_decisions=self.tag_stream_decisions,
+                tag_stream_label_rewrite_approvals=(
+                    self.tag_stream_label_rewrite_approvals
+                ),
                 digest_pin_label_rewrite_approvals=(
                     self.digest_pin_label_rewrite_approvals
                 ),
@@ -456,6 +490,23 @@ class _PlanBuilder(_UpdateScopeMixin):
                 )
                 for update in tag_updates
             )
+            plan_tag_stream_updates = tuple(
+                DryRunPlanTagStreamUpdate(
+                    line_no=update.line_no,
+                    service=update.service,
+                    current_tag=update.current_tag,
+                    reported_tag=update.reported_tag,
+                    selected_tag=update.selected_tag,
+                    decision=update.decision,
+                    label_key=update.label_key,
+                    current_label_value=update.current_label_value,
+                    proposed_label_value=update.proposed_label_value,
+                    proposed_label_regex=update.proposed_label_regex,
+                    approved=update.approved,
+                    reason=update.reason,
+                )
+                for update in self.tag_stream_updates_by_stack.get(stack.index, ())
+            )
             digest_pin_updates = self.digest_pin_updates_by_stack.get(stack.index, ())
             digest_unpin_updates = self.digest_unpin_updates_by_stack.get(
                 stack.index,
@@ -535,6 +586,7 @@ class _PlanBuilder(_UpdateScopeMixin):
                     force_recreate=scope.force_recreate,
                     up_no_deps=scope.up_no_deps,
                     tag_updates=plan_tag_updates,
+                    tag_stream_updates=plan_tag_stream_updates,
                     digest_pin_updates=plan_digest_pin_updates,
                     digest_unpin_updates=plan_digest_unpin_updates,
                     actions=render_plan_actions(
@@ -543,6 +595,7 @@ class _PlanBuilder(_UpdateScopeMixin):
                         stack,
                         scope,
                         plan_tag_updates,
+                        plan_tag_stream_updates,
                         plan_digest_pin_updates,
                         plan_digest_unpin_updates,
                     ),
@@ -733,6 +786,10 @@ def build_dry_run_plan(
     completed_update_selections: Sequence[CompletedUpdateSelection] = (),
     allow_tag_updates: bool = False,
     tag_overrides: Sequence[TagOverride] = (),
+    tag_stream_decisions: Sequence[TagStreamDecision] = (),
+    tag_stream_label_rewrite_approvals: Sequence[
+        TagStreamLabelRewriteApproval
+    ] = (),
     digest_pin_label_rewrite_approvals: Sequence[
         DigestPinLabelRewriteApproval
     ] = (),
@@ -748,6 +805,8 @@ def build_dry_run_plan(
         completed_update_selections=completed_update_selections,
         allow_tag_updates=allow_tag_updates,
         tag_overrides=tag_overrides,
+        tag_stream_decisions=tag_stream_decisions,
+        tag_stream_label_rewrite_approvals=tag_stream_label_rewrite_approvals,
         digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
         host_docker_base=host_docker_base,
         command_runner=runner,
@@ -766,6 +825,10 @@ def build_dry_run_plan_from_pending_source(
     selection_scope: _PlanSelectionScope | None = None,
     allow_tag_updates: bool = False,
     tag_overrides: Sequence[TagOverride] = (),
+    tag_stream_decisions: Sequence[TagStreamDecision] = (),
+    tag_stream_label_rewrite_approvals: Sequence[
+        TagStreamLabelRewriteApproval
+    ] = (),
     digest_pin_label_rewrite_approvals: Sequence[
         DigestPinLabelRewriteApproval
     ] = (),
@@ -782,6 +845,8 @@ def build_dry_run_plan_from_pending_source(
         completed_update_selections=selections.completed_update_selections,
         allow_tag_updates=allow_tag_updates,
         tag_overrides=tag_overrides,
+        tag_stream_decisions=tag_stream_decisions,
+        tag_stream_label_rewrite_approvals=tag_stream_label_rewrite_approvals,
         digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
         host_docker_base=host_docker_base,
         command_runner=runner,
@@ -933,6 +998,39 @@ def _parsed_for_selected_lines(
     )
 
 
+def _apply_selected_tags(
+    parsed: ParsedWudFile,
+    selected_tags_by_line: Mapping[int, str],
+) -> ParsedWudFile:
+    if not selected_tags_by_line:
+        return parsed
+    return ParsedWudFile(
+        lines=parsed.lines,
+        targets=tuple(
+            replace(
+                target,
+                desired_tag=selected_tags_by_line.get(
+                    target.line_no,
+                    target.desired_tag,
+                ),
+            )
+            for target in parsed.targets
+        ),
+        warnings=parsed.warnings,
+    )
+
+
+def _replace_match_targets(
+    matches: Sequence[Match],
+    parsed: ParsedWudFile,
+) -> list[Match]:
+    targets_by_line = {target.line_no: target for target in parsed.targets}
+    return [
+        replace(match, target=targets_by_line.get(match.target.line_no, match.target))
+        for match in matches
+    ]
+
+
 def _digest_unpin_updates_for_stack(
     stack_index: int,
     updates_by_stack: _DigestUnpinUpdatesByStack | None,
@@ -1077,6 +1175,11 @@ def _pending_grouping_item(
         compose_images,
         digest_pin_updates_enabled=digest_pin_updates_enabled,
     )
+    tag_stream_hint = pending_tag_stream_hint(
+        image_repo=target.repo,
+        current_tag=image_tag(target.first),
+        reported_tag=target.desired_tag,
+    )
     return PendingGroupingItem(
         line_no=target.line_no,
         raw=target.raw,
@@ -1101,6 +1204,14 @@ def _pending_grouping_item(
         platform_variant=target.platform.variant if target.platform is not None else "",
         diagnostic=diagnostic,
         digest_provenance=digest_provenance,
+        tag_stream=(
+            None
+            if tag_stream_hint is None
+            else PendingTagStream(
+                current_stream=tag_stream_hint.current_stream,
+                reported_stream=tag_stream_hint.reported_stream,
+            )
+        ),
     )
 
 

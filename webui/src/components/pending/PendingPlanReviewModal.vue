@@ -10,6 +10,8 @@ import type {
   PlanCleanupItem,
   PlanIssue,
   PlanResponse,
+  PlanTagStreamUpdate,
+  TagStreamDecision,
 } from "../../api/client";
 import {
   planLineDigestPinLabel,
@@ -54,6 +56,10 @@ defineProps<{
   digestPinLabelApprovalApproved: (issue: PlanIssue) => boolean;
   digestPinLabelApprovalIssues: PlanIssue[];
   digestPinLabelIssueProposedRegex: (issue: PlanIssue) => string;
+  tagStreamDecisionIssues: PlanIssue[];
+  tagStreamDecisionSelected: (issue: PlanIssue, decision: TagStreamDecision) => boolean;
+  tagStreamLabelApprovalApproved: (issue: PlanIssue) => boolean;
+  tagStreamLabelApprovalIssues: PlanIssue[];
   issueDetailString: (issue: PlanIssue, key: string) => string;
   issueHint: (issue: PlanIssue) => string;
   issueLabel: (issue: PlanIssue) => string;
@@ -66,6 +72,7 @@ defineProps<{
   planDigestPinLabelRewrites: PlanDigestPinLabelRewriteView[];
   planDigestUnpinUpdates: PlanDigestUnpinUpdateView[];
   planLines: PlanLineView[];
+  planTagStreamUpdates: { stack: string; update: PlanTagStreamUpdate }[];
   preflightDigestPinNotice: string;
   preflightDigestUnpinNotice: string;
   preflightServiceImpactLabel: string;
@@ -81,6 +88,8 @@ defineProps<{
 const emit = defineEmits<{
   (event: "apply"): void;
   (event: "approve-digest-pin-label-rewrite", issue: PlanIssue): void;
+  (event: "approve-tag-stream-label-rewrite", issue: PlanIssue): void;
+  (event: "choose-tag-stream", issue: PlanIssue, decision: TagStreamDecision): void;
   (event: "close"): void;
   (event: "open-cleanup"): void;
 }>();
@@ -186,6 +195,120 @@ const emit = defineEmits<{
       >
         {{ mutationDisabledMessage }}
       </n-alert>
+
+      <section
+        v-if="tagStreamDecisionIssues.length"
+        class="preflight-impact preflight-block stream-decision-section"
+        aria-labelledby="tag-stream-decision-title"
+      >
+        <div class="preflight-impact-heading">
+          <strong id="tag-stream-decision-title">Update stream change</strong>
+          <n-tag size="small" type="warning">Decision required</n-tag>
+        </div>
+        <div
+          v-for="issue in tagStreamDecisionIssues"
+          :key="`stream-${issue.line_no}`"
+          class="stream-decision"
+        >
+          <p>
+            WUD proposed
+            <code>{{ issueDetailString(issue, "reported_tag") }}</code>, which changes
+            {{ issueDetailString(issue, "current_stream") }} to
+            {{ issueDetailString(issue, "reported_stream") }}. The same-stream tag was verified.
+          </p>
+          <div class="stream-choice-grid" role="group" :aria-label="`Update stream choice for line ${issue.line_no}`">
+            <n-button
+              type="primary"
+              :loading="loading"
+              :disabled="tagStreamDecisionSelected(issue, 'preserve')"
+              @click="emit('choose-tag-stream', issue, 'preserve')"
+            >
+              Keep {{ issueDetailString(issue, "current_stream") }} —
+              {{ issueDetailString(issue, "same_stream_tag") }}
+            </n-button>
+            <n-button
+              secondary
+              :loading="loading"
+              :disabled="tagStreamDecisionSelected(issue, 'switch')"
+              @click="emit('choose-tag-stream', issue, 'switch')"
+            >
+              Switch to {{ issueDetailString(issue, "reported_stream") }} —
+              {{ issueDetailString(issue, "reported_tag") }}
+            </n-button>
+          </div>
+          <div class="stream-rule-preview">
+            <span>Recommended label</span>
+            <code>wud.tag.include={{ issueDetailString(issue, "preserve_label_regex") }}</code>
+          </div>
+        </div>
+      </section>
+
+      <section
+        v-if="planTagStreamUpdates.length"
+        class="preflight-impact preflight-block"
+        aria-labelledby="tag-stream-updates-title"
+      >
+        <div class="preflight-impact-heading">
+          <strong id="tag-stream-updates-title">Selected update stream</strong>
+          <n-tag size="small" type="success">Resolved</n-tag>
+        </div>
+        <div class="compact-list">
+          <div
+            v-for="item in planTagStreamUpdates"
+            :key="`${item.stack}-${item.update.service}-${item.update.line_no}`"
+            class="list-row plan-line-row"
+          >
+            <span>{{ item.update.decision }}</span>
+            <strong>{{ item.stack }} / {{ item.update.service }}</strong>
+            <em>
+              <code>{{ item.update.current_tag }} -> {{ item.update.selected_tag }}</code>
+              <code>{{ item.update.label_key }}={{ item.update.proposed_label_regex }}</code>
+            </em>
+          </div>
+        </div>
+      </section>
+
+      <section
+        v-if="tagStreamLabelApprovalIssues.length"
+        class="preflight-impact preflight-block"
+        aria-labelledby="tag-stream-label-approvals-title"
+      >
+        <div class="preflight-impact-heading">
+          <strong id="tag-stream-label-approvals-title">Update-stream label approval</strong>
+          <n-tag size="small" type="warning">
+            {{ pluralize(tagStreamLabelApprovalIssues.length, "approval") }}
+          </n-tag>
+        </div>
+        <p class="preflight-summary-text">
+          This service has a custom include expression. Review and approve the exact replacement; WUDup will not merge regular expressions.
+        </p>
+        <div class="compact-list">
+          <div
+            v-for="issue in tagStreamLabelApprovalIssues"
+            :key="`${issue.line_no}-${issue.stack}-${issue.service}`"
+            class="list-row plan-line-row digest-pin-approval-row"
+          >
+            <span>Review</span>
+            <strong>{{ issue.stack }} / {{ issue.service }}</strong>
+            <em>
+              <code>{{ issueDetailString(issue, "current_label_value") }}</code>
+              <span aria-hidden="true"> -> </span>
+              <code>{{ issueDetailString(issue, "proposed_label_regex") }}</code>
+              <n-button
+                size="small"
+                secondary
+                type="primary"
+                :disabled="tagStreamLabelApprovalApproved(issue)"
+                :loading="loading"
+                @click="emit('approve-tag-stream-label-rewrite', issue)"
+              >
+                <template #icon><Check :size="16" /></template>
+                {{ tagStreamLabelApprovalApproved(issue) ? "Approved" : "Approve label rewrite" }}
+              </n-button>
+            </em>
+          </div>
+        </div>
+      </section>
       <n-alert
         v-if="preflightTagRewriteNotice"
         class="preflight-block"
@@ -565,6 +688,34 @@ const emit = defineEmits<{
   gap: 6px;
 }
 
+.stream-decision {
+  display: grid;
+  gap: 10px;
+}
+
+.stream-decision p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.stream-choice-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stream-rule-preview {
+  display: grid;
+  gap: 4px;
+  color: var(--color-muted-text);
+  font-size: 0.82rem;
+}
+
+.stream-rule-preview code {
+  color: var(--color-code-text);
+}
+
 .apply-readiness {
   display: grid;
   gap: 10px;
@@ -658,6 +809,12 @@ const emit = defineEmits<{
 @media (--wud-compact) {
   .plan-action {
     grid-template-columns: 1fr;
+  }
+
+  .stream-choice-grid :deep(.n-button) {
+    width: 100%;
+    min-height: var(--size-touch-target);
+    white-space: normal;
   }
 }
 </style>

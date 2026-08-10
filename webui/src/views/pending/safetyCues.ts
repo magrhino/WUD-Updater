@@ -90,6 +90,10 @@ export function safetyCues(
 
   addVersionBumpCue(row, addCue);
 
+  if (row.tag_stream) {
+    addCue("possible-stream-change", "Possible stream change", "warning");
+  }
+
   if (!row.desired_tag && row.digest) {
     addCue("digest-only", "Digest-only", "info");
   }

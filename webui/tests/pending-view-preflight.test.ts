@@ -430,4 +430,107 @@ describe("pending view preflight safety", () => {
     );
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
   });
+
+  it("replans a mobile stream decision before enabling apply", async () => {
+    const restoreViewport = mockMobileViewport();
+    try {
+      const { pinia, settings, updates } = setupStores(true);
+      updates.pending = pendingResponse();
+      mockPendingLifecycle(settings, updates);
+      const issue = {
+        severity: "error",
+        code: "tag-stream-change",
+        message: "Choose whether to preserve or switch streams.",
+        line_no: 1,
+        stack: "media",
+        service: "app",
+        hint: "",
+        details: {
+          current_stream: "distroless",
+          reported_stream: "default",
+          reported_tag: "1.1.0",
+          same_stream_tag: "1.1.0-distroless",
+          preserve_label_regex: String.raw`^\d+\.\d+\.\d+-distroless$`,
+        },
+      };
+      const createPlan = vi
+        .spyOn(updates, "createPlan")
+        .mockImplementation(
+          async (_lines, _allow, _overrides, _digestApprovals, _selections, decisions = []) => {
+            const base = planResponse();
+            updates.plan = decisions.length
+              ? planResponse({
+                  stacks: [
+                    {
+                      ...base.stacks[0],
+                      tag_stream_updates: [
+                        {
+                          line_no: 1,
+                          service: "app",
+                          current_tag: "1.0.0-distroless",
+                          reported_tag: "1.1.0",
+                          selected_tag: "1.1.0-distroless",
+                          decision: "preserve",
+                          label_key: "wud.tag.include",
+                          current_label_value: "",
+                          proposed_label_value: String.raw`^\d+\.\d+\.\d+-distroless$$`,
+                          proposed_label_regex: String.raw`^\d+\.\d+\.\d+-distroless$`,
+                          approved: true,
+                          reason: "label-added",
+                        },
+                      ],
+                    },
+                  ],
+                })
+              : planResponse({
+                  can_apply: false,
+                  status: "blocked",
+                  issues: [issue],
+                  summary: { ...base.summary, issue_count: 1 },
+                });
+          },
+        );
+      const wrapper = mountPendingView(pinia);
+
+      await wrapper
+        .findAll("button")
+        .find((button) => button.text().includes("Preview media plan"))
+        ?.trigger("click");
+      await flushPromises();
+      const dialog = wrapper.find('[role="dialog"]');
+      expect(dialog.text()).toContain("Keep distroless");
+      expect(
+        dialog
+          .findAll("button")
+          .some((button) => button.text().includes("Apply 1 update")),
+      ).toBe(false);
+
+      await dialog
+        .findAll("button")
+        .find((button) => button.text().includes("Keep distroless"))
+        ?.trigger("click");
+      await flushPromises();
+
+      expect(createPlan).toHaveBeenLastCalledWith(
+        [1],
+        true,
+        [],
+        [],
+        [{ line_no: 1, selection_id: "selection-1" }],
+        [{ line_no: 1, decision: "preserve" }],
+        [],
+      );
+      expect(wrapper.find('[role="dialog"]').text()).toContain(
+        "Selected update stream",
+      );
+      expect(
+        wrapper
+          .find('[role="dialog"]')
+          .findAll("button")
+          .some((button) => button.text().includes("Apply 1 update")),
+      ).toBe(true);
+    } finally {
+      restoreViewport();
+    }
+  });
 });

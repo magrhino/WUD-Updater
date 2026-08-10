@@ -588,6 +588,7 @@ function readOnlyPlanStack(
         new_image: line.target_image,
         services: [line.service],
       })),
+    tag_stream_updates: [],
     digest_pin_updates: [],
     digest_unpin_updates: [],
     actions: [],

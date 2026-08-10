@@ -104,6 +104,9 @@ function groupedItemTarget(item: PendingGroupedItem): string {
         <n-tag size="small" type="warning">Tag rewrite</n-tag>
         {{ tagRewriteLabel }}
       </span>
+      <span v-if="item.tag_stream" class="tag-stream-detail wrap-anywhere">
+        {{ item.tag_stream.current_stream }} -> {{ item.tag_stream.reported_stream }}
+      </span>
       <span v-if="metaDetail" class="wrap-anywhere">{{ metaDetail }}</span>
       <PendingReleaseNotes
         v-if="showReleaseNotes"
@@ -171,6 +174,10 @@ function groupedItemTarget(item: PendingGroupedItem): string {
   align-items: center;
   gap: 6px 8px;
   min-width: 0;
+}
+
+.tag-stream-detail {
+  color: var(--color-warning-fg);
 }
 
 .pending-update-detail {

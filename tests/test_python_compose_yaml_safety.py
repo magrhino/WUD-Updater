@@ -15,10 +15,54 @@ from wudup.compose_rewrite import (
     render_compose_digest_pins,
     render_compose_tag_exclusions,
 )
-from wudup.updater_models import ComposeTagRewriteError, TagUpdate
+from wudup.updater_models import ComposeTagRewriteError, TagStreamUpdate, TagUpdate
 
 
 class ComposeTagUpdateYamlSafetyTests(ComposeRewriteTestCase):
+    def test_stream_rewrite_rejects_anchored_labels_without_write(self) -> None:
+        original = (
+            "x-labels: &labels\n"
+            "  wud.tag.include: ^custom-.+$$\n"
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.2.3-distroless\n"
+            "    labels: *labels\n"
+        )
+        compose_file = self.write_compose(original)
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "anchors or aliases"):
+            apply_compose_tag_updates(
+                compose_file,
+                (
+                    TagUpdate(
+                        old_image="repo/app:1.2.3-distroless",
+                        desired_tag="1.3.0-distroless",
+                        new_image="repo/app:1.3.0-distroless",
+                        services=("app",),
+                    ),
+                ),
+                tag_stream_updates=(
+                    TagStreamUpdate(
+                        line_no=1,
+                        stack="stack",
+                        service="app",
+                        current_tag="1.2.3-distroless",
+                        reported_tag="1.3.0",
+                        selected_tag="1.3.0-distroless",
+                        decision="preserve",
+                        label_key="wud.tag.include",
+                        current_label_value="^custom-.+$",
+                        proposed_label_value=r"^\d+\.\d+\.\d+-distroless$$",
+                        proposed_label_regex=r"^\d+\.\d+\.\d+-distroless$",
+                        approved=True,
+                        reason="approved",
+                    ),
+                ),
+                stack_name="stack",
+            )
+
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
     def test_rejects_invalid_yaml_without_write(self) -> None:
         original = "services:\n  app:\n    image: [repo/app:1.0\n"
         compose_file = self.write_compose(original)

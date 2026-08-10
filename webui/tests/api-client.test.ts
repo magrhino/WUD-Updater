@@ -478,6 +478,8 @@ describe("webApi", () => {
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
+      tag_stream_decisions: [],
+      tag_stream_label_rewrite_approvals: [],
       digest_pin_label_rewrite_approvals: [],
     });
     expect(jsonRequestBody(fetchMock.mock.calls[10])).toEqual({
@@ -485,6 +487,8 @@ describe("webApi", () => {
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
+      tag_stream_decisions: [],
+      tag_stream_label_rewrite_approvals: [],
       digest_pin_label_rewrite_approvals: [],
       confirmation: "apply",
     });
@@ -493,6 +497,8 @@ describe("webApi", () => {
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
+      tag_stream_decisions: [],
+      tag_stream_label_rewrite_approvals: [],
       digest_pin_label_rewrite_approvals: [],
       confirmation: "apply",
     });
@@ -529,6 +535,8 @@ describe("webApi", () => {
       selections,
       allow_tag_updates: false,
       tag_overrides: [],
+      tag_stream_decisions: [],
+      tag_stream_label_rewrite_approvals: [],
       digest_pin_label_rewrite_approvals: [],
     });
     expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual({
@@ -536,6 +544,8 @@ describe("webApi", () => {
       selections,
       allow_tag_updates: false,
       tag_overrides: [],
+      tag_stream_decisions: [],
+      tag_stream_label_rewrite_approvals: [],
       digest_pin_label_rewrite_approvals: [],
       confirmation: "apply",
     });
@@ -544,6 +554,8 @@ describe("webApi", () => {
       selections,
       allow_tag_updates: false,
       tag_overrides: [],
+      tag_stream_decisions: [],
+      tag_stream_label_rewrite_approvals: [],
       digest_pin_label_rewrite_approvals: [],
       confirmation: "apply",
     });
