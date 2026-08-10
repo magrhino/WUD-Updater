@@ -375,21 +375,47 @@ def _mutation_apply_preflight_check(settings: WebSettings) -> ApplyPreflightChec
 
 
 def _wud_metadata_apply_preflight_check(plan: DryRunPlan) -> ApplyPreflightCheck:
-    if plan.source.active != "api" or not plan.source.degraded:
+    statuses = plan.selected_metadata_statuses()
+    blocked_statuses = [status for status in statuses if status != "fresh"]
+    if blocked_statuses:
+        count = len(blocked_statuses)
+        kinds = ", ".join(sorted(set(blocked_statuses)))
+        verb = "are" if count != 1 else "is"
+        pronoun = "their" if count != 1 else "its"
+        return ApplyPreflightCheck(
+            status="FAIL",
+            code="wud-metadata-current",
+            label="Selected update metadata",
+            detail=(
+                f"{count} selected update{'s' if count != 1 else ''} {verb} blocked "
+                f"because {pronoun} metadata is stale ({kinds}). Check your WUD "
+                "configuration, then run a successful WUD scan."
+            ),
+            source_check_codes=["wud-api-observations"],
+        )
+    if plan.source.degraded:
+        return ApplyPreflightCheck(
+            status="WARN",
+            code="wud-metadata-current",
+            label="Selected update metadata",
+            detail=(
+                "Every selected update is fresh. Other WUD observations are "
+                "unresolved or use retained or recovered metadata; review the "
+                "issue dump."
+            ),
+            source_check_codes=["wud-api-observations"],
+        )
+    if not statuses:
         return ApplyPreflightCheck(
             status="PASS",
             code="wud-metadata-current",
-            label="WUD metadata current",
+            label="Selected update metadata",
             source_check_codes=["wud-api-observations"],
         )
     return ApplyPreflightCheck(
-        status="FAIL",
+        status="PASS",
         code="wud-metadata-current",
-        label="WUD metadata current",
-        detail=(
-            "WUD could not verify all update metadata. Wait for a successful WUD "
-            "scan, then check WUD status again."
-        ),
+        label="Selected update metadata",
         source_check_codes=["wud-api-observations"],
     )
 

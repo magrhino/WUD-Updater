@@ -26,6 +26,29 @@ from tests.web_test_helpers import (
 
 from tests.web_scheduler_test_helpers import _auto_update_tick
 
+
+def test_auto_update_plan_requires_fresh_selected_metadata() -> None:
+    settings = SimpleNamespace(mutations_enabled=True)
+
+    for metadata_status in ("retained", "recovered"):
+        plan = SimpleNamespace(
+            status="ready",
+            skipped=(),
+            issues=(),
+            selected_metadata_statuses=lambda value=metadata_status: (value,),
+        )
+
+        assert web_scheduler._plan_can_auto_apply(plan, settings) is False
+
+    fresh_plan = SimpleNamespace(
+        status="ready",
+        skipped=(),
+        issues=(),
+        selected_metadata_statuses=lambda: ("fresh",),
+    )
+    assert web_scheduler._plan_can_auto_apply(fresh_plan, settings) is True
+
+
 def test_auto_update_scheduler_applies_due_policy_at_configured_local_time(
     tmp_path: Path,
 ) -> None:
@@ -431,7 +454,12 @@ def test_auto_update_candidate_reuses_effective_config_snapshot(
     def fake_build_dry_run_plan(config, _parsed, **kwargs):
         observed["plan_config"] = config
         observed["plan_kwargs"] = kwargs
-        return SimpleNamespace(status="ready", skipped=(), issues=())
+        return SimpleNamespace(
+            status="ready",
+            skipped=(),
+            issues=(),
+            selected_metadata_statuses=lambda: ("fresh",),
+        )
 
     monkeypatch.setattr(
         web_scheduler,

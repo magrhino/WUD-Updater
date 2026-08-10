@@ -399,6 +399,7 @@ const {
   planDigestPinLabelRewrites,
   planDigestUnpinUpdates,
   planLines,
+  planMetadataWarning,
   planStatusLabel,
   preflightDigestPinNotice,
   preflightDigestUnpinNotice,
@@ -414,6 +415,7 @@ const {
   removeSelectedDisabled,
   removeSelectedDisabledMessage,
   selectedTagOverrideError,
+  selectedMetadataWarning,
   selectedUpdateContext,
   setUpdateIntent,
   staleDiagnosticDetail,
@@ -422,6 +424,7 @@ const {
   unmatchedReviewCountLabel,
   unmatchedReviewSummary,
   updateSelectedDisabled,
+  updateSelectedButtonLabel,
   visiblePlanIssues,
 } = usePendingPlanReviewState({
   pendingSourceLabel,
@@ -922,6 +925,7 @@ onBeforeUnmount(() => {
       :select-all-label="visibleSelectAllLabel"
       :selected-count="selectedSelections.length"
       :selected-hidden-count="selectedHiddenCount"
+      :selected-metadata-warning="selectedMetadataWarning"
       :selected-rescan-disabled="selectedRescanDisabled"
       :selected-rescan-disabled-message="selectedRescanDisabledMessage"
       :selected-rescan-visible="selectedRescanVisible"
@@ -931,6 +935,7 @@ onBeforeUnmount(() => {
       :stack-count="filteredStackGroups.length"
       :unmatched-review-count-label="visibleUnmatchedReviewCountLabel"
       :update-selected-disabled="updateSelectedDisabled"
+      :update-selected-button-label="updateSelectedButtonLabel"
       @clear-selection="clearSelection"
       @rescan-all="rescanAllPending"
       @rescan-selected="rescanSelectedPending"
@@ -1072,6 +1077,7 @@ onBeforeUnmount(() => {
       :plan-digest-pin-label-rewrites="planDigestPinLabelRewrites"
       :plan-digest-unpin-updates="planDigestUnpinUpdates"
       :plan-lines="planLines"
+      :plan-metadata-warning="planMetadataWarning"
       :plan-status-label="planStatusLabel"
       :preflight-digest-pin-notice="preflightDigestPinNotice"
       :preflight-digest-unpin-notice="preflightDigestUnpinNotice"

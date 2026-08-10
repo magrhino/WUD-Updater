@@ -4,6 +4,11 @@ import { NInput, NTag, type DataTableColumns } from "naive-ui";
 import type { PendingItem, ReleaseNoteInfo } from "../../api/client";
 import PendingReleaseNotes from "../../components/pending/PendingReleaseNotes.vue";
 import { digestProvenanceDisplay } from "../../utils/digestProvenance";
+import {
+  pendingMetadataStatusLabel,
+  pendingMetadataStatusTagType,
+  pendingMetadataStatusTitle,
+} from "./pendingDisplay";
 import type { SafetyCue } from "./safetyCues";
 
 export type PendingTableColumnsContext = {
@@ -84,6 +89,21 @@ export function createPendingColumns(
             )
           : context.displayValue("");
       },
+    },
+    {
+      title: "Metadata",
+      key: "metadata_status",
+      minWidth: 120,
+      render: (row) =>
+        h(
+          NTag,
+          {
+            size: "small",
+            type: pendingMetadataStatusTagType(row),
+            title: pendingMetadataStatusTitle(row),
+          },
+          () => pendingMetadataStatusLabel(row),
+        ),
     },
     {
       title: "Safety cues",

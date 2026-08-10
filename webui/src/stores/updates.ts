@@ -116,6 +116,8 @@ function pendingMetadataChanged(
   return (
     item.raw !== metadata.raw ||
     item.source_id !== metadata.source_id ||
+    (item.metadata_status ?? "fresh") !==
+      (metadata.metadata_status ?? item.metadata_status ?? "fresh") ||
     wudMetadataChanged(item.wud_metadata, metadata.wud_metadata)
   );
 }
@@ -971,6 +973,7 @@ export const useUpdatesStore = defineStore("updates", () => {
         ...item,
         raw: metadata.raw,
         source_id: metadata.source_id,
+        metadata_status: metadata.metadata_status ?? item.metadata_status ?? "fresh",
         wud_metadata: metadata.wud_metadata,
       };
     };

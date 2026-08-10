@@ -355,6 +355,7 @@ def _plan_can_auto_apply(plan: DryRunPlan, settings: WebSettings) -> bool:
     return (
         settings.mutations_enabled
         and plan.status == "ready"
+        and all(status == "fresh" for status in plan.selected_metadata_statuses())
         and not plan.skipped
         and not any(issue.severity == "error" for issue in plan.issues)
     )

@@ -12,7 +12,12 @@ from . import web_wud_api
 from .images import normalize_digest, strip_digest, tag_value_valid
 from .plan_models import DryRunPlanSource
 from .web_auth import WebConfigError
-from .web_models import PendingSourceActive, PendingSourceInfo, PendingSourceMode
+from .web_models import (
+    PendingMetadataStatus,
+    PendingSourceActive,
+    PendingSourceInfo,
+    PendingSourceMode,
+)
 from .wud_file import ParsedWudFile, parse_wud_text
 
 if TYPE_CHECKING:
@@ -46,6 +51,7 @@ class PendingSourceResult:
     metadata_by_line: Mapping[int, web_wud_api.WudApiContainer] | None = None
     container_ids_by_line: Mapping[int, tuple[str, ...]] | None = None
     source_ids_by_line: Mapping[int, str] | None = None
+    metadata_status_by_line: Mapping[int, PendingMetadataStatus] | None = None
 
     def response_source(self) -> PendingSourceInfo:
         return PendingSourceInfo(
@@ -68,6 +74,7 @@ class PendingSourceResult:
             fallback_reason=self.fallback_reason,
             detail=self.detail,
             source_hash=self.source_hash,
+            metadata_status_by_line=self.metadata_status_by_line or {},
         )
 
 
@@ -173,6 +180,10 @@ def _file_source(
         source_ids_by_line={
             target.line_no: f"file:{target.line_no}" for target in parsed.targets
         },
+        metadata_status_by_line={
+            target.line_no: "recovered" if degraded else "fresh"
+            for target in parsed.targets
+        },
     )
 
 
@@ -209,6 +220,10 @@ def _api_source(
     source_ids_by_line = {
         line_no: ",".join(line.source_ids) for line_no, line in enumerate(lines, start=1)
     }
+    metadata_status_by_line = {
+        line_no: line.container.metadata_status
+        for line_no, line in enumerate(lines, start=1)
+    }
     degraded = snapshot.degraded_container_count > 0
     detail = snapshot.status.detail if degraded else ""
     warnings = parsed.warnings
@@ -231,6 +246,7 @@ def _api_source(
         metadata_by_line=metadata_by_line,
         container_ids_by_line=container_ids_by_line,
         source_ids_by_line=source_ids_by_line,
+        metadata_status_by_line=metadata_status_by_line,
     )
 
 
@@ -262,6 +278,7 @@ def _empty_api_source(
         metadata_by_line={},
         container_ids_by_line={},
         source_ids_by_line={},
+        metadata_status_by_line={},
     )
 
 
@@ -298,13 +315,33 @@ def api_pending_lines(
         for container_id in _container_ids(container):
             if container_id not in container_ids:
                 container_ids = (*container_ids, container_id)
-        if source_ids != existing.source_ids or container_ids != existing.container_ids:
+        metadata_status = _least_fresh_metadata_status(
+            existing.container.metadata_status,
+            container.metadata_status,
+        )
+        if (
+            source_ids != existing.source_ids
+            or container_ids != existing.container_ids
+            or metadata_status != existing.container.metadata_status
+        ):
             by_raw[raw] = replace(
                 existing,
+                container=replace(
+                    existing.container,
+                    metadata_status=metadata_status,
+                ),
                 container_ids=container_ids,
                 source_ids=source_ids,
             )
     return tuple(by_raw[raw] for raw in sorted(by_raw))
+
+
+def _least_fresh_metadata_status(
+    left: PendingMetadataStatus,
+    right: PendingMetadataStatus,
+) -> PendingMetadataStatus:
+    priority = {"fresh": 0, "retained": 1, "recovered": 2}
+    return left if priority[left] >= priority[right] else right
 
 
 def _container_pending_line(container: web_wud_api.WudApiContainer) -> str:

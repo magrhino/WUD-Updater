@@ -642,6 +642,7 @@ export function pendingItem(overrides: Partial<PendingItem> = {}): PendingItem {
     wud_metadata: null,
     source: "file",
     source_id: "file:1",
+    metadata_status: "fresh",
     ...overrides,
   };
 }
@@ -1138,9 +1139,11 @@ export function applyPreflightResponse(
       applyPreflightCheck("mutations-enabled", "Mutations enabled", [
         "webui-mutation-gate",
       ]),
-      applyPreflightCheck("wud-metadata-current", "WUD metadata current", [
-        "wud-api-observations",
-      ]),
+      applyPreflightCheck(
+        "wud-metadata-current",
+        "Selected update metadata",
+        ["wud-api-observations"],
+      ),
       applyPreflightCheck("bind-mounts-safe", "Bind mounts safe", [
         "bind-mount-path-invalid",
       ]),
@@ -1204,6 +1207,7 @@ export function planResponse(overrides: Partial<PlanResponse> = {}): PlanRespons
             digest: "",
             desired_tag: "1.1",
             action: "tag-update",
+            metadata_status: "fresh",
           },
         ],
       },

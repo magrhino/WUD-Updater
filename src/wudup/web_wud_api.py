@@ -58,6 +58,7 @@ from .web_models import (
     WudApiStoreDiagnostics as WudApiStoreDiagnostics,
     WudApiWatcherDiagnostics as WudApiWatcherDiagnostics,
     WudContainerMetadata,
+    PendingMetadataStatus,
 )
 from .wud_file import WudTarget, parse_wud_text
 
@@ -108,6 +109,7 @@ class WudApiContainer:
     labels: Mapping[str, str] = field(default_factory=dict)
     platform: ImagePlatform | None = None
     local_image_id: str = ""
+    metadata_status: PendingMetadataStatus = "fresh"
 
     def response(self) -> WudContainerMetadata:
         platform = self.platform
@@ -151,7 +153,9 @@ _PERSISTED_WUD_API_CONTAINER_FIELDS = frozenset(
         "local_image_id",
     }
 )
-_EXCLUDED_WUD_API_CONTAINER_FIELDS = frozenset({"error", "labels"})
+_EXCLUDED_WUD_API_CONTAINER_FIELDS = frozenset(
+    {"error", "labels", "metadata_status"}
+)
 assert (
     _PERSISTED_WUD_API_CONTAINER_FIELDS | _EXCLUDED_WUD_API_CONTAINER_FIELDS
     == {item.name for item in fields(WudApiContainer)}
@@ -1524,6 +1528,7 @@ def _retain_previous_observation(
         status=container.status,
         error=container.error or "WUD update result is unavailable",
         labels=container.labels,
+        metadata_status="retained",
     )
     containers.append(retained)
     pending_observations[identity] = _PendingObservation(
@@ -1584,6 +1589,7 @@ def _recover_pending_file_observation(
                     or "WUD update result is unavailable; pending update recovered "
                     "from WUD_OUT_FILE"
                 ),
+                metadata_status="recovered",
             ),
         )
     return None

@@ -14,6 +14,7 @@ export type {
   WudApiConfigurationDiagnostics,
   PendingSourceMode,
   PendingSourceActive,
+  PendingMetadataStatus,
   PendingSourceInfo,
   // Pending updates
   PendingItem,

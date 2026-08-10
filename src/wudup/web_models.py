@@ -77,6 +77,7 @@ __all__ = (
     "PendingMetadataRefreshRequest",
     "PendingMetadataRefreshResponse",
     "PendingMetadataRefreshStatus",
+    "PendingMetadataStatus",
     "PendingRemovalPlanLine",
     "PendingRemovalPlanRequest",
     "PendingRemovalPlanResponse",
@@ -242,6 +243,7 @@ PendingRescanScope = Literal["all", "selected"]
 
 PendingRescanStatus = Literal["success", "partial", "blocked"]
 PendingMetadataRefreshStatus = Literal["ready", "stale"]
+PendingMetadataStatus = Literal["fresh", "retained", "recovered"]
 
 DoctorCheckStatus = Literal["PASS", "WARN", "FAIL"]
 
@@ -605,6 +607,7 @@ class PendingItem(BaseModel):
     wud_metadata: WudContainerMetadata | None = None
     source: PendingSourceActive = "file"
     source_id: str = ""
+    metadata_status: PendingMetadataStatus = "fresh"
 
 
 class PendingDiagnostic(BaseModel):
@@ -1497,6 +1500,7 @@ class PlanTarget(BaseModel):
     desired_tag: str
     matched: bool
     action: str
+    metadata_status: PendingMetadataStatus = "fresh"
 
 class PlanLine(BaseModel):
     line_no: int
@@ -1509,6 +1513,7 @@ class PlanLine(BaseModel):
     digest: str
     desired_tag: str
     action: str
+    metadata_status: PendingMetadataStatus = "fresh"
     digest_provenance: DigestTagProvenance | None = None
 
 class PlanTagUpdate(BaseModel):
@@ -1652,6 +1657,7 @@ class PendingMetadataRefreshItem(BaseModel):
     raw: str
     source_id: str = ""
     wud_metadata: WudContainerMetadata | None = None
+    metadata_status: PendingMetadataStatus = "fresh"
 
 class PendingMetadataRefreshResponse(BaseModel):
     status: PendingMetadataRefreshStatus

@@ -7,6 +7,11 @@ import type {
   ReleaseNoteInfo,
   SecurityScanInfo,
 } from "../../api/client";
+import {
+  pendingMetadataStatusLabel,
+  pendingMetadataStatusTagType,
+  pendingMetadataStatusTitle,
+} from "../../views/pending/pendingDisplay";
 import PendingReleaseNotes from "./PendingReleaseNotes.vue";
 import PendingSecurityScanDetails from "./PendingSecurityScanDetails.vue";
 
@@ -85,6 +90,13 @@ function groupedItemTarget(item: PendingGroupedItem): string {
     </div>
     <div class="pending-update-meta">
       <span class="wrap-anywhere">Pending file line #{{ item.line_no }}</span>
+      <n-tag
+        size="small"
+        :type="pendingMetadataStatusTagType(item)"
+        :title="pendingMetadataStatusTitle(item)"
+      >
+        {{ pendingMetadataStatusLabel(item) }} metadata
+      </n-tag>
       <span
         v-if="riskCues.length"
         class="risk-badges-container wrap-anywhere"

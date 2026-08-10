@@ -411,7 +411,7 @@ describe("pending view fallback and release notes", () => {
         }),
         apply_preflight: failedApplyPreflight(
           "wud-metadata-current",
-          "WUD could not verify all update metadata. Wait for a successful WUD scan, then check WUD status again.",
+          "1 selected update is blocked because its metadata is stale (retained). Check your WUD configuration, then run a successful WUD scan.",
         ),
       });
     });
@@ -426,9 +426,9 @@ describe("pending view fallback and release notes", () => {
     const dialog = wrapper.find('[role="dialog"]');
     expect(dialog.find("#preflight-modal-title").text()).toBe("Apply blocked");
     expect(dialog.text()).toContain("Apply blocked");
-    expect(dialog.text()).toContain("WUD metadata current");
+    expect(dialog.text()).toContain("Selected update metadata");
     expect(dialog.text()).toContain(
-      "Wait for a successful WUD scan, then check WUD status again.",
+      "Check your WUD configuration, then run a successful WUD scan.",
     );
     expect(dialog.text()).toContain("Plan issues0");
   });

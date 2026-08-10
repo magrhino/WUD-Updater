@@ -430,6 +430,7 @@ describe("updates store", () => {
           raw: "repo/app:1.0",
           source_id: "file:1",
           wud_metadata: newMetadata,
+          metadata_status: "retained",
         },
         {
           line_no: 2,
@@ -470,11 +471,15 @@ describe("updates store", () => {
       ),
     ).toBe("csrf-metadata");
     expect(updates.pending?.items[0].wud_metadata?.remote_tag).toBe("1.2");
+    expect(updates.pending?.items[0].metadata_status).toBe("retained");
     expect(updates.pending?.items[1].wud_metadata).toBeNull();
     expect(updates.pending?.items[2].wud_metadata).toBeNull();
     expect(
       updates.pending?.grouping.groups[0].items[0].wud_metadata?.remote_tag,
     ).toBe("1.2");
+    expect(
+      updates.pending?.grouping.groups[0].items[0].metadata_status,
+    ).toBe("retained");
     expect(updates.pending?.grouping.unmatched[0].wud_metadata).toBeNull();
     expect(updates.pendingWudMetadataCheckedAt).toBe("new-check");
     expect(updates.plan).toEqual(plan);

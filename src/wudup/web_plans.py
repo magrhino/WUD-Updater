@@ -308,7 +308,7 @@ def plan_can_apply(plan: DryRunPlan, settings: WebSettings) -> bool:
     return (
         settings.mutations_enabled
         and plan.status == "ready"
-        and not (plan.source.active == "api" and plan.source.degraded)
+        and all(status == "fresh" for status in plan.selected_metadata_statuses())
         and not plan.skipped
         and not any(issue.severity == "error" for issue in plan.issues)
     )
@@ -325,6 +325,11 @@ def plan_response(
         plan,
     )
     payload = asdict(plan)
+    for target in payload["targets"]:
+        target["metadata_status"] = plan.metadata_status_for_line(target["line_no"])
+    for stack in payload["stacks"]:
+        for line in stack["lines"]:
+            line["metadata_status"] = plan.metadata_status_for_line(line["line_no"])
     payload["can_apply"] = plan_can_apply(plan, settings) and apply_preflight.ok
     payload["cleanup"]["can_remove_unmatched"] = (
         settings.mutations_enabled

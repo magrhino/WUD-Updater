@@ -12,6 +12,11 @@ import type {
   PlanResponse,
 } from "../../api/client";
 import {
+  pendingMetadataStatusLabel,
+  pendingMetadataStatusTagType,
+  pendingMetadataStatusTitle,
+} from "../../views/pending/pendingDisplay";
+import {
   planLineDigestPinLabel,
   planLineDigestUnpinLabel,
   planLineServiceLabel,
@@ -66,6 +71,7 @@ defineProps<{
   planDigestPinLabelRewrites: PlanDigestPinLabelRewriteView[];
   planDigestUnpinUpdates: PlanDigestUnpinUpdateView[];
   planLines: PlanLineView[];
+  planMetadataWarning: string;
   planStatusLabel: string;
   preflightDigestPinNotice: string;
   preflightDigestUnpinNotice: string;
@@ -186,6 +192,13 @@ const emit = defineEmits<{
         type="warning"
       >
         {{ mutationDisabledMessage }}
+      </n-alert>
+      <n-alert
+        v-if="planMetadataWarning"
+        class="preflight-block"
+        type="warning"
+      >
+        {{ planMetadataWarning }}
       </n-alert>
       <n-alert
         v-if="preflightTagRewriteNotice"
@@ -363,7 +376,16 @@ const emit = defineEmits<{
             class="list-row plan-line-row"
           >
             <span>#{{ line.line_no }}</span>
-            <strong>{{ planLineServiceLabel(plan.summary.stack_count, stack, line) }}</strong>
+            <strong class="plan-line-heading">
+              <span>{{ planLineServiceLabel(plan.summary.stack_count, stack, line) }}</span>
+              <n-tag
+                size="small"
+                :type="pendingMetadataStatusTagType(line)"
+                :title="pendingMetadataStatusTitle(line)"
+              >
+                {{ pendingMetadataStatusLabel(line) }} metadata
+              </n-tag>
+            </strong>
             <em>
               <span v-if="planLineTagRewriteLabel(line)" class="tag-rewrite-detail">
                 <n-tag size="small" type="warning">Tag rewrite</n-tag>
@@ -423,7 +445,16 @@ const emit = defineEmits<{
               class="list-row plan-line-row"
             >
               <span>#{{ line.line_no }}</span>
-              <strong>{{ planLineServiceLabel(plan.summary.stack_count, stack, line) }}</strong>
+              <strong class="plan-line-heading">
+                <span>{{ planLineServiceLabel(plan.summary.stack_count, stack, line) }}</span>
+                <n-tag
+                  size="small"
+                  :type="pendingMetadataStatusTagType(line)"
+                  :title="pendingMetadataStatusTitle(line)"
+                >
+                  {{ pendingMetadataStatusLabel(line) }} metadata
+                </n-tag>
+              </strong>
               <em>
                 <span v-if="planLineTagRewriteLabel(line)" class="tag-rewrite-detail">
                   <n-tag size="small" type="warning">Tag rewrite</n-tag>

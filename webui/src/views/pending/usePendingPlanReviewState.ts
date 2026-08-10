@@ -16,6 +16,7 @@ import type {
 } from "../../api/client";
 import { useAuthStore } from "../../stores/auth";
 import { useUpdatesStore } from "../../stores/updates";
+import { pendingMetadataStatus } from "./pendingDisplay";
 import {
   pendingPlanContextLabel,
   planActionsFromPlan,
@@ -40,6 +41,7 @@ export type PendingUpdateIntent = {
   allowTagUpdates: boolean;
   tagOverrides: TagOverrideRequest[];
   digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[];
+  blockedMetadataCount?: number;
 };
 
 export type PendingApplyPlanPayload = {
@@ -91,9 +93,21 @@ export function usePendingPlanReviewState(
   const pendingSourceAllowsFileEdits = computed(
     () => (updates.pending?.source?.active ?? "file") === "file",
   );
+  const selectedFreshCount = computed(() => {
+    const byLine = new Map(
+      (updates.pending?.items ?? []).map((item) => [item.line_no, item]),
+    );
+    return options.selectedSelections.value.filter(
+      (selection) =>
+        pendingMetadataStatus(byLine.get(selection.line_no) ?? {}) === "fresh",
+    ).length;
+  });
+  const selectedBlockedMetadataCount = computed(
+    () => options.selectedSelections.value.length - selectedFreshCount.value,
+  );
   const updateSelectedDisabled = computed(
     () =>
-      options.selectedLineNumbers.value.length === 0 ||
+      selectedFreshCount.value === 0 ||
       updates.loading ||
       Boolean(selectedTagOverrideError.value),
   );
@@ -249,7 +263,7 @@ export function usePendingPlanReviewState(
       (updates.plan?.selected_selections?.length ?? 0) ||
       (updates.plan?.selected_line_numbers.length ?? 0);
     return count
-      ? `Apply ${pluralize(count, "update")}`
+      ? `Apply ${pluralize(count, updateIntent.value?.blockedMetadataCount ? "verified update" : "update")}`
       : "Apply selected updates";
   });
   const cleanupItems = computed(() => updates.plan?.cleanup.items ?? []);
@@ -387,9 +401,32 @@ export function usePendingPlanReviewState(
   });
   const batchSummaryLabel = computed(() => {
     const count = pluralize(options.selectedSelections.value.length, "update");
-    return selectedUpdateContext.value === "selected updates"
+    const context = selectedUpdateContext.value === "selected updates"
       ? `${count} selected`
       : `${count} selected in ${selectedUpdateContext.value}`;
+    if (!selectedBlockedMetadataCount.value) {
+      return context;
+    }
+    return `${context} · ${pluralize(selectedFreshCount.value, "verified")} · ${pluralize(selectedBlockedMetadataCount.value, "blocked")}`;
+  });
+  const updateSelectedButtonLabel = computed(() =>
+    selectedBlockedMetadataCount.value
+      ? `Preview ${pluralize(selectedFreshCount.value, "verified update")}`
+      : "Preview selected plan",
+  );
+  const selectedMetadataWarning = computed(() => {
+    const count = selectedBlockedMetadataCount.value;
+    if (!count) {
+      return "";
+    }
+    return `${pluralize(count, "selected update")} ${count === 1 ? "is" : "are"} blocked because ${count === 1 ? "its" : "their"} metadata is stale. Check your WUD configuration. Blocked updates will stay selected and pending.`;
+  });
+  const planMetadataWarning = computed(() => {
+    const count = updateIntent.value?.blockedMetadataCount ?? 0;
+    if (!count) {
+      return "";
+    }
+    return `${pluralize(count, "selected update")} ${count === 1 ? "is" : "are"} blocked because ${count === 1 ? "its" : "their"} metadata is stale. Check your WUD configuration. ${count === 1 ? "It" : "They"} will stay pending and will not be applied.`;
   });
   const planLines = computed(
     () => planLinesFromPlan(updates.plan),
@@ -581,6 +618,7 @@ export function usePendingPlanReviewState(
     planDigestPinLabelRewrites,
     planDigestUnpinUpdates,
     planLines,
+    planMetadataWarning,
     planStatusLabel,
     preflightDigestPinNotice,
     preflightDigestUnpinNotice,
@@ -597,6 +635,7 @@ export function usePendingPlanReviewState(
     removeSelectedDisabled,
     removeSelectedDisabledMessage,
     selectedTagOverrideError,
+    selectedMetadataWarning,
     selectedUpdateContext,
     setUpdateIntent,
     staleDiagnosticDetail,
@@ -605,6 +644,7 @@ export function usePendingPlanReviewState(
     unmatchedReviewCountLabel,
     unmatchedReviewSummary,
     updateSelectedDisabled,
+    updateSelectedButtonLabel,
     visiblePlanIssues,
   };
 }
