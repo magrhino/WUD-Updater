@@ -894,6 +894,7 @@ def tag_stream_updates_from_plan(
         TagStreamUpdate(
             line_no=item.line_no,
             stack=stack.name,
+            stack_directory=str(Path(stack.directory).resolve(strict=False)),
             service=item.service,
             current_tag=item.current_tag,
             reported_tag=item.reported_tag,

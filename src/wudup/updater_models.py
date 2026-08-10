@@ -113,6 +113,7 @@ class TagStreamLabelRewriteApproval:
 class TagStreamUpdate:
     line_no: int
     stack: str
+    stack_directory: str
     service: str
     current_tag: str
     reported_tag: str

@@ -128,6 +128,7 @@ class _LifecycleRewriteMixin:
                 label_rewrite_approvals=(
                     self.options.digest_pin_label_rewrite_approvals
                 ),
+                tag_stream_updates=state.tag_stream_updates,
                 stack_name=stack.name,
             )
         except ComposeTagRewriteError as exc:

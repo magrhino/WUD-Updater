@@ -371,6 +371,7 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
                 TagStreamUpdate(
                     line_no=1,
                     stack="app",
+                    stack_directory=str(stack_dir.resolve(strict=False)),
                     service="app",
                     current_tag="1.2.3-distroless",
                     reported_tag="1.3.0",

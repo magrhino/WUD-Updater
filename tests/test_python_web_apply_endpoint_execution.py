@@ -829,6 +829,151 @@ def test_apply_endpoint_applies_stream_image_and_label_as_one_plan(
     assert wud_file.read_text(encoding="utf-8") == ""
 
 
+def test_apply_endpoint_preserves_stream_rule_when_digest_pinning(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    target_image = "n8nio/runners:2.34.4-distroless"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_DIGEST_PIN_UPDATES": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text(
+        "n8nio/runners:2.33.5-distroless tag=2.34.4\n",
+        encoding="utf-8",
+    )
+    _write_fake_manifest(
+        fake_root,
+        f"docker.io/{target_image}",
+        _manifest_index_digest("sha256:index", "sha256:child"),
+    )
+    _write_fake_image_after_pull(
+        fake_root,
+        target_image,
+        "sha256:config",
+        "sha256:index",
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "jarvis",
+        [("task-runner", "n8nio/runners:2.33.5-distroless", "cid-task")],
+    )
+    headers = _csrf_headers(client)
+    payload = {
+        "line_numbers": [1],
+        "allow_tag_updates": True,
+        "tag_stream_decisions": [{"line_no": 1, "decision": "preserve"}],
+    }
+    plan_response = client.post(
+        "/api/v1/plans",
+        json=payload,
+        headers=headers,
+    )
+    plan = plan_response.json()
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={"plan_id": plan["plan_id"], **payload, "confirmation": "apply"},
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert plan_response.status_code == 200
+    assert plan["status"] == "ready"
+    assert not any(
+        issue["code"] == "compose-digest-pin-label-rewrite-unapproved"
+        for issue in plan["issues"]
+    )
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    rendered = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "image: n8nio/runners@sha256:index" in rendered
+    assert r"wud.tag.include=^\d+\.\d+\.\d+-distroless$$" in rendered
+    assert wud_file.read_text(encoding="utf-8") == ""
+
+
+def test_apply_endpoint_keeps_same_named_nested_stacks_separate(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text(
+        "n8nio/runners:2.33.5-distroless tag=2.34.4\n",
+        encoding="utf-8",
+    )
+    first_source = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "jarvis-a",
+        [("task-runner", "n8nio/runners:2.33.5-distroless", "cid-a")],
+    )
+    second_source = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "jarvis-b",
+        [("task-runner", "n8nio/runners:2.33.5-distroless", "cid-b")],
+    )
+    first_stack = tmp_path / "docker" / "primary" / "jarvis"
+    second_stack = tmp_path / "docker" / "secondary" / "jarvis"
+    first_stack.parent.mkdir(parents=True)
+    second_stack.parent.mkdir(parents=True)
+    first_source.rename(first_stack)
+    second_source.rename(second_stack)
+    runtime_path = fake_root / "compose-runtime.tsv"
+    runtime_path.write_text(
+        runtime_path.read_text(encoding="utf-8")
+        .replace(str(first_source), str(first_stack))
+        .replace(str(second_source), str(second_stack)),
+        encoding="utf-8",
+    )
+    (fake_root / "images" / "n8nio_runners_2.34.4-distroless.after_id").write_text(
+        "new\n",
+        encoding="utf-8",
+    )
+    headers = _csrf_headers(client)
+    payload = {
+        "line_numbers": [1],
+        "allow_tag_updates": True,
+        "tag_stream_decisions": [{"line_no": 1, "decision": "preserve"}],
+    }
+    plan = client.post(
+        "/api/v1/plans",
+        json=payload,
+        headers=headers,
+    ).json()
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={"plan_id": plan["plan_id"], **payload, "confirmation": "apply"},
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert [stack["name"] for stack in plan["stacks"]] == ["jarvis", "jarvis"]
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    for stack in (first_stack, second_stack):
+        rendered = (stack / "docker-compose.yml").read_text(encoding="utf-8")
+        assert "image: n8nio/runners:2.34.4-distroless" in rendered
+        assert r"wud.tag.include=^\d+\.\d+\.\d+-distroless$$" in rendered
+    assert wud_file.read_text(encoding="utf-8") == ""
+
+
 def test_apply_endpoint_rejects_stale_stream_label_approval(
     tmp_path: Path,
 ) -> None:

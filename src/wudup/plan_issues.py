@@ -34,6 +34,7 @@ from .updater_models import (
     DigestPinUpdate,
     DigestUnpinUpdate,
     Match,
+    TagStreamUpdate,
     UpdateScope,
     UpdaterError,
 )
@@ -173,6 +174,10 @@ def digest_pin_plan_issues(
     docker: DockerCli,
     matches: Sequence[Match],
     digest_pin_label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval],
+    tag_stream_updates_by_stack: Mapping[
+        int,
+        Sequence[TagStreamUpdate],
+    ] | None = None,
 ) -> DigestPinPlanIssueResult:
     updates_by_stack: dict[int, tuple[DigestPinUpdate, ...]] = {}
     label_rewrites_by_stack: dict[
@@ -183,6 +188,7 @@ def digest_pin_plan_issues(
         return DigestPinPlanIssueResult((), updates_by_stack, label_rewrites_by_stack)
 
     issues: list[DryRunPlanIssue] = []
+    stream_updates_by_stack = tag_stream_updates_by_stack or {}
     for stack in _stacks_to_update(matches):
         stack_matches = [
             match for match in matches if match.stack.index == stack.index
@@ -200,6 +206,7 @@ def digest_pin_plan_issues(
                 stack,
                 stack_updates,
                 digest_pin_label_rewrite_approvals,
+                stream_updates_by_stack.get(stack.index, ()),
             )
             issues.extend(render_issues)
             if label_rewrites:
@@ -300,16 +307,20 @@ def _digest_pin_render_issues(
     stack: ComposeStack,
     stack_updates: Sequence[DigestPinUpdate],
     digest_pin_label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval],
+    tag_stream_updates: Sequence[TagStreamUpdate] = (),
 ) -> tuple[
     dict[tuple[str, str], tuple[DigestPinLabelRewrite, ...]],
     list[DryRunPlanIssue],
 ]:
     issues: list[DryRunPlanIssue] = []
+    if any(not update.approved for update in tag_stream_updates):
+        return {}, issues
     try:
         _rendered, applied = render_compose_digest_pins(
             stack.directory / stack.file,
             stack_updates,
             label_rewrite_approvals=digest_pin_label_rewrite_approvals,
+            tag_stream_updates=tag_stream_updates,
             stack_name=stack.name,
         )
         return (

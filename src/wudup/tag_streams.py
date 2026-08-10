@@ -206,6 +206,9 @@ def plan_tag_stream_changes(
                     match.stack.directory / match.stack.file,
                     line_no=line_no,
                     stack_name=match.stack.name,
+                    stack_directory=str(
+                        match.stack.directory.resolve(strict=False)
+                    ),
                     service=match.service,
                     current_image=match.compose_image,
                     current_tag=image_tag(match.compose_image),

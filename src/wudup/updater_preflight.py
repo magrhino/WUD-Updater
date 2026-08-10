@@ -336,15 +336,31 @@ def validate_digest_pin_plan(runner: Any, matches: Sequence[Match]) -> bool:
         )
     try:
         for stack in _stacks_to_update(matches):
-            stack_updates = runner._digest_pin_updates(
-                [match for match in matches if match.stack.index == stack.index]
+            stack_matches = [
+                match for match in matches if match.stack.index == stack.index
+            ]
+            stack_updates = runner._digest_pin_updates(stack_matches)
+            stack_directory = str(stack.directory.resolve(strict=False))
+            tag_stream_updates = tuple(
+                update
+                for update in runner.options.tag_stream_updates
+                if update.stack_directory == stack_directory
             )
+            selected_lines = {match.target.line_no for match in stack_matches}
+            if any(
+                update.line_no not in selected_lines
+                for update in tag_stream_updates
+            ):
+                raise ComposeTagRewriteError(
+                    f"{stack.name} tag stream plan references an unselected line."
+                )
             compose_rewrite.render_compose_digest_pins(
                 stack.directory / stack.file,
                 stack_updates,
                 label_rewrite_approvals=(
                     runner.options.digest_pin_label_rewrite_approvals
                 ),
+                tag_stream_updates=tag_stream_updates,
                 stack_name=stack.name,
             )
     except (ComposeTagRewriteError, UpdaterError) as exc:

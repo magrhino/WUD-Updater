@@ -346,6 +346,7 @@ def plan_compose_tag_stream_update(
     *,
     line_no: int,
     stack_name: str,
+    stack_directory: str,
     service: str,
     current_image: str,
     current_tag: str,
@@ -396,6 +397,7 @@ def plan_compose_tag_stream_update(
     return TagStreamUpdate(
         line_no=line_no,
         stack=stack_name,
+        stack_directory=stack_directory,
         service=service,
         current_tag=current_tag,
         reported_tag=reported_tag,
@@ -423,21 +425,11 @@ def render_compose_tag_stream_updates(
     line_offsets = _line_start_offsets(source)
     counts = {id(update): 0 for update in updates}
     seen_spans: set[tuple[int, int]] = set()
-    stream_by_service: dict[str, TagStreamUpdate] = {}
-    for stream_update in tag_stream_updates:
-        if stream_update.stack != stack_name:
-            raise ComposeTagRewriteError(
-                f"Tag stream update targets stack {stream_update.stack}, expected {stack_name}."
-            )
-        if not stream_update.approved:
-            raise ComposeTagRewriteError(
-                f"Service {stream_update.service} tag stream label rewrite is not approved."
-            )
-        if stream_update.service in stream_by_service:
-            raise ComposeTagRewriteError(
-                f"Service {stream_update.service} has more than one tag stream update."
-            )
-        stream_by_service[stream_update.service] = stream_update
+    stream_by_service = _tag_stream_updates_by_service(
+        compose_path,
+        tag_stream_updates,
+        stack_name=stack_name,
+    )
 
     rewritten_services: set[str] = set()
     for update in updates:
@@ -502,6 +494,36 @@ def render_compose_tag_stream_updates(
     return _dump_compose_yaml(yaml, parsed), applied
 
 
+def _tag_stream_updates_by_service(
+    compose_path: Path,
+    updates: Sequence[TagStreamUpdate],
+    *,
+    stack_name: str,
+) -> dict[str, TagStreamUpdate]:
+    compose_directory = compose_path.parent.resolve(strict=False)
+    by_service: dict[str, TagStreamUpdate] = {}
+    for update in updates:
+        if update.stack != stack_name:
+            raise ComposeTagRewriteError(
+                f"Tag stream update targets stack {update.stack}, expected {stack_name}."
+            )
+        if Path(update.stack_directory).resolve(strict=False) != compose_directory:
+            raise ComposeTagRewriteError(
+                f"Tag stream update for service {update.service} targets "
+                "a different Compose directory."
+            )
+        if not update.approved:
+            raise ComposeTagRewriteError(
+                f"Service {update.service} tag stream label rewrite is not approved."
+            )
+        if update.service in by_service:
+            raise ComposeTagRewriteError(
+                f"Service {update.service} has more than one tag stream update."
+            )
+        by_service[update.service] = update
+    return by_service
+
+
 def apply_compose_tag_exclusions(
     compose_path: Path,
     updates: Sequence[TagExclusionUpdate],
@@ -525,6 +547,7 @@ def apply_compose_digest_pins(
     updates: Sequence[DigestPinUpdate],
     *,
     label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval] = (),
+    tag_stream_updates: Sequence[TagStreamUpdate] = (),
     stack_name: str = "",
 ) -> tuple[AppliedDigestPinUpdate, ...]:
     """Write final digest-pinned images plus WUD watch metadata."""
@@ -533,6 +556,7 @@ def apply_compose_digest_pins(
         compose_path,
         updates,
         label_rewrite_approvals=label_rewrite_approvals,
+        tag_stream_updates=tag_stream_updates,
         stack_name=stack_name,
     )
     if updates and not rendered:
@@ -584,6 +608,7 @@ def render_compose_digest_pins(
     updates: Sequence[DigestPinUpdate],
     *,
     label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval] = (),
+    tag_stream_updates: Sequence[TagStreamUpdate] = (),
     stack_name: str = "",
 ) -> tuple[str, tuple[AppliedDigestPinUpdate, ...]]:
     """Return Compose YAML with digest-pin image and watch metadata applied."""
@@ -592,6 +617,7 @@ def render_compose_digest_pins(
         compose_path,
         updates,
         label_rewrite_approvals=label_rewrite_approvals,
+        tag_stream_updates=tag_stream_updates,
         stack_name=stack_name,
     )
 
@@ -616,6 +642,7 @@ def _render_compose_retag_updates(
     updates: Sequence[DigestPinUpdate],
     *,
     label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval] = (),
+    tag_stream_updates: Sequence[TagStreamUpdate] = (),
     stack_name: str = "",
 ) -> tuple[str, tuple[AppliedDigestPinUpdate, ...]]:
 
@@ -627,6 +654,12 @@ def _render_compose_retag_updates(
     counts = {id(update): 0 for update in updates}
     label_rewrites = {id(update): [] for update in updates}
     seen_spans: set[tuple[int, int]] = set()
+    stream_by_service = _tag_stream_updates_by_service(
+        compose_path,
+        tag_stream_updates,
+        stack_name=stack_name,
+    )
+    rewritten_stream_services: set[str] = set()
 
     for update in updates:
         _require_update_services(update.old_image, update.services)
@@ -652,20 +685,42 @@ def _render_compose_retag_updates(
             current_include = compose_unescape_dollars(
                 _get_service_label_value(service_config, update.label_key)
             )
-            label_rewrite = _digest_pin_label_rewrite_or_raise(
-                stack_name=stack_name,
-                service=service,
-                current_image=str(current_image),
-                current_label_value=current_include,
-                update=update,
-                approvals=label_rewrite_approvals,
-            )
-            if label_rewrite is not None:
-                label_rewrites[id(update)].append(label_rewrite)
+            stream_update = stream_by_service.get(service)
+            next_label_value = update.label_value
+            if stream_update is not None:
+                if (
+                    stream_update.current_tag != image_tag(update.old_image)
+                    or stream_update.selected_tag != update.watch_tag
+                    or stream_update.label_key != update.label_key
+                ):
+                    raise ComposeTagRewriteError(
+                        f"Service {service} tag stream update does not match "
+                        "the digest-pin update."
+                    )
+                if current_include not in {
+                    stream_update.current_label_value,
+                    stream_update.proposed_label_regex,
+                }:
+                    raise ComposeTagRewriteError(
+                        f"Service {service} {stream_update.label_key} changed since planning."
+                    )
+                next_label_value = stream_update.proposed_label_value
+                rewritten_stream_services.add(service)
+            else:
+                label_rewrite = _digest_pin_label_rewrite_or_raise(
+                    stack_name=stack_name,
+                    service=service,
+                    current_image=str(current_image),
+                    current_label_value=current_include,
+                    update=update,
+                    approvals=label_rewrite_approvals,
+                )
+                if label_rewrite is not None:
+                    label_rewrites[id(update)].append(label_rewrite)
             _set_service_label_value(
                 service_config,
                 update.label_key,
-                update.label_value,
+                next_label_value,
             )
             service_config["image"] = update.final_image
             _update_service_resolved_tag_marker(
@@ -675,6 +730,13 @@ def _render_compose_retag_updates(
                 update.marker,
             )
             counts[id(update)] += 1
+
+    missing_stream_services = sorted(set(stream_by_service) - rewritten_stream_services)
+    if missing_stream_services:
+        raise ComposeTagRewriteError(
+            "Tag stream update did not match digest-pin service(s): "
+            + ", ".join(missing_stream_services)
+        )
 
     applied = tuple(
         AppliedDigestPinUpdate(

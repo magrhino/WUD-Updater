@@ -323,6 +323,7 @@ class _PlanBuilder(_UpdateScopeMixin):
                 self.docker,
                 matches,
                 self.digest_pin_label_rewrite_approvals,
+                self.tag_stream_updates_by_stack,
             )
             self.digest_pin_updates_by_stack = dict(digest_pin_result.updates_by_stack)
             self.digest_pin_label_rewrites_by_stack = {

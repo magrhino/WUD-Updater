@@ -80,6 +80,34 @@ class StackLifecycleExecutor(
         images = tuple(stack.images)
         before = self._image_state(images)
         tag_updates = self._tag_updates(matches)
+        stack_directory = str(stack.directory.resolve(strict=False))
+        tag_stream_updates = tuple(
+            update
+            for update in self.options.tag_stream_updates
+            if update.stack_directory == stack_directory
+        )
+        selected_lines = {match.target.line_no for match in matches}
+        unexpected_stream_lines = sorted(
+            {
+                update.line_no
+                for update in tag_stream_updates
+                if update.line_no not in selected_lines
+            }
+        )
+        if unexpected_stream_lines:
+            line_list = ", ".join(str(line_no) for line_no in unexpected_stream_lines)
+            self.log.error(
+                f"[{stack.name}] Tag stream update line(s) are not selected: {line_list}"
+            )
+            self._record_failure(
+                stack,
+                matches,
+                phase="compose-tag-rewrite",
+                reason="compose-tag-stream-plan-stale",
+                services=scope.pull_services,
+                note=f"Unselected tag stream line(s): {line_list}",
+            )
+            return StackStatus("failure", "compose-tag-stream-plan-stale")
         try:
             digest_pin_updates = self._digest_pin_updates(matches)
             digest_unpin_updates = self._digest_unpin_updates(matches)
@@ -99,11 +127,6 @@ class StackLifecycleExecutor(
             digest_pin_updates
         )
         compose_tag_updates = (*tag_updates, *digest_pin_tag_updates)
-        tag_stream_updates = tuple(
-            update
-            for update in self.options.tag_stream_updates
-            if update.stack == stack.name
-        )
         return _StackUpdateState(
             stack=stack,
             matches=matches,
