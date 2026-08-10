@@ -348,21 +348,24 @@ describe("pending helper modules", () => {
         reported_stream: "default",
       },
     });
-    expect(
-      safetyCues(streamChange, {
-        pending,
-        releaseNote: null,
-        releaseNotesLoaded: false,
-        releaseNotesLoading: false,
-        securityScan: null,
-        securityScansCurrent: false,
-        securityScansEnabled: false,
-        securityScansLoaded: false,
-        securityScansLoading: false,
-        servicePolicies: [],
-        snoozes: [],
-      }).map((cue) => cue.label),
-    ).toContain("Possible stream change");
+    const streamCues = safetyCues(streamChange, {
+      pending,
+      releaseNote: null,
+      releaseNotesLoaded: false,
+      releaseNotesLoading: false,
+      securityScan: null,
+      securityScansCurrent: false,
+      securityScansEnabled: false,
+      securityScansLoaded: false,
+      securityScansLoading: false,
+      servicePolicies: [],
+      snoozes: [],
+    });
+    expect(streamCues).toContainEqual({
+      key: "possible-stream-change",
+      label: "Possible stream change",
+      type: "error",
+    });
 
     expect(
       safetyCues(minor, {

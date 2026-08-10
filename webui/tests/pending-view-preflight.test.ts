@@ -435,7 +435,16 @@ describe("pending view preflight safety", () => {
     const restoreViewport = mockMobileViewport();
     try {
       const { pinia, settings, updates } = setupStores(true);
-      updates.pending = pendingResponse();
+      updates.pending = pendingResponse([
+        pendingItem({
+          current_tag: "1.0.0-distroless",
+          desired_tag: "1.1.0",
+          tag_stream: {
+            current_stream: "distroless",
+            reported_stream: "default",
+          },
+        }),
+      ]);
       mockPendingLifecycle(settings, updates);
       const issue = {
         severity: "error",
@@ -492,10 +501,14 @@ describe("pending view preflight safety", () => {
         );
       const wrapper = mountPendingView(pinia);
 
-      await wrapper
+      const chooseStream = wrapper
         .findAll("button")
-        .find((button) => button.text().includes("Preview media plan"))
-        ?.trigger("click");
+        .find((button) => button.text().includes("Choose stream"));
+      expect(chooseStream?.attributes("aria-haspopup")).toBe("dialog");
+      expect(
+        wrapper.find('input[aria-label="New tag for repo/app:1.0"]').exists(),
+      ).toBe(false);
+      await chooseStream?.trigger("click");
       await flushPromises();
       const dialog = wrapper.find('[role="dialog"]');
       expect(dialog.text()).toContain("Keep distroless");

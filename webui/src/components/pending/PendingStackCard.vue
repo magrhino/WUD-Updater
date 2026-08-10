@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Play } from "@lucide/vue";
+import { Play, Repeat2 } from "@lucide/vue";
 import { NButton, NCheckbox, NTag } from "naive-ui";
 
 import type {
@@ -157,6 +157,21 @@ const emit = defineEmits<{
           >
             {{ previewImageLabel(groupedItemTarget(item), displayDigest) }}
           </code>
+          <n-button
+            v-if="item.tag_stream"
+            size="small"
+            secondary
+            type="info"
+            class="stream-choice-trigger"
+            aria-haspopup="dialog"
+            :aria-label="`Choose update stream for ${item.image}`"
+            @click="emit('previewStack', group)"
+          >
+            <template #icon>
+              <Repeat2 :size="15" aria-hidden="true" />
+            </template>
+            Choose stream
+          </n-button>
         </span>
       </div>
       <span v-if="groupChangeOverflowCount(group)" class="stack-change-more wrap-anywhere">
@@ -192,6 +207,7 @@ const emit = defineEmits<{
           :show-tag-input="Boolean(item.desired_tag)"
           :tag-input-props="tagInputProps(item)"
           @toggle="(_lineNo, checked) => emit('toggleItem', item, checked)"
+          @review-stream="emit('previewStack', group)"
           @update-tag="emit('updateTag', item, $event)"
         />
       </div>
@@ -325,6 +341,10 @@ const emit = defineEmits<{
   color: var(--color-code-text);
   font-family: var(--font-mono);
   font-size: 0.82rem;
+}
+
+.stream-choice-trigger {
+  margin-inline-start: 2px;
 }
 
 .stack-change-more {

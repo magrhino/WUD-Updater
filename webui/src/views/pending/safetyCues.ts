@@ -91,7 +91,7 @@ export function safetyCues(
   addVersionBumpCue(row, addCue);
 
   if (row.tag_stream) {
-    addCue("possible-stream-change", "Possible stream change", "warning");
+    addCue("possible-stream-change", "Possible stream change", "error");
   }
 
   if (!row.desired_tag && row.digest) {
