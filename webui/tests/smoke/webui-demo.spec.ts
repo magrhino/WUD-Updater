@@ -105,7 +105,7 @@ test("static demo renders current pending state in read-only mode", async ({
   ).toBeVisible();
 
   await page.getByRole("button", { name: /Preview home plan/ }).click();
-  await expect(page.getByRole("heading", { name: "Review home plan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Apply blocked" })).toBeVisible();
   const applyButton = page
     .getByRole("dialog")
     .getByRole("button", { name: /Apply 1 update/ });
