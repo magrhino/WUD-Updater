@@ -908,6 +908,7 @@ def test_apply_endpoint_keeps_same_named_nested_stacks_separate(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_MAX_WAIT": "0",
             **fake_env,
         },
     )
