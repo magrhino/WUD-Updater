@@ -114,7 +114,7 @@ describe("pending view selection actions", () => {
       .setValue("bad tag");
 
     expect(wrapper.text()).toContain(
-      "2 updates selected in media · 1 verified · 1 blocked",
+      "2 updates selected in media · 1 verified update · 1 blocked update",
     );
     expect(wrapper.text()).toContain(
       "1 selected update is blocked because its metadata is stale. Check your WUD configuration.",

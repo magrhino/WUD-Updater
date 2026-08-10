@@ -415,7 +415,7 @@ export function usePendingPlanReviewState(
     if (!selectedBlockedMetadataCount.value) {
       return context;
     }
-    return `${context} · ${pluralize(selectedFreshCount.value, "verified")} · ${pluralize(selectedBlockedMetadataCount.value, "blocked")}`;
+    return `${context} · ${pluralize(selectedFreshCount.value, "verified update")} · ${pluralize(selectedBlockedMetadataCount.value, "blocked update")}`;
   });
   const updateSelectedButtonLabel = computed(() =>
     selectedBlockedMetadataCount.value
