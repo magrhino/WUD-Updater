@@ -267,8 +267,11 @@ export function usePendingPlanReviewState(
     const count =
       (updates.plan?.selected_selections?.length ?? 0) ||
       (updates.plan?.selected_line_numbers.length ?? 0);
+    const updateLabel = updateIntent.value?.blockedMetadataCount
+      ? "verified update"
+      : "update";
     return count
-      ? `Apply ${pluralize(count, updateIntent.value?.blockedMetadataCount ? "verified update" : "update")}`
+      ? `Apply ${pluralize(count, updateLabel)}`
       : "Apply selected updates";
   });
   const cleanupItems = computed(() => updates.plan?.cleanup.items ?? []);

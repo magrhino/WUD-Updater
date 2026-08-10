@@ -324,31 +324,7 @@ def api_pending_lines(
                 source_ids=(source_id,),
             )
             continue
-        source_ids = existing.source_ids
-        if source_id not in source_ids:
-            source_ids = (*source_ids, source_id)
-        container_ids = existing.container_ids
-        for container_id in _container_ids(container):
-            if container_id not in container_ids:
-                container_ids = (*container_ids, container_id)
-        metadata_status = _least_fresh_metadata_status(
-            existing.container.metadata_status,
-            container.metadata_status,
-        )
-        if (
-            source_ids != existing.source_ids
-            or container_ids != existing.container_ids
-            or metadata_status != existing.container.metadata_status
-        ):
-            by_raw[raw] = replace(
-                existing,
-                container=replace(
-                    existing.container,
-                    metadata_status=metadata_status,
-                ),
-                container_ids=container_ids,
-                source_ids=source_ids,
-            )
+        by_raw[raw] = _merge_api_pending_line(existing, container)
     related_containers = (
         *containers,
         *(
@@ -361,34 +337,65 @@ def api_pending_lines(
         for container in sorted(related_containers, key=_container_sort_key):
             if not _container_can_share_apply_scope(container, existing.container):
                 continue
-            source_ids = tuple(
-                sorted(
-                    dict.fromkeys(
-                        (*existing.source_ids, _container_source_id(container))
-                    )
-                )
-            )
-            container_ids = tuple(
-                sorted(
-                    dict.fromkeys(
-                        (*existing.container_ids, *_container_ids(container))
-                    )
-                )
-            )
-            by_raw[raw] = replace(
-                existing,
-                container=replace(
-                    existing.container,
-                    metadata_status=_least_fresh_metadata_status(
-                        existing.container.metadata_status,
-                        container.metadata_status,
-                    ),
-                ),
-                container_ids=container_ids,
-                source_ids=source_ids,
-            )
-            existing = by_raw[raw]
+            existing = _merge_related_api_pending_line(existing, container)
+            by_raw[raw] = existing
     return tuple(by_raw[raw] for raw in sorted(by_raw))
+
+
+def _merge_api_pending_line(
+    existing: ApiPendingLine,
+    container: web_wud_api.WudApiContainer,
+) -> ApiPendingLine:
+    source_ids = existing.source_ids
+    source_id = _container_source_id(container)
+    if source_id not in source_ids:
+        source_ids = (*source_ids, source_id)
+    container_ids = existing.container_ids
+    for container_id in _container_ids(container):
+        if container_id not in container_ids:
+            container_ids = (*container_ids, container_id)
+    metadata_status = _least_fresh_metadata_status(
+        existing.container.metadata_status,
+        container.metadata_status,
+    )
+    if (
+        source_ids == existing.source_ids
+        and container_ids == existing.container_ids
+        and metadata_status == existing.container.metadata_status
+    ):
+        return existing
+    return replace(
+        existing,
+        container=replace(existing.container, metadata_status=metadata_status),
+        container_ids=container_ids,
+        source_ids=source_ids,
+    )
+
+
+def _merge_related_api_pending_line(
+    existing: ApiPendingLine,
+    container: web_wud_api.WudApiContainer,
+) -> ApiPendingLine:
+    source_ids = tuple(
+        sorted(
+            dict.fromkeys((*existing.source_ids, _container_source_id(container)))
+        )
+    )
+    container_ids = tuple(
+        sorted(dict.fromkeys((*existing.container_ids, *_container_ids(container))))
+    )
+    return replace(
+        existing,
+        container=replace(
+            existing.container,
+            metadata_status=_least_fresh_metadata_status(
+                existing.container.metadata_status,
+                container.metadata_status,
+            ),
+        ),
+        container_ids=container_ids,
+        source_ids=source_ids,
+    )
 
 
 def _container_can_share_apply_scope(

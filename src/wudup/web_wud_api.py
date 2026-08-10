@@ -1648,6 +1648,22 @@ def _reconcile_degraded_observation(
     return recovery_targets, 1, 0, 0, 0, "unresolved"
 
 
+def _record_retryable_degraded_container(
+    observation: _WudContainerObservation,
+    seen_container_ids: set[str],
+    container_ids: list[str],
+) -> None:
+    container_id = observation.container.id
+    if (
+        not observation.degraded
+        or not container_id
+        or container_id in seen_container_ids
+    ):
+        return
+    seen_container_ids.add(container_id)
+    container_ids.append(container_id)
+
+
 def _reconcile_container_observations(
     payload: Sequence[object],
     settings: WebSettings,
@@ -1689,13 +1705,11 @@ def _reconcile_container_observations(
             continue
 
         container = observation.container
-        if (
-            observation.degraded
-            and container.id
-            and container.id not in seen_retryable_container_ids
-        ):
-            seen_retryable_container_ids.add(container.id)
-            retryable_degraded_container_ids.append(container.id)
+        _record_retryable_degraded_container(
+            observation,
+            seen_retryable_container_ids,
+            retryable_degraded_container_ids,
+        )
         if observation.unsupported or observation.degraded:
             (
                 recovery_targets,

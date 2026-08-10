@@ -1007,13 +1007,14 @@ export const useUpdatesStore = defineStore("updates", () => {
     return lineNumbers.some((lineNo) => {
       const previous = beforeByLine.get(lineNo);
       const current = afterByLine.get(lineNo);
+      if (previous === undefined) {
+        return true;
+      }
       return (
-        previous === undefined ||
-        current === undefined ||
-        previous.raw !== current.raw ||
-        previous.source_id !== current.source_id ||
+        previous.raw !== current?.raw ||
+        previous.source_id !== current?.source_id ||
         (previous.metadata_status ?? "fresh") !==
-          (current.metadata_status ?? "fresh")
+          (current?.metadata_status ?? "fresh")
       );
     });
   }

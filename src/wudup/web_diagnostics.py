@@ -37,6 +37,8 @@ from .web_models import (
     WebSettings,
 )
 
+_WUD_METADATA_CHECK_LABEL = "Selected update metadata"
+
 
 def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundleResponse:
     settings = _settings(request)
@@ -385,7 +387,7 @@ def _wud_metadata_apply_preflight_check(plan: DryRunPlan) -> ApplyPreflightCheck
         return ApplyPreflightCheck(
             status="FAIL",
             code="wud-metadata-current",
-            label="Selected update metadata",
+            label=_WUD_METADATA_CHECK_LABEL,
             detail=(
                 f"{count} selected update{'s' if count != 1 else ''} {verb} blocked "
                 f"because {pronoun} metadata is stale ({kinds}). Check your WUD "
@@ -397,7 +399,7 @@ def _wud_metadata_apply_preflight_check(plan: DryRunPlan) -> ApplyPreflightCheck
         return ApplyPreflightCheck(
             status="WARN",
             code="wud-metadata-current",
-            label="Selected update metadata",
+            label=_WUD_METADATA_CHECK_LABEL,
             detail=(
                 "Every selected update is fresh. Other WUD observations are "
                 "unresolved or use retained or recovered metadata; review the "
@@ -409,13 +411,13 @@ def _wud_metadata_apply_preflight_check(plan: DryRunPlan) -> ApplyPreflightCheck
         return ApplyPreflightCheck(
             status="PASS",
             code="wud-metadata-current",
-            label="Selected update metadata",
+            label=_WUD_METADATA_CHECK_LABEL,
             source_check_codes=["wud-api-observations"],
         )
     return ApplyPreflightCheck(
         status="PASS",
         code="wud-metadata-current",
-        label="Selected update metadata",
+        label=_WUD_METADATA_CHECK_LABEL,
         source_check_codes=["wud-api-observations"],
     )
 
