@@ -10,7 +10,10 @@ import type {
   SecurityScanInfo,
 } from "../../api/client";
 import type { SnoozedPendingItem } from "../../views/pending/snoozeSelection";
-import type { PendingTagInputProps } from "../../views/pending/pendingDisplay";
+import {
+  pendingMetadataStatus,
+  type PendingTagInputProps,
+} from "../../views/pending/pendingDisplay";
 import type { SafetyCue } from "../../views/pending/safetyCues";
 import {
   pendingSelectionForItem,
@@ -55,6 +58,12 @@ const emit = defineEmits<{
   toggleStack: [group: PendingStackGroup, checked: boolean];
   updateTag: [item: PendingGroupedItem, value: string];
 }>();
+
+function verifiedLineNumbers(group: PendingStackGroup): number[] {
+  return group.items
+    .filter((item) => pendingMetadataStatus(item) === "fresh")
+    .map((item) => item.line_no);
+}
 </script>
 
 <template>
@@ -75,7 +84,7 @@ const emit = defineEmits<{
       :stack-selected="stackSelected(group)"
       :tag-input-props="tagInputProps"
       :tag-override-value="tagOverrideValue"
-      :update-disabled="updateDisabled(group.line_numbers)"
+      :update-disabled="updateDisabled(verifiedLineNumbers(group))"
       @preview-stack="emit('previewStack', $event)"
       @toggle-item="(item, checked) => emit('toggleItem', item, checked)"
       @toggle-stack="(stackGroup, checked) => emit('toggleStack', stackGroup, checked)"

@@ -35,6 +35,16 @@ def _plan_id(
     plan_payload = asdict(plan)
     plan_payload.pop("plan_id", None)
     plan_payload.pop("can_apply", None)
+    source_payload = plan_payload.get("source")
+    if isinstance(source_payload, dict):
+        for key in ("fresh", "degraded", "fallback_reason", "detail"):
+            source_payload.pop(key, None)
+        for key in ("source_ids_by_line", "metadata_status_by_line"):
+            source_payload[key] = {
+                line_no: value
+                for line_no, value in source_payload.get(key, {}).items()
+                if line_no in plan.selected_line_numbers
+            }
     payload = {
         "version": 1,
         "allow_tag_updates": allow_tag_updates,

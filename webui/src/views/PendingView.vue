@@ -399,6 +399,8 @@ const {
   planDigestPinLabelRewrites,
   planDigestUnpinUpdates,
   planLines,
+  planMetadataWarning,
+  planStatusLabel,
   preflightDigestPinNotice,
   preflightDigestUnpinNotice,
   preflightServiceImpactLabel,
@@ -413,6 +415,7 @@ const {
   removeSelectedDisabled,
   removeSelectedDisabledMessage,
   selectedTagOverrideError,
+  selectedMetadataWarning,
   selectedUpdateContext,
   setUpdateIntent,
   staleDiagnosticDetail,
@@ -421,6 +424,7 @@ const {
   unmatchedReviewCountLabel,
   unmatchedReviewSummary,
   updateSelectedDisabled,
+  updateSelectedButtonLabel,
   visiblePlanIssues,
 } = usePendingPlanReviewState({
   pendingSourceLabel,
@@ -550,12 +554,12 @@ async function retryPendingStatus(): Promise<void> {
   pendingStatusError.value = "";
   await updates.loadPending().catch(() => undefined);
   if (updates.error) {
-    pendingStatusError.value = `Pending status refresh failed: ${updates.error}`;
+    pendingStatusError.value = `WUD status check failed: ${updates.error}`;
     return;
   }
   pendingStatusMessage.value = pendingSourceDegraded.value
-    ? "Pending status refreshed. WUD metadata remains degraded."
-    : "Pending status refreshed.";
+    ? "WUD status checked. Some update metadata is still unavailable."
+    : "WUD status checked. Update metadata is current.";
 }
 
 function viewIssueDump(): void {
@@ -644,15 +648,15 @@ async function refreshPendingMetadataFromStatus(): Promise<void> {
     await connection.loadStatus({ silent: true });
     const sourceHash = connection.status?.source_hash ?? "";
     if (sourceHash && sourceHash !== (updates.pending?.source_hash ?? "")) {
-      await loadPendingAndReleaseNotesHandler({
-        preserveCleanup: true,
-        freshAfterCurrent: true,
-      });
+      await updates.refreshPendingMetadata(selectedLineNumbers.value);
+      await updates.loadReleaseNotes().catch(() => undefined);
+      await updates.loadSecurityScans().catch(() => undefined);
+      updates.refreshReleaseNotes().catch(() => undefined);
       return;
     }
     const checkedAt = connection.status?.wud_api.last_checked_at ?? "";
     if (checkedAt && checkedAt !== updates.pendingWudMetadataCheckedAt) {
-      await updates.refreshPendingMetadata();
+      await updates.refreshPendingMetadata(selectedLineNumbers.value);
     }
   } finally {
     pendingMetadataRefreshInFlight.value = false;
@@ -836,7 +840,7 @@ onBeforeUnmount(() => {
           :loading="updates.loading"
           @click="retryPendingStatus"
         >
-          Retry pending status
+          Check WUD status again
         </n-button>
       </n-flex>
     </n-alert>
@@ -921,6 +925,7 @@ onBeforeUnmount(() => {
       :select-all-label="visibleSelectAllLabel"
       :selected-count="selectedSelections.length"
       :selected-hidden-count="selectedHiddenCount"
+      :selected-metadata-warning="selectedMetadataWarning"
       :selected-rescan-disabled="selectedRescanDisabled"
       :selected-rescan-disabled-message="selectedRescanDisabledMessage"
       :selected-rescan-visible="selectedRescanVisible"
@@ -930,6 +935,7 @@ onBeforeUnmount(() => {
       :stack-count="filteredStackGroups.length"
       :unmatched-review-count-label="visibleUnmatchedReviewCountLabel"
       :update-selected-disabled="updateSelectedDisabled"
+      :update-selected-button-label="updateSelectedButtonLabel"
       @clear-selection="clearSelection"
       @rescan-all="rescanAllPending"
       @rescan-selected="rescanSelectedPending"
@@ -1071,6 +1077,8 @@ onBeforeUnmount(() => {
       :plan-digest-pin-label-rewrites="planDigestPinLabelRewrites"
       :plan-digest-unpin-updates="planDigestUnpinUpdates"
       :plan-lines="planLines"
+      :plan-metadata-warning="planMetadataWarning"
+      :plan-status-label="planStatusLabel"
       :preflight-digest-pin-notice="preflightDigestPinNotice"
       :preflight-digest-unpin-notice="preflightDigestUnpinNotice"
       :preflight-service-impact-label="preflightServiceImpactLabel"

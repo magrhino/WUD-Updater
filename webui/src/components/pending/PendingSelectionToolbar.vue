@@ -18,6 +18,7 @@ defineProps<{
   selectAllLabel: string;
   selectedCount: number;
   selectedHiddenCount: number;
+  selectedMetadataWarning: string;
   selectedRescanDisabled: boolean;
   selectedRescanDisabledMessage: string;
   selectedRescanVisible: boolean;
@@ -25,6 +26,7 @@ defineProps<{
   stackCount: number;
   unmatchedReviewCountLabel: string;
   updateSelectedDisabled: boolean;
+  updateSelectedButtonLabel: string;
 }>();
 
 const emit = defineEmits<{
@@ -108,6 +110,9 @@ const emit = defineEmits<{
         <template v-if="selectedHiddenCount">
           {{ selectedHiddenCount === 1 ? "1 selected update remains selected outside the current search." : `${selectedHiddenCount} selected updates remain selected outside the current search.` }}
         </template>
+        <template v-if="selectedMetadataWarning">
+          {{ selectedMetadataWarning }}
+        </template>
       </span>
     </div>
     <n-flex
@@ -159,7 +164,7 @@ const emit = defineEmits<{
         <template #icon>
           <Play :size="16" />
         </template>
-        Preview selected plan
+        {{ updateSelectedButtonLabel }}
       </n-button>
     </n-flex>
   </div>

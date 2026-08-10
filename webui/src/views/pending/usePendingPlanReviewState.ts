@@ -16,6 +16,7 @@ import type {
 } from "../../api/client";
 import { useAuthStore } from "../../stores/auth";
 import { useUpdatesStore } from "../../stores/updates";
+import { pendingMetadataStatus } from "./pendingDisplay";
 import {
   pendingPlanContextLabel,
   planActionsFromPlan,
@@ -40,6 +41,7 @@ export type PendingUpdateIntent = {
   allowTagUpdates: boolean;
   tagOverrides: TagOverrideRequest[];
   digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[];
+  blockedMetadataCount?: number;
 };
 
 export type PendingApplyPlanPayload = {
@@ -85,15 +87,32 @@ export function usePendingPlanReviewState(
       ? "Apply starts a server-side job, streams the live log, and writes a run record you can verify afterward."
       : "Read-only mode keeps Apply disabled. You can still preview impact now, then enable browser mutations server-side when you are ready to apply.",
   );
-  const selectedTagOverrideError = computed(() =>
-    options.tagOverrideErrorForLines(options.selectedLineNumbers.value),
-  );
   const pendingSourceAllowsFileEdits = computed(
     () => (updates.pending?.source?.active ?? "file") === "file",
   );
+  const selectedFreshLineNumbers = computed(() => {
+    const byLine = new Map(
+      (updates.pending?.items ?? []).map((item) => [item.line_no, item]),
+    );
+    return options.selectedSelections.value
+      .filter(
+        (selection) =>
+          pendingMetadataStatus(byLine.get(selection.line_no) ?? {}) === "fresh",
+      )
+      .map((selection) => selection.line_no);
+  });
+  const selectedFreshCount = computed(
+    () => selectedFreshLineNumbers.value.length,
+  );
+  const selectedTagOverrideError = computed(() =>
+    options.tagOverrideErrorForLines(selectedFreshLineNumbers.value),
+  );
+  const selectedBlockedMetadataCount = computed(
+    () => options.selectedSelections.value.length - selectedFreshCount.value,
+  );
   const updateSelectedDisabled = computed(
     () =>
-      options.selectedLineNumbers.value.length === 0 ||
+      selectedFreshCount.value === 0 ||
       updates.loading ||
       Boolean(selectedTagOverrideError.value),
   );
@@ -117,13 +136,22 @@ export function usePendingPlanReviewState(
     return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to remove selected entries.";
   });
   const planAlertType = computed(() => {
-    if (updates.plan?.status === "blocked") {
+    if (
+      updates.plan?.status === "blocked" ||
+      (updates.plan?.status === "ready" && !updates.plan.can_apply)
+    ) {
       return "error";
     }
     if (updates.plan?.status === "empty") {
       return "warning";
     }
     return "info";
+  });
+  const planStatusLabel = computed(() => {
+    if (updates.plan?.status === "ready" && !updates.plan.can_apply) {
+      return "Apply blocked";
+    }
+    return updates.plan?.status ?? "";
   });
   const planContextLabel = computed(() => {
     return pendingPlanContextLabel(
@@ -137,6 +165,9 @@ export function usePendingPlanReviewState(
     }
     if (updates.plan.status === "blocked") {
       return "Plan blocked";
+    }
+    if (!updates.plan.can_apply) {
+      return "Apply blocked";
     }
     if (updates.plan.status === "empty") {
       return "No changes to apply";
@@ -161,6 +192,9 @@ export function usePendingPlanReviewState(
     }
     if (updates.plan.status === "empty") {
       return "No selected services need changes.";
+    }
+    if (!updates.plan.can_apply && updates.plan.apply_preflight.failures) {
+      return `${pluralize(updates.plan.apply_preflight.failures, "failed check")} must be fixed before applying.`;
     }
     const serviceCount =
       updates.plan.summary.service_count ||
@@ -233,8 +267,11 @@ export function usePendingPlanReviewState(
     const count =
       (updates.plan?.selected_selections?.length ?? 0) ||
       (updates.plan?.selected_line_numbers.length ?? 0);
+    const updateLabel = updateIntent.value?.blockedMetadataCount
+      ? "verified update"
+      : "update";
     return count
-      ? `Apply ${pluralize(count, "update")}`
+      ? `Apply ${pluralize(count, updateLabel)}`
       : "Apply selected updates";
   });
   const cleanupItems = computed(() => updates.plan?.cleanup.items ?? []);
@@ -341,7 +378,12 @@ export function usePendingPlanReviewState(
       return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to apply updates.";
     }
     if (!updates.plan.apply_preflight.ok) {
-      return "Fix the failed apply readiness check before applying updates.";
+      const failed = updates.plan.apply_preflight.checks.find(
+        (check) => check.status === "FAIL",
+      );
+      return failed?.detail
+        ? `${failed.label}: ${failed.detail}`
+        : "Fix the failed apply readiness check before applying updates.";
     }
     return "This plan cannot be applied.";
   });
@@ -367,9 +409,32 @@ export function usePendingPlanReviewState(
   });
   const batchSummaryLabel = computed(() => {
     const count = pluralize(options.selectedSelections.value.length, "update");
-    return selectedUpdateContext.value === "selected updates"
+    const context = selectedUpdateContext.value === "selected updates"
       ? `${count} selected`
       : `${count} selected in ${selectedUpdateContext.value}`;
+    if (!selectedBlockedMetadataCount.value) {
+      return context;
+    }
+    return `${context} · ${pluralize(selectedFreshCount.value, "verified update")} · ${pluralize(selectedBlockedMetadataCount.value, "blocked update")}`;
+  });
+  const updateSelectedButtonLabel = computed(() =>
+    selectedBlockedMetadataCount.value
+      ? `Preview ${pluralize(selectedFreshCount.value, "verified update")}`
+      : "Preview selected plan",
+  );
+  const selectedMetadataWarning = computed(() => {
+    const count = selectedBlockedMetadataCount.value;
+    if (!count) {
+      return "";
+    }
+    return `${pluralize(count, "selected update")} ${count === 1 ? "is" : "are"} blocked because ${count === 1 ? "its" : "their"} metadata is stale. Check your WUD configuration. Blocked updates will stay selected and pending.`;
+  });
+  const planMetadataWarning = computed(() => {
+    const count = updateIntent.value?.blockedMetadataCount ?? 0;
+    if (!count) {
+      return "";
+    }
+    return `${pluralize(count, "selected update")} ${count === 1 ? "is" : "are"} blocked because ${count === 1 ? "its" : "their"} metadata is stale. Check your WUD configuration. ${count === 1 ? "It" : "They"} will stay pending and will not be applied.`;
   });
   const planLines = computed(
     () => planLinesFromPlan(updates.plan),
@@ -561,6 +626,8 @@ export function usePendingPlanReviewState(
     planDigestPinLabelRewrites,
     planDigestUnpinUpdates,
     planLines,
+    planMetadataWarning,
+    planStatusLabel,
     preflightDigestPinNotice,
     preflightDigestUnpinNotice,
     preflightServiceImpactLabel,
@@ -576,6 +643,7 @@ export function usePendingPlanReviewState(
     removeSelectedDisabled,
     removeSelectedDisabledMessage,
     selectedTagOverrideError,
+    selectedMetadataWarning,
     selectedUpdateContext,
     setUpdateIntent,
     staleDiagnosticDetail,
@@ -584,6 +652,7 @@ export function usePendingPlanReviewState(
     unmatchedReviewCountLabel,
     unmatchedReviewSummary,
     updateSelectedDisabled,
+    updateSelectedButtonLabel,
     visiblePlanIssues,
   };
 }

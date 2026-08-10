@@ -96,6 +96,7 @@ export interface WudApiConfigurationDiagnostics {
 
 export type PendingSourceMode = "file" | "api" | "auto";
 export type PendingSourceActive = "file" | "api";
+export type PendingMetadataStatus = "fresh" | "retained" | "recovered";
 
 export interface PendingSourceInfo {
   configured: PendingSourceMode;
@@ -126,6 +127,7 @@ export interface PendingItem {
   wud_metadata?: WudContainerMetadata | null;
   source: PendingSourceActive;
   source_id: string;
+  metadata_status?: PendingMetadataStatus;
 }
 
 export interface PendingDiagnostic {
@@ -235,12 +237,14 @@ export interface PendingMetadataRefreshItem {
   raw: string;
   source_id: string;
   wud_metadata: WudContainerMetadata | null;
+  metadata_status?: PendingMetadataStatus;
 }
 
 export interface PendingMetadataRefreshResponse {
   status: PendingMetadataRefreshStatus;
   requires_pending_reload: boolean;
   source_hash: string;
+  source: PendingSourceInfo;
   wud_api: WudApiStatus;
   items: PendingMetadataRefreshItem[];
 }
@@ -723,6 +727,7 @@ export interface PlanTarget {
   desired_tag: string;
   matched: boolean;
   action: string;
+  metadata_status?: PendingMetadataStatus;
 }
 
 export interface PlanLine {
@@ -736,6 +741,7 @@ export interface PlanLine {
   digest: string;
   desired_tag: string;
   action: string;
+  metadata_status?: PendingMetadataStatus;
   digest_provenance?: DigestTagProvenance | null;
 }
 

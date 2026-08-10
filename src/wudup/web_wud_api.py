@@ -58,6 +58,7 @@ from .web_models import (
     WudApiStoreDiagnostics as WudApiStoreDiagnostics,
     WudApiWatcherDiagnostics as WudApiWatcherDiagnostics,
     WudContainerMetadata,
+    PendingMetadataStatus,
 )
 from .wud_file import WudTarget, parse_wud_text
 
@@ -108,6 +109,7 @@ class WudApiContainer:
     labels: Mapping[str, str] = field(default_factory=dict)
     platform: ImagePlatform | None = None
     local_image_id: str = ""
+    metadata_status: PendingMetadataStatus = "fresh"
 
     def response(self) -> WudContainerMetadata:
         platform = self.platform
@@ -151,7 +153,9 @@ _PERSISTED_WUD_API_CONTAINER_FIELDS = frozenset(
         "local_image_id",
     }
 )
-_EXCLUDED_WUD_API_CONTAINER_FIELDS = frozenset({"error", "labels"})
+_EXCLUDED_WUD_API_CONTAINER_FIELDS = frozenset(
+    {"error", "labels", "metadata_status"}
+)
 assert (
     _PERSISTED_WUD_API_CONTAINER_FIELDS | _EXCLUDED_WUD_API_CONTAINER_FIELDS
     == {item.name for item in fields(WudApiContainer)}
@@ -165,6 +169,7 @@ assert not (
 class WudApiSnapshot:
     status: WudApiStatus
     containers: tuple[WudApiContainer, ...] = ()
+    unresolved_containers: tuple[WudApiContainer, ...] = ()
     hidden_update_candidates: tuple[WudApiContainer, ...] = ()
     retryable_degraded_container_ids: tuple[str, ...] = ()
     degraded_container_count: int = 0
@@ -861,6 +866,7 @@ def _refresh_snapshot_serialized(
     cache_key = _cache_key(settings, base_url)
     (
         containers,
+        unresolved_containers,
         hidden_update_candidates,
         retryable_degraded_container_ids,
         degraded_container_count,
@@ -913,6 +919,7 @@ def _refresh_snapshot_serialized(
             retained_update_count=retained_update_count,
             recovered_update_count=recovered_update_count,
         ),
+        unresolved_containers=unresolved_containers,
         unsupported_container_count=unsupported_container_count,
         observation_diagnostics=tuple(observation_diagnostics),
     )
@@ -1524,6 +1531,7 @@ def _retain_previous_observation(
         status=container.status,
         error=container.error or "WUD update result is unavailable",
         labels=container.labels,
+        metadata_status="retained",
     )
     containers.append(retained)
     pending_observations[identity] = _PendingObservation(
@@ -1584,6 +1592,7 @@ def _recover_pending_file_observation(
                     or "WUD update result is unavailable; pending update recovered "
                     "from WUD_OUT_FILE"
                 ),
+                metadata_status="recovered",
             ),
         )
     return None
@@ -1639,6 +1648,22 @@ def _reconcile_degraded_observation(
     return recovery_targets, 1, 0, 0, 0, "unresolved"
 
 
+def _record_retryable_degraded_container(
+    observation: _WudContainerObservation,
+    seen_container_ids: set[str],
+    container_ids: list[str],
+) -> None:
+    container_id = observation.container.id
+    if (
+        not observation.degraded
+        or not container_id
+        or container_id in seen_container_ids
+    ):
+        return
+    seen_container_ids.add(container_id)
+    container_ids.append(container_id)
+
+
 def _reconcile_container_observations(
     payload: Sequence[object],
     settings: WebSettings,
@@ -1646,6 +1671,7 @@ def _reconcile_container_observations(
     previous: Mapping[WudContainerIdentity, _PendingObservation],
     observed_at: str,
 ) -> tuple[
+    tuple[WudApiContainer, ...],
     tuple[WudApiContainer, ...],
     tuple[WudApiContainer, ...],
     tuple[str, ...],
@@ -1657,6 +1683,7 @@ def _reconcile_container_observations(
     Mapping[WudContainerIdentity, _PendingObservation],
 ]:
     containers: list[WudApiContainer] = []
+    unresolved_containers: list[WudApiContainer] = []
     hidden_update_candidates: list[WudApiContainer] = []
     retryable_degraded_container_ids: list[str] = []
     seen_retryable_container_ids: set[str] = set()
@@ -1678,13 +1705,11 @@ def _reconcile_container_observations(
             continue
 
         container = observation.container
-        if (
-            observation.degraded
-            and container.id
-            and container.id not in seen_retryable_container_ids
-        ):
-            seen_retryable_container_ids.add(container.id)
-            retryable_degraded_container_ids.append(container.id)
+        _record_retryable_degraded_container(
+            observation,
+            seen_retryable_container_ids,
+            retryable_degraded_container_ids,
+        )
         if observation.unsupported or observation.degraded:
             (
                 recovery_targets,
@@ -1708,6 +1733,8 @@ def _reconcile_container_observations(
             observation_diagnostics.append(
                 _observation_diagnostic(observation, outcome, settings)
             )
+            if outcome == "unresolved":
+                unresolved_containers.append(container)
             continue
 
         if observation.update_available:
@@ -1725,6 +1752,7 @@ def _reconcile_container_observations(
 
     return (
         tuple(containers),
+        tuple(unresolved_containers),
         tuple(hidden_update_candidates),
         tuple(retryable_degraded_container_ids),
         degraded_container_count,
