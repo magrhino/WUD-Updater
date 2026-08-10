@@ -83,7 +83,7 @@ test("static demo renders current pending state in read-only mode", async ({
       level: 1,
     }),
   ).toBeVisible();
-  await expect(page.getByText("7 pending updates")).toBeVisible();
+  await expect(page.getByText("8 pending updates")).toBeVisible();
   await expect(page.getByText("Read-only", { exact: true })).toBeVisible();
   await expect(page.getByText("3 items need review")).toBeVisible();
   const snoozedPanel = page
@@ -116,7 +116,7 @@ test("static demo renders current pending state in read-only mode", async ({
       { exact: true },
     ),
   ).toBeVisible();
-  await expect(page.getByText("7 pending updates")).toBeVisible();
+  await expect(page.getByText("8 pending updates")).toBeVisible();
 });
 
 test("static demo renders seeded audit log records", async ({ page }) => {
