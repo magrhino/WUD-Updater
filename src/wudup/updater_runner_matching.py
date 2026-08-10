@@ -185,7 +185,7 @@ class _RunnerMatchingMixin:
         return self._apply_tag_stream_updates(matches), skipped_tags
 
     def _apply_tag_stream_updates(self, matches: Sequence[Match]) -> list[Match]:
-        selected_tags = {
+        updates_by_target = {
             (
                 update.line_no,
                 update.stack,
@@ -194,34 +194,37 @@ class _RunnerMatchingMixin:
                 update.service,
                 update.current_tag,
                 update.reported_tag,
-            ): update.selected_tag
+            ): update
             for update in self.options.tag_stream_updates
         }
-        if not selected_tags:
+        self.matched_tag_stream_updates = set()
+        if not updates_by_target:
             return list(matches)
 
-        return [
-            replace(
-                match,
-                target=replace(match.target, desired_tag=selected_tag),
-            )
-            if (
-                selected_tag := selected_tags.get(
-                    (
-                        match.target.line_no,
-                        match.stack.name,
-                        str(match.stack.directory.resolve(strict=False)),
-                        match.stack.file,
-                        match.service,
-                        image_tag(match.compose_image),
-                        match.target.desired_tag,
-                    )
+        adjusted: list[Match] = []
+        for match in matches:
+            update = updates_by_target.get(
+                (
+                    match.target.line_no,
+                    match.stack.name,
+                    str(match.stack.directory.resolve(strict=False)),
+                    match.stack.file,
+                    match.service,
+                    image_tag(match.compose_image),
+                    match.target.desired_tag,
                 )
             )
-            is not None
-            else match
-            for match in matches
-        ]
+            if update is None:
+                adjusted.append(match)
+                continue
+            self.matched_tag_stream_updates.add(update)
+            adjusted.append(
+                replace(
+                    match,
+                    target=replace(match.target, desired_tag=update.selected_tag),
+                )
+            )
+        return adjusted
 
     def _prefilter_targets(
         self,

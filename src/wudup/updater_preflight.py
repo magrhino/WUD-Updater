@@ -121,6 +121,13 @@ def validate_tag_update_plan(runner: Any, matches: Sequence[Match]) -> bool:
         for match in matches
     }
     for update in runner.options.tag_stream_updates:
+        if update not in runner.matched_tag_stream_updates:
+            ok = False
+            runner.log.error(
+                f"[{update.stack}] Tag stream plan for {update.compose_file} "
+                f"service {update.service} line {update.line_no} is stale."
+            )
+            continue
         target = (
             update.line_no,
             update.stack,

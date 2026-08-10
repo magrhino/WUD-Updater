@@ -43,6 +43,7 @@ if TYPE_CHECKING:
         ImageState,
         Match,
         TagExclusionUpdate,
+        TagStreamUpdate,
         UpdaterOptions,
         UpdaterProgressEvent,
     )
@@ -88,6 +89,7 @@ class UpdateFromWudRunner(
         self.discovered_completed_update_selections: tuple[
             CompletedUpdateSelection, ...
         ] = ()
+        self.matched_tag_stream_updates: set[TagStreamUpdate] = set()
         self.audit_conn: sqlite3.Connection | None = None
         self.audit_run_id: int | None = None
         self.audit_db_path: Path | None = None

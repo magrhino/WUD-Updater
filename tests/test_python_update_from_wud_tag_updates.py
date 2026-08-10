@@ -14,7 +14,6 @@ from wudup.updater import (
     UpdateFromWudRunner,
 )
 from wudup.updater_models import (
-    TagOverride,
     TagStreamUpdate,
     UpdaterOptions,
 )
@@ -32,7 +31,8 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
         stack_directory: Path,
         *,
         compose_file: str = "docker-compose.yml",
-        include_tag_override: bool = True,
+        reported_tag: str = "1.3.0",
+        selected_tag: str = "1.3.0-distroless",
     ) -> UpdateFromWudRunner:
         options = UpdaterOptions(
             docker_base=self.base,
@@ -42,11 +42,6 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
             assume_yes=True,
             allow_tag_updates=True,
             no_color=True,
-            tag_overrides=(
-                (TagOverride(1, "1.3.0-distroless"),)
-                if include_tag_override
-                else ()
-            ),
             tag_stream_updates=(
                 TagStreamUpdate(
                     line_no=1,
@@ -55,8 +50,8 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
                     compose_file=compose_file,
                     service="app",
                     current_tag="1.2.3-distroless",
-                    reported_tag="1.3.0",
-                    selected_tag="1.3.0-distroless",
+                    reported_tag=reported_tag,
+                    selected_tag=selected_tag,
                     decision="preserve",
                     label_key="wud.tag.include",
                     current_label_value="",
@@ -472,10 +467,7 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
     def test_tag_stream_plan_fails_when_pending_input_becomes_empty(self) -> None:
         self.wud_file.write_text("", encoding="utf-8")
         planned_directory = self.base / "app"
-        runner = self.make_tag_stream_runner(
-            planned_directory,
-            include_tag_override=False,
-        )
+        runner = self.make_tag_stream_runner(planned_directory)
         stderr = StringIO()
 
         with redirect_stdout(StringIO()), redirect_stderr(stderr):
@@ -485,6 +477,32 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
         self.assertIn("Tag stream plan for docker-compose.yml", stderr.getvalue())
         self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
         self.assertNotIn("compose", self.calls())
+
+    def test_tag_stream_plan_with_stale_reported_tag_fails_closed(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:1.2.3-distroless tag=1.3.0\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack(
+            "app",
+            [("app", "repo/app:1.2.3-distroless", "cid-app")],
+        )
+        compose_file = stack_dir / "docker-compose.yml"
+        original = compose_file.read_text(encoding="utf-8")
+        runner = self.make_tag_stream_runner(
+            stack_dir,
+            reported_tag="1.3.1",
+            selected_tag="1.3.0",
+        )
+        stderr = StringIO()
+
+        with redirect_stdout(StringIO()), redirect_stderr(stderr):
+            status = runner.run()
+
+        self.assertEqual(status, 1)
+        self.assertIn("Tag stream plan for docker-compose.yml", stderr.getvalue())
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+        self.assertNotRegex(self.calls(), r"compose -f .* pull")
 
     def test_tag_update_with_digest_checks_rewritten_tag(self) -> None:
         self.wud_file.write_text(
