@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+from pathlib import Path
 from unittest import mock
 
 from wudup.command import CommandRunner
@@ -26,6 +27,52 @@ from tests.update_from_wud_helpers import (
 )
 
 class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
+    def make_tag_stream_runner(
+        self,
+        stack_directory: Path,
+        *,
+        compose_file: str = "docker-compose.yml",
+        include_tag_override: bool = True,
+    ) -> UpdateFromWudRunner:
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            allow_tag_updates=True,
+            no_color=True,
+            tag_overrides=(
+                (TagOverride(1, "1.3.0-distroless"),)
+                if include_tag_override
+                else ()
+            ),
+            tag_stream_updates=(
+                TagStreamUpdate(
+                    line_no=1,
+                    stack="app",
+                    stack_directory=str(stack_directory.resolve(strict=False)),
+                    compose_file=compose_file,
+                    service="app",
+                    current_tag="1.2.3-distroless",
+                    reported_tag="1.3.0",
+                    selected_tag="1.3.0-distroless",
+                    decision="preserve",
+                    label_key="wud.tag.include",
+                    current_label_value="",
+                    proposed_label_value=r"^\d+\.\d+\.\d+-distroless$$",
+                    proposed_label_regex=r"^\d+\.\d+\.\d+-distroless$",
+                    approved=True,
+                    reason="label-added",
+                ),
+            ),
+        )
+        return UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+
     def test_tag_update_requires_explicit_flag(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
         stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
@@ -358,40 +405,7 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
             "",
             encoding="utf-8",
         )
-        options = UpdaterOptions(
-            docker_base=self.base,
-            wud_file=self.wud_file,
-            log_dir=self.log_dir,
-            max_wait=0,
-            assume_yes=True,
-            allow_tag_updates=True,
-            no_color=True,
-            tag_overrides=(TagOverride(1, "1.3.0-distroless"),),
-            tag_stream_updates=(
-                TagStreamUpdate(
-                    line_no=1,
-                    stack="app",
-                    stack_directory=str(stack_dir.resolve(strict=False)),
-                    compose_file="docker-compose.yml",
-                    service="app",
-                    current_tag="1.2.3-distroless",
-                    reported_tag="1.3.0",
-                    selected_tag="1.3.0-distroless",
-                    decision="preserve",
-                    label_key="wud.tag.include",
-                    current_label_value="",
-                    proposed_label_value=r"^\d+\.\d+\.\d+-distroless$$",
-                    proposed_label_regex=r"^\d+\.\d+\.\d+-distroless$",
-                    approved=True,
-                    reason="label-added",
-                ),
-            ),
-        )
-        runner = UpdateFromWudRunner(
-            options,
-            environ=self.env,
-            command_runner=CommandRunner(env=self.env),
-        )
+        runner = self.make_tag_stream_runner(stack_dir)
 
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
             status = runner.run()
@@ -416,39 +430,9 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
         )
         compose_file = stack_dir / "docker-compose.yml"
         original = compose_file.read_text(encoding="utf-8")
-        options = UpdaterOptions(
-            docker_base=self.base,
-            wud_file=self.wud_file,
-            log_dir=self.log_dir,
-            max_wait=0,
-            assume_yes=True,
-            allow_tag_updates=True,
-            no_color=True,
-            tag_overrides=(TagOverride(1, "1.3.0-distroless"),),
-            tag_stream_updates=(
-                TagStreamUpdate(
-                    line_no=1,
-                    stack="app",
-                    stack_directory=str(stack_dir.resolve(strict=False)),
-                    compose_file="compose.yml",
-                    service="app",
-                    current_tag="1.2.3-distroless",
-                    reported_tag="1.3.0",
-                    selected_tag="1.3.0-distroless",
-                    decision="preserve",
-                    label_key="wud.tag.include",
-                    current_label_value="",
-                    proposed_label_value=r"^\d+\.\d+\.\d+-distroless$$",
-                    proposed_label_regex=r"^\d+\.\d+\.\d+-distroless$",
-                    approved=True,
-                    reason="label-added",
-                ),
-            ),
-        )
-        runner = UpdateFromWudRunner(
-            options,
-            environ=self.env,
-            command_runner=CommandRunner(env=self.env),
+        runner = self.make_tag_stream_runner(
+            stack_dir,
+            compose_file="compose.yml",
         )
         stderr = StringIO()
 
@@ -471,40 +455,7 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
         )
         self.make_stack("other", [("other", "repo/other:1.0", "cid-other")])
         planned_directory = self.base / "app"
-        options = UpdaterOptions(
-            docker_base=self.base,
-            wud_file=self.wud_file,
-            log_dir=self.log_dir,
-            max_wait=0,
-            assume_yes=True,
-            allow_tag_updates=True,
-            no_color=True,
-            tag_overrides=(TagOverride(1, "1.3.0-distroless"),),
-            tag_stream_updates=(
-                TagStreamUpdate(
-                    line_no=1,
-                    stack="app",
-                    stack_directory=str(planned_directory.resolve(strict=False)),
-                    compose_file="docker-compose.yml",
-                    service="app",
-                    current_tag="1.2.3-distroless",
-                    reported_tag="1.3.0",
-                    selected_tag="1.3.0-distroless",
-                    decision="preserve",
-                    label_key="wud.tag.include",
-                    current_label_value="",
-                    proposed_label_value=r"^\d+\.\d+\.\d+-distroless$$",
-                    proposed_label_regex=r"^\d+\.\d+\.\d+-distroless$",
-                    approved=True,
-                    reason="label-added",
-                ),
-            ),
-        )
-        runner = UpdateFromWudRunner(
-            options,
-            environ=self.env,
-            command_runner=CommandRunner(env=self.env),
-        )
+        runner = self.make_tag_stream_runner(planned_directory)
         stderr = StringIO()
 
         with redirect_stdout(StringIO()), redirect_stderr(stderr):
@@ -521,38 +472,9 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
     def test_tag_stream_plan_fails_when_pending_input_becomes_empty(self) -> None:
         self.wud_file.write_text("", encoding="utf-8")
         planned_directory = self.base / "app"
-        options = UpdaterOptions(
-            docker_base=self.base,
-            wud_file=self.wud_file,
-            log_dir=self.log_dir,
-            max_wait=0,
-            assume_yes=True,
-            allow_tag_updates=True,
-            no_color=True,
-            tag_stream_updates=(
-                TagStreamUpdate(
-                    line_no=1,
-                    stack="app",
-                    stack_directory=str(planned_directory.resolve(strict=False)),
-                    compose_file="docker-compose.yml",
-                    service="app",
-                    current_tag="1.2.3-distroless",
-                    reported_tag="1.3.0",
-                    selected_tag="1.3.0-distroless",
-                    decision="preserve",
-                    label_key="wud.tag.include",
-                    current_label_value="",
-                    proposed_label_value=r"^\d+\.\d+\.\d+-distroless$$",
-                    proposed_label_regex=r"^\d+\.\d+\.\d+-distroless$",
-                    approved=True,
-                    reason="label-added",
-                ),
-            ),
-        )
-        runner = UpdateFromWudRunner(
-            options,
-            environ=self.env,
-            command_runner=CommandRunner(env=self.env),
+        runner = self.make_tag_stream_runner(
+            planned_directory,
+            include_tag_override=False,
         )
         stderr = StringIO()
 
