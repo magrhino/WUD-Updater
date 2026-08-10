@@ -80,6 +80,7 @@ export function usePendingPlanReviewState(
   const updates = useUpdatesStore();
   const auth = useAuthStore();
   const updateIntent = ref<PendingUpdateIntent | null>(null);
+  const retainedTagStreamDecisionIssues = ref<PlanIssue[]>([]);
 
   const mutationStateLabel = computed(() =>
     auth.session?.mutations_enabled ? "Mutations enabled" : "Read-only",
@@ -263,9 +264,17 @@ export function usePendingPlanReviewState(
         digestPinLabelApprovalFromIssue(issue) !== null,
     ),
   );
-  const tagStreamDecisionIssues = computed(() =>
-    allPlanIssues.value.filter((issue) => issue.code === "tag-stream-change"),
-  );
+  const tagStreamDecisionIssues = computed(() => {
+    const issuesByLine = new Map(
+      retainedTagStreamDecisionIssues.value.map((issue) => [issue.line_no, issue]),
+    );
+    for (const issue of allPlanIssues.value) {
+      if (issue.code === "tag-stream-change") {
+        issuesByLine.set(issue.line_no, issue);
+      }
+    }
+    return [...issuesByLine.values()];
+  });
   const tagStreamLabelApprovalIssues = computed(() =>
     allPlanIssues.value.filter(
       (issue) =>
@@ -494,6 +503,7 @@ export function usePendingPlanReviewState(
   }
 
   function setUpdateIntent(intent: PendingUpdateIntent): void {
+    retainedTagStreamDecisionIssues.value = [];
     updateIntent.value = {
       ...intent,
       tagStreamDecisions: intent.tagStreamDecisions ?? [],
@@ -503,6 +513,7 @@ export function usePendingPlanReviewState(
   }
 
   function clearUpdateIntent(): void {
+    retainedTagStreamDecisionIssues.value = [];
     updateIntent.value = null;
   }
 
@@ -557,6 +568,12 @@ export function usePendingPlanReviewState(
     if (issue.line_no === null || !intent || updates.loading) {
       return false;
     }
+    retainedTagStreamDecisionIssues.value = [
+      ...retainedTagStreamDecisionIssues.value.filter(
+        (item) => item.line_no !== issue.line_no,
+      ),
+      issue,
+    ];
     const decisions = new Map(
       intent.tagStreamDecisions.map((item) => [item.line_no, item]),
     );

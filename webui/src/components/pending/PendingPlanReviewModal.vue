@@ -33,7 +33,7 @@ import PreflightNoticeList from "../preflight/PreflightNoticeList.vue";
 
 type TagType = "default" | "error" | "info" | "success" | "warning";
 
-defineProps<{
+const props = defineProps<{
   actionCommand: (action: PlanAction) => string;
   applyButtonLabel: string;
   applyDisabled: boolean;
@@ -94,6 +94,25 @@ const emit = defineEmits<{
   (event: "close"): void;
   (event: "open-cleanup"): void;
 }>();
+
+function tagStreamDecisionsComplete(): boolean {
+  return props.tagStreamDecisionIssues.every(
+    (issue) =>
+      props.tagStreamDecisionSelected(issue, "preserve") ||
+      props.tagStreamDecisionSelected(issue, "switch"),
+  );
+}
+
+function selectedTagStreamUpdate(issue: PlanIssue): PlanTagStreamUpdate | undefined {
+  return props.planTagStreamUpdates.find(
+    (item) => item.update.line_no === issue.line_no,
+  )?.update;
+}
+
+function tagStreamRulePreview(issue: PlanIssue): string {
+  return selectedTagStreamUpdate(issue)?.proposed_label_regex
+    ?? props.issueDetailString(issue, "preserve_label_regex");
+}
 </script>
 
 <template>
@@ -204,7 +223,12 @@ const emit = defineEmits<{
       >
         <div class="preflight-impact-heading">
           <strong id="tag-stream-decision-title">Update stream change</strong>
-          <n-tag size="small" type="warning">Decision required</n-tag>
+          <n-tag
+            size="small"
+            :type="tagStreamDecisionsComplete() ? 'success' : 'warning'"
+          >
+            {{ tagStreamDecisionsComplete() ? "Decision selected" : "Decision required" }}
+          </n-tag>
         </div>
         <div
           v-for="issue in tagStreamDecisionIssues"
@@ -224,6 +248,9 @@ const emit = defineEmits<{
               :disabled="tagStreamDecisionSelected(issue, 'preserve')"
               @click="emit('choose-tag-stream', issue, 'preserve')"
             >
+              <template v-if="tagStreamDecisionSelected(issue, 'preserve')" #icon>
+                <Check :size="16" aria-hidden="true" />
+              </template>
               Keep {{ issueDetailString(issue, "current_stream") }} —
               {{ issueDetailString(issue, "same_stream_tag") }}
             </n-button>
@@ -233,13 +260,16 @@ const emit = defineEmits<{
               :disabled="tagStreamDecisionSelected(issue, 'switch')"
               @click="emit('choose-tag-stream', issue, 'switch')"
             >
+              <template v-if="tagStreamDecisionSelected(issue, 'switch')" #icon>
+                <Check :size="16" aria-hidden="true" />
+              </template>
               Switch to {{ issueDetailString(issue, "reported_stream") }} —
               {{ issueDetailString(issue, "reported_tag") }}
             </n-button>
           </div>
           <div class="stream-rule-preview">
-            <span>Recommended label</span>
-            <code>wud.tag.include={{ issueDetailString(issue, "preserve_label_regex") }}</code>
+            <span>{{ selectedTagStreamUpdate(issue) ? "Resulting label" : "Recommended label" }}</span>
+            <code>wud.tag.include={{ tagStreamRulePreview(issue) }}</code>
           </div>
         </div>
       </section>

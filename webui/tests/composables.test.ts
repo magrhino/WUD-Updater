@@ -922,6 +922,39 @@ describe("usePendingPlanReviewState", () => {
       [],
     );
     expect(state.tagStreamDecisionSelected(decisionIssue, "preserve")).toBe(true);
+    expect(state.tagStreamDecisionIssues.value).toEqual([decisionIssue]);
+    const retainedDecisionIssue = state.tagStreamDecisionIssues.value[0];
+    expect(retainedDecisionIssue).toBeDefined();
+
+    await expect(
+      state.chooseTagStream(retainedDecisionIssue!, "switch"),
+    ).resolves.toBe(true);
+    expect(createPlan).toHaveBeenNthCalledWith(
+      2,
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-media-app" }],
+      [{ line_no: 1, decision: "switch" }],
+      [],
+    );
+    expect(state.tagStreamDecisionSelected(decisionIssue, "preserve")).toBe(false);
+    expect(state.tagStreamDecisionSelected(decisionIssue, "switch")).toBe(true);
+
+    await expect(
+      state.chooseTagStream(retainedDecisionIssue!, "preserve"),
+    ).resolves.toBe(true);
+    expect(createPlan).toHaveBeenNthCalledWith(
+      3,
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-media-app" }],
+      [{ line_no: 1, decision: "preserve" }],
+      [],
+    );
 
     await expect(state.approveTagStreamLabelRewrite(labelIssue)).resolves.toBe(true);
     const approval = {
@@ -936,7 +969,7 @@ describe("usePendingPlanReviewState", () => {
       proposed_label_value: String.raw`^\d+\.\d+\.\d+-distroless$$`,
     };
     expect(createPlan).toHaveBeenNthCalledWith(
-      2,
+      4,
       [1],
       true,
       [],

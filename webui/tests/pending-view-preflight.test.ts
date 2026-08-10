@@ -467,6 +467,7 @@ describe("pending view preflight safety", () => {
         .mockImplementation(
           async (_lines, _allow, _overrides, _digestApprovals, _selections, decisions = []) => {
             const base = planResponse();
+            const decision = decisions[0]?.decision ?? "preserve";
             updates.plan = decisions.length
               ? planResponse({
                   stacks: [
@@ -478,12 +479,21 @@ describe("pending view preflight safety", () => {
                           service: "app",
                           current_tag: "1.0.0-distroless",
                           reported_tag: "1.1.0",
-                          selected_tag: "1.1.0-distroless",
-                          decision: "preserve",
+                          selected_tag:
+                            decision === "preserve"
+                              ? "1.1.0-distroless"
+                              : "1.1.0",
+                          decision,
                           label_key: "wud.tag.include",
                           current_label_value: "",
-                          proposed_label_value: String.raw`^\d+\.\d+\.\d+-distroless$$`,
-                          proposed_label_regex: String.raw`^\d+\.\d+\.\d+-distroless$`,
+                          proposed_label_value:
+                            decision === "preserve"
+                              ? String.raw`^\d+\.\d+\.\d+-distroless$$`
+                              : String.raw`^\d+\.\d+\.\d+$$`,
+                          proposed_label_regex:
+                            decision === "preserve"
+                              ? String.raw`^\d+\.\d+\.\d+-distroless$`
+                              : String.raw`^\d+\.\d+\.\d+$`,
                           approved: true,
                           reason: "label-added",
                         },
@@ -536,12 +546,59 @@ describe("pending view preflight safety", () => {
       expect(wrapper.find('[role="dialog"]').text()).toContain(
         "Selected update stream",
       );
+      expect(wrapper.find('[role="dialog"]').text()).toContain(
+        "Decision selected",
+      );
+      const switchStream = wrapper
+        .find('[role="dialog"]')
+        .findAll("button")
+        .find((button) => button.text().includes("Switch to default"));
+      expect(switchStream?.attributes("disabled")).toBeUndefined();
+      await switchStream?.trigger("click");
+      await flushPromises();
+      expect(createPlan).toHaveBeenLastCalledWith(
+        [1],
+        true,
+        [],
+        [],
+        [{ line_no: 1, selection_id: "selection-1" }],
+        [{ line_no: 1, decision: "switch" }],
+        [],
+      );
+      expect(
+        wrapper
+          .find('[role="dialog"]')
+          .findAll("button")
+          .find((button) => button.text().includes("Switch to default"))
+          ?.attributes("disabled"),
+      ).toBeDefined();
+      expect(wrapper.find('[role="dialog"]').text()).toContain(
+        String.raw`Resulting labelwud.tag.include=^\d+\.\d+\.\d+$`,
+      );
       expect(
         wrapper
           .find('[role="dialog"]')
           .findAll("button")
           .some((button) => button.text().includes("Apply 1 update")),
       ).toBe(true);
+      await wrapper
+        .find('[role="dialog"]')
+        .findAll("button")
+        .find((button) => button.text().includes("Keep distroless"))
+        ?.trigger("click");
+      await flushPromises();
+      expect(createPlan).toHaveBeenLastCalledWith(
+        [1],
+        true,
+        [],
+        [],
+        [{ line_no: 1, selection_id: "selection-1" }],
+        [{ line_no: 1, decision: "preserve" }],
+        [],
+      );
+      expect(wrapper.find('[role="dialog"]').text()).toContain(
+        String.raw`Resulting labelwud.tag.include=^\d+\.\d+\.\d+-distroless$`,
+      );
     } finally {
       restoreViewport();
     }
