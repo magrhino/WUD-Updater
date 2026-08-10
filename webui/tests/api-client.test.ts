@@ -577,30 +577,14 @@ describe("webApi", () => {
         proposed_label_value: String.raw`^\d+\.\d+\.\d+-distroless$$`,
       },
     ];
+    const options = {
+      tagStreamDecisions: decisions,
+      tagStreamLabelRewriteApprovals: approvals,
+    };
 
-    await webApi.createPlan(
-      [4],
-      true,
-      [],
-      [],
-      "csrf",
-      {
-        tagStreamDecisions: decisions,
-        tagStreamLabelRewriteApprovals: approvals,
-      },
-    );
-    await webApi.applyPlan(
-      "plan-id",
-      [4],
-      true,
-      [],
-      [],
-      "csrf",
-      {
-        tagStreamDecisions: decisions,
-        tagStreamLabelRewriteApprovals: approvals,
-      },
-    );
+    await webApi.createPlan([4], true, [], [], "csrf", options);
+    await webApi.createJob("plan-id", [4], true, [], [], "csrf", options);
+    await webApi.applyPlan("plan-id", [4], true, [], [], "csrf", options);
 
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       line_numbers: [4],
@@ -610,7 +594,7 @@ describe("webApi", () => {
       tag_stream_label_rewrite_approvals: approvals,
       digest_pin_label_rewrite_approvals: [],
     });
-    expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual({
+    const expectedApplyBody = {
       plan_id: "plan-id",
       line_numbers: [4],
       allow_tag_updates: true,
@@ -619,7 +603,9 @@ describe("webApi", () => {
       tag_stream_label_rewrite_approvals: approvals,
       digest_pin_label_rewrite_approvals: [],
       confirmation: "apply",
-    });
+    };
+    expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual(expectedApplyBody);
+    expect(jsonRequestBody(fetchMock.mock.calls[2])).toEqual(expectedApplyBody);
   });
 
   it("serializes pending rescan payload exactly", async () => {
