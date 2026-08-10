@@ -833,6 +833,8 @@ export function tagStreamLabelApprovalFromIssue(
   const approval = {
     line_no: issue.line_no,
     stack: issue.stack,
+    stack_directory: issueDetailString(issue, "stack_directory"),
+    compose_file: issueDetailString(issue, "compose_file"),
     service: issue.service,
     label_key: issueDetailString(issue, "label_key"),
     current_label_value: issueDetailString(issue, "current_label_value"),
@@ -850,12 +852,21 @@ export function tagStreamLabelApprovalKey(
   return [
     approval.line_no,
     approval.stack,
+    approval.stack_directory,
+    approval.compose_file,
     approval.service,
     approval.label_key,
     approval.current_label_value,
     approval.selected_tag,
     approval.proposed_label_value,
   ].join("\u0000");
+}
+
+export function tagStreamLabelApprovalIssueKey(issue: PlanIssue): string {
+  const approval = tagStreamLabelApprovalFromIssue(issue);
+  return approval === null
+    ? [issue.line_no, issue.stack, issue.service].join("\u0000")
+    : tagStreamLabelApprovalKey(approval);
 }
 
 function digestPinLabelIssueProposedRegex(issue: PlanIssue): string {

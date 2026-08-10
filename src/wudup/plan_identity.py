@@ -60,6 +60,8 @@ def _plan_id(
             {
                 "line_no": item.line_no,
                 "stack": item.stack,
+                "stack_directory": item.stack_directory,
+                "compose_file": item.compose_file,
                 "service": item.service,
                 "label_key": item.label_key,
                 "current_label_value": item.current_label_value,
@@ -71,6 +73,8 @@ def _plan_id(
                 key=lambda item: (
                     item.line_no,
                     item.stack,
+                    item.stack_directory,
+                    item.compose_file,
                     item.service,
                     item.label_key,
                     item.current_label_value,

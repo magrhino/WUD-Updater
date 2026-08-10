@@ -251,6 +251,8 @@ def plan_tag_stream_changes(
                         stack=match.stack.name,
                         service=match.service,
                         details={
+                            "stack_directory": stream_update.stack_directory,
+                            "compose_file": stream_update.compose_file,
                             "label_key": stream_update.label_key,
                             "current_label_value": stream_update.current_label_value,
                             "selected_tag": stream_update.selected_tag,
@@ -370,6 +372,8 @@ def _matching_approval(
         if (
             approval.line_no == update.line_no
             and approval.stack == update.stack
+            and approval.stack_directory == update.stack_directory
+            and approval.compose_file == update.compose_file
             and approval.service == update.service
             and approval.label_key == update.label_key
             and approval.current_label_value == update.current_label_value

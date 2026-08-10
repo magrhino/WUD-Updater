@@ -41,6 +41,7 @@ class ComposeTagUpdateTests(ComposeRewriteTestCase):
                     line_no=1,
                     stack="stack",
                     stack_directory=str(compose_file.parent.resolve(strict=False)),
+                    compose_file=compose_file.name,
                     service="app",
                     current_tag="1.2.3-distroless",
                     reported_tag="1.3.0",
@@ -95,6 +96,7 @@ class ComposeTagUpdateTests(ComposeRewriteTestCase):
                         stack_directory=str(
                             compose_file.parent.resolve(strict=False)
                         ),
+                        compose_file=compose_file.name,
                         service="app",
                         current_tag="1.2.3-distroless",
                         reported_tag="1.3.0",

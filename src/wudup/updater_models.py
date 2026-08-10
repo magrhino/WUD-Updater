@@ -102,6 +102,8 @@ class TagStreamDecision:
 class TagStreamLabelRewriteApproval:
     line_no: int
     stack: str
+    stack_directory: str
+    compose_file: str
     service: str
     label_key: str
     current_label_value: str
@@ -114,6 +116,7 @@ class TagStreamUpdate:
     line_no: int
     stack: str
     stack_directory: str
+    compose_file: str
     service: str
     current_tag: str
     reported_tag: str

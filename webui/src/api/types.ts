@@ -762,6 +762,8 @@ export interface TagStreamDecisionRequest {
 export interface TagStreamLabelRewriteApprovalRequest {
   line_no: number;
   stack: string;
+  stack_directory: string;
+  compose_file: string;
   service: string;
   label_key: string;
   current_label_value: string;

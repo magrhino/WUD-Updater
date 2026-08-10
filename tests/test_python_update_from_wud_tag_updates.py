@@ -372,6 +372,7 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
                     line_no=1,
                     stack="app",
                     stack_directory=str(stack_dir.resolve(strict=False)),
+                    compose_file="docker-compose.yml",
                     service="app",
                     current_tag="1.2.3-distroless",
                     reported_tag="1.3.0",
@@ -401,6 +402,168 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
             self.wud_file.read_text(encoding="utf-8"),
             "repo/app:1.2.3-distroless tag=1.3.0\n",
         )
+
+    def test_tag_stream_plan_for_missing_compose_file_fails_before_mutation(
+        self,
+    ) -> None:
+        self.wud_file.write_text(
+            "repo/app:1.2.3-distroless tag=1.3.0\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack(
+            "app",
+            [("app", "repo/app:1.2.3-distroless", "cid-app")],
+        )
+        compose_file = stack_dir / "docker-compose.yml"
+        original = compose_file.read_text(encoding="utf-8")
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            allow_tag_updates=True,
+            no_color=True,
+            tag_overrides=(TagOverride(1, "1.3.0-distroless"),),
+            tag_stream_updates=(
+                TagStreamUpdate(
+                    line_no=1,
+                    stack="app",
+                    stack_directory=str(stack_dir.resolve(strict=False)),
+                    compose_file="compose.yml",
+                    service="app",
+                    current_tag="1.2.3-distroless",
+                    reported_tag="1.3.0",
+                    selected_tag="1.3.0-distroless",
+                    decision="preserve",
+                    label_key="wud.tag.include",
+                    current_label_value="",
+                    proposed_label_value=r"^\d+\.\d+\.\d+-distroless$$",
+                    proposed_label_regex=r"^\d+\.\d+\.\d+-distroless$",
+                    approved=True,
+                    reason="label-added",
+                ),
+            ),
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stderr = StringIO()
+
+        with redirect_stdout(StringIO()), redirect_stderr(stderr):
+            status = runner.run()
+
+        self.assertEqual(status, 1)
+        self.assertIn("Tag stream plan for compose.yml", stderr.getvalue())
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:1.2.3-distroless tag=1.3.0\n",
+        )
+        self.assertNotRegex(self.calls(), r"compose -f .* pull")
+
+    def test_all_stale_tag_stream_plan_fails_before_no_match_success(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:1.2.3-distroless tag=1.3.0\n",
+            encoding="utf-8",
+        )
+        self.make_stack("other", [("other", "repo/other:1.0", "cid-other")])
+        planned_directory = self.base / "app"
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            allow_tag_updates=True,
+            no_color=True,
+            tag_overrides=(TagOverride(1, "1.3.0-distroless"),),
+            tag_stream_updates=(
+                TagStreamUpdate(
+                    line_no=1,
+                    stack="app",
+                    stack_directory=str(planned_directory.resolve(strict=False)),
+                    compose_file="docker-compose.yml",
+                    service="app",
+                    current_tag="1.2.3-distroless",
+                    reported_tag="1.3.0",
+                    selected_tag="1.3.0-distroless",
+                    decision="preserve",
+                    label_key="wud.tag.include",
+                    current_label_value="",
+                    proposed_label_value=r"^\d+\.\d+\.\d+-distroless$$",
+                    proposed_label_regex=r"^\d+\.\d+\.\d+-distroless$",
+                    approved=True,
+                    reason="label-added",
+                ),
+            ),
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stderr = StringIO()
+
+        with redirect_stdout(StringIO()), redirect_stderr(stderr):
+            status = runner.run()
+
+        self.assertEqual(status, 1)
+        self.assertIn("Tag stream plan for docker-compose.yml", stderr.getvalue())
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:1.2.3-distroless tag=1.3.0\n",
+        )
+        self.assertNotRegex(self.calls(), r"compose -f .* pull")
+
+    def test_tag_stream_plan_fails_when_pending_input_becomes_empty(self) -> None:
+        self.wud_file.write_text("", encoding="utf-8")
+        planned_directory = self.base / "app"
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            allow_tag_updates=True,
+            no_color=True,
+            tag_stream_updates=(
+                TagStreamUpdate(
+                    line_no=1,
+                    stack="app",
+                    stack_directory=str(planned_directory.resolve(strict=False)),
+                    compose_file="docker-compose.yml",
+                    service="app",
+                    current_tag="1.2.3-distroless",
+                    reported_tag="1.3.0",
+                    selected_tag="1.3.0-distroless",
+                    decision="preserve",
+                    label_key="wud.tag.include",
+                    current_label_value="",
+                    proposed_label_value=r"^\d+\.\d+\.\d+-distroless$$",
+                    proposed_label_regex=r"^\d+\.\d+\.\d+-distroless$",
+                    approved=True,
+                    reason="label-added",
+                ),
+            ),
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stderr = StringIO()
+
+        with redirect_stdout(StringIO()), redirect_stderr(stderr):
+            status = runner.run()
+
+        self.assertEqual(status, 1)
+        self.assertIn("Tag stream plan for docker-compose.yml", stderr.getvalue())
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertNotIn("compose", self.calls())
+
     def test_tag_update_with_digest_checks_rewritten_tag(self) -> None:
         self.wud_file.write_text(
             "repo/app:1.0@sha256:good tag=2.0\n",

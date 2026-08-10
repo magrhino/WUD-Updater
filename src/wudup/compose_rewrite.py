@@ -7,6 +7,7 @@ import re
 import shutil
 import tempfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import replace
 from io import StringIO
 from pathlib import Path
 
@@ -385,6 +386,8 @@ def plan_compose_tag_stream_update(
                 approval,
                 line_no=line_no,
                 stack_name=stack_name,
+                stack_directory=stack_directory,
+                compose_file=compose_path.name,
                 service=service,
                 current_label_value=current_label_value,
                 selected_tag=selected_tag,
@@ -398,6 +401,7 @@ def plan_compose_tag_stream_update(
         line_no=line_no,
         stack=stack_name,
         stack_directory=stack_directory,
+        compose_file=compose_path.name,
         service=service,
         current_tag=current_tag,
         reported_tag=reported_tag,
@@ -512,11 +516,19 @@ def _tag_stream_updates_by_service(
                 f"Tag stream update for service {update.service} targets "
                 "a different Compose directory."
             )
+        if update.compose_file != compose_path.name:
+            raise ComposeTagRewriteError(
+                f"Tag stream update for service {update.service} targets "
+                "a different Compose file."
+            )
         if not update.approved:
             raise ComposeTagRewriteError(
                 f"Service {update.service} tag stream label rewrite is not approved."
             )
         if update.service in by_service:
+            existing = by_service[update.service]
+            if replace(update, line_no=existing.line_no) == existing:
+                continue
             raise ComposeTagRewriteError(
                 f"Service {update.service} has more than one tag stream update."
             )
@@ -1567,6 +1579,8 @@ def _tag_stream_label_rewrite_approval_matches(
     *,
     line_no: int,
     stack_name: str,
+    stack_directory: str,
+    compose_file: str,
     service: str,
     current_label_value: str,
     selected_tag: str,
@@ -1575,6 +1589,8 @@ def _tag_stream_label_rewrite_approval_matches(
     return (
         approval.line_no == line_no
         and approval.stack == stack_name
+        and approval.stack_directory == stack_directory
+        and approval.compose_file == compose_file
         and approval.service == service
         and approval.label_key == WUD_TAG_INCLUDE_LABEL
         and approval.current_label_value == current_label_value

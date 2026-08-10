@@ -295,11 +295,13 @@ def tag_stream_label_rewrite_approvals_from_payload(
     payload: PlanRequest | ApplyPlanRequest,
 ) -> tuple[TagStreamLabelRewriteApproval, ...]:
     approvals: list[TagStreamLabelRewriteApproval] = []
-    seen: set[tuple[int, str, str, str, str, str, str]] = set()
+    seen: set[tuple[int, str, str, str, str, str, str, str, str]] = set()
     for item in payload.tag_stream_label_rewrite_approvals:
         key = (
             item.line_no,
             item.stack,
+            item.stack_directory,
+            item.compose_file,
             item.service,
             item.label_key,
             item.current_label_value,
@@ -322,6 +324,8 @@ def tag_stream_label_rewrite_approvals_from_payload(
             TagStreamLabelRewriteApproval(
                 line_no=item.line_no,
                 stack=item.stack,
+                stack_directory=item.stack_directory,
+                compose_file=item.compose_file,
                 service=item.service,
                 label_key=item.label_key,
                 current_label_value=item.current_label_value,

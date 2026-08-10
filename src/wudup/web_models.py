@@ -1462,6 +1462,8 @@ class TagStreamDecisionRequest(BaseModel):
 class TagStreamLabelRewriteApprovalRequest(BaseModel):
     line_no: LineNumber
     stack: str = Field(min_length=1, max_length=256)
+    stack_directory: str = Field(min_length=1, max_length=4096)
+    compose_file: str = Field(min_length=1, max_length=256)
     service: str = Field(min_length=1, max_length=256)
     label_key: str = Field(min_length=1, max_length=256)
     current_label_value: str = Field(min_length=1, max_length=512)

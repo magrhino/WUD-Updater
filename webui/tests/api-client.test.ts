@@ -568,6 +568,8 @@ describe("webApi", () => {
       {
         line_no: 4,
         stack: "jarvis",
+        stack_directory: "/docker/jarvis",
+        compose_file: "docker-compose.yml",
         service: "task-runner",
         label_key: "wud.tag.include",
         current_label_value: "^stable-.+$",

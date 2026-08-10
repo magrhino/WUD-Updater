@@ -48,6 +48,7 @@ class ComposeTagUpdateYamlSafetyTests(ComposeRewriteTestCase):
                         stack_directory=str(
                             compose_file.parent.resolve(strict=False)
                         ),
+                        compose_file=compose_file.name,
                         service="app",
                         current_tag="1.2.3-distroless",
                         reported_tag="1.3.0",

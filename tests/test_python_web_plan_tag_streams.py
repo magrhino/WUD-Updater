@@ -179,6 +179,8 @@ def test_custom_stream_label_requires_exact_stale_bound_approval(
     approval = {
         "line_no": 1,
         "stack": issue["stack"],
+        "stack_directory": issue["details"]["stack_directory"],
+        "compose_file": issue["details"]["compose_file"],
         "service": issue["service"],
         "label_key": issue["details"]["label_key"],
         "current_label_value": issue["details"]["current_label_value"],
@@ -208,6 +210,66 @@ def test_custom_stream_label_requires_exact_stale_bound_approval(
     )
     assert rejected.status_code == 422
     assert "stale or forged" in rejected.json()["detail"]
+
+
+def test_stream_label_approval_is_bound_to_one_compose_file(
+    tmp_path: Path,
+) -> None:
+    client, _fake_root, compose_dir = _stream_client(tmp_path)
+    custom_compose = (
+        "services:\n"
+        "  task-runner:\n"
+        "    image: n8nio/runners:2.33.5-distroless\n"
+        "    labels:\n"
+        "      wud.tag.include: ^stable-.+$$\n"
+    )
+    (compose_dir / "docker-compose.yml").write_text(
+        custom_compose,
+        encoding="utf-8",
+    )
+    (compose_dir / "compose.yml").write_text(custom_compose, encoding="utf-8")
+    decision = {"line_no": 1, "decision": "preserve"}
+
+    blocked = _plan(client, {"tag_stream_decisions": [decision]}).json()
+    issues = [
+        item
+        for item in blocked["issues"]
+        if item["code"] == "compose-tag-stream-label-rewrite-unapproved"
+    ]
+    assert blocked["status"] == "blocked"
+    assert len(issues) == 2
+
+    issue = next(
+        item for item in issues if item["details"].get("compose_file") == "compose.yml"
+    )
+    approval = {
+        "line_no": 1,
+        "stack": issue["stack"],
+        "stack_directory": str(compose_dir.resolve(strict=False)),
+        "compose_file": "compose.yml",
+        "service": issue["service"],
+        "label_key": issue["details"]["label_key"],
+        "current_label_value": issue["details"]["current_label_value"],
+        "selected_tag": issue["details"]["selected_tag"],
+        "proposed_label_value": issue["details"]["proposed_label_value"],
+    }
+
+    partial = _plan(
+        client,
+        {
+            "tag_stream_decisions": [decision],
+            "tag_stream_label_rewrite_approvals": [approval],
+        },
+    ).json()
+    remaining = [
+        item
+        for item in partial["issues"]
+        if item["code"] == "compose-tag-stream-label-rewrite-unapproved"
+    ]
+
+    assert partial["status"] == "blocked"
+    assert len(remaining) == 1
+    assert remaining[0]["details"]["compose_file"] == "docker-compose.yml"
 
 
 @pytest.mark.parametrize(
@@ -313,6 +375,8 @@ def test_duplicate_stream_label_approval_is_rejected(tmp_path: Path) -> None:
     approval = {
         "line_no": 1,
         "stack": issue["stack"],
+        "stack_directory": issue["details"]["stack_directory"],
+        "compose_file": issue["details"]["compose_file"],
         "service": issue["service"],
         "label_key": issue["details"]["label_key"],
         "current_label_value": issue["details"]["current_label_value"],

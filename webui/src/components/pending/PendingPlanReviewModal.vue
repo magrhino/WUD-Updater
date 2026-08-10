@@ -24,6 +24,7 @@ import {
   type PlanDigestUnpinUpdateView,
   type PlanLineView,
 } from "../../views/pending/utils";
+import { tagStreamLabelApprovalIssueKey } from "../../views/pending/usePendingPlanReviewState";
 import CoreUpdateTourPanel from "../CoreUpdateTourPanel.vue";
 import PreflightFooterActions from "../preflight/PreflightFooterActions.vue";
 import PreflightMetricsGrid from "../preflight/PreflightMetricsGrid.vue";
@@ -285,11 +286,14 @@ const emit = defineEmits<{
         <div class="compact-list">
           <div
             v-for="issue in tagStreamLabelApprovalIssues"
-            :key="`${issue.line_no}-${issue.stack}-${issue.service}`"
+            :key="tagStreamLabelApprovalIssueKey(issue)"
             class="list-row plan-line-row digest-pin-approval-row"
           >
             <span>Review</span>
-            <strong>{{ issue.stack }} / {{ issue.service }}</strong>
+            <strong>
+              {{ issue.stack }} / {{ issueDetailString(issue, "compose_file") }} /
+              {{ issue.service }}
+            </strong>
             <em>
               <code>{{ issueDetailString(issue, "current_label_value") }}</code>
               <span aria-hidden="true"> -> </span>

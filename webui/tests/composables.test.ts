@@ -32,6 +32,7 @@ import {
   type PendingApplyJobPanelRef,
 } from "../src/views/pending/usePendingApplyJob";
 import {
+  tagStreamLabelApprovalIssueKey,
   usePendingPlanReviewState,
 } from "../src/views/pending/usePendingPlanReviewState";
 import { usePendingQueueState } from "../src/views/pending/usePendingQueueState";
@@ -882,12 +883,21 @@ describe("usePendingPlanReviewState", () => {
       ...decisionIssue,
       code: "compose-tag-stream-label-rewrite-unapproved",
       details: {
+        stack_directory: "/docker/media",
+        compose_file: "docker-compose.yml",
         label_key: "wud.tag.include",
         current_label_value: "^stable-.+$",
         selected_tag: "1.2.0-distroless",
         proposed_label_value: String.raw`^\d+\.\d+\.\d+-distroless$$`,
       },
     };
+    const siblingLabelIssue = {
+      ...labelIssue,
+      details: { ...labelIssue.details, compose_file: "compose.yml" },
+    };
+    expect(tagStreamLabelApprovalIssueKey(labelIssue)).not.toBe(
+      tagStreamLabelApprovalIssueKey(siblingLabelIssue),
+    );
     state.setUpdateIntent({
       title: "Preview media plan",
       contextLabel: "media",
@@ -917,6 +927,8 @@ describe("usePendingPlanReviewState", () => {
     const approval = {
       line_no: 1,
       stack: "media",
+      stack_directory: "/docker/media",
+      compose_file: "docker-compose.yml",
       service: "app",
       label_key: "wud.tag.include",
       current_label_value: "^stable-.+$",

@@ -85,6 +85,7 @@ class StackLifecycleExecutor(
             update
             for update in self.options.tag_stream_updates
             if update.stack_directory == stack_directory
+            and update.compose_file == stack.file
         )
         selected_lines = {match.target.line_no for match in matches}
         unexpected_stream_lines = sorted(
