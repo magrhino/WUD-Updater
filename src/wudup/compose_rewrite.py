@@ -455,25 +455,13 @@ def render_compose_tag_stream_updates(
                 selected_image=update.old_image,
             )
             stream_update = stream_by_service.get(service)
-            if stream_update is not None:
-                if stream_update.selected_tag != update.desired_tag:
-                    raise ComposeTagRewriteError(
-                        f"Service {service} tag stream selected {stream_update.selected_tag}, "
-                        f"expected {update.desired_tag}."
-                    )
-                _prepare_service_labels(services, service, service_config)
-                current_label = compose_unescape_dollars(
-                    _get_service_label_value(service_config, stream_update.label_key)
-                )
-                if current_label != stream_update.current_label_value:
-                    raise ComposeTagRewriteError(
-                        f"Service {service} {stream_update.label_key} changed since planning."
-                    )
-                _set_service_label_value(
-                    service_config,
-                    stream_update.label_key,
-                    stream_update.proposed_label_value,
-                )
+            if _rewrite_tag_stream_label(
+                services,
+                service,
+                service_config,
+                update,
+                stream_update,
+            ):
                 rewritten_services.add(service)
             service_config["image"] = update.new_image
             counts[id(update)] += 1
@@ -496,6 +484,36 @@ def render_compose_tag_stream_updates(
     if any(item.replacements < 1 for item in applied):
         raise ComposeTagRewriteError("Compose tag stream rewrite produced no output.")
     return _dump_compose_yaml(yaml, parsed), applied
+
+
+def _rewrite_tag_stream_label(
+    services: CommentedMap,
+    service: str,
+    service_config: CommentedMap,
+    update: TagUpdate,
+    stream_update: TagStreamUpdate | None,
+) -> bool:
+    if stream_update is None:
+        return False
+    if stream_update.selected_tag != update.desired_tag:
+        raise ComposeTagRewriteError(
+            f"Service {service} tag stream selected {stream_update.selected_tag}, "
+            f"expected {update.desired_tag}."
+        )
+    _prepare_service_labels(services, service, service_config)
+    current_label = compose_unescape_dollars(
+        _get_service_label_value(service_config, stream_update.label_key)
+    )
+    if current_label != stream_update.current_label_value:
+        raise ComposeTagRewriteError(
+            f"Service {service} {stream_update.label_key} changed since planning."
+        )
+    _set_service_label_value(
+        service_config,
+        stream_update.label_key,
+        stream_update.proposed_label_value,
+    )
+    return True
 
 
 def _tag_stream_updates_by_service(
@@ -698,37 +716,21 @@ def _render_compose_retag_updates(
                 _get_service_label_value(service_config, update.label_key)
             )
             stream_update = stream_by_service.get(service)
-            next_label_value = update.label_value
-            if stream_update is not None:
-                if (
-                    stream_update.current_tag != image_tag(update.old_image)
-                    or stream_update.selected_tag != update.watch_tag
-                    or stream_update.label_key != update.label_key
-                ):
-                    raise ComposeTagRewriteError(
-                        f"Service {service} tag stream update does not match "
-                        "the digest-pin update."
-                    )
-                if current_include not in {
-                    stream_update.current_label_value,
-                    stream_update.proposed_label_regex,
-                }:
-                    raise ComposeTagRewriteError(
-                        f"Service {service} {stream_update.label_key} changed since planning."
-                    )
-                next_label_value = stream_update.proposed_label_value
-                rewritten_stream_services.add(service)
-            else:
-                label_rewrite = _digest_pin_label_rewrite_or_raise(
+            next_label_value, label_rewrite, stream_rewritten = (
+                _retag_label_rewrite(
                     stack_name=stack_name,
                     service=service,
                     current_image=str(current_image),
                     current_label_value=current_include,
                     update=update,
+                    stream_update=stream_update,
                     approvals=label_rewrite_approvals,
                 )
-                if label_rewrite is not None:
-                    label_rewrites[id(update)].append(label_rewrite)
+            )
+            if label_rewrite is not None:
+                label_rewrites[id(update)].append(label_rewrite)
+            if stream_rewritten:
+                rewritten_stream_services.add(service)
             _set_service_label_value(
                 service_config,
                 update.label_key,
@@ -770,6 +772,48 @@ def _render_compose_retag_updates(
     if any(item.replacements < 1 for item in applied):
         return "", ()
     return _dump_compose_yaml(yaml, parsed), applied
+
+
+def _retag_label_rewrite(
+    *,
+    stack_name: str,
+    service: str,
+    current_image: str,
+    current_label_value: str,
+    update: DigestPinUpdate,
+    stream_update: TagStreamUpdate | None,
+    approvals: Sequence[DigestPinLabelRewriteApproval],
+) -> tuple[str, DigestPinLabelRewrite | None, bool]:
+    if stream_update is None:
+        return (
+            update.label_value,
+            _digest_pin_label_rewrite_or_raise(
+                stack_name=stack_name,
+                service=service,
+                current_image=current_image,
+                current_label_value=current_label_value,
+                update=update,
+                approvals=approvals,
+            ),
+            False,
+        )
+    if (
+        stream_update.current_tag != image_tag(update.old_image)
+        or stream_update.selected_tag != update.watch_tag
+        or stream_update.label_key != update.label_key
+    ):
+        raise ComposeTagRewriteError(
+            f"Service {service} tag stream update does not match "
+            "the digest-pin update."
+        )
+    if current_label_value not in {
+        stream_update.current_label_value,
+        stream_update.proposed_label_regex,
+    }:
+        raise ComposeTagRewriteError(
+            f"Service {service} {stream_update.label_key} changed since planning."
+        )
+    return stream_update.proposed_label_value, None, True
 
 
 def render_compose_digest_unpins(

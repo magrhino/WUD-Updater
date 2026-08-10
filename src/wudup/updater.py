@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     from .wud_file import ParsedWudFile, WudTarget
 
 VALID_MODES = frozenset({"pause", "stop", "live"})
+TAG_UPDATE_PLAN_VALIDATION_FAILED = "Tag update plan validation failed."
 
 
 class UpdateFromWudRunner(
@@ -147,7 +148,7 @@ class UpdateFromWudRunner(
                     self._progress(
                         "preflight",
                         "failure",
-                        "Tag update plan validation failed.",
+                        TAG_UPDATE_PLAN_VALIDATION_FAILED,
                     )
                     return 1
                 self.log.info("Nothing to do; list is empty.")
@@ -183,7 +184,7 @@ class UpdateFromWudRunner(
                     self._progress(
                         "preflight",
                         "failure",
-                        "Tag update plan validation failed.",
+                        TAG_UPDATE_PLAN_VALIDATION_FAILED,
                         matches=matches,
                     )
                     return 1
@@ -315,7 +316,7 @@ class UpdateFromWudRunner(
             self._progress(
                 "preflight",
                 "failure",
-                "Tag update plan validation failed.",
+                TAG_UPDATE_PLAN_VALIDATION_FAILED,
                 matches=matches,
             )
             return 1

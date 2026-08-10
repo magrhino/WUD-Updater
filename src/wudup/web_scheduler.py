@@ -343,7 +343,6 @@ def _build_auto_update_plan(
         source=pending_source.plan_source(),
         line_numbers=line_numbers,
         allow_tag_updates=False,
-        tag_overrides=(),
         digest_pin_label_rewrite_approvals=(),
         host_docker_base=settings.host_docker_base,
         environ=settings.command_env,

@@ -133,6 +133,13 @@ class _PlanSelectionScope:
     completed_update_selections: Sequence[CompletedUpdateSelection] = ()
 
 
+@dataclass(frozen=True)
+class _TagStreamPlanInputs:
+    tag_overrides: Sequence[TagOverride] = ()
+    decisions: Sequence[TagStreamDecision] = ()
+    label_rewrite_approvals: Sequence[TagStreamLabelRewriteApproval] = ()
+
+
 @dataclass
 class _PlanBuilder(_UpdateScopeMixin):
     config: UpdaterConfig
@@ -815,7 +822,7 @@ def build_dry_run_plan(
     ).build()
 
 
-def build_dry_run_plan_from_pending_source(
+def build_dry_run_plan_from_pending_source(  # NOSONAR - compatibility facade
     config: UpdaterConfig,
     parsed: ParsedWudFile,
     *,
@@ -837,17 +844,57 @@ def build_dry_run_plan_from_pending_source(
     environ: Mapping[str, str] | None = None,
     known_digest_provenance_by_service: _DigestProvenanceByService | None = None,
 ) -> DryRunPlan:
+    return _build_dry_run_plan_from_pending_source(
+        config,
+        parsed,
+        source_file=source_file,
+        source_hash=source_hash,
+        source=source,
+        line_numbers=line_numbers,
+        selection_scope=selection_scope,
+        allow_tag_updates=allow_tag_updates,
+        tag_stream_inputs=_TagStreamPlanInputs(
+            tag_overrides=tag_overrides,
+            decisions=tag_stream_decisions,
+            label_rewrite_approvals=tag_stream_label_rewrite_approvals,
+        ),
+        digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
+        host_docker_base=host_docker_base,
+        environ=environ,
+        known_digest_provenance_by_service=known_digest_provenance_by_service,
+    )
+
+
+def _build_dry_run_plan_from_pending_source(
+    config: UpdaterConfig,
+    parsed: ParsedWudFile,
+    *,
+    source_file: str,
+    source_hash: str,
+    source: DryRunPlanSource,
+    line_numbers: Sequence[int],
+    selection_scope: _PlanSelectionScope | None = None,
+    allow_tag_updates: bool = False,
+    tag_stream_inputs: _TagStreamPlanInputs | None = None,
+    digest_pin_label_rewrite_approvals: Sequence[
+        DigestPinLabelRewriteApproval
+    ] = (),
+    host_docker_base: Path | None = None,
+    environ: Mapping[str, str] | None = None,
+    known_digest_provenance_by_service: _DigestProvenanceByService | None = None,
+) -> DryRunPlan:
     runner = CommandRunner(env=environ) if environ is not None else CommandRunner()
     selections = selection_scope or _PlanSelectionScope()
+    stream_inputs = tag_stream_inputs or _TagStreamPlanInputs()
     return _PlanBuilder(
         config=config,
         line_numbers=line_numbers,
         update_selections=selections.update_selections,
         completed_update_selections=selections.completed_update_selections,
         allow_tag_updates=allow_tag_updates,
-        tag_overrides=tag_overrides,
-        tag_stream_decisions=tag_stream_decisions,
-        tag_stream_label_rewrite_approvals=tag_stream_label_rewrite_approvals,
+        tag_overrides=stream_inputs.tag_overrides,
+        tag_stream_decisions=stream_inputs.decisions,
+        tag_stream_label_rewrite_approvals=stream_inputs.label_rewrite_approvals,
         digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
         host_docker_base=host_docker_base,
         command_runner=runner,

@@ -53,6 +53,23 @@ class TagStreamPlanResult:
     selected_tags_by_line: Mapping[int, str]
 
 
+@dataclass(frozen=True)
+class _VerifiedTagStreamChange:
+    current: TagStreamParts
+    reported: TagStreamParts
+    reported_tag: str
+    alternate_tag: str
+
+
+@dataclass(frozen=True)
+class _TagStreamLinePlan:
+    verified: bool = False
+    selected_tag: str = ""
+    issues: tuple[DryRunPlanIssue, ...] = ()
+    updates: tuple[tuple[int, TagStreamUpdate], ...] = ()
+    used_approvals: tuple[TagStreamLabelRewriteApproval, ...] = ()
+
+
 def parse_tag_stream(tag: str) -> TagStreamParts | None:
     match = _STRICT_VERSION_TAG_RE.fullmatch(tag)
     if match is None:
@@ -115,152 +132,23 @@ def plan_tag_stream_changes(
     manifest_cache: dict[str, bool] = {}
 
     for line_no, line_matches in sorted(matches_by_line.items()):
-        target = line_matches[0].target
-        reported_tag = target.desired_tag
-        if not reported_tag:
-            continue
-        candidates = _line_candidates(line_matches, reported_tag)
-        if not candidates:
-            continue
-        if len({candidate[1] for candidate in candidates}) != 1:
-            issues.append(
-                DryRunPlanIssue(
-                    severity="error",
-                    code="tag-stream-change-ambiguous",
-                    message=(
-                        "Selected services use different current update streams; "
-                        "review their Compose images separately."
-                    ),
-                    line_no=line_no,
-                )
-            )
-            continue
-
-        current, alternate_tag = candidates[0]
-        alternate_images = {
-            image_with_tag(match.compose_image, alternate_tag)
-            for match in line_matches
-        }
-        verified = all(
-            _manifest_exists(docker, image, manifest_cache)
-            for image in sorted(alternate_images)
+        line_plan = _plan_tag_stream_line(
+            docker,
+            line_no,
+            line_matches,
+            decision_by_line=decision_by_line,
+            override_lines=override_lines,
+            label_rewrite_approvals=label_rewrite_approvals,
+            manifest_cache=manifest_cache,
         )
-        if not verified:
-            issues.append(
-                DryRunPlanIssue(
-                    severity="warning",
-                    code="possible-tag-stream-change",
-                    message=(
-                        f"Possible update stream change: {current.stream} to "
-                        f"{parse_tag_stream(reported_tag).stream}. A same-stream "
-                        "target could not be verified."
-                    ),
-                    line_no=line_no,
-                    details={
-                        "current_stream": current.stream,
-                        "reported_stream": parse_tag_stream(reported_tag).stream,
-                    },
-                )
-            )
-            continue
-
-        verified_lines.add(line_no)
-        if line_no in override_lines:
-            raise PlanInputError(
-                f"tag_overrides line {line_no} has a verified stream change; "
-                "submit an explicit tag_stream_decision"
-            )
-        decision = decision_by_line.get(line_no)
-        preserve_regex = tag_stream_include_regex(alternate_tag)
-        switch_regex = tag_stream_include_regex(reported_tag)
-        if decision is None:
-            issues.append(
-                DryRunPlanIssue(
-                    severity="error",
-                    code="tag-stream-change",
-                    message=(
-                        f"WUD proposed changing the update stream from {current.stream} "
-                        f"to {parse_tag_stream(reported_tag).stream}. Choose whether to "
-                        "preserve or switch streams."
-                    ),
-                    line_no=line_no,
-                    details={
-                        "current_tag": image_tag(line_matches[0].compose_image),
-                        "reported_tag": reported_tag,
-                        "current_stream": current.stream,
-                        "reported_stream": parse_tag_stream(reported_tag).stream,
-                        "same_stream_tag": alternate_tag,
-                        "preserve_label_regex": preserve_regex,
-                        "switch_label_regex": switch_regex,
-                    },
-                )
-            )
-            continue
-
-        selected_tag = alternate_tag if decision == "preserve" else reported_tag
-        selected_regex = preserve_regex if decision == "preserve" else switch_regex
-        selected_tags_by_line[line_no] = selected_tag
-        for match in line_matches:
-            try:
-                stream_update = plan_compose_tag_stream_update(
-                    match.stack.directory / match.stack.file,
-                    line_no=line_no,
-                    stack_name=match.stack.name,
-                    stack_directory=str(
-                        match.stack.directory.resolve(strict=False)
-                    ),
-                    service=match.service,
-                    current_image=match.compose_image,
-                    current_tag=image_tag(match.compose_image),
-                    reported_tag=reported_tag,
-                    selected_tag=selected_tag,
-                    decision=decision,
-                    proposed_label_regex=selected_regex,
-                    approvals=label_rewrite_approvals,
-                )
-            except (ComposeTagRewriteError, OSError) as exc:
-                issues.append(
-                    DryRunPlanIssue(
-                        severity="error",
-                        code="compose-tag-stream-rewrite-unsafe",
-                        message=f"Tag stream configuration cannot be rewritten safely: {exc}",
-                        line_no=line_no,
-                        stack=match.stack.name,
-                        service=match.service,
-                    )
-                )
-                continue
-            updates_by_stack.setdefault(match.stack.index, []).append(stream_update)
-            matching_approval = (
-                _matching_approval(label_rewrite_approvals, stream_update)
-                if stream_update.reason == "approved"
-                else None
-            )
-            if matching_approval is not None:
-                used_approvals.add(matching_approval)
-            if stream_update.reason == "approval-required":
-                issues.append(
-                    DryRunPlanIssue(
-                        severity="error",
-                        code="compose-tag-stream-label-rewrite-unapproved",
-                        message=(
-                            f"Service {match.service} has a custom wud.tag.include "
-                            "expression. Approve its exact replacement before apply."
-                        ),
-                        line_no=line_no,
-                        stack=match.stack.name,
-                        service=match.service,
-                        details={
-                            "stack_directory": stream_update.stack_directory,
-                            "compose_file": stream_update.compose_file,
-                            "label_key": stream_update.label_key,
-                            "current_label_value": stream_update.current_label_value,
-                            "selected_tag": stream_update.selected_tag,
-                            "proposed_label_value": stream_update.proposed_label_value,
-                            "proposed_label_regex": stream_update.proposed_label_regex,
-                        },
-                    )
-                )
+        issues.extend(line_plan.issues)
+        if line_plan.verified:
+            verified_lines.add(line_no)
+        if line_plan.selected_tag:
+            selected_tags_by_line[line_no] = line_plan.selected_tag
+        for stack_index, stream_update in line_plan.updates:
+            updates_by_stack.setdefault(stack_index, []).append(stream_update)
+        used_approvals.update(line_plan.used_approvals)
 
     unused_decisions = sorted(set(decision_by_line) - verified_lines)
     if unused_decisions:
@@ -296,6 +184,213 @@ def plan_tag_stream_changes(
             for stack_index, updates in updates_by_stack.items()
         },
         selected_tags_by_line=selected_tags_by_line,
+    )
+
+
+def _plan_tag_stream_line(
+    docker: DockerCli,
+    line_no: int,
+    line_matches: Sequence[Match],
+    *,
+    decision_by_line: Mapping[int, str],
+    override_lines: set[int],
+    label_rewrite_approvals: Sequence[TagStreamLabelRewriteApproval],
+    manifest_cache: dict[str, bool],
+) -> _TagStreamLinePlan:
+    reported_tag = line_matches[0].target.desired_tag
+    if not reported_tag:
+        return _TagStreamLinePlan()
+    change, issues = _verified_tag_stream_change(
+        docker,
+        line_no,
+        line_matches,
+        reported_tag,
+        manifest_cache,
+    )
+    if change is None:
+        return _TagStreamLinePlan(issues=issues)
+    if line_no in override_lines:
+        raise PlanInputError(
+            f"tag_overrides line {line_no} has a verified stream change; "
+            "submit an explicit tag_stream_decision"
+        )
+    decision = decision_by_line.get(line_no)
+    if decision is None:
+        preserve_regex = tag_stream_include_regex(change.alternate_tag)
+        switch_regex = tag_stream_include_regex(change.reported_tag)
+        return _TagStreamLinePlan(
+            verified=True,
+            issues=(
+                DryRunPlanIssue(
+                    severity="error",
+                    code="tag-stream-change",
+                    message=(
+                        "WUD proposed changing the update stream from "
+                        f"{change.current.stream} to {change.reported.stream}. "
+                        "Choose whether to preserve or switch streams."
+                    ),
+                    line_no=line_no,
+                    details={
+                        "current_tag": image_tag(line_matches[0].compose_image),
+                        "reported_tag": change.reported_tag,
+                        "current_stream": change.current.stream,
+                        "reported_stream": change.reported.stream,
+                        "same_stream_tag": change.alternate_tag,
+                        "preserve_label_regex": preserve_regex,
+                        "switch_label_regex": switch_regex,
+                    },
+                ),
+            ),
+        )
+    return _plan_decided_tag_stream_change(
+        line_no,
+        line_matches,
+        change,
+        decision,
+        label_rewrite_approvals,
+    )
+
+
+def _verified_tag_stream_change(
+    docker: DockerCli,
+    line_no: int,
+    line_matches: Sequence[Match],
+    reported_tag: str,
+    manifest_cache: dict[str, bool],
+) -> tuple[_VerifiedTagStreamChange | None, tuple[DryRunPlanIssue, ...]]:
+    candidates = _line_candidates(line_matches, reported_tag)
+    if not candidates:
+        return None, ()
+    if len({candidate[1] for candidate in candidates}) != 1:
+        return None, (
+            DryRunPlanIssue(
+                severity="error",
+                code="tag-stream-change-ambiguous",
+                message=(
+                    "Selected services use different current update streams; "
+                    "review their Compose images separately."
+                ),
+                line_no=line_no,
+            ),
+        )
+    current, alternate_tag = candidates[0]
+    reported = parse_tag_stream(reported_tag)
+    if reported is None:
+        return None, ()
+    alternate_images = {
+        image_with_tag(match.compose_image, alternate_tag) for match in line_matches
+    }
+    if not all(
+        _manifest_exists(docker, image, manifest_cache)
+        for image in sorted(alternate_images)
+    ):
+        return None, (
+            DryRunPlanIssue(
+                severity="warning",
+                code="possible-tag-stream-change",
+                message=(
+                    f"Possible update stream change: {current.stream} to "
+                    f"{reported.stream}. A same-stream target could not be verified."
+                ),
+                line_no=line_no,
+                details={
+                    "current_stream": current.stream,
+                    "reported_stream": reported.stream,
+                },
+            ),
+        )
+    return (
+        _VerifiedTagStreamChange(
+            current=current,
+            reported=reported,
+            reported_tag=reported_tag,
+            alternate_tag=alternate_tag,
+        ),
+        (),
+    )
+
+
+def _plan_decided_tag_stream_change(
+    line_no: int,
+    line_matches: Sequence[Match],
+    change: _VerifiedTagStreamChange,
+    decision: str,
+    label_rewrite_approvals: Sequence[TagStreamLabelRewriteApproval],
+) -> _TagStreamLinePlan:
+    preserve_regex = tag_stream_include_regex(change.alternate_tag)
+    switch_regex = tag_stream_include_regex(change.reported_tag)
+    selected_tag = (
+        change.alternate_tag if decision == "preserve" else change.reported_tag
+    )
+    selected_regex = preserve_regex if decision == "preserve" else switch_regex
+    issues: list[DryRunPlanIssue] = []
+    updates: list[tuple[int, TagStreamUpdate]] = []
+    used_approvals: list[TagStreamLabelRewriteApproval] = []
+    for match in line_matches:
+        try:
+            stream_update = plan_compose_tag_stream_update(
+                match.stack.directory / match.stack.file,
+                line_no=line_no,
+                stack_name=match.stack.name,
+                stack_directory=str(match.stack.directory.resolve(strict=False)),
+                service=match.service,
+                current_image=match.compose_image,
+                current_tag=image_tag(match.compose_image),
+                reported_tag=change.reported_tag,
+                selected_tag=selected_tag,
+                decision=decision,
+                proposed_label_regex=selected_regex,
+                approvals=label_rewrite_approvals,
+            )
+        except (ComposeTagRewriteError, OSError) as exc:
+            issues.append(
+                DryRunPlanIssue(
+                    severity="error",
+                    code="compose-tag-stream-rewrite-unsafe",
+                    message=f"Tag stream configuration cannot be rewritten safely: {exc}",
+                    line_no=line_no,
+                    stack=match.stack.name,
+                    service=match.service,
+                )
+            )
+            continue
+        updates.append((match.stack.index, stream_update))
+        matching_approval = (
+            _matching_approval(label_rewrite_approvals, stream_update)
+            if stream_update.reason == "approved"
+            else None
+        )
+        if matching_approval is not None:
+            used_approvals.append(matching_approval)
+        if stream_update.reason == "approval-required":
+            issues.append(
+                DryRunPlanIssue(
+                    severity="error",
+                    code="compose-tag-stream-label-rewrite-unapproved",
+                    message=(
+                        f"Service {match.service} has a custom wud.tag.include "
+                        "expression. Approve its exact replacement before apply."
+                    ),
+                    line_no=line_no,
+                    stack=match.stack.name,
+                    service=match.service,
+                    details={
+                        "stack_directory": stream_update.stack_directory,
+                        "compose_file": stream_update.compose_file,
+                        "label_key": stream_update.label_key,
+                        "current_label_value": stream_update.current_label_value,
+                        "selected_tag": stream_update.selected_tag,
+                        "proposed_label_value": stream_update.proposed_label_value,
+                        "proposed_label_regex": stream_update.proposed_label_regex,
+                    },
+                )
+            )
+    return _TagStreamLinePlan(
+        verified=True,
+        selected_tag=selected_tag,
+        issues=tuple(issues),
+        updates=tuple(updates),
+        used_approvals=tuple(used_approvals),
     )
 
 
