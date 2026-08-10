@@ -286,8 +286,10 @@ export function usePendingPlanReviewState(
     allPlanIssues.value.filter(
       (issue) =>
         issue.code !== "tag-stream-change" &&
-        issue.code !== "compose-tag-stream-label-rewrite-unapproved" &&
-        issue.code !== "compose-digest-pin-label-rewrite-unapproved",
+        (issue.code !== "compose-tag-stream-label-rewrite-unapproved" ||
+          tagStreamLabelApprovalFromIssue(issue) === null) &&
+        (issue.code !== "compose-digest-pin-label-rewrite-unapproved" ||
+          digestPinLabelApprovalFromIssue(issue) === null),
     ),
   );
   const planTagStreamUpdates = computed(() =>

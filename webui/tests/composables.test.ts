@@ -828,6 +828,37 @@ describe("usePendingPlanReviewState", () => {
     ]);
   });
 
+  it("keeps unparseable label approval blockers visible", () => {
+    const { state, updates } = setupPendingPlanReview();
+    const malformedIssues = [
+      {
+        severity: "error",
+        code: "compose-tag-stream-label-rewrite-unapproved",
+        message: "Malformed stream approval issue.",
+        line_no: 1,
+        stack: "media",
+        service: "app",
+        hint: "",
+        details: {},
+      },
+      {
+        severity: "error",
+        code: "compose-digest-pin-label-rewrite-unapproved",
+        message: "Malformed digest approval issue.",
+        line_no: 1,
+        stack: "media",
+        service: "app",
+        hint: "",
+        details: {},
+      },
+    ];
+    updates.plan = planResponse({ issues: malformedIssues });
+
+    expect(state.tagStreamLabelApprovalIssues.value).toEqual([]);
+    expect(state.digestPinLabelApprovalIssues.value).toEqual([]);
+    expect(state.visiblePlanIssues.value).toEqual(malformedIssues);
+  });
+
   it("replans with digest-pin label rewrite approval before marking it approved", async () => {
     const { state, updates } = setupPendingPlanReview();
     const issue = digestPinApprovalIssue();

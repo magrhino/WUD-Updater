@@ -154,7 +154,7 @@ export function createDemoWebApi(): WebApi {
         allowTagUpdates,
         tagOverrides,
         digestPinLabelRewriteApprovals,
-        options.selections ?? [],
+        options,
       ),
     createJob: async (
       _planId: string,
