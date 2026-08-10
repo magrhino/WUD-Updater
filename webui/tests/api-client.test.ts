@@ -511,7 +511,7 @@ describe("webApi", () => {
       { line_no: 1, selection_id: "selection-backup" },
     ];
 
-    await webApi.createPlan([1], false, [], [], "csrf", selections);
+    await webApi.createPlan([1], false, [], [], "csrf", { selections });
     await webApi.createJob(
       "plan-id",
       [1],
@@ -519,7 +519,7 @@ describe("webApi", () => {
       [],
       [],
       "csrf",
-      selections,
+      { selections },
     );
     await webApi.applyPlan(
       "plan-id",
@@ -528,7 +528,7 @@ describe("webApi", () => {
       [],
       [],
       "csrf",
-      selections,
+      { selections },
     );
 
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
@@ -584,9 +584,10 @@ describe("webApi", () => {
       [],
       [],
       "csrf",
-      [],
-      decisions,
-      approvals,
+      {
+        tagStreamDecisions: decisions,
+        tagStreamLabelRewriteApprovals: approvals,
+      },
     );
     await webApi.applyPlan(
       "plan-id",
@@ -595,9 +596,10 @@ describe("webApi", () => {
       [],
       [],
       "csrf",
-      [],
-      decisions,
-      approvals,
+      {
+        tagStreamDecisions: decisions,
+        tagStreamLabelRewriteApprovals: approvals,
+      },
     );
 
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({

@@ -134,7 +134,7 @@ describe("demo web API", () => {
       tagOverrides,
       [],
       "csrf",
-      selections,
+      { selections },
     );
 
     expect(plan).toMatchObject({
@@ -173,7 +173,9 @@ describe("demo web API", () => {
         tagOverrides,
         [],
         "csrf",
-        [{ line_no: 2, selection_id: "selection-forged" }],
+        {
+          selections: [{ line_no: 2, selection_id: "selection-forged" }],
+        },
       ),
     ).rejects.toThrow("stale or no longer available");
 

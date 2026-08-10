@@ -186,7 +186,11 @@ describe("pending view apply jobs", () => {
       true,
       [],
       [],
-      [{ line_no: 1, selection_id: "selection-reviewed" }],
+      {
+        selections: [{ line_no: 1, selection_id: "selection-reviewed" }],
+        tagStreamDecisions: [],
+        tagStreamLabelRewriteApprovals: [],
+      },
     );
     expect(jobStream.observed).toBe(true);
     await flushPromises();

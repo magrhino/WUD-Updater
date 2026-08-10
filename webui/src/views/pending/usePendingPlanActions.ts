@@ -232,23 +232,19 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
       allowTagUpdates: options.lineNumbersHaveTagUpdates(lineNumbers),
       tagOverrides: options.tagOverridesForLines(lineNumbers),
     });
-    const applyArgs = [
+    const job = await updates.applyPlan(
       updates.plan.plan_id,
       lineNumbers,
       payload.allowTagUpdates,
       payload.tagOverrides,
       payload.digestPinLabelRewriteApprovals,
-      updates.plan.selected_selections ?? [],
-    ] as const;
-    const job =
-      payload.tagStreamDecisions.length ||
-      payload.tagStreamLabelRewriteApprovals.length
-        ? await updates.applyPlan(
-            ...applyArgs,
-            payload.tagStreamDecisions,
-            payload.tagStreamLabelRewriteApprovals,
-          )
-        : await updates.applyPlan(...applyArgs);
+      {
+        selections: updates.plan.selected_selections ?? [],
+        tagStreamDecisions: payload.tagStreamDecisions,
+        tagStreamLabelRewriteApprovals:
+          payload.tagStreamLabelRewriteApprovals,
+      },
+    );
     options.applyJobSnapshot.value = snapshot;
     options.subscribeApplyJob(job.job_id);
     showPreflightModal.value = false;

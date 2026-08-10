@@ -911,6 +911,12 @@ export interface PlanSelectionRequest {
   selection_id: string;
 }
 
+export interface PlanMutationOptions {
+  selections?: PlanSelectionRequest[];
+  tagStreamDecisions?: TagStreamDecisionRequest[];
+  tagStreamLabelRewriteApprovals?: TagStreamLabelRewriteApprovalRequest[];
+}
+
 export interface PlanResponse {
   plan_id: string;
   dry_run: boolean;

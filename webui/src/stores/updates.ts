@@ -17,6 +17,7 @@ import {
   type PendingRescanScope,
   type PendingItem,
   type PlanResponse,
+  type PlanMutationOptions,
   type PlanSelectionRequest,
   type PendingResponse,
   type ReleaseNoteInfo,
@@ -819,22 +820,18 @@ export const useUpdatesStore = defineStore("updates", () => {
       pendingRemovalPlan.value = null;
       applyJob.value = null;
       applyJobLog.value = null;
-      const createArgs = [
+      plan.value = await webApi.createPlan(
         lineNumbers,
         allowTagUpdates,
         tagOverrides,
         digestPinLabelRewriteApprovals,
         await auth.ensureCsrf(),
-        selections,
-      ] as const;
-      plan.value =
-        tagStreamDecisions.length || tagStreamLabelRewriteApprovals.length
-          ? await webApi.createPlan(
-              ...createArgs,
-              tagStreamDecisions,
-              tagStreamLabelRewriteApprovals,
-            )
-          : await webApi.createPlan(...createArgs);
+        {
+          selections,
+          tagStreamDecisions,
+          tagStreamLabelRewriteApprovals,
+        },
+      );
     });
   }
 
@@ -1014,30 +1011,20 @@ export const useUpdatesStore = defineStore("updates", () => {
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[] = [],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
-    selections: PlanSelectionRequest[] = [],
-    tagStreamDecisions: TagStreamDecisionRequest[] = [],
-    tagStreamLabelRewriteApprovals: TagStreamLabelRewriteApprovalRequest[] = [],
+    options: PlanMutationOptions = {},
   ): Promise<ApplyJobResponse> {
     const auth = useAuthStore();
     await loadWithState(async () => {
       applyJobLog.value = null;
-      const createArgs = [
+      const job = await webApi.createJob(
         planId,
         lineNumbers,
         allowTagUpdates,
         tagOverrides,
         digestPinLabelRewriteApprovals,
         await auth.ensureCsrf(),
-        selections,
-      ] as const;
-      const job =
-        tagStreamDecisions.length || tagStreamLabelRewriteApprovals.length
-          ? await webApi.createJob(
-              ...createArgs,
-              tagStreamDecisions,
-              tagStreamLabelRewriteApprovals,
-            )
-          : await webApi.createJob(...createArgs);
+        options,
+      );
       setApplyJob(job);
     });
     if (applyJob.value === null) {
@@ -1052,30 +1039,20 @@ export const useUpdatesStore = defineStore("updates", () => {
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[] = [],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
-    selections: PlanSelectionRequest[] = [],
-    tagStreamDecisions: TagStreamDecisionRequest[] = [],
-    tagStreamLabelRewriteApprovals: TagStreamLabelRewriteApprovalRequest[] = [],
+    options: PlanMutationOptions = {},
   ): Promise<ApplyJobResponse> {
     const auth = useAuthStore();
     await loadWithState(async () => {
       applyJobLog.value = null;
-      const applyArgs = [
+      const job = await webApi.applyPlan(
         planId,
         lineNumbers,
         allowTagUpdates,
         tagOverrides,
         digestPinLabelRewriteApprovals,
         await auth.ensureCsrf(),
-        selections,
-      ] as const;
-      const job =
-        tagStreamDecisions.length || tagStreamLabelRewriteApprovals.length
-          ? await webApi.applyPlan(
-              ...applyArgs,
-              tagStreamDecisions,
-              tagStreamLabelRewriteApprovals,
-            )
-          : await webApi.applyPlan(...applyArgs);
+        options,
+      );
       setApplyJob(job);
     });
     if (applyJob.value === null) {
