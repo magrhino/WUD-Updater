@@ -185,17 +185,57 @@ class ComposeTagUpdateTests(ComposeRewriteTestCase):
             (
                 '    labels: ["keep=value"] # list\n',
                 '    labels: ["keep=value", '
-                "wud.tag.include=^\\d+-distroless$$] # list\n",
+                "wud.tag.include=^\\d+-distroless$$,] # list\n",
             ),
             (
                 '    labels: {"keep": "value"} # map\n',
                 '    labels: {"keep": "value", '
-                "wud.tag.include: ^\\d+-distroless$$} # map\n",
+                "wud.tag.include: ^\\d+-distroless$$,} # map\n",
             ),
             (
                 "    labels: null # empty\n",
                 "    labels: # empty\n"
                 "      - wud.tag.include=^\\d+-distroless$$\n",
+            ),
+        )
+        for original_labels, expected_labels in cases:
+            with self.subTest(labels=original_labels):
+                original = (
+                    "services:\n"
+                    "  app:\n"
+                    "    image: repo/app:1.0-distroless\n"
+                    f"{original_labels}"
+                    "    command: run\n"
+                )
+                compose_file = self.write_compose(original)
+
+                self._apply_preserved_stream(compose_file)
+
+                self.assertEqual(
+                    compose_file.read_text(encoding="utf-8"),
+                    original.replace("repo/app:1.0-distroless", "repo/app:2.0-distroless")
+                    .replace(original_labels, expected_labels),
+                )
+
+    def test_stream_rewrite_preserves_multiline_flow_label_comments(self) -> None:
+        cases = (
+            (
+                "    labels: [\n"
+                '      "keep=value" # keep ] inside comment\n'
+                "    ]\n",
+                "    labels: [\n"
+                '      "keep=value", # keep ] inside comment\n'
+                "      wud.tag.include=^\\d+-distroless$$,\n"
+                "    ]\n",
+            ),
+            (
+                "    labels: {\n"
+                '      "keep": "value" # keep } inside comment\n'
+                "    }\n",
+                "    labels: {\n"
+                '      "keep": "value", # keep } inside comment\n'
+                "      wud.tag.include: ^\\d+-distroless$$,\n"
+                "    }\n",
             ),
         )
         for original_labels, expected_labels in cases:

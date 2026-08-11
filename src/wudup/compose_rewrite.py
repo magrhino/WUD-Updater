@@ -466,7 +466,7 @@ def render_compose_tag_stream_updates(
                 stream_update,
             ):
                 rewritten_services.add(service)
-                rewrites.append(
+                rewrites.extend(
                     _service_label_source_rewrite(
                         service_config,
                         stream_update.label_key,
@@ -531,25 +531,30 @@ def _service_label_source_rewrite(
     value: str,
     source: str,
     line_offsets: Sequence[int],
-) -> tuple[int, int, str]:
+) -> tuple[tuple[int, int, str], ...]:
     labels = service_config.get("labels")
     if labels is None:
         if _commented_map_has_direct_key(service_config, "labels"):
-            return _empty_service_labels_rewrite(
+            return (
+                _empty_service_labels_rewrite(
+                    service_config,
+                    key,
+                    value,
+                    source,
+                    line_offsets,
+                ),
+            )
+        return (
+            _new_service_labels_rewrite(
                 service_config,
                 key,
                 value,
                 source,
                 line_offsets,
-            )
-        return _new_service_labels_rewrite(
-            service_config,
-            key,
-            value,
-            source,
-            line_offsets,
+            ),
         )
 
+    flow_start: int | None = None
     if isinstance(labels, (CommentedMap, CommentedSeq)):
         try:
             collection_start = line_offsets[labels.lc.line] + labels.lc.col
@@ -558,13 +563,7 @@ def _service_label_source_rewrite(
                 "Service labels source location is unavailable."
             ) from exc
         if collection_start < len(source) and source[collection_start] in "[{":
-            return _flow_labels_source_rewrite(
-                labels,
-                key,
-                value,
-                source,
-                collection_start,
-            )
+            flow_start = collection_start
 
     if isinstance(labels, CommentedMap):
         if key in labels:
@@ -581,20 +580,34 @@ def _service_label_source_rewrite(
             current = labels[key]
             if not isinstance(current, str):
                 raise ComposeTagRewriteError(f"Label {key} is not a string value.")
-            return _yaml_scalar_source_rewrite(
+            return (
+                _yaml_scalar_source_rewrite(
+                    source,
+                    line_offsets,
+                    line_no,
+                    col,
+                    current,
+                    value,
+                    flow=flow_start is not None,
+                ),
+            )
+        entry = f"{key}: {value}"
+        if flow_start is not None:
+            return _flow_label_addition_rewrites(
+                labels,
+                entry,
                 source,
                 line_offsets,
-                line_no,
-                col,
-                current,
-                value,
+                flow_start,
             )
-        return _append_block_label_rewrite(
-            service_config,
-            labels,
-            f"{key}: {value}",
-            source,
-            line_offsets,
+        return (
+            _append_block_label_rewrite(
+                service_config,
+                labels,
+                entry,
+                source,
+                line_offsets,
+            ),
         )
 
     if isinstance(labels, CommentedSeq):
@@ -612,20 +625,33 @@ def _service_label_source_rewrite(
                     raise ComposeTagRewriteError(
                         f"Label {key} source location is unavailable."
                     ) from exc
-                return _yaml_scalar_source_rewrite(
-                    source,
-                    line_offsets,
-                    line_no,
-                    col,
-                    item,
-                    replacement,
+                return (
+                    _yaml_scalar_source_rewrite(
+                        source,
+                        line_offsets,
+                        line_no,
+                        col,
+                        item,
+                        replacement,
+                        flow=flow_start is not None,
+                    ),
                 )
-        return _append_block_label_rewrite(
-            service_config,
-            labels,
-            f"- {replacement}",
-            source,
-            line_offsets,
+        if flow_start is not None:
+            return _flow_label_addition_rewrites(
+                labels,
+                replacement,
+                source,
+                line_offsets,
+                flow_start,
+            )
+        return (
+            _append_block_label_rewrite(
+                service_config,
+                labels,
+                f"- {replacement}",
+                source,
+                line_offsets,
+            ),
         )
 
     raise ComposeTagRewriteError("Service labels use unsupported YAML syntax.")
@@ -686,44 +712,66 @@ def _empty_service_labels_rewrite(
     return line_start + len(match.group(1)), line_start + len(body), replacement
 
 
-def _flow_labels_source_rewrite(
+def _flow_label_addition_rewrites(
     labels: CommentedMap | CommentedSeq,
-    key: str,
-    value: str,
+    entry: str,
     source: str,
+    line_offsets: Sequence[int],
     start: int,
-) -> tuple[int, int, str]:
-    copied: CommentedMap | CommentedSeq
-    if isinstance(labels, CommentedMap):
-        copied = _copy_label_map(labels)
-    else:
-        copied = _copy_label_sequence(labels)
-    copied.fa.set_flow_style()
-    service_config = CommentedMap({"labels": copied})
-    _set_service_label_value(service_config, key, value)
+) -> tuple[tuple[int, int, str], ...]:
+    end, last_significant = _flow_collection_bounds(source, start)
+    rewrites: list[tuple[int, int, str]] = []
+    needs_comma = last_significant != start and source[last_significant] != ","
 
-    yaml = YAML(typ="rt")
-    yaml.preserve_quotes = True
-    yaml.width = 4096
-    rendered = _dump_compose_yaml(yaml, service_config)
-    prefix = "labels: "
-    if not rendered.startswith(prefix):
-        raise ComposeTagRewriteError("Service labels could not be rendered safely.")
-    replacement = rendered.removeprefix(prefix).removesuffix("\n")
-    return start, _flow_collection_end(source, start), replacement
+    if "\n" not in source[start:end]:
+        if needs_comma and last_significant + 1 == end - 1:
+            prefix = ", "
+        else:
+            if needs_comma:
+                rewrites.append((last_significant + 1, last_significant + 1, ","))
+            prefix = "" if last_significant == start else " "
+        rewrites.append((end - 1, end - 1, f"{prefix}{entry},"))
+        return tuple(rewrites)
+
+    if needs_comma:
+        rewrites.append((last_significant + 1, last_significant + 1, ","))
+
+    closing_line_start = source.rfind("\n", start, end - 1) + 1
+    closing_prefix = source[closing_line_start : end - 1]
+    if closing_prefix.strip():
+        raise ComposeTagRewriteError(
+            "Service labels use unsupported multiline flow-style YAML syntax."
+        )
+    entry_indent = _multiline_flow_label_indent(
+        labels,
+        source,
+        line_offsets,
+        start,
+        closing_prefix,
+    )
+    rewrites.append(
+        (closing_line_start, closing_line_start, f"{entry_indent}{entry},\n")
+    )
+    return tuple(rewrites)
 
 
-def _flow_collection_end(source: str, start: int) -> int:
-    opening = source[start]
-    closing = "]" if opening == "[" else "}"
-    depth = 0
+def _flow_collection_bounds(source: str, start: int) -> tuple[int, int]:
+    pairs = {"[": "]", "{": "}"}
+    stack: list[str] = []
     quote = ""
     escaped = False
+    comment = False
+    last_significant = start
     index = start
     while index < len(source):
         char = source[index]
-        if quote:
+        if comment:
+            if char == "\n":
+                comment = False
+        elif quote:
+            last_significant = index
             if quote == "'" and char == "'" and source[index + 1 : index + 2] == "'":
+                last_significant = index + 1
                 index += 2
                 continue
             if quote == '"' and escaped:
@@ -732,16 +780,55 @@ def _flow_collection_end(source: str, start: int) -> int:
                 escaped = True
             elif char == quote:
                 quote = ""
+        elif char == "#" and (index == start or source[index - 1].isspace()):
+            comment = True
         elif char in "'\"":
             quote = char
-        elif char == opening:
-            depth += 1
-        elif char == closing:
-            depth -= 1
-            if depth == 0:
-                return index + 1
+            last_significant = index
+        elif char in pairs:
+            stack.append(char)
+            last_significant = index
+        elif char in "]}":
+            if not stack or pairs[stack[-1]] != char:
+                raise ComposeTagRewriteError(
+                    "Service labels use a malformed flow collection."
+                )
+            stack.pop()
+            if not stack:
+                return index + 1, last_significant
+            last_significant = index
+        elif not char.isspace():
+            last_significant = index
         index += 1
     raise ComposeTagRewriteError("Service labels use an unterminated flow collection.")
+
+
+def _multiline_flow_label_indent(
+    labels: CommentedMap | CommentedSeq,
+    source: str,
+    line_offsets: Sequence[int],
+    collection_start: int,
+    closing_prefix: str,
+) -> str:
+    locations: list[tuple[int, int]] = []
+    try:
+        if isinstance(labels, CommentedMap):
+            locations = [labels.lc.key(item_key) for item_key in labels]
+        else:
+            locations = [labels.lc.item(index) for index in range(len(labels))]
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise ComposeTagRewriteError(
+            "Service labels source location is unavailable."
+        ) from exc
+    opening_line_no = source.count("\n", 0, collection_start)
+    for line_no, col in locations:
+        if line_no > opening_line_no:
+            _line_start, _line_end, body = _source_line(
+                source, line_offsets, line_no
+            )
+            if not body[:col].strip():
+                return body[:col]
+    return f"{closing_prefix}  "
 
 
 def _append_block_label_rewrite(
@@ -813,6 +900,8 @@ def _yaml_scalar_source_rewrite(
     col: int,
     expected: str,
     replacement: str,
+    *,
+    flow: bool = False,
 ) -> tuple[int, int, str]:
     line_start, _line_end, body = _source_line(source, line_offsets, line_no)
     if col < 0 or col >= len(body):
@@ -827,9 +916,9 @@ def _yaml_scalar_source_rewrite(
             candidate
             for candidate in representations
             if body.startswith(candidate, col)
-            and (
-                candidate.startswith(("'", '"'))
-                or re.fullmatch(r"[ \t]*(?:#.*)?", body[col + len(candidate) :])
+            and _yaml_scalar_boundary_matches(
+                body[col + len(candidate) :],
+                flow=flow,
             )
         ),
         "",
@@ -840,6 +929,12 @@ def _yaml_scalar_source_rewrite(
         )
     rendered = _render_yaml_scalar_like(token, replacement)
     return line_start + col, line_start + col + len(token), rendered
+
+
+def _yaml_scalar_boundary_matches(tail: str, *, flow: bool) -> bool:
+    if flow:
+        return re.match(r"[ \t]*(?:[,}\]]|#)", tail) is not None
+    return re.fullmatch(r"[ \t]*(?:#.*)?", tail) is not None
 
 
 def _render_yaml_scalar_like(token: str, value: str) -> str:
