@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.58.0](https://github.com/magrhino/wudup/compare/v0.57.2...v0.58.0) (2026-08-11)
+
+
+### Features
+
+* **updater:** guard Docker update stream changes ([#593](https://github.com/magrhino/wudup/issues/593)) ([9788b4c](https://github.com/magrhino/wudup/commit/9788b4c4e2597215dd4b0056e599975dadc11ce1))
+
 ## [0.57.2](https://github.com/magrhino/wudup/compare/v0.57.1...v0.57.2) (2026-08-10)
 
 
