@@ -1016,6 +1016,21 @@ describe("usePendingPlanReviewState", () => {
       tagStreamDecisions: [{ line_no: 1, decision: "preserve" }],
       tagStreamLabelRewriteApprovals: [approval],
     });
+
+    await expect(
+      state.chooseTagStream(retainedDecisionIssue!, "switch"),
+    ).resolves.toBe(true);
+    expect(createPlan).toHaveBeenNthCalledWith(
+      5,
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-media-app" }],
+      [{ line_no: 1, decision: "switch" }],
+      [],
+    );
+    expect(state.tagStreamLabelApprovalApproved(labelIssue)).toBe(false);
   });
 
   it("surfaces digest-pin notice only when the plan contains digest-pin rewrites", () => {
