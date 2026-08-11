@@ -278,8 +278,11 @@ function demoTagStreamValues(item: DemoPendingGroupItem) {
       return "";
     }
     const prefix = parts[1].startsWith("v") ? "v" : "";
-    const suffix = (parts[2] ?? "").replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-    return `^${prefix}\\d+\\.\\d+\\.\\d+${suffix}$`;
+    const suffix = (parts[2] ?? "").replace(
+      /[\\^$.*+?()[\]{}|]/g,
+      String.raw`\$&`,
+    );
+    return String.raw`^${prefix}\d+\.\d+\.\d+${suffix}$`;
   };
   return {
     sameStreamTag,

@@ -1499,6 +1499,9 @@ describe("pending helper modules", () => {
     expect(wrapper.text()).toContain("Update stream change");
     expect(wrapper.text()).toContain("Keep distroless");
     expect(wrapper.text()).toContain("Switch to default");
+    expect(wrapper.find("fieldset.stream-choice-group legend").text()).toBe(
+      "Update stream choice for line 9",
+    );
     const keep = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Keep distroless"));

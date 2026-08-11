@@ -248,32 +248,35 @@ function tagStreamRulePreview(issue: PlanIssue): string {
             {{ issueDetailString(issue, "current_stream") }} to
             {{ issueDetailString(issue, "reported_stream") }}. The same-stream tag was verified.
           </p>
-          <div class="stream-choice-grid" role="group" :aria-label="`Update stream choice for line ${issue.line_no}`">
-            <n-button
-              type="primary"
-              :loading="loading"
-              :disabled="tagStreamDecisionSelected(issue, 'preserve')"
-              @click="emit('choose-tag-stream', issue, 'preserve')"
-            >
-              <template v-if="tagStreamDecisionSelected(issue, 'preserve')" #icon>
-                <Check :size="16" aria-hidden="true" />
-              </template>
-              Keep {{ issueDetailString(issue, "current_stream") }} —
-              {{ issueDetailString(issue, "same_stream_tag") }}
-            </n-button>
-            <n-button
-              secondary
-              :loading="loading"
-              :disabled="tagStreamDecisionSelected(issue, 'switch')"
-              @click="emit('choose-tag-stream', issue, 'switch')"
-            >
-              <template v-if="tagStreamDecisionSelected(issue, 'switch')" #icon>
-                <Check :size="16" aria-hidden="true" />
-              </template>
-              Switch to {{ issueDetailString(issue, "reported_stream") }} —
-              {{ issueDetailString(issue, "reported_tag") }}
-            </n-button>
-          </div>
+          <fieldset class="stream-choice-group">
+            <legend class="sr-only">Update stream choice for line {{ issue.line_no }}</legend>
+            <div class="stream-choice-grid">
+              <n-button
+                type="primary"
+                :loading="loading"
+                :disabled="tagStreamDecisionSelected(issue, 'preserve')"
+                @click="emit('choose-tag-stream', issue, 'preserve')"
+              >
+                <template v-if="tagStreamDecisionSelected(issue, 'preserve')" #icon>
+                  <Check :size="16" aria-hidden="true" />
+                </template>
+                Keep {{ issueDetailString(issue, "current_stream") }} —
+                {{ issueDetailString(issue, "same_stream_tag") }}
+              </n-button>
+              <n-button
+                secondary
+                :loading="loading"
+                :disabled="tagStreamDecisionSelected(issue, 'switch')"
+                @click="emit('choose-tag-stream', issue, 'switch')"
+              >
+                <template v-if="tagStreamDecisionSelected(issue, 'switch')" #icon>
+                  <Check :size="16" aria-hidden="true" />
+                </template>
+                Switch to {{ issueDetailString(issue, "reported_stream") }} —
+                {{ issueDetailString(issue, "reported_tag") }}
+              </n-button>
+            </div>
+          </fieldset>
           <div class="stream-rule-preview">
             <span>{{ selectedTagStreamUpdate(issue) ? "Resulting label" : "Recommended label" }}</span>
             <code>wud.tag.include={{ tagStreamRulePreview(issue) }}</code>
@@ -763,6 +766,13 @@ function tagStreamRulePreview(issue: PlanIssue): string {
   margin: 0;
   color: var(--color-text-secondary);
   line-height: 1.5;
+}
+
+.stream-choice-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .stream-choice-grid {
