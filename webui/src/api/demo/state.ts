@@ -735,7 +735,7 @@ function readOnlyPlanStack(
         decision,
         label_key: "wud.tag.include",
         current_label_value: "",
-        proposed_label_value: proposedLabelRegex.replaceAll("$", "$$"),
+        proposed_label_value: proposedLabelRegex.replaceAll("$", "$$$$"),
         proposed_label_regex: proposedLabelRegex,
         approved: true,
         reason: "label-added",

@@ -288,6 +288,7 @@ describe("demo web API", () => {
         tag_stream_updates: [expect.objectContaining({
           selected_tag: "2.34.4-distroless",
           decision: "preserve",
+          proposed_label_value: String.raw`^\d+\.\d+\.\d+-distroless$$`,
           proposed_label_regex: String.raw`^\d+\.\d+\.\d+-distroless$`,
         })],
         lines: [expect.objectContaining({
@@ -301,6 +302,7 @@ describe("demo web API", () => {
         tag_stream_updates: [expect.objectContaining({
           selected_tag: "2.34.4",
           decision: "switch",
+          proposed_label_value: String.raw`^\d+\.\d+\.\d+$$`,
           proposed_label_regex: String.raw`^\d+\.\d+\.\d+$`,
         })],
         lines: [expect.objectContaining({
