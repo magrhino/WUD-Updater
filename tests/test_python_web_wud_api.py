@@ -398,6 +398,7 @@ def test_wud_api_retains_unique_last_good_when_current_digest_is_missing(
 
     assert degraded.retained_update_count == 1
     assert degraded.containers[0].remote_tag == "1.1.0"
+    assert degraded.containers[0].metadata_status == "retained"
     assert degraded.retryable_degraded_container_ids == (
         "docker.local.bazarr",
     )
@@ -903,6 +904,7 @@ def test_wud_api_recovers_cold_start_update_from_matching_pending_file(
     assert recovered.remote_digest == target_digest
     assert recovered.update_kind == "tag"
     assert recovered.error == "registry lookup failed"
+    assert recovered.metadata_status == "recovered"
     assert snapshot.degraded_container_count == 1
     assert snapshot.retained_update_count == 0
     assert snapshot.recovered_update_count == 1

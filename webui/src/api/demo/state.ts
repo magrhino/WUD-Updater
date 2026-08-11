@@ -894,6 +894,7 @@ export class DemoApiState {
       status: "ready",
       requires_pending_reload: false,
       source_hash: pending.source_hash ?? "",
+      source: pending.source,
       wud_api: pending.wud_api,
       items,
     };
@@ -906,6 +907,7 @@ export class DemoApiState {
       status: "stale",
       requires_pending_reload: true,
       source_hash: pending.source_hash ?? "",
+      source: pending.source,
       wud_api: pending.wud_api,
       items: [],
     };

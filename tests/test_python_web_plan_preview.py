@@ -519,6 +519,7 @@ def test_plan_endpoint_returns_apply_preflight_summary(tmp_path: Path) -> None:
         "database-ready",
         "logs-writable",
         "mutations-enabled",
+        "wud-metadata-current",
         "bind-mounts-safe",
         "selected-services-matched",
     ]

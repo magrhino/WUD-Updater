@@ -14,6 +14,11 @@ import type {
   TagStreamDecision,
 } from "../../api/client";
 import {
+  pendingMetadataStatusLabel,
+  pendingMetadataStatusTagType,
+  pendingMetadataStatusTitle,
+} from "../../views/pending/pendingDisplay";
+import {
   planLineDigestPinLabel,
   planLineDigestUnpinLabel,
   planLineServiceLabel,
@@ -74,6 +79,8 @@ const props = defineProps<{
   planDigestUnpinUpdates: PlanDigestUnpinUpdateView[];
   planLines: PlanLineView[];
   planTagStreamUpdates: { stack: string; update: PlanTagStreamUpdate }[];
+  planMetadataWarning: string;
+  planStatusLabel: string;
   preflightDigestPinNotice: string;
   preflightDigestUnpinNotice: string;
   preflightServiceImpactLabel: string;
@@ -123,7 +130,7 @@ function tagStreamRulePreview(issue: PlanIssue): string {
     :title="preflightTitle"
     :summary="preflightSummary"
     :impact-label="preflightServiceImpactLabel"
-    :status-label="plan.status"
+    :status-label="planStatusLabel"
     :status-type="planAlertType"
     @close="emit('close')"
   >
@@ -132,7 +139,7 @@ function tagStreamRulePreview(issue: PlanIssue): string {
         { label: 'Targets', value: plan.summary.target_count },
         { label: 'Matched', value: plan.summary.matched_target_count },
         { label: 'Stacks', value: plan.summary.stack_count },
-        { label: 'Issues', value: plan.summary.issue_count },
+        { label: 'Plan issues', value: plan.summary.issue_count },
       ]"
     />
 
@@ -344,9 +351,16 @@ function tagStreamRulePreview(issue: PlanIssue): string {
         </div>
       </section>
       <n-alert
-        v-if="preflightTagRewriteNotice"
+        v-if="planMetadataWarning"
         class="preflight-block"
         type="warning"
+      >
+        {{ planMetadataWarning }}
+      </n-alert>
+      <n-alert
+        v-if="preflightTagRewriteNotice"
+        class="preflight-block"
+        type="info"
       >
         {{ preflightTagRewriteNotice }}
       </n-alert>
@@ -519,7 +533,16 @@ function tagStreamRulePreview(issue: PlanIssue): string {
             class="list-row plan-line-row"
           >
             <span>#{{ line.line_no }}</span>
-            <strong>{{ planLineServiceLabel(plan.summary.stack_count, stack, line) }}</strong>
+            <strong class="plan-line-heading">
+              <span>{{ planLineServiceLabel(plan.summary.stack_count, stack, line) }}</span>
+              <n-tag
+                size="small"
+                :type="pendingMetadataStatusTagType(line)"
+                :title="pendingMetadataStatusTitle(line)"
+              >
+                {{ pendingMetadataStatusLabel(line) }} metadata
+              </n-tag>
+            </strong>
             <em>
               <span v-if="planLineTagRewriteLabel(line)" class="tag-rewrite-detail">
                 <n-tag size="small" type="warning">Tag rewrite</n-tag>
@@ -579,7 +602,16 @@ function tagStreamRulePreview(issue: PlanIssue): string {
               class="list-row plan-line-row"
             >
               <span>#{{ line.line_no }}</span>
-              <strong>{{ planLineServiceLabel(plan.summary.stack_count, stack, line) }}</strong>
+              <strong class="plan-line-heading">
+                <span>{{ planLineServiceLabel(plan.summary.stack_count, stack, line) }}</span>
+                <n-tag
+                  size="small"
+                  :type="pendingMetadataStatusTagType(line)"
+                  :title="pendingMetadataStatusTitle(line)"
+                >
+                  {{ pendingMetadataStatusLabel(line) }} metadata
+                </n-tag>
+              </strong>
               <em>
                 <span v-if="planLineTagRewriteLabel(line)" class="tag-rewrite-detail">
                   <n-tag size="small" type="warning">Tag rewrite</n-tag>

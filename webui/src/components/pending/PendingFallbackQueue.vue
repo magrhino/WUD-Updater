@@ -14,7 +14,13 @@ import {
   digestProvenanceDisplay,
   displayDigest,
 } from "../../utils/digestProvenance";
-import { rowKey, type PendingTagInputProps } from "../../views/pending/pendingDisplay";
+import {
+  pendingMetadataStatusLabel,
+  pendingMetadataStatusTagType,
+  pendingMetadataStatusTitle,
+  rowKey,
+  type PendingTagInputProps,
+} from "../../views/pending/pendingDisplay";
 import type { SafetyCue } from "../../views/pending/safetyCues";
 import PendingEmptyQueueState from "./PendingEmptyQueueState.vue";
 import PendingReleaseNotes from "./PendingReleaseNotes.vue";
@@ -127,6 +133,18 @@ const emit = defineEmits<{
               {{ displayDigest(item.digest) }}
             </code>
             <span v-else>None</span>
+          </dd>
+        </div>
+        <div>
+          <dt>Metadata</dt>
+          <dd>
+            <n-tag
+              size="small"
+              :type="pendingMetadataStatusTagType(item)"
+              :title="pendingMetadataStatusTitle(item)"
+            >
+              {{ pendingMetadataStatusLabel(item) }}
+            </n-tag>
           </dd>
         </div>
         <div>

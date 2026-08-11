@@ -417,6 +417,7 @@ def test_apply_endpoint_rejects_degraded_api_last_good_source(
     assert degraded.status_code == 200
     assert degraded.json()["count"] == 1
     assert degraded.json()["source"]["degraded"] is True
+    assert degraded.json()["items"][0]["metadata_status"] == "retained"
 
     headers = _csrf_headers(client)
     plan_response = client.post(
@@ -431,6 +432,22 @@ def test_apply_endpoint_rejects_degraded_api_last_good_source(
     assert plan["source"]["active"] == "api"
     assert plan["source"]["degraded"] is True
     assert plan["can_apply"] is False
+    metadata_check = next(
+        check
+        for check in plan["apply_preflight"]["checks"]
+        if check["code"] == "wud-metadata-current"
+    )
+    assert metadata_check == {
+        "status": "FAIL",
+        "code": "wud-metadata-current",
+        "label": "Selected update metadata",
+        "detail": (
+            "1 selected update is blocked because its metadata is stale (retained). "
+            "Check your WUD configuration, then run a successful WUD scan."
+        ),
+        "source_check_codes": ["wud-api-observations"],
+    }
+    assert plan["targets"][0]["metadata_status"] == "retained"
 
     apply_response = client.post(
         "/api/v1/jobs",
@@ -508,6 +525,368 @@ def test_plan_allows_fresh_update_with_unrelated_unsupported_registry_row(
     calls = _fake_docker_calls(fake_root)
     assert " pull " not in calls
     assert " up -d " not in calls
+
+
+def test_apply_allows_fresh_update_with_unrelated_degraded_observation_in_auto_mode(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:new",
+            update_kind="digest",
+        ),
+        _wud_api_container(
+            name="broken",
+            image="repo/broken:latest",
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:broken-new",
+            update_kind="digest",
+        ),
+    ]
+    _install_wud_api(monkeypatch, containers=containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "auto",
+            "WUD_API_BASE_URL": "https://wud.apply-api-mixed.test:3000",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    headers = _csrf_headers(client)
+    pending = client.get("/api/v1/pending").json()
+    assert pending["source"]["degraded"] is False
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    containers[1]["updateAvailable"] = False
+    containers[1]["result"] = None
+    containers[1]["error"] = {"message": "registry lookup failed"}
+
+    metadata_check = next(
+        check
+        for check in plan["apply_preflight"]["checks"]
+        if check["code"] == "wud-metadata-current"
+    )
+    assert plan["can_apply"] is True
+    assert plan["targets"][0]["metadata_status"] == "fresh"
+    assert metadata_check["status"] == "PASS"
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert apply_response.status_code == 202
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+    assert job["status"] == "success"
+    refreshed = client.get("/api/v1/pending").json()
+    assert refreshed["source"]["active"] == "api"
+    assert refreshed["source"]["degraded"] is True
+    calls = _fake_docker_calls(fake_root)
+    assert "compose -f docker-compose.yml pull app" in calls
+    assert "broken" not in calls
+
+
+def test_plan_blocks_fresh_update_with_unresolved_matching_container(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:new",
+            update_kind="digest",
+        ),
+        _wud_api_container(
+            name="app-shadow",
+            image="repo/app",
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:new",
+            update_kind="digest",
+            update_available=False,
+        ),
+    ]
+    containers[1]["result"] = None
+    containers[1]["error"] = {"message": "registry lookup failed"}
+    _install_wud_api(monkeypatch, containers=containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "auto",
+            "WUD_API_BASE_URL": "https://wud.apply-api-related.test:3000",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("app-shadow", "repo/app:latest", "cid-app-shadow"),
+        ],
+    )
+
+    pending = client.get("/api/v1/pending").json()
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    ).json()
+
+    assert pending["source"]["degraded"] is True
+    assert pending["items"][0]["metadata_status"] == "retained"
+    assert plan["can_apply"] is False
+    assert plan["targets"][0]["metadata_status"] == "retained"
+    metadata_check = next(
+        check
+        for check in plan["apply_preflight"]["checks"]
+        if check["code"] == "wud-metadata-current"
+    )
+    assert metadata_check["status"] == "FAIL"
+    assert "1 selected update is blocked" in metadata_check["detail"]
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
+def test_shared_apply_scope_uses_least_fresh_container_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:app-new",
+            update_kind="digest",
+        ),
+        _wud_api_container(
+            name="app-shadow",
+            image="repo/app",
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:shadow-new",
+            update_kind="digest",
+        ),
+    ]
+    _install_wud_api(monkeypatch, containers=containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.apply-api-shared-scope.test:3000",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("app-shadow", "repo/app:latest", "cid-app-shadow"),
+        ],
+    )
+
+    initial = client.get("/api/v1/pending").json()
+    containers[1]["updateAvailable"] = False
+    containers[1]["result"] = None
+    containers[1]["error"] = {"message": "registry lookup failed"}
+    degraded = client.get("/api/v1/pending").json()
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    ).json()
+
+    assert [item["metadata_status"] for item in initial["items"]] == [
+        "fresh",
+        "fresh",
+    ]
+    assert [item["metadata_status"] for item in degraded["items"]] == [
+        "retained",
+        "retained",
+    ]
+    assert all(
+        item["source_id"] == "docker.local.app,docker.local.app-shadow"
+        for item in degraded["items"]
+    )
+    assert plan["can_apply"] is False
+    assert plan["targets"][0]["metadata_status"] == "retained"
+
+
+def test_apply_rejects_plan_when_selected_wud_container_identity_changes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:new",
+            update_kind="digest",
+        )
+    ]
+    _install_wud_api(monkeypatch, containers=containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.apply-api-identity.test:3000",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    containers[0]["id"] = "docker.local.replaced-app"
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert plan["can_apply"] is True
+    assert apply_response.status_code == 409
+    assert apply_response.json()["detail"] == "plan is stale"
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
+def test_plan_blocks_mixed_fresh_and_retained_selection(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:app-new",
+            update_kind="digest",
+        ),
+        _wud_api_container(
+            name="worker",
+            image="repo/worker:latest",
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:worker-new",
+            update_kind="digest",
+        ),
+    ]
+    _install_wud_api(monkeypatch, containers=containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.apply-api-retained-mixed.test:3000",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("worker", "repo/worker:latest", "cid-worker"),
+        ],
+    )
+
+    assert client.get("/api/v1/pending").json()["count"] == 2
+    containers[1]["updateAvailable"] = False
+    containers[1]["result"] = None
+    containers[1]["error"] = {"message": "registry lookup failed"}
+    pending = client.get("/api/v1/pending").json()
+    assert [item["metadata_status"] for item in pending["items"]] == [
+        "fresh",
+        "retained",
+    ]
+
+    headers = _csrf_headers(client)
+    mixed = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1, 2]},
+        headers=headers,
+    ).json()
+    fresh_only = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    assert mixed["can_apply"] is False
+    assert [target["metadata_status"] for target in mixed["targets"]] == [
+        "fresh",
+        "retained",
+    ]
+    mixed_metadata_check = next(
+        check
+        for check in mixed["apply_preflight"]["checks"]
+        if check["code"] == "wud-metadata-current"
+    )
+    assert mixed_metadata_check["status"] == "FAIL"
+    assert "1 selected update is blocked" in mixed_metadata_check["detail"]
+
+    assert fresh_only["can_apply"] is True
+    fresh_metadata_check = next(
+        check
+        for check in fresh_only["apply_preflight"]["checks"]
+        if check["code"] == "wud-metadata-current"
+    )
+    assert fresh_metadata_check["status"] == "WARN"
+    assert "Other WUD observations" in fresh_metadata_check["detail"]
 
 
 def test_apply_endpoint_rejects_stale_api_pending_source_without_editing_file(

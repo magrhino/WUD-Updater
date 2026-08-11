@@ -86,14 +86,25 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
     contextLabel: string;
     selections: PlanSelectionRequest[];
   }): Promise<void> {
-    const selections = uniqueSelections(input.selections);
+    const requestedSelections = uniqueSelections(input.selections);
+    const metadataStatusByLine = new Map(
+      (updates.pending?.items ?? []).map((item) => [
+        item.line_no,
+        item.metadata_status ?? "fresh",
+      ]),
+    );
+    const selections = requestedSelections.filter(
+      (selection) =>
+        (metadataStatusByLine.get(selection.line_no) ?? "fresh") === "fresh",
+    );
+    const blockedMetadataCount = requestedSelections.length - selections.length;
     const lineNumbers = uniqueSorted(
       selections.map((selection) => selection.line_no),
     );
     if (lineNumbers.length === 0 || updates.loading) {
       return;
     }
-    options.selectedSelections.value = selections;
+    options.selectedSelections.value = requestedSelections;
     const validationError = options.tagOverrideErrorForLines(lineNumbers);
     if (validationError) {
       clearPreflight();
@@ -110,6 +121,7 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
       digestPinLabelRewriteApprovals: [],
       tagStreamDecisions: [],
       tagStreamLabelRewriteApprovals: [],
+      blockedMetadataCount,
     };
     options.setUpdateIntent(intent);
     try {

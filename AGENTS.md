@@ -44,6 +44,7 @@ Repo-local routing/context only for WUDup. Global instructions control default b
 - WUD output is a line-oriented file of image/container targets; blank and comment lines are ignored, and optional `sha256=` digest suffixes must stay compatible with the Python updater path.
 - Mutating Docker operations require explicit confirmation or `--yes`; `--dry-run` must not pull, restart, clean the WUD file, or otherwise mutate host state.
 - Secrets such as Discord webhooks and GitHub tokens must come from the environment or host-local config and must not be logged in full.
+- Write error messages and error logs in plain language that a WUDup operator can understand without knowing this repository's internals. State what failed, why when known, and what the operator can do next; put implementation details after that human-readable summary.
 - Container-facing scripts assume `/wud` for mounted scripts and `/out` for WUD output; host paths belong in install/config, not hard-coded into container scripts.
 
 ## Scoped AGENTS

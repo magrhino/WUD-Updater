@@ -16,6 +16,38 @@ export function displayValue(value: string): string {
   return value || "None";
 }
 
+export function pendingMetadataStatus(
+  item: Pick<PendingItem, "metadata_status">,
+): "fresh" | "retained" | "recovered" {
+  return item.metadata_status ?? "fresh";
+}
+
+export function pendingMetadataStatusLabel(
+  item: Pick<PendingItem, "metadata_status">,
+): string {
+  const status = pendingMetadataStatus(item);
+  return status[0].toUpperCase() + status.slice(1);
+}
+
+export function pendingMetadataStatusTitle(
+  item: Pick<PendingItem, "metadata_status">,
+): string {
+  switch (pendingMetadataStatus(item)) {
+    case "retained":
+      return "Last-known update metadata kept because the current WUD check failed.";
+    case "recovered":
+      return "Update metadata recovered from the pending file because the current WUD check failed.";
+    default:
+      return "Verified by the latest WUD scan.";
+  }
+}
+
+export function pendingMetadataStatusTagType(
+  item: Pick<PendingItem, "metadata_status">,
+): SafetyCue["type"] {
+  return pendingMetadataStatus(item) === "fresh" ? "success" : "warning";
+}
+
 export function previewImageLabel(
   value: string,
   displayDigest: (digest: string) => string,

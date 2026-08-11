@@ -62,6 +62,7 @@ from .web_models import (
     PendingMetadataRefreshItem,
     PendingMetadataRefreshRequest,
     PendingMetadataRefreshResponse,
+    PendingMetadataStatus,
     PendingRemovalPlanLine,
     PendingRemovalPlanRequest,
     PendingRemovalPlanResponse,
@@ -372,6 +373,7 @@ def pending_response_with_snapshot(
     wud_metadata = dict(source.metadata_by_line or {})
     wud_metadata_by_line = web_wud_api.metadata_response_by_line(wud_metadata)
     source_ids_by_line = dict(source.source_ids_by_line or {})
+    metadata_status_by_line = dict(source.metadata_status_by_line or {})
     grouping = (
         _pending_grouping_response(
             settings,
@@ -379,6 +381,7 @@ def pending_response_with_snapshot(
             wud_metadata_by_line=wud_metadata_by_line,
             source=source.active,
             source_ids_by_line=source_ids_by_line,
+            metadata_status_by_line=metadata_status_by_line,
             completed_update_selections=completed_update_selections,
         )
         if include_grouping
@@ -423,6 +426,7 @@ def pending_response_with_snapshot(
                 image_tag(target.first),
                 target.desired_tag,
             ),
+            metadata_status=metadata_status_by_line.get(target.line_no, "fresh"),
         )
         for target in parsed.targets
     ]
@@ -468,6 +472,7 @@ def pending_metadata_response(
 
     targets_by_line = {target.line_no: target for target in source.parsed.targets}
     source_ids_by_line = dict(source.source_ids_by_line or {})
+    metadata_status_by_line = dict(source.metadata_status_by_line or {})
     metadata_by_line = web_wud_api.metadata_response_by_line(
         dict(source.metadata_by_line or {})
     )
@@ -486,6 +491,7 @@ def pending_metadata_response(
                 raw=target.raw,
                 source_id=source_ids_by_line.get(line.line_no, ""),
                 wud_metadata=metadata_by_line.get(line.line_no),
+                metadata_status=metadata_status_by_line.get(line.line_no, "fresh"),
             )
         )
 
@@ -493,6 +499,7 @@ def pending_metadata_response(
         status="ready",
         requires_pending_reload=False,
         source_hash=source.source_hash,
+        source=source.response_source(),
         wud_api=_wud_api_status(source.wud_snapshot),
         items=items,
     )
@@ -505,6 +512,7 @@ def _stale_pending_metadata_response(
         status="stale",
         requires_pending_reload=True,
         source_hash=source.source_hash,
+        source=source.response_source(),
         wud_api=_wud_api_status(source.wud_snapshot),
         items=[],
     )
@@ -649,6 +657,7 @@ def _pending_grouping_response(
     wud_metadata_by_line: dict[int, Any],
     source: str,
     source_ids_by_line: dict[int, str],
+    metadata_status_by_line: dict[int, PendingMetadataStatus],
     completed_update_selections: Sequence[CompletedUpdateSelection],
 ) -> PendingGrouping:
     grouping = resolve_pending_groups(
@@ -678,6 +687,7 @@ def _pending_grouping_response(
                         wud_metadata_by_line,
                         source=source,
                         source_ids_by_line=source_ids_by_line,
+                        metadata_status_by_line=metadata_status_by_line,
                     )
                     for item in group.items
                 ],
@@ -690,6 +700,7 @@ def _pending_grouping_response(
                 wud_metadata_by_line,
                 source=source,
                 source_ids_by_line=source_ids_by_line,
+                metadata_status_by_line=metadata_status_by_line,
             )
             for item in grouping.unmatched
         ],
@@ -703,6 +714,7 @@ def _pending_grouped_item(
     *,
     source: str,
     source_ids_by_line: dict[int, str],
+    metadata_status_by_line: dict[int, PendingMetadataStatus],
 ) -> PendingGroupedItem:
     return PendingGroupedItem(
         line_no=item.line_no,
@@ -746,6 +758,7 @@ def _pending_grouped_item(
                 reported_stream=item.tag_stream.reported_stream,
             )
         ),
+        metadata_status=metadata_status_by_line.get(item.line_no, "fresh"),
     )
 
 
