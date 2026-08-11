@@ -10,8 +10,8 @@ updates:
       timezone: "America/Chicago"
     open-pull-requests-limit: 5
     commit-message:
-      prefix: "chore"
-      prefix-development: "chore"
+      prefix: "build"
+      prefix-development: "build"
       include: "scope"
     cooldown:
       default-days: 7
@@ -53,8 +53,8 @@ updates:
     open-pull-requests-limit: 5
     versioning-strategy: increase
     commit-message:
-      prefix: "chore"
-      prefix-development: "chore"
+      prefix: "build"
+      prefix-development: "build"
       include: "scope"
     cooldown:
       default-days: 7
@@ -94,7 +94,7 @@ updates:
       timezone: "America/Chicago"
     open-pull-requests-limit: 5
     commit-message:
-      prefix: "ci"
+      prefix: "build"
       include: "scope"
     cooldown:
       default-days: 7
