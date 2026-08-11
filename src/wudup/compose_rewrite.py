@@ -44,6 +44,9 @@ RESOLVED_TAG_MARKER_PREFIXES = (
 )
 WUD_TAG_INCLUDE_LABEL = "wud.tag.include"
 _JS_REGEX_SPECIAL_RE = re.compile(r"([\\^$.*+?()[\]{}|])")
+_UNSUPPORTED_NON_STRING_LABEL_ENTRY = (
+    "Service labels use unsupported non-string list entries."
+)
 
 
 class _CommentTokenList:
@@ -591,7 +594,10 @@ def _service_label_source_rewrite(
                     flow=flow_start is not None,
                 ),
             )
-        entry = f"{key}: {value}"
+        entry = (
+            f"{key}: "
+            f"{_render_yaml_scalar_like('', value, flow=flow_start is not None)}"
+        )
         if flow_start is not None:
             return _flow_label_addition_rewrites(
                 labels,
@@ -614,9 +620,7 @@ def _service_label_source_rewrite(
         replacement = f"{key}={value}"
         for index, item in enumerate(labels):
             if not isinstance(item, str):
-                raise ComposeTagRewriteError(
-                    "Service labels use unsupported non-string list entries."
-                )
+                raise ComposeTagRewriteError(_UNSUPPORTED_NON_STRING_LABEL_ENTRY)
             label_key, sep, _label_value = item.partition("=")
             if sep and label_key == key:
                 try:
@@ -636,10 +640,15 @@ def _service_label_source_rewrite(
                         flow=flow_start is not None,
                     ),
                 )
+        inserted_replacement = _render_yaml_scalar_like(
+            "",
+            replacement,
+            flow=flow_start is not None,
+        )
         if flow_start is not None:
             return _flow_label_addition_rewrites(
                 labels,
-                replacement,
+                inserted_replacement,
                 source,
                 line_offsets,
                 flow_start,
@@ -648,7 +657,7 @@ def _service_label_source_rewrite(
             _append_block_label_rewrite(
                 service_config,
                 labels,
-                f"- {replacement}",
+                f"- {inserted_replacement}",
                 source,
                 line_offsets,
             ),
@@ -676,10 +685,14 @@ def _new_service_labels_rewrite(
     )
     insertion = line_end + 1 if line_end < len(source) else line_end
     indent = " " * key_col
+    label = _render_yaml_scalar_like("", f"{key}={value}")
     replacement = _source_lines_insertion(
         source,
         insertion,
-        (f"{indent}labels:", f"{indent}  - {key}={value}"),
+        (
+            f"{indent}labels:",
+            f"{indent}  - {label}",
+        ),
     )
     return insertion, insertion, replacement
 
@@ -708,7 +721,8 @@ def _empty_service_labels_rewrite(
             "Service labels use unsupported empty YAML syntax."
         )
     comment = match.group(2) or ""
-    replacement = f"{comment}\n{' ' * (key_col + 2)}- {key}={value}"
+    label = _render_yaml_scalar_like("", f"{key}={value}")
+    replacement = f"{comment}\n{' ' * (key_col + 2)}- {label}"
     return line_start + len(match.group(1)), line_start + len(body), replacement
 
 
@@ -927,7 +941,7 @@ def _yaml_scalar_source_rewrite(
         raise ComposeTagRewriteError(
             "Label uses unsupported YAML syntax for automatic rewrite."
         )
-    rendered = _render_yaml_scalar_like(token, replacement)
+    rendered = _render_yaml_scalar_like(token, replacement, flow=flow)
     return line_start + col, line_start + col + len(token), rendered
 
 
@@ -937,7 +951,7 @@ def _yaml_scalar_boundary_matches(tail: str, *, flow: bool) -> bool:
     return re.fullmatch(r"[ \t]*(?:#.*)?", tail) is not None
 
 
-def _render_yaml_scalar_like(token: str, value: str) -> str:
+def _render_yaml_scalar_like(token: str, value: str, *, flow: bool = False) -> str:
     if "\n" in value or "\r" in value:
         raise ComposeTagRewriteError("Label value cannot contain a line break.")
     if token.startswith("'"):
@@ -945,7 +959,10 @@ def _render_yaml_scalar_like(token: str, value: str) -> str:
     if token.startswith('"'):
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
-    if re.search(r"(?:^[-?:,\[\]{}#&*!|>'\"%@`]|[ \t]#|:[ \t])", value):
+    unsafe_initial = bool(value) and value[0] in "-?:,[]{}#&*!|>'\"%@`"
+    unsafe_content = re.search(r"(?:[ \t]#|:[ \t])", value) is not None
+    unsafe_flow = flow and re.search(r"[\[\]{},]", value) is not None
+    if unsafe_initial or unsafe_content or unsafe_flow:
         return f"'{value.replace(chr(39), chr(39) * 2)}'"
     return value
 
@@ -1725,9 +1742,7 @@ def _get_service_label_value(service_config: CommentedMap, key: str) -> str:
     if isinstance(labels, CommentedSeq):
         for item in labels:
             if not isinstance(item, str):
-                raise ComposeTagRewriteError(
-                    "Service labels use unsupported non-string list entries."
-                )
+                raise ComposeTagRewriteError(_UNSUPPORTED_NON_STRING_LABEL_ENTRY)
             label_key, sep, label_value = item.partition("=")
             if sep and label_key == key:
                 return label_value
@@ -2154,9 +2169,7 @@ def _set_service_label_value(
         replacement = f"{key}={value}"
         for index, item in enumerate(labels):
             if not isinstance(item, str):
-                raise ComposeTagRewriteError(
-                    "Service labels use unsupported non-string list entries."
-                )
+                raise ComposeTagRewriteError(_UNSUPPORTED_NON_STRING_LABEL_ENTRY)
             label_key, sep, _label_value = item.partition("=")
             if sep and label_key == key:
                 labels[index] = replacement

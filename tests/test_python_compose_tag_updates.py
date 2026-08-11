@@ -217,6 +217,45 @@ class ComposeTagUpdateTests(ComposeRewriteTestCase):
                     .replace(original_labels, expected_labels),
                 )
 
+    def test_stream_rewrite_quotes_inserted_label_scalars(self) -> None:
+        proposed_label_value = r"^release, candidate #1[blue]$$"
+        cases = (
+            ("", False),
+            ("    labels: null\n", False),
+            ("    labels:\n      - keep=value\n", False),
+            ("    labels:\n      keep: value\n", True),
+            ('    labels: ["keep=value"]\n', False),
+            ('    labels: {"keep": "value"}\n', True),
+        )
+        for original_labels, mapping_labels in cases:
+            with self.subTest(labels=original_labels or "missing"):
+                original = (
+                    "services:\n"
+                    "  app:\n"
+                    "    image: repo/app:1.0-distroless\n"
+                    f"{original_labels}"
+                    "    command: run\n"
+                )
+                compose_file = self.write_compose(original)
+
+                self._apply_preserved_stream(
+                    compose_file,
+                    proposed_label_value=proposed_label_value,
+                )
+
+                parsed = YAML(typ="safe").load(
+                    compose_file.read_text(encoding="utf-8")
+                )
+                labels = parsed["services"]["app"]["labels"]
+                if mapping_labels:
+                    self.assertEqual(
+                        labels["wud.tag.include"], proposed_label_value
+                    )
+                else:
+                    self.assertIn(
+                        f"wud.tag.include={proposed_label_value}", labels
+                    )
+
     def test_stream_rewrite_preserves_multiline_flow_label_comments(self) -> None:
         cases = (
             (
@@ -257,7 +296,12 @@ class ComposeTagUpdateTests(ComposeRewriteTestCase):
                     .replace(original_labels, expected_labels),
                 )
 
-    def _apply_preserved_stream(self, compose_file: Path) -> None:
+    def _apply_preserved_stream(
+        self,
+        compose_file: Path,
+        *,
+        proposed_label_value: str = r"^\d+-distroless$$",
+    ) -> None:
         apply_compose_tag_updates(
             compose_file,
             (
@@ -281,8 +325,8 @@ class ComposeTagUpdateTests(ComposeRewriteTestCase):
                     decision="preserve",
                     label_key="wud.tag.include",
                     current_label_value="",
-                    proposed_label_value=r"^\d+-distroless$$",
-                    proposed_label_regex=r"^\d+-distroless$",
+                    proposed_label_value=proposed_label_value,
+                    proposed_label_regex=proposed_label_value.removesuffix("$"),
                     approved=True,
                     reason="label-added",
                 ),
