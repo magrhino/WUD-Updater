@@ -11,6 +11,7 @@ from .plan_models import (
     DryRunPlanAction,
     DryRunPlanDigestPinUpdate,
     DryRunPlanDigestUnpinUpdate,
+    DryRunPlanTagStreamUpdate,
     DryRunPlanTagUpdate,
 )
 from .updater_models import UpdateScope
@@ -22,6 +23,7 @@ def render_plan_actions(
     stack: ComposeStack,
     scope: UpdateScope,
     tag_updates: Sequence[DryRunPlanTagUpdate],
+    tag_stream_updates: Sequence[DryRunPlanTagStreamUpdate],
     digest_pin_updates: Sequence[DryRunPlanDigestPinUpdate],
     digest_unpin_updates: Sequence[DryRunPlanDigestUnpinUpdate],
 ) -> tuple[DryRunPlanAction, ...]:
@@ -33,6 +35,18 @@ def render_plan_actions(
                 description=(
                     f"Rewrite {update.old_image} to {update.new_image} "
                     f"for {', '.join(update.services)}"
+                ),
+                cwd=str(stack.directory),
+            )
+        )
+    for update in tag_stream_updates:
+        actions.append(
+            DryRunPlanAction(
+                kind="compose-tag-stream",
+                description=(
+                    f"Set {update.label_key} from "
+                    f"{update.current_label_value or '<missing>'} to "
+                    f"{update.proposed_label_regex} for {update.service}"
                 ),
                 cwd=str(stack.directory),
             )

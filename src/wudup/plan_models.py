@@ -10,7 +10,11 @@ from .digest_provenance import DigestTagProvenance
 from .updater_models import CompletedUpdateSelection, UpdateSelection
 
 if TYPE_CHECKING:
-    from .web_models import PendingSourceActive, PendingSourceMode
+    from .web_models import (
+        PendingMetadataStatus,
+        PendingSourceActive,
+        PendingSourceMode,
+    )
 
 
 class PlanInputError(ValueError):
@@ -81,6 +85,22 @@ class DryRunPlanTagUpdate:
 
 
 @dataclass(frozen=True)
+class DryRunPlanTagStreamUpdate:
+    line_no: int
+    service: str
+    current_tag: str
+    reported_tag: str
+    selected_tag: str
+    decision: str
+    label_key: str
+    current_label_value: str
+    proposed_label_value: str
+    proposed_label_regex: str
+    approved: bool
+    reason: str
+
+
+@dataclass(frozen=True)
 class DryRunPlanDigestPinUpdate:
     source_image: str
     resolved_tag: str
@@ -143,6 +163,7 @@ class DryRunPlanStack:
     force_recreate: bool
     up_no_deps: bool
     tag_updates: tuple[DryRunPlanTagUpdate, ...] = ()
+    tag_stream_updates: tuple[DryRunPlanTagStreamUpdate, ...] = ()
     digest_pin_updates: tuple[DryRunPlanDigestPinUpdate, ...] = ()
     digest_unpin_updates: tuple[DryRunPlanDigestUnpinUpdate, ...] = ()
     actions: tuple[DryRunPlanAction, ...] = ()
@@ -196,6 +217,10 @@ class DryRunPlanSource:
     fallback_reason: str = ""
     detail: str = ""
     source_hash: str = ""
+    source_ids_by_line: Mapping[int, str] = field(default_factory=dict)
+    metadata_status_by_line: Mapping[int, PendingMetadataStatus] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True)
@@ -218,6 +243,20 @@ class DryRunPlan:
     skipped: tuple[DryRunPlanSkipped, ...] = ()
     issues: tuple[DryRunPlanIssue, ...] = ()
     cleanup: DryRunPlanCleanup = field(default_factory=DryRunPlanCleanup)
+
+    def metadata_status_for_line(self, line_no: int) -> PendingMetadataStatus:
+        fallback: PendingMetadataStatus = (
+            "fresh"
+            if self.source.active == "file" and not self.source.degraded
+            else "recovered"
+        )
+        return self.source.metadata_status_by_line.get(line_no, fallback)
+
+    def selected_metadata_statuses(self) -> tuple[PendingMetadataStatus, ...]:
+        return tuple(
+            self.metadata_status_for_line(line_no)
+            for line_no in self.selected_line_numbers
+        )
 
 
 @dataclass(frozen=True)
@@ -243,6 +282,13 @@ class PendingGroupingItem:
     platform_variant: str = ""
     diagnostic: UnmatchedDiagnostic | None = None
     digest_provenance: DigestTagProvenance | None = None
+    tag_stream: "PendingTagStream | None" = None
+
+
+@dataclass(frozen=True)
+class PendingTagStream:
+    current_stream: str
+    reported_stream: str
 
 
 @dataclass(frozen=True)

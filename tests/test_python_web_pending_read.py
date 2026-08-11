@@ -908,6 +908,7 @@ def test_pending_metadata_endpoint_refreshes_api_source(
     body = response.json()
     assert body["status"] == "ready"
     assert body["requires_pending_reload"] is False
+    assert body["source"] == pending_body["source"]
     assert body["items"][0]["source_id"] == "docker.local.app"
     assert body["items"][0]["wud_metadata"]["remote_tag"] == "2.0"
 

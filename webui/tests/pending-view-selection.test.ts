@@ -75,6 +75,85 @@ describe("pending view selection actions", () => {
     setActivePinia(createPinia());
   });
 
+  it("offers only the verified subset of a mixed metadata selection", async () => {
+    const fresh = pendingItem({
+      line_no: 1,
+      metadata_status: "fresh",
+    });
+    const retained = pendingItem({
+      line_no: 2,
+      raw: "repo/worker:1.0",
+      image: "repo/worker:1.0",
+      key: "repo/worker",
+      repo: "repo/worker",
+      source_id: "docker.local.worker",
+      metadata_status: "retained",
+    });
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = pendingResponse([fresh, retained]);
+    mockPendingLifecycle(settings, updates);
+    const createPlan = vi.spyOn(updates, "createPlan").mockImplementation(
+      async (_lines, _allow, _tags, _approvals, selections = []) => {
+        updates.plan = planResponse({
+          selected_line_numbers: [1],
+          selected_selections: selections,
+        });
+      },
+    );
+    const wrapper = mountPendingView(pinia);
+
+    expect(wrapper.text()).toContain("Fresh metadata");
+    expect(wrapper.text()).toContain("Retained metadata");
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Select all stack updates"))
+      ?.trigger("click");
+    await wrapper
+      .find(`input[aria-label="New tag for ${retained.image}"]`)
+      .setValue("bad tag");
+
+    expect(wrapper.text()).toContain(
+      "2 updates selected in media · 1 verified update · 1 blocked update",
+    );
+    expect(wrapper.text()).toContain(
+      "1 selected update is blocked because its metadata is stale. Check your WUD configuration.",
+    );
+    const preview = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview 1 verified update"));
+    expect(
+      wrapper
+        .findAll("button")
+        .filter((button) => button.text().includes("Preview 1 verified update")),
+    ).toHaveLength(2);
+    expect(
+      wrapper
+        .findAll("button")
+        .filter((button) => button.text().includes("Preview 1 verified update"))
+        .every((button) => button.attributes("disabled") === undefined),
+    ).toBe(true);
+    await preview?.trigger("click");
+    await flushPromises();
+
+    expect(createPlan).toHaveBeenCalledWith(
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-1" }],
+    );
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.text()).toContain(
+      "It will stay pending and will not be applied.",
+    );
+    expect(
+      dialog
+        .findAll("button")
+        .some((button) => button.text().includes("Apply 1 verified update")),
+    ).toBe(true);
+  });
+
   it("shows unmatched cleanup preview disabled in read-only mode", async () => {
     const item = unmatchedPendingItem();
     const { pinia, settings, updates } = setupStores(false);
@@ -208,6 +287,7 @@ describe("pending view selection actions", () => {
       expect(loadStatus).toHaveBeenCalledTimes(1);
       expect(loadStatus).toHaveBeenCalledWith({ silent: true });
       expect(refreshPendingMetadata).toHaveBeenCalledTimes(1);
+      expect(refreshPendingMetadata).toHaveBeenCalledWith([1]);
       expect(lifecycle.loadPending).not.toHaveBeenCalled();
       expect(lifecycle.loadReleaseNotes).not.toHaveBeenCalled();
       expect(lifecycle.loadSecurityScans).not.toHaveBeenCalled();
@@ -226,7 +306,7 @@ describe("pending view selection actions", () => {
     }
   });
 
-  it("reloads pending from status source hash changes while mounted", async () => {
+  it("refreshes selected metadata when the status source hash changes", async () => {
     vi.useFakeTimers();
     const { pinia, connection, settings, updates } = setupStores(true);
     updates.pending = pendingResponse();
@@ -244,19 +324,23 @@ describe("pending view selection actions", () => {
       .spyOn(updates, "refreshPendingMetadata")
       .mockResolvedValue();
     const wrapper = mountPendingView(pinia);
+    const selectedInput = () =>
+      wrapper.find<HTMLInputElement>('input[aria-label="Select update repo/app:1.0"]');
 
     try {
       await flushPromises();
       lifecycle.loadPending.mockClear();
+      lifecycle.loadReleaseNotes.mockClear();
+      lifecycle.loadSecurityScans.mockClear();
+      await selectedInput().setValue(true);
 
       await vi.advanceTimersByTimeAsync(30_000);
       await flushPromises();
 
-      expect(refreshPendingMetadata).not.toHaveBeenCalled();
-      expect(lifecycle.loadPending).toHaveBeenCalledWith({
-        preserveCleanup: true,
-        freshAfterCurrent: true,
-      });
+      expect(refreshPendingMetadata).toHaveBeenCalledWith([1]);
+      expect(lifecycle.loadPending).not.toHaveBeenCalled();
+      expect(lifecycle.loadReleaseNotes).toHaveBeenCalledTimes(1);
+      expect(lifecycle.loadSecurityScans).toHaveBeenCalledTimes(1);
     } finally {
       wrapper.unmount();
       vi.useRealTimers();

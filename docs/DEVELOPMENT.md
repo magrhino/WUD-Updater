@@ -115,8 +115,10 @@ The wrapper puts the checked-in fake Docker command first on `PATH` and points
 it at `local-dev/fake-docker`, so interactive actions exercise the real WebUI
 backend and updater code paths without using the host Docker daemon. You can
 open `http://127.0.0.1:5173/#/pending`, select stack updates, preview the dry-run
-plan, apply it, and then inspect the new run detail and log records. The
-policies, snoozes, and tag exclusions pages also seed editable SQLite demo
+plan, apply it, and then inspect the new run detail and log records. The seeded
+`jarvis/task-runner` update exercises the update-stream choice between
+`2.34.4-distroless` and `2.34.4`. The policies, snoozes, and tag exclusions
+pages also seed editable SQLite demo
 records, and the pending view includes a cached example security finding. Use
 `make webui-demo-state` when you only need to refresh the disposable fixtures
 without starting the servers.

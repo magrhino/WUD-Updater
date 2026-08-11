@@ -12,6 +12,7 @@ import type {
   PendingResponse,
   PendingRescanResponse,
   PendingRescanScope,
+  PlanMutationOptions,
   PlanSelectionRequest,
   PlanResponse,
   ReleaseNotesResponse,
@@ -60,6 +61,7 @@ const fixtures: DemoGeneratedFixtures = generatedFixtures;
 const DEMO_NOW = "2026-05-31T00:00:00.000Z";
 const DEMO_DB_UPDATED_AT = "2026-05-28T12:00:00+00:00";
 const TAG_VALUE_PATTERN = /^\w[\w.-]{0,127}$/;
+const STRICT_TAG_STREAM_PATTERN = /^(v?\d+\.\d+\.\d+)([-_.].+)?$/;
 const EMPTY_SECURITY_COUNTS: SecurityScanSeverityCounts = {
   critical: 0,
   high: 0,
@@ -257,6 +259,72 @@ function tagOverridesByLine(
   return overrides;
 }
 
+type DemoPendingGroup = PendingResponse["grouping"]["groups"][number];
+type DemoPendingGroupItem = DemoPendingGroup["items"][number];
+type DemoTagStreamDecision = NonNullable<
+  PlanMutationOptions["tagStreamDecisions"]
+>[number]["decision"];
+
+function demoTagStreamValues(item: DemoPendingGroupItem) {
+  const current = STRICT_TAG_STREAM_PATTERN.exec(item.current_tag);
+  const reported = STRICT_TAG_STREAM_PATTERN.exec(item.desired_tag);
+  if (!item.tag_stream || !current || !reported) {
+    return null;
+  }
+  const sameStreamTag = `${reported[1]}${current[2] ?? ""}`;
+  const streamRegex = (tag: string) => {
+    const parts = STRICT_TAG_STREAM_PATTERN.exec(tag);
+    if (!parts) {
+      return "";
+    }
+    const prefix = parts[1].startsWith("v") ? "v" : "";
+    const suffix = (parts[2] ?? "").replace(
+      /[\\^$.*+?()[\]{}|]/g,
+      String.raw`\$&`,
+    );
+    return String.raw`^${prefix}\d+\.\d+\.\d+${suffix}$`;
+  };
+  return {
+    sameStreamTag,
+    preserveRegex: streamRegex(sameStreamTag),
+    switchRegex: streamRegex(item.desired_tag),
+  };
+}
+
+function demoTagStreamDecisions(
+  groups: DemoPendingGroup[],
+  decisions: NonNullable<PlanMutationOptions["tagStreamDecisions"]>,
+): Map<number, DemoTagStreamDecision> {
+  const availableLines = new Set(
+    groups.flatMap((group) =>
+      group.items
+        .filter((item) => demoTagStreamValues(item) !== null)
+        .map((item) => item.line_no),
+    ),
+  );
+  const result = new Map<number, DemoTagStreamDecision>();
+  for (const item of decisions) {
+    if (result.has(item.line_no)) {
+      throw new Error(`tag_stream_decisions line ${item.line_no} was provided more than once`);
+    }
+    if (!availableLines.has(item.line_no)) {
+      throw new Error(
+        `tag_stream_decisions must reference verified stream-change lines: ${item.line_no}`,
+      );
+    }
+    result.set(item.line_no, item.decision);
+  }
+  return result;
+}
+
+function demoSelectedStreamTag(
+  item: DemoPendingGroupItem,
+  decision: DemoTagStreamDecision,
+): string {
+  const values = demoTagStreamValues(item);
+  return decision === "preserve" && values ? values.sameStreamTag : item.desired_tag;
+}
+
 function validateDigestPinLabelRewriteApprovals(
   approvals: DigestPinLabelRewriteApprovalRequest[],
 ): string {
@@ -292,6 +360,7 @@ function planIdFor(
   tagOverrides: Map<number, string>,
   digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
   selections: PlanSelectionRequest[] = [],
+  tagStreamDecisions: NonNullable<PlanMutationOptions["tagStreamDecisions"]> = [],
 ): string {
   const parts = [
     `demo-session-${selectedLineNumbers.join("-") || "empty"}`,
@@ -312,6 +381,14 @@ function planIdFor(
           (selection) =>
             `${selection.line_no}-${demoIdPart(selection.selection_id || "line")}`,
         )
+        .join("-"),
+    );
+  }
+  if (tagStreamDecisions.length) {
+    parts.push(
+      [...tagStreamDecisions]
+        .sort((left, right) => left.line_no - right.line_no)
+        .map((item) => `${item.line_no}-stream-${item.decision}`)
         .join("-"),
     );
   }
@@ -364,8 +441,9 @@ function readOnlyPlanFromPending(
   allowTagUpdates: boolean,
   tagOverrides: TagOverrideRequest[],
   digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
-  selections: PlanSelectionRequest[] = [],
+  options: PlanMutationOptions = {},
 ): PlanResponse {
+  const selections = options.selections ?? [];
   const selected = new Set(selectedLineNumbers);
   const scopedSelections = new Set(
     selections
@@ -411,10 +489,21 @@ function readOnlyPlanFromPending(
       ),
     }))
     .filter((group) => group.items.length > 0);
+  const tagStreamDecisions = demoTagStreamDecisions(
+    matchedGroups,
+    options.tagStreamDecisions ?? [],
+  );
+  if (options.tagStreamLabelRewriteApprovals?.length) {
+    throw new Error(
+      "tag_stream_label_rewrite_approvals contains a stale or forged approval",
+    );
+  }
   const selectedUnmatched = selectedUnmatchedItems.filter(
     (item) => allowTagUpdates || !item.desired_tag,
   );
-  const stacks = matchedGroups.map((group) => readOnlyPlanStack(group));
+  const stacks = matchedGroups.map((group) =>
+    readOnlyPlanStack(group, tagStreamDecisions),
+  );
   const matchedTargets = stacks.flatMap((stack) =>
     stack.lines.map((line) => ({
       line_no: line.line_no,
@@ -443,18 +532,48 @@ function readOnlyPlanFromPending(
       reason: item.diagnostic?.code ?? "unmatched",
     })),
   ];
-  const issues = selectedUnmatched.map((item) => ({
-    severity: "error",
-    code: item.diagnostic?.code ?? "unmatched",
-    message:
-      item.diagnostic?.message ??
-      "This pending update is not matched to a discovered Compose service.",
-    line_no: item.line_no,
-    stack: item.diagnostic?.stack ?? "",
-    service: item.diagnostic?.service ?? "",
-    hint: item.diagnostic?.hint ?? "",
-    details: item.diagnostic?.details ?? {},
-  }));
+  const issues = [
+    ...selectedUnmatched.map((item) => ({
+      severity: "error",
+      code: item.diagnostic?.code ?? "unmatched",
+      message:
+        item.diagnostic?.message ??
+        "This pending update is not matched to a discovered Compose service.",
+      line_no: item.line_no,
+      stack: item.diagnostic?.stack ?? "",
+      service: item.diagnostic?.service ?? "",
+      hint: item.diagnostic?.hint ?? "",
+      details: item.diagnostic?.details ?? {},
+    })),
+    ...matchedGroups.flatMap((group) =>
+      group.items.flatMap((item) => {
+        const values = demoTagStreamValues(item);
+        if (!values || tagStreamDecisions.has(item.line_no)) {
+          return [];
+        }
+        return [{
+          severity: "error",
+          code: "tag-stream-change",
+          message:
+            `WUD proposed changing the update stream from ${item.tag_stream?.current_stream} `
+            + `to ${item.tag_stream?.reported_stream}. Choose whether to preserve or switch streams.`,
+          line_no: item.line_no,
+          stack: group.name,
+          service: item.services[0] ?? "",
+          hint: "",
+          details: {
+            current_tag: item.current_tag,
+            reported_tag: item.desired_tag,
+            current_stream: item.tag_stream?.current_stream ?? "",
+            reported_stream: item.tag_stream?.reported_stream ?? "",
+            same_stream_tag: values.sameStreamTag,
+            preserve_label_regex: values.preserveRegex,
+            switch_label_regex: values.switchRegex,
+          },
+        }];
+      }),
+    ),
+  ];
   const serviceCount = new Set(
     stacks.flatMap((stack) =>
       stack.lines.map((line) => `${stack.name}/${line.service}`),
@@ -474,6 +593,7 @@ function readOnlyPlanFromPending(
       overrides,
       digestPinLabelRewriteApprovals,
       selections,
+      options.tagStreamDecisions ?? [],
     ),
     dry_run: true,
     can_apply: false,
@@ -550,20 +670,31 @@ function readOnlyPlanFromPending(
 }
 
 function readOnlyPlanStack(
-  group: PendingResponse["grouping"]["groups"][number],
+  group: DemoPendingGroup,
+  tagStreamDecisions: Map<number, DemoTagStreamDecision>,
 ): PlanResponse["stacks"][number] {
   const lines = group.items.map((item) => {
     const composeImage = item.compose_images[0] ?? item.resolved_image;
+    const decision = tagStreamDecisions.get(item.line_no);
+    const desiredTag = decision
+      ? demoSelectedStreamTag(item, decision)
+      : item.desired_tag;
     return {
       line_no: item.line_no,
       raw: item.raw,
       image: item.image,
       resolved_image: item.resolved_image,
       compose_image: composeImage,
-      target_image: item.target_image || item.resolved_image,
+      target_image: desiredTag
+        ? replaceTagReference(
+            item.target_image || item.resolved_image,
+            item.desired_tag,
+            desiredTag,
+          )
+        : item.target_image || item.resolved_image,
       service: item.services[0] ?? item.repo,
       digest: item.digest,
-      desired_tag: item.desired_tag,
+      desired_tag: desiredTag,
       action: item.action,
       digest_provenance: item.digest_provenance ?? null,
     };
@@ -588,6 +719,31 @@ function readOnlyPlanStack(
         new_image: line.target_image,
         services: [line.service],
       })),
+    tag_stream_updates: group.items.flatMap((item) => {
+      const decision = tagStreamDecisions.get(item.line_no);
+      const values = demoTagStreamValues(item);
+      if (!decision || !values) {
+        return [];
+      }
+      const selectedTag = demoSelectedStreamTag(item, decision);
+      const proposedLabelRegex = decision === "preserve"
+        ? values.preserveRegex
+        : values.switchRegex;
+      return [{
+        line_no: item.line_no,
+        service: item.services[0] ?? item.repo,
+        current_tag: item.current_tag,
+        reported_tag: item.desired_tag,
+        selected_tag: selectedTag,
+        decision,
+        label_key: "wud.tag.include",
+        current_label_value: "",
+        proposed_label_value: proposedLabelRegex.replaceAll("$", "$$$$"),
+        proposed_label_regex: proposedLabelRegex,
+        approved: true,
+        reason: "label-added",
+      }];
+    }),
     digest_pin_updates: [],
     digest_unpin_updates: [],
     actions: [],
@@ -741,6 +897,7 @@ export class DemoApiState {
       status: "ready",
       requires_pending_reload: false,
       source_hash: pending.source_hash ?? "",
+      source: pending.source,
       wud_api: pending.wud_api,
       items,
     };
@@ -753,6 +910,7 @@ export class DemoApiState {
       status: "stale",
       requires_pending_reload: true,
       source_hash: pending.source_hash ?? "",
+      source: pending.source,
       wud_api: pending.wud_api,
       items: [],
     };
@@ -1194,9 +1352,10 @@ export class DemoApiState {
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
-    selections: PlanSelectionRequest[] = [],
+    options: PlanMutationOptions = {},
   ): PlanResponse {
     const pending = this.pendingResponse();
+    const selections = options.selections ?? [];
     const normalizedSelections = normalizeDemoSelections(pending, selections);
     const selectedLineNumbers = uniqueSortedNumbers(
       normalizedSelections.length
@@ -1210,7 +1369,7 @@ export class DemoApiState {
       allowTagUpdates,
       tagOverrides,
       digestPinLabelRewriteApprovals,
-      normalizedSelections,
+      { ...options, selections: normalizedSelections },
     );
   }
 

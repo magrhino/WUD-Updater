@@ -14,6 +14,7 @@ export type {
   WudApiConfigurationDiagnostics,
   PendingSourceMode,
   PendingSourceActive,
+  PendingMetadataStatus,
   PendingSourceInfo,
   // Pending updates
   PendingItem,
@@ -89,6 +90,8 @@ export type {
   PlanTarget,
   PlanLine,
   PlanTagUpdate,
+  PlanTagStreamUpdate,
+  TagStreamDecision,
   DigestPinLabelRewriteApprovalRequest,
   PlanDigestPinLabelRewrite,
   PlanDigestPinUpdate,
@@ -102,7 +105,10 @@ export type {
   ApplyPreflightCheck,
   ApplyPreflightResponse,
   TagOverrideRequest,
+  TagStreamDecisionRequest,
+  TagStreamLabelRewriteApprovalRequest,
   PlanSelectionRequest,
+  PlanMutationOptions,
   PlanResponse,
   // Jobs
   ApplyJobStatus,
@@ -237,7 +243,7 @@ import type {
   SelfUpdatePrepareRequest,
   ContainerRestartResponse,
   TagOverrideRequest,
-  PlanSelectionRequest,
+  PlanMutationOptions,
   DigestPinLabelRewriteApprovalRequest,
   PlanResponse,
   ApplyJobResponse,
@@ -697,6 +703,25 @@ const selfUpdateApi = {
 // Plans and jobs
 // ---------------------------------------------------------------------------
 
+const planMutationBody = (
+  lineNumbers: number[],
+  allowTagUpdates: boolean,
+  tagOverrides: TagOverrideRequest[],
+  digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
+  options: PlanMutationOptions,
+) => {
+  const selections = options.selections ?? [];
+  return {
+    ...(selections.length ? { selections } : { line_numbers: lineNumbers }),
+    allow_tag_updates: allowTagUpdates,
+    tag_overrides: tagOverrides,
+    tag_stream_decisions: options.tagStreamDecisions ?? [],
+    tag_stream_label_rewrite_approvals:
+      options.tagStreamLabelRewriteApprovals ?? [],
+    digest_pin_label_rewrite_approvals: digestPinLabelRewriteApprovals,
+  };
+};
+
 const plansApi = {
   createPlan: (
     lineNumbers: number[],
@@ -704,19 +729,20 @@ const plansApi = {
     tagOverrides: TagOverrideRequest[],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
     csrfToken: string,
-    selections: PlanSelectionRequest[] = [],
+    options: PlanMutationOptions = {},
   ) =>
     apiRequest<PlanResponse>("/plans", {
       method: "POST",
       headers: { "x-wud-csrf-token": csrfToken },
-      body: JSON.stringify({
-        ...(selections.length
-          ? { selections }
-          : { line_numbers: lineNumbers }),
-        allow_tag_updates: allowTagUpdates,
-        tag_overrides: tagOverrides,
-        digest_pin_label_rewrite_approvals: digestPinLabelRewriteApprovals,
-      }),
+      body: JSON.stringify(
+        planMutationBody(
+          lineNumbers,
+          allowTagUpdates,
+          tagOverrides,
+          digestPinLabelRewriteApprovals,
+          options,
+        ),
+      ),
     }),
   createJob: (
     planId: string,
@@ -725,19 +751,20 @@ const plansApi = {
     tagOverrides: TagOverrideRequest[],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
     csrfToken: string,
-    selections: PlanSelectionRequest[] = [],
+    options: PlanMutationOptions = {},
   ) =>
     apiRequest<ApplyJobResponse>("/jobs", {
       method: "POST",
       headers: { "x-wud-csrf-token": csrfToken },
       body: JSON.stringify({
         plan_id: planId,
-        ...(selections.length
-          ? { selections }
-          : { line_numbers: lineNumbers }),
-        allow_tag_updates: allowTagUpdates,
-        tag_overrides: tagOverrides,
-        digest_pin_label_rewrite_approvals: digestPinLabelRewriteApprovals,
+        ...planMutationBody(
+          lineNumbers,
+          allowTagUpdates,
+          tagOverrides,
+          digestPinLabelRewriteApprovals,
+          options,
+        ),
         confirmation: "apply",
       }),
     }),
@@ -748,19 +775,20 @@ const plansApi = {
     tagOverrides: TagOverrideRequest[],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
     csrfToken: string,
-    selections: PlanSelectionRequest[] = [],
+    options: PlanMutationOptions = {},
   ) =>
     apiRequest<ApplyJobResponse>("/plans/apply", {
       method: "POST",
       headers: { "x-wud-csrf-token": csrfToken },
       body: JSON.stringify({
         plan_id: planId,
-        ...(selections.length
-          ? { selections }
-          : { line_numbers: lineNumbers }),
-        allow_tag_updates: allowTagUpdates,
-        tag_overrides: tagOverrides,
-        digest_pin_label_rewrite_approvals: digestPinLabelRewriteApprovals,
+        ...planMutationBody(
+          lineNumbers,
+          allowTagUpdates,
+          tagOverrides,
+          digestPinLabelRewriteApprovals,
+          options,
+        ),
         confirmation: "apply",
       }),
     }),

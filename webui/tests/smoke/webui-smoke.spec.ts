@@ -807,7 +807,7 @@ test("read-only pending flow can preflight a stack but cannot apply", async ({ p
   await page.getByRole("button", { name: /Preview selected plan/ }).click();
 
   await expect(page.getByText("Read-only mode is active").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Review media plan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Apply blocked" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Apply 1 update/ })).toBeDisabled();
   expect(state.calls.some((call) => call.path === "/api/v1/plans")).toBe(true);
   expect(state.calls.some((call) => call.path === "/api/v1/plans/apply")).toBe(false);
@@ -1004,6 +1004,8 @@ test("mutation-enabled pending flow creates jobs only after confirmation", async
     selections: [stackSelection],
     allow_tag_updates: true,
     tag_overrides: [],
+    tag_stream_decisions: [],
+    tag_stream_label_rewrite_approvals: [],
     digest_pin_label_rewrite_approvals: [],
   });
   expect(applyCall?.headers["x-wud-csrf-token"]).toBe(csrfToken);
@@ -1012,6 +1014,8 @@ test("mutation-enabled pending flow creates jobs only after confirmation", async
     selections: [stackSelection],
     allow_tag_updates: true,
     tag_overrides: [],
+    tag_stream_decisions: [],
+    tag_stream_label_rewrite_approvals: [],
     digest_pin_label_rewrite_approvals: [],
     confirmation: "apply",
   });

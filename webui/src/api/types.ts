@@ -96,6 +96,7 @@ export interface WudApiConfigurationDiagnostics {
 
 export type PendingSourceMode = "file" | "api" | "auto";
 export type PendingSourceActive = "file" | "api";
+export type PendingMetadataStatus = "fresh" | "retained" | "recovered";
 
 export interface PendingSourceInfo {
   configured: PendingSourceMode;
@@ -105,6 +106,11 @@ export interface PendingSourceInfo {
   degraded: boolean;
   fallback_reason: string;
   detail: string;
+}
+
+export interface PendingTagStream {
+  current_stream: string;
+  reported_stream: string;
 }
 
 export interface PendingItem {
@@ -126,6 +132,8 @@ export interface PendingItem {
   wud_metadata?: WudContainerMetadata | null;
   source: PendingSourceActive;
   source_id: string;
+  tag_stream?: PendingTagStream | null;
+  metadata_status?: PendingMetadataStatus;
 }
 
 export interface PendingDiagnostic {
@@ -235,12 +243,14 @@ export interface PendingMetadataRefreshItem {
   raw: string;
   source_id: string;
   wud_metadata: WudContainerMetadata | null;
+  metadata_status?: PendingMetadataStatus;
 }
 
 export interface PendingMetadataRefreshResponse {
   status: PendingMetadataRefreshStatus;
   requires_pending_reload: boolean;
   source_hash: string;
+  source: PendingSourceInfo;
   wud_api: WudApiStatus;
   items: PendingMetadataRefreshItem[];
 }
@@ -723,6 +733,7 @@ export interface PlanTarget {
   desired_tag: string;
   matched: boolean;
   action: string;
+  metadata_status?: PendingMetadataStatus;
 }
 
 export interface PlanLine {
@@ -736,6 +747,7 @@ export interface PlanLine {
   digest: string;
   desired_tag: string;
   action: string;
+  metadata_status?: PendingMetadataStatus;
   digest_provenance?: DigestTagProvenance | null;
 }
 
@@ -744,6 +756,40 @@ export interface PlanTagUpdate {
   desired_tag: string;
   new_image: string;
   services: string[];
+}
+
+export type TagStreamDecision = "preserve" | "switch";
+
+export interface TagStreamDecisionRequest {
+  line_no: number;
+  decision: TagStreamDecision;
+}
+
+export interface TagStreamLabelRewriteApprovalRequest {
+  line_no: number;
+  stack: string;
+  stack_directory: string;
+  compose_file: string;
+  service: string;
+  label_key: string;
+  current_label_value: string;
+  selected_tag: string;
+  proposed_label_value: string;
+}
+
+export interface PlanTagStreamUpdate {
+  line_no: number;
+  service: string;
+  current_tag: string;
+  reported_tag: string;
+  selected_tag: string;
+  decision: TagStreamDecision;
+  label_key: string;
+  current_label_value: string;
+  proposed_label_value: string;
+  proposed_label_regex: string;
+  approved: boolean;
+  reason: string;
 }
 
 export interface DigestPinLabelRewriteApprovalRequest {
@@ -813,6 +859,7 @@ export interface PlanStack {
   force_recreate: boolean;
   up_no_deps: boolean;
   tag_updates: PlanTagUpdate[];
+  tag_stream_updates: PlanTagStreamUpdate[];
   digest_pin_updates: PlanDigestPinUpdate[];
   digest_unpin_updates: PlanDigestUnpinUpdate[];
   actions: PlanAction[];
@@ -868,6 +915,12 @@ export interface TagOverrideRequest {
 export interface PlanSelectionRequest {
   line_no: number;
   selection_id: string;
+}
+
+export interface PlanMutationOptions {
+  selections?: PlanSelectionRequest[];
+  tagStreamDecisions?: TagStreamDecisionRequest[];
+  tagStreamLabelRewriteApprovals?: TagStreamLabelRewriteApprovalRequest[];
 }
 
 export interface PlanResponse {

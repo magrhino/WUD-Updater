@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Play } from "@lucide/vue";
+import { computed } from "vue";
+import { Play, Repeat2 } from "@lucide/vue";
 import { NButton, NCheckbox, NTag } from "naive-ui";
 
 import type {
@@ -20,6 +21,10 @@ import {
   groupedItemTarget,
   groupTagChangeCount,
   itemsBreakingCount,
+  pendingMetadataStatusLabel,
+  pendingMetadataStatus,
+  pendingMetadataStatusTagType,
+  pendingMetadataStatusTitle,
   type PendingTagInputProps,
   previewImageLabel,
 } from "../../views/pending/pendingDisplay";
@@ -54,6 +59,32 @@ const emit = defineEmits<{
   toggleStack: [group: PendingStackGroup, checked: boolean];
   updateTag: [item: PendingGroupedItem, value: string];
 }>();
+
+const verifiedUpdateCount = computed(
+  () =>
+    props.group.items.filter((item) => pendingMetadataStatus(item) === "fresh")
+      .length,
+);
+const blockedUpdateCount = computed(
+  () => props.group.items.length - verifiedUpdateCount.value,
+);
+const previewDisabled = computed(
+  () => props.updateDisabled || verifiedUpdateCount.value === 0,
+);
+const previewLabel = computed(() => {
+  if (!blockedUpdateCount.value) {
+    return `Preview ${props.group.name} plan`;
+  }
+  if (!verifiedUpdateCount.value) {
+    return "No verified updates";
+  }
+  return `Preview ${pluralize(verifiedUpdateCount.value, "verified update")}`;
+});
+const previewDisabledMessage = computed(() =>
+  verifiedUpdateCount.value
+    ? ""
+    : "No updates in this stack have fresh WUD metadata. Check your WUD configuration.",
+);
 </script>
 
 <template>
@@ -100,14 +131,15 @@ const emit = defineEmits<{
           <n-button
             size="small"
             secondary
-            :disabled="updateDisabled"
+            :disabled="previewDisabled"
             :loading="loading"
+            :title="previewDisabledMessage || undefined"
             @click="emit('previewStack', group)"
           >
             <template #icon>
               <Play :size="16" />
             </template>
-            Preview {{ group.name }} plan
+            {{ previewLabel }}
           </n-button>
         </div>
       </div>
@@ -126,6 +158,13 @@ const emit = defineEmits<{
             :type="groupedItemActionTagType(item)"
           >
             {{ groupedItemActionLabel(item) }}
+          </n-tag>
+          <n-tag
+            size="small"
+            :type="pendingMetadataStatusTagType(item)"
+            :title="pendingMetadataStatusTitle(item)"
+          >
+            {{ pendingMetadataStatusLabel(item) }} metadata
           </n-tag>
           <span
             v-if="riskCues(item).length"
@@ -157,6 +196,21 @@ const emit = defineEmits<{
           >
             {{ previewImageLabel(groupedItemTarget(item), displayDigest) }}
           </code>
+          <n-button
+            v-if="item.tag_stream"
+            size="small"
+            secondary
+            type="info"
+            class="stream-choice-trigger"
+            aria-haspopup="dialog"
+            :aria-label="`Choose update stream for ${item.image}`"
+            @click="emit('previewStack', group)"
+          >
+            <template #icon>
+              <Repeat2 :size="15" aria-hidden="true" />
+            </template>
+            Choose stream
+          </n-button>
         </span>
       </div>
       <span v-if="groupChangeOverflowCount(group)" class="stack-change-more wrap-anywhere">
@@ -192,6 +246,7 @@ const emit = defineEmits<{
           :show-tag-input="Boolean(item.desired_tag)"
           :tag-input-props="tagInputProps(item)"
           @toggle="(_lineNo, checked) => emit('toggleItem', item, checked)"
+          @review-stream="emit('previewStack', group)"
           @update-tag="emit('updateTag', item, $event)"
         />
       </div>
@@ -325,6 +380,10 @@ const emit = defineEmits<{
   color: var(--color-code-text);
   font-family: var(--font-mono);
   font-size: 0.82rem;
+}
+
+.stream-choice-trigger {
+  margin-inline-start: 2px;
 }
 
 .stack-change-more {

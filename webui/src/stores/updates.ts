@@ -17,6 +17,7 @@ import {
   type PendingRescanScope,
   type PendingItem,
   type PlanResponse,
+  type PlanMutationOptions,
   type PlanSelectionRequest,
   type PendingResponse,
   type ReleaseNoteInfo,
@@ -37,6 +38,8 @@ import {
   type SecurityScanJobResponse,
   type SecurityScansResponse,
   type TagOverrideRequest,
+  type TagStreamDecisionRequest,
+  type TagStreamLabelRewriteApprovalRequest,
   type WudContainerMetadata,
   type UpdateTargetsResponse,
   webApi,
@@ -63,6 +66,8 @@ export const APPLY_JOB_RECOVERY_MESSAGE =
   "Last known apply job state is unavailable because the WebUI process restarted. Check Runs -> Latest run and the updater log before applying more updates.";
 const PENDING_RESCAN_SELECTION_REQUIRED_MESSAGE =
   "Select at least one pending update to rescan.";
+const PENDING_PLAN_METADATA_CHANGED_MESSAGE =
+  "Selected update metadata changed. Review the warnings and preview the plan again.";
 
 type PendingLoadOptions = {
   preserveCleanup?: boolean;
@@ -116,6 +121,8 @@ function pendingMetadataChanged(
   return (
     item.raw !== metadata.raw ||
     item.source_id !== metadata.source_id ||
+    (item.metadata_status ?? "fresh") !==
+      (metadata.metadata_status ?? item.metadata_status ?? "fresh") ||
     wudMetadataChanged(item.wud_metadata, metadata.wud_metadata)
   );
 }
@@ -247,19 +254,24 @@ export const useUpdatesStore = defineStore("updates", () => {
     return trailing;
   }
 
-  async function refreshPendingMetadata(): Promise<void> {
+  async function refreshPendingMetadata(
+    selectedLineNumbers?: readonly number[],
+  ): Promise<void> {
     const current = pending.value;
     if (current === null) {
       return;
     }
+    const selectedScope = [
+      ...new Set(
+        selectedLineNumbers ?? plan.value?.selected_line_numbers ?? [],
+      ),
+    ];
     const auth = useAuthStore();
-    const lines = current.items
-      .filter((item) => item.wud_metadata !== null && item.wud_metadata !== undefined)
-      .map((item) => ({
-        line_no: item.line_no,
-        raw: item.raw,
-        source_id: item.source_id,
-      }));
+    const lines = current.items.map((item) => ({
+      line_no: item.line_no,
+      raw: item.raw,
+      source_id: item.source_id,
+    }));
     const response = await webApi.pendingMetadata(
       {
         source_hash: current.source_hash ?? "",
@@ -268,27 +280,63 @@ export const useUpdatesStore = defineStore("updates", () => {
       await auth.ensureCsrf(),
     );
     if (response.requires_pending_reload) {
+      const openPlan = plan.value;
+      const sourceHashChanged =
+        response.source_hash !== (current.source_hash ?? "");
       clearReleaseNoteDisplay();
       await loadPending({
         preserveCleanup: true,
         freshAfterCurrent: true,
       });
+      const selectedMetadataChanged =
+        sourceHashChanged ||
+        pendingLinesChanged(
+          current.items,
+          pending.value?.items ?? [],
+          selectedScope,
+        );
+      if (openPlan !== null && selectedMetadataChanged) {
+        error.value = PENDING_PLAN_METADATA_CHANGED_MESSAGE;
+      } else if (openPlan !== null) {
+        plan.value = openPlan;
+      }
       return;
     }
     if (pending.value !== current) {
       return;
     }
+    const refreshedByLine = new Map(
+      response.items.map((item) => [item.line_no, item]),
+    );
+    const currentByLine = new Map(
+      current.items.map((item) => [item.line_no, item]),
+    );
+    const selectedPlanMetadataChanged = selectedScope.some((lineNo) => {
+      const currentItem = currentByLine.get(lineNo);
+      const refreshedItem = refreshedByLine.get(lineNo);
+      return (
+        currentItem !== undefined &&
+        refreshedItem !== undefined &&
+        (currentItem.metadata_status ?? "fresh") !==
+          (refreshedItem.metadata_status ?? currentItem.metadata_status ?? "fresh")
+      );
+    });
     const metadataChanged = patchPendingMetadata(response.items);
     if (pending.value) {
       pending.value = {
         ...pending.value,
         source_hash: response.source_hash,
+        source: response.source,
         wud_api: response.wud_api,
       };
     }
     pendingWudMetadataCheckedAt.value = response.wud_api.last_checked_at;
     if (metadataChanged) {
       clearReleaseNoteDisplay();
+    }
+    if (selectedPlanMetadataChanged) {
+      plan.value = null;
+      error.value = PENDING_PLAN_METADATA_CHANGED_MESSAGE;
     }
   }
 
@@ -807,6 +855,8 @@ export const useUpdatesStore = defineStore("updates", () => {
     tagOverrides: TagOverrideRequest[] = [],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
     selections: PlanSelectionRequest[] = [],
+    tagStreamDecisions: TagStreamDecisionRequest[] = [],
+    tagStreamLabelRewriteApprovals: TagStreamLabelRewriteApprovalRequest[] = [],
   ): Promise<void> {
     const auth = useAuthStore();
     await loadWithState(async () => {
@@ -821,7 +871,11 @@ export const useUpdatesStore = defineStore("updates", () => {
         tagOverrides,
         digestPinLabelRewriteApprovals,
         await auth.ensureCsrf(),
-        selections,
+        {
+          selections,
+          tagStreamDecisions,
+          tagStreamLabelRewriteApprovals,
+        },
       );
     });
   }
@@ -952,6 +1006,28 @@ export const useUpdatesStore = defineStore("updates", () => {
     pendingWudMetadataCheckedAt.value = response.wud_api.last_checked_at;
   }
 
+  function pendingLinesChanged(
+    before: PendingItem[],
+    after: PendingItem[],
+    lineNumbers: readonly number[],
+  ): boolean {
+    const beforeByLine = new Map(before.map((item) => [item.line_no, item]));
+    const afterByLine = new Map(after.map((item) => [item.line_no, item]));
+    return lineNumbers.some((lineNo) => {
+      const previous = beforeByLine.get(lineNo);
+      const current = afterByLine.get(lineNo);
+      if (previous === undefined) {
+        return true;
+      }
+      return (
+        previous.raw !== current?.raw ||
+        previous.source_id !== current?.source_id ||
+        (previous.metadata_status ?? "fresh") !==
+          (current?.metadata_status ?? "fresh")
+      );
+    });
+  }
+
   function patchPendingMetadata(items: PendingMetadataRefreshItem[]): boolean {
     const current = pending.value;
     if (current === null) {
@@ -971,6 +1047,7 @@ export const useUpdatesStore = defineStore("updates", () => {
         ...item,
         raw: metadata.raw,
         source_id: metadata.source_id,
+        metadata_status: metadata.metadata_status ?? item.metadata_status ?? "fresh",
         wud_metadata: metadata.wud_metadata,
       };
     };
@@ -1002,7 +1079,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[] = [],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
-    selections: PlanSelectionRequest[] = [],
+    options: PlanMutationOptions = {},
   ): Promise<ApplyJobResponse> {
     const auth = useAuthStore();
     await loadWithState(async () => {
@@ -1014,7 +1091,7 @@ export const useUpdatesStore = defineStore("updates", () => {
         tagOverrides,
         digestPinLabelRewriteApprovals,
         await auth.ensureCsrf(),
-        selections,
+        options,
       );
       setApplyJob(job);
     });
@@ -1030,7 +1107,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[] = [],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
-    selections: PlanSelectionRequest[] = [],
+    options: PlanMutationOptions = {},
   ): Promise<ApplyJobResponse> {
     const auth = useAuthStore();
     await loadWithState(async () => {
@@ -1042,7 +1119,7 @@ export const useUpdatesStore = defineStore("updates", () => {
         tagOverrides,
         digestPinLabelRewriteApprovals,
         await auth.ensureCsrf(),
-        selections,
+        options,
       );
       setApplyJob(job);
     });

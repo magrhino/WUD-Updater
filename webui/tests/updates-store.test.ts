@@ -423,6 +423,12 @@ describe("updates store", () => {
       status: "ready",
       requires_pending_reload: false,
       source_hash: pending.source_hash,
+      source: {
+        ...pending.source,
+        degraded: true,
+        fresh: false,
+        detail: "1 unrelated WUD observation is unresolved.",
+      },
       wud_api: wudApiStatus({ last_checked_at: "new-check" }),
       items: [
         {
@@ -430,11 +436,18 @@ describe("updates store", () => {
           raw: "repo/app:1.0",
           source_id: "file:1",
           wud_metadata: newMetadata,
+          metadata_status: "retained",
         },
         {
           line_no: 2,
           raw: "repo/old:1.0",
           source_id: "file:2",
+          wud_metadata: null,
+        },
+        {
+          line_no: 3,
+          raw: "repo/untracked:1.0",
+          source_id: "file:3",
           wud_metadata: null,
         },
       ],
@@ -462,6 +475,7 @@ describe("updates store", () => {
       lines: [
         { line_no: 1, raw: "repo/app:1.0", source_id: "file:1" },
         { line_no: 2, raw: "repo/old:1.0", source_id: "file:2" },
+        { line_no: 3, raw: "repo/untracked:1.0", source_id: "file:3" },
       ],
     });
     expect(
@@ -470,14 +484,26 @@ describe("updates store", () => {
       ),
     ).toBe("csrf-metadata");
     expect(updates.pending?.items[0].wud_metadata?.remote_tag).toBe("1.2");
+    expect(updates.pending?.items[0].metadata_status).toBe("retained");
     expect(updates.pending?.items[1].wud_metadata).toBeNull();
     expect(updates.pending?.items[2].wud_metadata).toBeNull();
     expect(
       updates.pending?.grouping.groups[0].items[0].wud_metadata?.remote_tag,
     ).toBe("1.2");
+    expect(
+      updates.pending?.grouping.groups[0].items[0].metadata_status,
+    ).toBe("retained");
     expect(updates.pending?.grouping.unmatched[0].wud_metadata).toBeNull();
     expect(updates.pendingWudMetadataCheckedAt).toBe("new-check");
-    expect(updates.plan).toEqual(plan);
+    expect(updates.pending?.source).toMatchObject({
+      degraded: true,
+      fresh: false,
+      detail: "1 unrelated WUD observation is unresolved.",
+    });
+    expect(updates.plan).toBeNull();
+    expect(updates.error).toBe(
+      "Selected update metadata changed. Review the warnings and preview the plan again.",
+    );
     expect(updates.pendingRemovalPlan).toEqual(removalPlan);
     expect(updates.pendingRescan).toEqual(rescan);
     expect(updates.releaseNotes).toBeNull();
@@ -500,6 +526,7 @@ describe("updates store", () => {
       status: "ready",
       requires_pending_reload: false,
       source_hash: pending.source_hash,
+      source: pending.source,
       wud_api: wudApiStatus({ last_checked_at: "new-check" }),
       items: [
         {
@@ -528,6 +555,60 @@ describe("updates store", () => {
     expect(updates.releaseNotification).toEqual(notification);
   });
 
+  it("invalidates a fresh-subset plan when another selected line recovers", async () => {
+    const fresh = pendingItem({ line_no: 1, metadata_status: "fresh" });
+    const retained = pendingItem({
+      line_no: 2,
+      raw: "repo/worker:1.0",
+      image: "repo/worker:1.0",
+      key: "repo/worker",
+      repo: "repo/worker",
+      source_id: "api:worker",
+      metadata_status: "retained",
+    });
+    const current = pendingResponse([fresh, retained]);
+    const fetchMock = mockFetch({
+      status: "ready",
+      requires_pending_reload: false,
+      source_hash: current.source_hash,
+      source: current.source,
+      wud_api: wudApiStatus({ last_checked_at: "new-check" }),
+      items: [
+        {
+          line_no: fresh.line_no,
+          raw: fresh.raw,
+          source_id: fresh.source_id,
+          wud_metadata: fresh.wud_metadata,
+          metadata_status: "fresh",
+        },
+        {
+          line_no: retained.line_no,
+          raw: retained.raw,
+          source_id: retained.source_id,
+          wud_metadata: retained.wud_metadata,
+          metadata_status: "fresh",
+        },
+      ],
+    });
+    useConnectionStore();
+    useSettingsStore();
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-metadata");
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pending = current;
+    updates.plan = planResponse({ selected_line_numbers: [1] });
+
+    await updates.refreshPendingMetadata([1, 2]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(updates.pending?.items[1].metadata_status).toBe("fresh");
+    expect(updates.plan).toBeNull();
+    expect(updates.error).toBe(
+      "Selected update metadata changed. Review the warnings and preview the plan again.",
+    );
+  });
+
   it("rejects metadata refresh failures without changing main loading state", async () => {
     vi.stubGlobal(
       "fetch",
@@ -551,18 +632,37 @@ describe("updates store", () => {
     expect(updates.error).toBe("keep me");
   });
 
-  it("reloads pending while preserving cleanup when metadata refresh is stale", async () => {
+  it("reloads recovered entries when WUD returns with the same source hash", async () => {
+    const sourceHash = "same-source-hash";
+    const recovered = pendingItem({
+      metadata_status: "recovered",
+      wud_metadata: null,
+    });
+    const current = {
+      ...pendingResponse([recovered]),
+      source_hash: sourceHash,
+      source: {
+        configured: "auto" as const,
+        active: "file" as const,
+        label: "Pending file",
+        fresh: false,
+        degraded: true,
+        fallback_reason: "WUD API unavailable",
+        detail: "WUD API unavailable",
+      },
+    };
     const refreshed = {
-      ...pendingResponse([
-        pendingItem({
-          line_no: 1,
-          raw: "repo/new:1.0",
-          image: "repo/new:1.0",
-          key: "repo/new",
-          repo: "repo/new",
-        }),
-      ]),
-      source_hash: "new-source-hash",
+      ...pendingResponse([pendingItem({ metadata_status: "fresh" })]),
+      source_hash: sourceHash,
+      source: {
+        ...current.source,
+        active: "api" as const,
+        label: "WUD API",
+        fresh: true,
+        degraded: false,
+        fallback_reason: "",
+        detail: "",
+      },
       wud_api: wudApiStatus({ last_checked_at: "new-check" }),
     };
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
@@ -572,7 +672,8 @@ describe("updates store", () => {
           jsonResponse({
             status: "stale",
             requires_pending_reload: true,
-            source_hash: "new-source-hash",
+            source_hash: sourceHash,
+            source: refreshed.source,
             wud_api: wudApiStatus({ last_checked_at: "new-check" }),
             items: [],
           }),
@@ -590,7 +691,7 @@ describe("updates store", () => {
     vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-metadata");
     const updates = useUpdatesStore();
     useRunsStore();
-    updates.pending = pendingResponse();
+    updates.pending = current;
     updates.plan = planResponse();
     updates.pendingRescan = pendingRescanResponse();
     updates.releaseNotes = releaseNotesResponse();
@@ -604,13 +705,130 @@ describe("updates store", () => {
 
     await updates.refreshPendingMetadata();
 
-    expect(updates.pending?.source_hash).toBe("new-source-hash");
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      source_hash: sourceHash,
+      lines: [
+        {
+          line_no: recovered.line_no,
+          raw: recovered.raw,
+          source_id: recovered.source_id,
+        },
+      ],
+    });
+    expect(updates.pending?.source_hash).toBe(sourceHash);
+    expect(updates.pending?.source.active).toBe("api");
+    expect(updates.pending?.items[0].metadata_status).toBe("fresh");
     expect(updates.pendingWudMetadataCheckedAt).toBe("new-check");
     expect(updates.pendingCleanup?.audit_run_id).toBe(12);
     expect(updates.plan).toBeNull();
+    expect(updates.error).toBe(
+      "Selected update metadata changed. Review the warnings and preview the plan again.",
+    );
     expect(updates.pendingRescan).toBeNull();
     expect(updates.releaseNotes).toBeNull();
     expect(updates.releaseNotification).toBeNull();
+  });
+
+  it("preserves an open plan when only an unrelated source identity changes", async () => {
+    const selected = pendingItem({
+      line_no: 1,
+      source_id: "docker.local.app",
+    });
+    const unrelated = pendingItem({
+      line_no: 2,
+      raw: "repo/worker:1.0",
+      image: "repo/worker:1.0",
+      key: "repo/worker",
+      repo: "repo/worker",
+      source_id: "docker.local.worker-old",
+    });
+    const current = pendingResponse([selected, unrelated]);
+    const refreshed = pendingResponse([
+      selected,
+      { ...unrelated, source_id: "docker.local.worker-new" },
+    ]);
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/v1/pending/metadata") {
+        return Promise.resolve(
+          jsonResponse({
+            status: "stale",
+            requires_pending_reload: true,
+            source_hash: current.source_hash,
+            source: refreshed.source,
+            wud_api: refreshed.wud_api,
+            items: [],
+          }),
+        );
+      }
+      if (url === "/api/v1/pending") {
+        return Promise.resolve(jsonResponse(refreshed));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    useConnectionStore();
+    useSettingsStore();
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-metadata");
+    const updates = useUpdatesStore();
+    useRunsStore();
+    const openPlan = planResponse({ selected_line_numbers: [1] });
+    updates.pending = current;
+    updates.plan = openPlan;
+
+    await updates.refreshPendingMetadata([1]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(updates.pending?.items[1].source_id).toBe(
+      "docker.local.worker-new",
+    );
+    expect(updates.plan).toEqual(openPlan);
+    expect(updates.error).toBe("");
+  });
+
+  it("explains plan invalidation when the pending source hash changes", async () => {
+    const current = pendingResponse();
+    const refreshed = {
+      ...pendingResponse(),
+      source_hash: "changed-source-hash",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/v1/pending/metadata") {
+        return Promise.resolve(
+          jsonResponse({
+            status: "stale",
+            requires_pending_reload: true,
+            source_hash: refreshed.source_hash,
+            source: refreshed.source,
+            wud_api: refreshed.wud_api,
+            items: [],
+          }),
+        );
+      }
+      if (url === "/api/v1/pending") {
+        return Promise.resolve(jsonResponse(refreshed));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    useConnectionStore();
+    useSettingsStore();
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-metadata");
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pending = current;
+    updates.plan = planResponse({ selected_line_numbers: [1] });
+
+    await updates.refreshPendingMetadata([1]);
+
+    expect(updates.pending?.source_hash).toBe("changed-source-hash");
+    expect(updates.plan).toBeNull();
+    expect(updates.error).toBe(
+      "Selected update metadata changed. Review the warnings and preview the plan again.",
+    );
   });
 
   it("matches security scans only for the current pending source and line", () => {
@@ -1833,7 +2051,7 @@ describe("updates store", () => {
       [],
       [],
       "csrf-plan-apply",
-      [],
+      {},
     );
     expect(createJob).not.toHaveBeenCalled();
     expect(job.job_id).toBe("job-plan");

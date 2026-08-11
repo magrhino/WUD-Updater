@@ -109,7 +109,7 @@ def classify_lsio_update(
 ) -> LSIOUpdateClassification:
     current = parse_lsio_tag(current_tag)
     target = parse_lsio_tag(target_tag or lsio_tag)
-    if not _lsio_repo(image_repo):
+    if not is_lsio_repo(image_repo):
         return LSIOUpdateClassification(
             reason="non-lsio-image",
             current=current,
@@ -208,7 +208,7 @@ def normalize_lsio_version(value: str) -> str:
     return normalized
 
 
-def _lsio_repo(value: str) -> bool:
+def is_lsio_repo(value: str) -> bool:
     parts = value.lower().split("/")
     return any(part in {"linuxserver", "linuxserver.io"} for part in parts[:-1])
 

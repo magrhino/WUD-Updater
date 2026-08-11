@@ -10,7 +10,14 @@ import type {
   PlanCleanupItem,
   PlanIssue,
   PlanResponse,
+  PlanTagStreamUpdate,
+  TagStreamDecision,
 } from "../../api/client";
+import {
+  pendingMetadataStatusLabel,
+  pendingMetadataStatusTagType,
+  pendingMetadataStatusTitle,
+} from "../../views/pending/pendingDisplay";
 import {
   planLineDigestPinLabel,
   planLineDigestUnpinLabel,
@@ -22,6 +29,7 @@ import {
   type PlanDigestUnpinUpdateView,
   type PlanLineView,
 } from "../../views/pending/utils";
+import { tagStreamLabelApprovalIssueKey } from "../../views/pending/usePendingPlanReviewState";
 import CoreUpdateTourPanel from "../CoreUpdateTourPanel.vue";
 import PreflightFooterActions from "../preflight/PreflightFooterActions.vue";
 import PreflightMetricsGrid from "../preflight/PreflightMetricsGrid.vue";
@@ -30,7 +38,7 @@ import PreflightNoticeList from "../preflight/PreflightNoticeList.vue";
 
 type TagType = "default" | "error" | "info" | "success" | "warning";
 
-defineProps<{
+const props = defineProps<{
   actionCommand: (action: PlanAction) => string;
   applyButtonLabel: string;
   applyDisabled: boolean;
@@ -54,6 +62,10 @@ defineProps<{
   digestPinLabelApprovalApproved: (issue: PlanIssue) => boolean;
   digestPinLabelApprovalIssues: PlanIssue[];
   digestPinLabelIssueProposedRegex: (issue: PlanIssue) => string;
+  tagStreamDecisionIssues: PlanIssue[];
+  tagStreamDecisionSelected: (issue: PlanIssue, decision: TagStreamDecision) => boolean;
+  tagStreamLabelApprovalApproved: (issue: PlanIssue) => boolean;
+  tagStreamLabelApprovalIssues: PlanIssue[];
   issueDetailString: (issue: PlanIssue, key: string) => string;
   issueHint: (issue: PlanIssue) => string;
   issueLabel: (issue: PlanIssue) => string;
@@ -66,6 +78,9 @@ defineProps<{
   planDigestPinLabelRewrites: PlanDigestPinLabelRewriteView[];
   planDigestUnpinUpdates: PlanDigestUnpinUpdateView[];
   planLines: PlanLineView[];
+  planTagStreamUpdates: { stack: string; update: PlanTagStreamUpdate }[];
+  planMetadataWarning: string;
+  planStatusLabel: string;
   preflightDigestPinNotice: string;
   preflightDigestUnpinNotice: string;
   preflightServiceImpactLabel: string;
@@ -81,9 +96,30 @@ defineProps<{
 const emit = defineEmits<{
   (event: "apply"): void;
   (event: "approve-digest-pin-label-rewrite", issue: PlanIssue): void;
+  (event: "approve-tag-stream-label-rewrite", issue: PlanIssue): void;
+  (event: "choose-tag-stream", issue: PlanIssue, decision: TagStreamDecision): void;
   (event: "close"): void;
   (event: "open-cleanup"): void;
 }>();
+
+function tagStreamDecisionsComplete(): boolean {
+  return props.tagStreamDecisionIssues.every(
+    (issue) =>
+      props.tagStreamDecisionSelected(issue, "preserve") ||
+      props.tagStreamDecisionSelected(issue, "switch"),
+  );
+}
+
+function selectedTagStreamUpdate(issue: PlanIssue): PlanTagStreamUpdate | undefined {
+  return props.planTagStreamUpdates.find(
+    (item) => item.update.line_no === issue.line_no,
+  )?.update;
+}
+
+function tagStreamRulePreview(issue: PlanIssue): string {
+  return selectedTagStreamUpdate(issue)?.proposed_label_regex
+    ?? props.issueDetailString(issue, "preserve_label_regex");
+}
 </script>
 
 <template>
@@ -94,7 +130,7 @@ const emit = defineEmits<{
     :title="preflightTitle"
     :summary="preflightSummary"
     :impact-label="preflightServiceImpactLabel"
-    :status-label="plan.status"
+    :status-label="planStatusLabel"
     :status-type="planAlertType"
     @close="emit('close')"
   >
@@ -103,7 +139,7 @@ const emit = defineEmits<{
         { label: 'Targets', value: plan.summary.target_count },
         { label: 'Matched', value: plan.summary.matched_target_count },
         { label: 'Stacks', value: plan.summary.stack_count },
-        { label: 'Issues', value: plan.summary.issue_count },
+        { label: 'Plan issues', value: plan.summary.issue_count },
       ]"
     />
 
@@ -186,10 +222,148 @@ const emit = defineEmits<{
       >
         {{ mutationDisabledMessage }}
       </n-alert>
+
+      <section
+        v-if="tagStreamDecisionIssues.length"
+        class="preflight-impact preflight-block stream-decision-section"
+        aria-labelledby="tag-stream-decision-title"
+      >
+        <div class="preflight-impact-heading">
+          <strong id="tag-stream-decision-title">Update stream change</strong>
+          <n-tag
+            size="small"
+            :type="tagStreamDecisionsComplete() ? 'success' : 'warning'"
+          >
+            {{ tagStreamDecisionsComplete() ? "Decision selected" : "Decision required" }}
+          </n-tag>
+        </div>
+        <div
+          v-for="issue in tagStreamDecisionIssues"
+          :key="`stream-${issue.line_no}`"
+          class="stream-decision"
+        >
+          <p>
+            WUD proposed
+            <code>{{ issueDetailString(issue, "reported_tag") }}</code>, which changes
+            {{ issueDetailString(issue, "current_stream") }} to
+            {{ issueDetailString(issue, "reported_stream") }}. The same-stream tag was verified.
+          </p>
+          <fieldset class="stream-choice-group">
+            <legend class="sr-only">Update stream choice for line {{ issue.line_no }}</legend>
+            <div class="stream-choice-grid">
+              <n-button
+                type="primary"
+                :loading="loading"
+                :disabled="tagStreamDecisionSelected(issue, 'preserve')"
+                @click="emit('choose-tag-stream', issue, 'preserve')"
+              >
+                <template v-if="tagStreamDecisionSelected(issue, 'preserve')" #icon>
+                  <Check :size="16" aria-hidden="true" />
+                </template>
+                Keep {{ issueDetailString(issue, "current_stream") }} —
+                {{ issueDetailString(issue, "same_stream_tag") }}
+              </n-button>
+              <n-button
+                secondary
+                :loading="loading"
+                :disabled="tagStreamDecisionSelected(issue, 'switch')"
+                @click="emit('choose-tag-stream', issue, 'switch')"
+              >
+                <template v-if="tagStreamDecisionSelected(issue, 'switch')" #icon>
+                  <Check :size="16" aria-hidden="true" />
+                </template>
+                Switch to {{ issueDetailString(issue, "reported_stream") }} —
+                {{ issueDetailString(issue, "reported_tag") }}
+              </n-button>
+            </div>
+          </fieldset>
+          <div class="stream-rule-preview">
+            <span>{{ selectedTagStreamUpdate(issue) ? "Resulting label" : "Recommended label" }}</span>
+            <code>wud.tag.include={{ tagStreamRulePreview(issue) }}</code>
+          </div>
+        </div>
+      </section>
+
+      <section
+        v-if="planTagStreamUpdates.length"
+        class="preflight-impact preflight-block"
+        aria-labelledby="tag-stream-updates-title"
+      >
+        <div class="preflight-impact-heading">
+          <strong id="tag-stream-updates-title">Selected update stream</strong>
+          <n-tag size="small" type="success">Resolved</n-tag>
+        </div>
+        <div class="compact-list">
+          <div
+            v-for="item in planTagStreamUpdates"
+            :key="`${item.stack}-${item.update.service}-${item.update.line_no}`"
+            class="list-row plan-line-row"
+          >
+            <span>{{ item.update.decision }}</span>
+            <strong>{{ item.stack }} / {{ item.update.service }}</strong>
+            <em>
+              <code>{{ item.update.current_tag }} -> {{ item.update.selected_tag }}</code>
+              <code>{{ item.update.label_key }}={{ item.update.proposed_label_regex }}</code>
+            </em>
+          </div>
+        </div>
+      </section>
+
+      <section
+        v-if="tagStreamLabelApprovalIssues.length"
+        class="preflight-impact preflight-block"
+        aria-labelledby="tag-stream-label-approvals-title"
+      >
+        <div class="preflight-impact-heading">
+          <strong id="tag-stream-label-approvals-title">Update-stream label approval</strong>
+          <n-tag size="small" type="warning">
+            {{ pluralize(tagStreamLabelApprovalIssues.length, "approval") }}
+          </n-tag>
+        </div>
+        <p class="preflight-summary-text">
+          This service has a custom include expression. Review and approve the exact replacement; WUDup will not merge regular expressions.
+        </p>
+        <div class="compact-list">
+          <div
+            v-for="issue in tagStreamLabelApprovalIssues"
+            :key="tagStreamLabelApprovalIssueKey(issue)"
+            class="list-row plan-line-row digest-pin-approval-row"
+          >
+            <span>Review</span>
+            <strong>
+              {{ issue.stack }} / {{ issueDetailString(issue, "compose_file") }} /
+              {{ issue.service }}
+            </strong>
+            <em>
+              <code>{{ issueDetailString(issue, "current_label_value") }}</code>
+              <span aria-hidden="true"> -> </span>
+              <code>{{ issueDetailString(issue, "proposed_label_regex") }}</code>
+              <n-button
+                size="small"
+                secondary
+                type="primary"
+                :disabled="tagStreamLabelApprovalApproved(issue)"
+                :loading="loading"
+                @click="emit('approve-tag-stream-label-rewrite', issue)"
+              >
+                <template #icon><Check :size="16" /></template>
+                {{ tagStreamLabelApprovalApproved(issue) ? "Approved" : "Approve label rewrite" }}
+              </n-button>
+            </em>
+          </div>
+        </div>
+      </section>
+      <n-alert
+        v-if="planMetadataWarning"
+        class="preflight-block"
+        type="warning"
+      >
+        {{ planMetadataWarning }}
+      </n-alert>
       <n-alert
         v-if="preflightTagRewriteNotice"
         class="preflight-block"
-        type="warning"
+        type="info"
       >
         {{ preflightTagRewriteNotice }}
       </n-alert>
@@ -362,7 +536,16 @@ const emit = defineEmits<{
             class="list-row plan-line-row"
           >
             <span>#{{ line.line_no }}</span>
-            <strong>{{ planLineServiceLabel(plan.summary.stack_count, stack, line) }}</strong>
+            <strong class="plan-line-heading">
+              <span>{{ planLineServiceLabel(plan.summary.stack_count, stack, line) }}</span>
+              <n-tag
+                size="small"
+                :type="pendingMetadataStatusTagType(line)"
+                :title="pendingMetadataStatusTitle(line)"
+              >
+                {{ pendingMetadataStatusLabel(line) }} metadata
+              </n-tag>
+            </strong>
             <em>
               <span v-if="planLineTagRewriteLabel(line)" class="tag-rewrite-detail">
                 <n-tag size="small" type="warning">Tag rewrite</n-tag>
@@ -422,7 +605,16 @@ const emit = defineEmits<{
               class="list-row plan-line-row"
             >
               <span>#{{ line.line_no }}</span>
-              <strong>{{ planLineServiceLabel(plan.summary.stack_count, stack, line) }}</strong>
+              <strong class="plan-line-heading">
+                <span>{{ planLineServiceLabel(plan.summary.stack_count, stack, line) }}</span>
+                <n-tag
+                  size="small"
+                  :type="pendingMetadataStatusTagType(line)"
+                  :title="pendingMetadataStatusTitle(line)"
+                >
+                  {{ pendingMetadataStatusLabel(line) }} metadata
+                </n-tag>
+              </strong>
               <em>
                 <span v-if="planLineTagRewriteLabel(line)" class="tag-rewrite-detail">
                   <n-tag size="small" type="warning">Tag rewrite</n-tag>
@@ -565,6 +757,41 @@ const emit = defineEmits<{
   gap: 6px;
 }
 
+.stream-decision {
+  display: grid;
+  gap: 10px;
+}
+
+.stream-decision p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.stream-choice-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.stream-choice-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stream-rule-preview {
+  display: grid;
+  gap: 4px;
+  color: var(--color-muted-text);
+  font-size: 0.82rem;
+}
+
+.stream-rule-preview code {
+  color: var(--color-code-text);
+}
+
 .apply-readiness {
   display: grid;
   gap: 10px;
@@ -658,6 +885,12 @@ const emit = defineEmits<{
 @media (--wud-compact) {
   .plan-action {
     grid-template-columns: 1fr;
+  }
+
+  .stream-choice-grid :deep(.n-button) {
+    width: 100%;
+    min-height: var(--size-touch-target);
+    white-space: normal;
   }
 }
 </style>

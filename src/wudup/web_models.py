@@ -77,6 +77,7 @@ __all__ = (
     "PendingMetadataRefreshRequest",
     "PendingMetadataRefreshResponse",
     "PendingMetadataRefreshStatus",
+    "PendingMetadataStatus",
     "PendingRemovalPlanLine",
     "PendingRemovalPlanRequest",
     "PendingRemovalPlanResponse",
@@ -93,6 +94,7 @@ __all__ = (
     "PendingSourceMode",
     "PendingSnoozedCandidate",
     "PendingStackGroup",
+    "PendingTagStream",
     "PendingUpdateRecord",
     "PlanAction",
     "PlanCleanup",
@@ -110,6 +112,7 @@ __all__ = (
     "PlanStatus",
     "PlanSummary",
     "PlanTagUpdate",
+    "PlanTagStreamUpdate",
     "PlanTarget",
     "ReadyResponse",
     "ReleaseNoteInfo",
@@ -199,6 +202,8 @@ __all__ = (
     "TagExclusionStatus",
     "TagExclusionStatusFilter",
     "TagOverrideRequest",
+    "TagStreamDecisionRequest",
+    "TagStreamLabelRewriteApprovalRequest",
     "UpdateTargetItem",
     "UpdateTargetsResponse",
     "UpdateTargetsStatus",
@@ -242,6 +247,7 @@ PendingRescanScope = Literal["all", "selected"]
 
 PendingRescanStatus = Literal["success", "partial", "blocked"]
 PendingMetadataRefreshStatus = Literal["ready", "stale"]
+PendingMetadataStatus = Literal["fresh", "retained", "recovered"]
 
 DoctorCheckStatus = Literal["PASS", "WARN", "FAIL"]
 
@@ -586,6 +592,11 @@ class WudApiObservationDiagnostics(BaseModel):
     items: list[WudApiObservationDiagnostic] = Field(default_factory=list)
 
 
+class PendingTagStream(BaseModel):
+    current_stream: str
+    reported_stream: str
+
+
 class PendingItem(BaseModel):
     line_no: int
     raw: str
@@ -605,6 +616,8 @@ class PendingItem(BaseModel):
     wud_metadata: WudContainerMetadata | None = None
     source: PendingSourceActive = "file"
     source_id: str = ""
+    tag_stream: PendingTagStream | None = None
+    metadata_status: PendingMetadataStatus = "fresh"
 
 
 class PendingDiagnostic(BaseModel):
@@ -1443,6 +1456,23 @@ class TagOverrideRequest(BaseModel):
     line_no: LineNumber
     tag: str = Field(min_length=1, max_length=128)
 
+
+class TagStreamDecisionRequest(BaseModel):
+    line_no: LineNumber
+    decision: Literal["preserve", "switch"]
+
+
+class TagStreamLabelRewriteApprovalRequest(BaseModel):
+    line_no: LineNumber
+    stack: str = Field(min_length=1, max_length=256)
+    stack_directory: str = Field(min_length=1, max_length=4096)
+    compose_file: str = Field(min_length=1, max_length=256)
+    service: str = Field(min_length=1, max_length=256)
+    label_key: str = Field(min_length=1, max_length=256)
+    current_label_value: str = Field(min_length=1, max_length=512)
+    selected_tag: str = Field(min_length=1, max_length=128)
+    proposed_label_value: str = Field(min_length=1, max_length=512)
+
 class DigestPinLabelRewriteApprovalRequest(BaseModel):
     stack: str = Field(min_length=1, max_length=256)
     service: str = Field(min_length=1, max_length=256)
@@ -1460,6 +1490,10 @@ class PlanRequest(BaseModel):
     selections: list[PlanSelectionRequest] = Field(default_factory=list)
     allow_tag_updates: bool = False
     tag_overrides: list[TagOverrideRequest] = Field(default_factory=list)
+    tag_stream_decisions: list[TagStreamDecisionRequest] = Field(default_factory=list)
+    tag_stream_label_rewrite_approvals: list[
+        TagStreamLabelRewriteApprovalRequest
+    ] = Field(default_factory=list)
     digest_pin_label_rewrite_approvals: list[
         DigestPinLabelRewriteApprovalRequest
     ] = Field(default_factory=list)
@@ -1497,6 +1531,7 @@ class PlanTarget(BaseModel):
     desired_tag: str
     matched: bool
     action: str
+    metadata_status: PendingMetadataStatus = "fresh"
 
 class PlanLine(BaseModel):
     line_no: int
@@ -1509,6 +1544,7 @@ class PlanLine(BaseModel):
     digest: str
     desired_tag: str
     action: str
+    metadata_status: PendingMetadataStatus = "fresh"
     digest_provenance: DigestTagProvenance | None = None
 
 class PlanTagUpdate(BaseModel):
@@ -1516,6 +1552,21 @@ class PlanTagUpdate(BaseModel):
     desired_tag: str
     new_image: str
     services: list[str] = Field(default_factory=list)
+
+
+class PlanTagStreamUpdate(BaseModel):
+    line_no: int
+    service: str
+    current_tag: str
+    reported_tag: str
+    selected_tag: str
+    decision: Literal["preserve", "switch"]
+    label_key: str
+    current_label_value: str
+    proposed_label_value: str
+    proposed_label_regex: str
+    approved: bool
+    reason: str
 
 class PlanDigestPinLabelRewrite(BaseModel):
     service: str
@@ -1571,6 +1622,7 @@ class PlanStack(BaseModel):
     force_recreate: bool
     up_no_deps: bool
     tag_updates: list[PlanTagUpdate] = Field(default_factory=list)
+    tag_stream_updates: list[PlanTagStreamUpdate] = Field(default_factory=list)
     digest_pin_updates: list[PlanDigestPinUpdate] = Field(default_factory=list)
     digest_unpin_updates: list[PlanDigestUnpinUpdate] = Field(default_factory=list)
     actions: list[PlanAction] = Field(default_factory=list)
@@ -1652,11 +1704,13 @@ class PendingMetadataRefreshItem(BaseModel):
     raw: str
     source_id: str = ""
     wud_metadata: WudContainerMetadata | None = None
+    metadata_status: PendingMetadataStatus = "fresh"
 
 class PendingMetadataRefreshResponse(BaseModel):
     status: PendingMetadataRefreshStatus
     requires_pending_reload: bool
     source_hash: str
+    source: PendingSourceInfo
     wud_api: WudApiStatus
     items: list[PendingMetadataRefreshItem] = Field(default_factory=list)
 
@@ -1715,6 +1769,10 @@ class ApplyPlanRequest(BaseModel):
     selections: list[PlanSelectionRequest] = Field(default_factory=list)
     allow_tag_updates: bool = False
     tag_overrides: list[TagOverrideRequest] = Field(default_factory=list)
+    tag_stream_decisions: list[TagStreamDecisionRequest] = Field(default_factory=list)
+    tag_stream_label_rewrite_approvals: list[
+        TagStreamLabelRewriteApprovalRequest
+    ] = Field(default_factory=list)
     digest_pin_label_rewrite_approvals: list[
         DigestPinLabelRewriteApprovalRequest
     ] = Field(default_factory=list)

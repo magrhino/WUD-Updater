@@ -343,7 +343,6 @@ def _build_auto_update_plan(
         source=pending_source.plan_source(),
         line_numbers=line_numbers,
         allow_tag_updates=False,
-        tag_overrides=(),
         digest_pin_label_rewrite_approvals=(),
         host_docker_base=settings.host_docker_base,
         environ=settings.command_env,
@@ -355,6 +354,7 @@ def _plan_can_auto_apply(plan: DryRunPlan, settings: WebSettings) -> bool:
     return (
         settings.mutations_enabled
         and plan.status == "ready"
+        and all(status == "fresh" for status in plan.selected_metadata_statuses())
         and not plan.skipped
         and not any(issue.severity == "error" for issue in plan.issues)
     )

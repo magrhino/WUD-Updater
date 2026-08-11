@@ -417,6 +417,7 @@ def test_apply_endpoint_rejects_degraded_api_last_good_source(
     assert degraded.status_code == 200
     assert degraded.json()["count"] == 1
     assert degraded.json()["source"]["degraded"] is True
+    assert degraded.json()["items"][0]["metadata_status"] == "retained"
 
     headers = _csrf_headers(client)
     plan_response = client.post(
@@ -431,6 +432,22 @@ def test_apply_endpoint_rejects_degraded_api_last_good_source(
     assert plan["source"]["active"] == "api"
     assert plan["source"]["degraded"] is True
     assert plan["can_apply"] is False
+    metadata_check = next(
+        check
+        for check in plan["apply_preflight"]["checks"]
+        if check["code"] == "wud-metadata-current"
+    )
+    assert metadata_check == {
+        "status": "FAIL",
+        "code": "wud-metadata-current",
+        "label": "Selected update metadata",
+        "detail": (
+            "1 selected update is blocked because its metadata is stale (retained). "
+            "Check your WUD configuration, then run a successful WUD scan."
+        ),
+        "source_check_codes": ["wud-api-observations"],
+    }
+    assert plan["targets"][0]["metadata_status"] == "retained"
 
     apply_response = client.post(
         "/api/v1/jobs",
@@ -508,6 +525,368 @@ def test_plan_allows_fresh_update_with_unrelated_unsupported_registry_row(
     calls = _fake_docker_calls(fake_root)
     assert " pull " not in calls
     assert " up -d " not in calls
+
+
+def test_apply_allows_fresh_update_with_unrelated_degraded_observation_in_auto_mode(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:new",
+            update_kind="digest",
+        ),
+        _wud_api_container(
+            name="broken",
+            image="repo/broken:latest",
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:broken-new",
+            update_kind="digest",
+        ),
+    ]
+    _install_wud_api(monkeypatch, containers=containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "auto",
+            "WUD_API_BASE_URL": "https://wud.apply-api-mixed.test:3000",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    headers = _csrf_headers(client)
+    pending = client.get("/api/v1/pending").json()
+    assert pending["source"]["degraded"] is False
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    containers[1]["updateAvailable"] = False
+    containers[1]["result"] = None
+    containers[1]["error"] = {"message": "registry lookup failed"}
+
+    metadata_check = next(
+        check
+        for check in plan["apply_preflight"]["checks"]
+        if check["code"] == "wud-metadata-current"
+    )
+    assert plan["can_apply"] is True
+    assert plan["targets"][0]["metadata_status"] == "fresh"
+    assert metadata_check["status"] == "PASS"
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert apply_response.status_code == 202
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+    assert job["status"] == "success"
+    refreshed = client.get("/api/v1/pending").json()
+    assert refreshed["source"]["active"] == "api"
+    assert refreshed["source"]["degraded"] is True
+    calls = _fake_docker_calls(fake_root)
+    assert "compose -f docker-compose.yml pull app" in calls
+    assert "broken" not in calls
+
+
+def test_plan_blocks_fresh_update_with_unresolved_matching_container(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:new",
+            update_kind="digest",
+        ),
+        _wud_api_container(
+            name="app-shadow",
+            image="repo/app",
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:new",
+            update_kind="digest",
+            update_available=False,
+        ),
+    ]
+    containers[1]["result"] = None
+    containers[1]["error"] = {"message": "registry lookup failed"}
+    _install_wud_api(monkeypatch, containers=containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "auto",
+            "WUD_API_BASE_URL": "https://wud.apply-api-related.test:3000",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("app-shadow", "repo/app:latest", "cid-app-shadow"),
+        ],
+    )
+
+    pending = client.get("/api/v1/pending").json()
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    ).json()
+
+    assert pending["source"]["degraded"] is True
+    assert pending["items"][0]["metadata_status"] == "retained"
+    assert plan["can_apply"] is False
+    assert plan["targets"][0]["metadata_status"] == "retained"
+    metadata_check = next(
+        check
+        for check in plan["apply_preflight"]["checks"]
+        if check["code"] == "wud-metadata-current"
+    )
+    assert metadata_check["status"] == "FAIL"
+    assert "1 selected update is blocked" in metadata_check["detail"]
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
+def test_shared_apply_scope_uses_least_fresh_container_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:app-new",
+            update_kind="digest",
+        ),
+        _wud_api_container(
+            name="app-shadow",
+            image="repo/app",
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:shadow-new",
+            update_kind="digest",
+        ),
+    ]
+    _install_wud_api(monkeypatch, containers=containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.apply-api-shared-scope.test:3000",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("app-shadow", "repo/app:latest", "cid-app-shadow"),
+        ],
+    )
+
+    initial = client.get("/api/v1/pending").json()
+    containers[1]["updateAvailable"] = False
+    containers[1]["result"] = None
+    containers[1]["error"] = {"message": "registry lookup failed"}
+    degraded = client.get("/api/v1/pending").json()
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    ).json()
+
+    assert [item["metadata_status"] for item in initial["items"]] == [
+        "fresh",
+        "fresh",
+    ]
+    assert [item["metadata_status"] for item in degraded["items"]] == [
+        "retained",
+        "retained",
+    ]
+    assert all(
+        item["source_id"] == "docker.local.app,docker.local.app-shadow"
+        for item in degraded["items"]
+    )
+    assert plan["can_apply"] is False
+    assert plan["targets"][0]["metadata_status"] == "retained"
+
+
+def test_apply_rejects_plan_when_selected_wud_container_identity_changes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:new",
+            update_kind="digest",
+        )
+    ]
+    _install_wud_api(monkeypatch, containers=containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.apply-api-identity.test:3000",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    containers[0]["id"] = "docker.local.replaced-app"
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert plan["can_apply"] is True
+    assert apply_response.status_code == 409
+    assert apply_response.json()["detail"] == "plan is stale"
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
+def test_plan_blocks_mixed_fresh_and_retained_selection(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:app-new",
+            update_kind="digest",
+        ),
+        _wud_api_container(
+            name="worker",
+            image="repo/worker:latest",
+            tag="latest",
+            remote_tag="",
+            remote_digest="sha256:worker-new",
+            update_kind="digest",
+        ),
+    ]
+    _install_wud_api(monkeypatch, containers=containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.apply-api-retained-mixed.test:3000",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("worker", "repo/worker:latest", "cid-worker"),
+        ],
+    )
+
+    assert client.get("/api/v1/pending").json()["count"] == 2
+    containers[1]["updateAvailable"] = False
+    containers[1]["result"] = None
+    containers[1]["error"] = {"message": "registry lookup failed"}
+    pending = client.get("/api/v1/pending").json()
+    assert [item["metadata_status"] for item in pending["items"]] == [
+        "fresh",
+        "retained",
+    ]
+
+    headers = _csrf_headers(client)
+    mixed = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1, 2]},
+        headers=headers,
+    ).json()
+    fresh_only = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    assert mixed["can_apply"] is False
+    assert [target["metadata_status"] for target in mixed["targets"]] == [
+        "fresh",
+        "retained",
+    ]
+    mixed_metadata_check = next(
+        check
+        for check in mixed["apply_preflight"]["checks"]
+        if check["code"] == "wud-metadata-current"
+    )
+    assert mixed_metadata_check["status"] == "FAIL"
+    assert "1 selected update is blocked" in mixed_metadata_check["detail"]
+
+    assert fresh_only["can_apply"] is True
+    fresh_metadata_check = next(
+        check
+        for check in fresh_only["apply_preflight"]["checks"]
+        if check["code"] == "wud-metadata-current"
+    )
+    assert fresh_metadata_check["status"] == "WARN"
+    assert "Other WUD observations" in fresh_metadata_check["detail"]
 
 
 def test_apply_endpoint_rejects_stale_api_pending_source_without_editing_file(
@@ -765,6 +1144,479 @@ def test_apply_endpoint_passes_tag_overrides_to_updater(tmp_path: Path) -> None:
     calls = _fake_docker_calls(fake_root)
     assert "manifest inspect repo/app:3.0" in calls
     assert "compose -f docker-compose.yml pull app" in calls
+
+
+def test_apply_endpoint_applies_stream_image_and_label_as_one_plan(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text(
+        "n8nio/runners:2.33.5-distroless tag=2.34.4\n",
+        encoding="utf-8",
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "jarvis",
+        [("task-runner", "n8nio/runners:2.33.5-distroless", "cid-task")],
+    )
+    (fake_root / "images" / "n8nio_runners_2.34.4-distroless.after_id").write_text(
+        "new\n",
+        encoding="utf-8",
+    )
+    headers = _csrf_headers(client)
+    payload = {
+        "line_numbers": [1],
+        "allow_tag_updates": True,
+        "tag_stream_decisions": [{"line_no": 1, "decision": "preserve"}],
+    }
+    plan = client.post("/api/v1/plans", json=payload, headers=headers).json()
+
+    stale_apply = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "allow_tag_updates": True,
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={"plan_id": plan["plan_id"], **payload, "confirmation": "apply"},
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert stale_apply.status_code == 409
+    assert stale_apply.json()["detail"] == "plan is stale"
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    rendered = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "image: n8nio/runners:2.34.4-distroless" in rendered
+    assert r"wud.tag.include=^\d+\.\d+\.\d+-distroless$$" in rendered
+    assert wud_file.read_text(encoding="utf-8") == ""
+
+
+def test_apply_endpoint_preserves_stream_only_for_candidate_service(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text(
+        "n8nio/runners:2.33.5-distroless tag=2.34.4\n",
+        encoding="utf-8",
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "jarvis",
+        [
+            (
+                "distroless",
+                "n8nio/runners:2.33.5-distroless",
+                "cid-distroless",
+            ),
+            ("default", "n8nio/runners:2.33.5", "cid-default"),
+        ],
+    )
+    for image in (
+        "n8nio_runners_2.34.4-distroless.after_id",
+        "n8nio_runners_2.34.4.after_id",
+    ):
+        (fake_root / "images" / image).write_text("new\n", encoding="utf-8")
+    headers = _csrf_headers(client)
+    payload = {
+        "line_numbers": [1],
+        "allow_tag_updates": True,
+        "tag_stream_decisions": [{"line_no": 1, "decision": "preserve"}],
+    }
+    plan = client.post("/api/v1/plans", json=payload, headers=headers).json()
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={"plan_id": plan["plan_id"], **payload, "confirmation": "apply"},
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert plan["status"] == "ready"
+    assert len(plan["stacks"][0]["tag_stream_updates"]) == 1
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    rendered = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "    image: n8nio/runners:2.34.4-distroless\n" in rendered
+    assert "    image: n8nio/runners:2.33.5\n" in rendered
+    assert rendered.count(r"wud.tag.include=^\d+\.\d+\.\d+-distroless$$") == 1
+    assert wud_file.read_text(encoding="utf-8") == ""
+
+
+def test_apply_endpoint_coalesces_duplicate_stream_entries(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_MAX_WAIT": "0",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    line = "n8nio/runners:2.33.5-distroless tag=2.34.4\n"
+    wud_file.write_text(line * 2, encoding="utf-8")
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "jarvis",
+        [("task-runner", "n8nio/runners:2.33.5-distroless", "cid-task")],
+    )
+    (fake_root / "images" / "n8nio_runners_2.34.4-distroless.after_id").write_text(
+        "new\n",
+        encoding="utf-8",
+    )
+    headers = _csrf_headers(client)
+    payload = {
+        "line_numbers": [1, 2],
+        "allow_tag_updates": True,
+        "tag_stream_decisions": [
+            {"line_no": 1, "decision": "preserve"},
+            {"line_no": 2, "decision": "preserve"},
+        ],
+    }
+    plan = client.post("/api/v1/plans", json=payload, headers=headers).json()
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={"plan_id": plan["plan_id"], **payload, "confirmation": "apply"},
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert plan["status"] == "ready"
+    assert len(plan["stacks"][0]["tag_stream_updates"]) == 2
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    rendered = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    assert rendered.count("    image: n8nio/runners:2.34.4-distroless\n") == 1
+    assert rendered.count(r"wud.tag.include=^\d+\.\d+\.\d+-distroless$$") == 1
+    assert wud_file.read_text(encoding="utf-8") == ""
+
+
+def test_apply_endpoint_preserves_stream_rule_when_digest_pinning(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    target_image = "n8nio/runners:2.34.4-distroless"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_DIGEST_PIN_UPDATES": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text(
+        "n8nio/runners:2.33.5-distroless tag=2.34.4\n",
+        encoding="utf-8",
+    )
+    _write_fake_manifest(
+        fake_root,
+        f"docker.io/{target_image}",
+        _manifest_index_digest("sha256:index", "sha256:child"),
+    )
+    _write_fake_image_after_pull(
+        fake_root,
+        target_image,
+        "sha256:config",
+        "sha256:index",
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "jarvis",
+        [("task-runner", "n8nio/runners:2.33.5-distroless", "cid-task")],
+    )
+    headers = _csrf_headers(client)
+    payload = {
+        "line_numbers": [1],
+        "allow_tag_updates": True,
+        "tag_stream_decisions": [{"line_no": 1, "decision": "preserve"}],
+    }
+    plan_response = client.post(
+        "/api/v1/plans",
+        json=payload,
+        headers=headers,
+    )
+    plan = plan_response.json()
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={"plan_id": plan["plan_id"], **payload, "confirmation": "apply"},
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert plan_response.status_code == 200
+    assert plan["status"] == "ready"
+    assert not any(
+        issue["code"] == "compose-digest-pin-label-rewrite-unapproved"
+        for issue in plan["issues"]
+    )
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    rendered = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "image: n8nio/runners@sha256:index" in rendered
+    assert r"wud.tag.include=^\d+\.\d+\.\d+-distroless$$" in rendered
+    assert wud_file.read_text(encoding="utf-8") == ""
+
+
+def test_apply_endpoint_keeps_same_named_nested_stacks_separate(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_MAX_WAIT": "0",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text(
+        "n8nio/runners:2.33.5-distroless tag=2.34.4\n",
+        encoding="utf-8",
+    )
+    first_source = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "jarvis-a",
+        [("task-runner", "n8nio/runners:2.33.5-distroless", "cid-a")],
+    )
+    second_source = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "jarvis-b",
+        [("task-runner", "n8nio/runners:2.33.5-distroless", "cid-b")],
+    )
+    first_stack = tmp_path / "docker" / "primary" / "jarvis"
+    second_stack = tmp_path / "docker" / "secondary" / "jarvis"
+    first_stack.parent.mkdir(parents=True)
+    second_stack.parent.mkdir(parents=True)
+    first_source.rename(first_stack)
+    second_source.rename(second_stack)
+    runtime_path = fake_root / "compose-runtime.tsv"
+    runtime_path.write_text(
+        runtime_path.read_text(encoding="utf-8")
+        .replace(str(first_source), str(first_stack))
+        .replace(str(second_source), str(second_stack)),
+        encoding="utf-8",
+    )
+    (fake_root / "images" / "n8nio_runners_2.34.4-distroless.after_id").write_text(
+        "new\n",
+        encoding="utf-8",
+    )
+    headers = _csrf_headers(client)
+    payload = {
+        "line_numbers": [1],
+        "allow_tag_updates": True,
+        "tag_stream_decisions": [{"line_no": 1, "decision": "preserve"}],
+    }
+    plan = client.post(
+        "/api/v1/plans",
+        json=payload,
+        headers=headers,
+    ).json()
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={"plan_id": plan["plan_id"], **payload, "confirmation": "apply"},
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert [stack["name"] for stack in plan["stacks"]] == ["jarvis", "jarvis"]
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    for stack in (first_stack, second_stack):
+        rendered = (stack / "docker-compose.yml").read_text(encoding="utf-8")
+        assert "image: n8nio/runners:2.34.4-distroless" in rendered
+        assert r"wud.tag.include=^\d+\.\d+\.\d+-distroless$$" in rendered
+    assert wud_file.read_text(encoding="utf-8") == ""
+
+
+def test_apply_endpoint_routes_same_directory_compose_files_separately(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_MAX_WAIT": "0",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text(
+        "n8nio/runners:2.33.5-distroless tag=2.34.4\n",
+        encoding="utf-8",
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "jarvis",
+        [("task-runner", "n8nio/runners:2.33.5-distroless", "cid-task")],
+    )
+    alternate_compose = compose_dir / "compose.yml"
+    alternate_compose.write_text(
+        (compose_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (fake_root / "images" / "n8nio_runners_2.34.4-distroless.after_id").write_text(
+        "new\n",
+        encoding="utf-8",
+    )
+    headers = _csrf_headers(client)
+    payload = {
+        "line_numbers": [1],
+        "allow_tag_updates": True,
+        "tag_stream_decisions": [{"line_no": 1, "decision": "preserve"}],
+    }
+    plan = client.post("/api/v1/plans", json=payload, headers=headers).json()
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={"plan_id": plan["plan_id"], **payload, "confirmation": "apply"},
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert plan["status"] == "ready"
+    assert [stack["compose_file"] for stack in plan["stacks"]] == [
+        "compose.yml",
+        "docker-compose.yml",
+    ]
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    for compose_file in (alternate_compose, compose_dir / "docker-compose.yml"):
+        rendered = compose_file.read_text(encoding="utf-8")
+        assert "image: n8nio/runners:2.34.4-distroless" in rendered
+        assert r"wud.tag.include=^\d+\.\d+\.\d+-distroless$$" in rendered
+    assert wud_file.read_text(encoding="utf-8") == ""
+
+
+def test_apply_endpoint_rejects_stale_stream_label_approval(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    (tmp_path / "state" / "images.todo").write_text(
+        "n8nio/runners:2.33.5-distroless tag=2.34.4\n",
+        encoding="utf-8",
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "jarvis",
+        [("task-runner", "n8nio/runners:2.33.5-distroless", "cid-task")],
+    )
+    compose_path = compose_dir / "docker-compose.yml"
+    compose_path.write_text(
+        "services:\n"
+        "  task-runner:\n"
+        "    image: n8nio/runners:2.33.5-distroless\n"
+        "    labels:\n"
+        "      wud.tag.include: ^stable-.+$$\n",
+        encoding="utf-8",
+    )
+    headers = _csrf_headers(client)
+    decision = {"line_no": 1, "decision": "preserve"}
+    blocked = client.post(
+        "/api/v1/plans",
+        json={
+            "line_numbers": [1],
+            "allow_tag_updates": True,
+            "tag_stream_decisions": [decision],
+        },
+        headers=headers,
+    ).json()
+    issue = next(
+        item
+        for item in blocked["issues"]
+        if item["code"] == "compose-tag-stream-label-rewrite-unapproved"
+    )
+    approval = {
+        "line_no": 1,
+        "stack": issue["stack"],
+        "stack_directory": issue["details"]["stack_directory"],
+        "compose_file": issue["details"]["compose_file"],
+        "service": issue["service"],
+        "label_key": issue["details"]["label_key"],
+        "current_label_value": issue["details"]["current_label_value"],
+        "selected_tag": issue["details"]["selected_tag"],
+        "proposed_label_value": issue["details"]["proposed_label_value"],
+    }
+    plan_payload = {
+        "line_numbers": [1],
+        "allow_tag_updates": True,
+        "tag_stream_decisions": [decision],
+        "tag_stream_label_rewrite_approvals": [approval],
+    }
+    plan = client.post(
+        "/api/v1/plans",
+        json=plan_payload,
+        headers=headers,
+    ).json()
+    compose_path.write_text(
+        compose_path.read_text(encoding="utf-8").replace(
+            "^stable-.+$$",
+            "^beta-.+$$",
+        ),
+        encoding="utf-8",
+    )
+
+    response = client.post(
+        "/api/v1/jobs",
+        json={"plan_id": plan["plan_id"], **plan_payload, "confirmation": "apply"},
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "plan is stale"
+    rendered = compose_path.read_text(encoding="utf-8")
+    assert "image: n8nio/runners:2.33.5-distroless" in rendered
+    assert "wud.tag.include: ^beta-.+$$" in rendered
 
 
 def test_apply_endpoint_holds_wud_lock_for_worker_handoff(

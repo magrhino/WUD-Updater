@@ -13,9 +13,13 @@ import type {
   PlanIssue,
   PlanSelectionRequest,
   TagOverrideRequest,
+  TagStreamDecision,
+  TagStreamDecisionRequest,
+  TagStreamLabelRewriteApprovalRequest,
 } from "../../api/client";
 import { useAuthStore } from "../../stores/auth";
 import { useUpdatesStore } from "../../stores/updates";
+import { pendingMetadataStatus } from "./pendingDisplay";
 import {
   pendingPlanContextLabel,
   planActionsFromPlan,
@@ -40,12 +44,17 @@ export type PendingUpdateIntent = {
   allowTagUpdates: boolean;
   tagOverrides: TagOverrideRequest[];
   digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[];
+  tagStreamDecisions: TagStreamDecisionRequest[];
+  tagStreamLabelRewriteApprovals: TagStreamLabelRewriteApprovalRequest[];
+  blockedMetadataCount?: number;
 };
 
 export type PendingApplyPlanPayload = {
   allowTagUpdates: boolean;
   tagOverrides: TagOverrideRequest[];
   digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[];
+  tagStreamDecisions: TagStreamDecisionRequest[];
+  tagStreamLabelRewriteApprovals: TagStreamLabelRewriteApprovalRequest[];
 };
 
 type AssistantDetailKey =
@@ -73,6 +82,7 @@ export function usePendingPlanReviewState(
   const updates = useUpdatesStore();
   const auth = useAuthStore();
   const updateIntent = ref<PendingUpdateIntent | null>(null);
+  const retainedTagStreamDecisionIssues = ref<PlanIssue[]>([]);
 
   const mutationStateLabel = computed(() =>
     auth.session?.mutations_enabled ? "Mutations enabled" : "Read-only",
@@ -85,15 +95,32 @@ export function usePendingPlanReviewState(
       ? "Apply starts a server-side job, streams the live log, and writes a run record you can verify afterward."
       : "Read-only mode keeps Apply disabled. You can still preview impact now, then enable browser mutations server-side when you are ready to apply.",
   );
-  const selectedTagOverrideError = computed(() =>
-    options.tagOverrideErrorForLines(options.selectedLineNumbers.value),
-  );
   const pendingSourceAllowsFileEdits = computed(
     () => (updates.pending?.source?.active ?? "file") === "file",
   );
+  const selectedFreshLineNumbers = computed(() => {
+    const byLine = new Map(
+      (updates.pending?.items ?? []).map((item) => [item.line_no, item]),
+    );
+    return options.selectedSelections.value
+      .filter(
+        (selection) =>
+          pendingMetadataStatus(byLine.get(selection.line_no) ?? {}) === "fresh",
+      )
+      .map((selection) => selection.line_no);
+  });
+  const selectedFreshCount = computed(
+    () => selectedFreshLineNumbers.value.length,
+  );
+  const selectedTagOverrideError = computed(() =>
+    options.tagOverrideErrorForLines(selectedFreshLineNumbers.value),
+  );
+  const selectedBlockedMetadataCount = computed(
+    () => options.selectedSelections.value.length - selectedFreshCount.value,
+  );
   const updateSelectedDisabled = computed(
     () =>
-      options.selectedLineNumbers.value.length === 0 ||
+      selectedFreshCount.value === 0 ||
       updates.loading ||
       Boolean(selectedTagOverrideError.value),
   );
@@ -117,13 +144,22 @@ export function usePendingPlanReviewState(
     return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to remove selected entries.";
   });
   const planAlertType = computed(() => {
-    if (updates.plan?.status === "blocked") {
+    if (
+      updates.plan?.status === "blocked" ||
+      (updates.plan?.status === "ready" && !updates.plan.can_apply)
+    ) {
       return "error";
     }
     if (updates.plan?.status === "empty") {
       return "warning";
     }
     return "info";
+  });
+  const planStatusLabel = computed(() => {
+    if (updates.plan?.status === "ready" && !updates.plan.can_apply) {
+      return "Apply blocked";
+    }
+    return updates.plan?.status ?? "";
   });
   const planContextLabel = computed(() => {
     return pendingPlanContextLabel(
@@ -137,6 +173,9 @@ export function usePendingPlanReviewState(
     }
     if (updates.plan.status === "blocked") {
       return "Plan blocked";
+    }
+    if (!updates.plan.can_apply) {
+      return "Apply blocked";
     }
     if (updates.plan.status === "empty") {
       return "No changes to apply";
@@ -161,6 +200,9 @@ export function usePendingPlanReviewState(
     }
     if (updates.plan.status === "empty") {
       return "No selected services need changes.";
+    }
+    if (!updates.plan.can_apply && updates.plan.apply_preflight.failures) {
+      return `${pluralize(updates.plan.apply_preflight.failures, "failed check")} must be fixed before applying.`;
     }
     const serviceCount =
       updates.plan.summary.service_count ||
@@ -233,13 +275,16 @@ export function usePendingPlanReviewState(
     const count =
       (updates.plan?.selected_selections?.length ?? 0) ||
       (updates.plan?.selected_line_numbers.length ?? 0);
+    const updateLabel = updateIntent.value?.blockedMetadataCount
+      ? "verified update"
+      : "update";
     return count
-      ? `Apply ${pluralize(count, "update")}`
+      ? `Apply ${pluralize(count, updateLabel)}`
       : "Apply selected updates";
   });
   const cleanupItems = computed(() => updates.plan?.cleanup.items ?? []);
   const cleanupAvailable = computed(() => cleanupItems.value.length > 0);
-  const visiblePlanIssues = computed(() => {
+  const allPlanIssues = computed(() => {
     const issues = updates.plan?.issues ?? [];
     if (!cleanupItems.value.length) {
       return issues;
@@ -250,11 +295,47 @@ export function usePendingPlanReviewState(
     );
   });
   const digestPinLabelApprovalIssues = computed(() =>
-    visiblePlanIssues.value.filter(
+    allPlanIssues.value.filter(
       (issue) =>
         issue.code === "compose-digest-pin-label-rewrite-unapproved" &&
         digestPinLabelApprovalFromIssue(issue) !== null,
     ),
+  );
+  const tagStreamDecisionIssues = computed(() => {
+    const issuesByLine = new Map(
+      retainedTagStreamDecisionIssues.value.map((issue) => [issue.line_no, issue]),
+    );
+    for (const issue of allPlanIssues.value) {
+      if (issue.code === "tag-stream-change") {
+        issuesByLine.set(issue.line_no, issue);
+      }
+    }
+    return [...issuesByLine.values()];
+  });
+  const tagStreamLabelApprovalIssues = computed(() =>
+    allPlanIssues.value.filter(
+      (issue) =>
+        issue.code === "compose-tag-stream-label-rewrite-unapproved" &&
+        tagStreamLabelApprovalFromIssue(issue) !== null,
+    ),
+  );
+  const visiblePlanIssues = computed(() =>
+    allPlanIssues.value.filter(
+      (issue) =>
+        issue.code !== "tag-stream-change" &&
+        (issue.code !== "compose-tag-stream-label-rewrite-unapproved" ||
+          tagStreamLabelApprovalFromIssue(issue) === null) &&
+        (issue.code !== "compose-digest-pin-label-rewrite-unapproved" ||
+          digestPinLabelApprovalFromIssue(issue) === null),
+    ),
+  );
+  const planTagStreamUpdates = computed(() =>
+    updates.plan?.stacks.flatMap((stack) =>
+      (stack.tag_stream_updates ?? []).map((update) => ({
+        stack: stack.name,
+        update,
+      })),
+    ) ?? [],
   );
   const planDigestPinLabelRewrites = computed(() =>
     planDigestPinLabelRewritesFromPlan(updates.plan),
@@ -341,7 +422,12 @@ export function usePendingPlanReviewState(
       return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to apply updates.";
     }
     if (!updates.plan.apply_preflight.ok) {
-      return "Fix the failed apply readiness check before applying updates.";
+      const failed = updates.plan.apply_preflight.checks.find(
+        (check) => check.status === "FAIL",
+      );
+      return failed?.detail
+        ? `${failed.label}: ${failed.detail}`
+        : "Fix the failed apply readiness check before applying updates.";
     }
     return "This plan cannot be applied.";
   });
@@ -367,9 +453,32 @@ export function usePendingPlanReviewState(
   });
   const batchSummaryLabel = computed(() => {
     const count = pluralize(options.selectedSelections.value.length, "update");
-    return selectedUpdateContext.value === "selected updates"
+    const context = selectedUpdateContext.value === "selected updates"
       ? `${count} selected`
       : `${count} selected in ${selectedUpdateContext.value}`;
+    if (!selectedBlockedMetadataCount.value) {
+      return context;
+    }
+    return `${context} · ${pluralize(selectedFreshCount.value, "verified update")} · ${pluralize(selectedBlockedMetadataCount.value, "blocked update")}`;
+  });
+  const updateSelectedButtonLabel = computed(() =>
+    selectedBlockedMetadataCount.value
+      ? `Preview ${pluralize(selectedFreshCount.value, "verified update")}`
+      : "Preview selected plan",
+  );
+  const selectedMetadataWarning = computed(() => {
+    const count = selectedBlockedMetadataCount.value;
+    if (!count) {
+      return "";
+    }
+    return `${pluralize(count, "selected update")} ${count === 1 ? "is" : "are"} blocked because ${count === 1 ? "its" : "their"} metadata is stale. Check your WUD configuration. Blocked updates will stay selected and pending.`;
+  });
+  const planMetadataWarning = computed(() => {
+    const count = updateIntent.value?.blockedMetadataCount ?? 0;
+    if (!count) {
+      return "";
+    }
+    return `${pluralize(count, "selected update")} ${count === 1 ? "is" : "are"} blocked because ${count === 1 ? "its" : "their"} metadata is stale. Check your WUD configuration. ${count === 1 ? "It" : "They"} will stay pending and will not be applied.`;
   });
   const planLines = computed(
     () => planLinesFromPlan(updates.plan),
@@ -461,10 +570,17 @@ export function usePendingPlanReviewState(
   }
 
   function setUpdateIntent(intent: PendingUpdateIntent): void {
-    updateIntent.value = intent;
+    retainedTagStreamDecisionIssues.value = [];
+    updateIntent.value = {
+      ...intent,
+      tagStreamDecisions: intent.tagStreamDecisions ?? [],
+      tagStreamLabelRewriteApprovals:
+        intent.tagStreamLabelRewriteApprovals ?? [],
+    };
   }
 
   function clearUpdateIntent(): void {
+    retainedTagStreamDecisionIssues.value = [];
     updateIntent.value = null;
   }
 
@@ -478,6 +594,9 @@ export function usePendingPlanReviewState(
       tagOverrides: intent?.tagOverrides ?? fallback.tagOverrides,
       digestPinLabelRewriteApprovals:
         intent?.digestPinLabelRewriteApprovals ?? [],
+      tagStreamDecisions: intent?.tagStreamDecisions ?? [],
+      tagStreamLabelRewriteApprovals:
+        intent?.tagStreamLabelRewriteApprovals ?? [],
     };
   }
 
@@ -500,18 +619,111 @@ export function usePendingPlanReviewState(
       ...intent,
       digestPinLabelRewriteApprovals: [...approvalsByKey.values()],
     };
-    await updates.createPlan(
-      nextIntent.lineNumbers,
-      nextIntent.allowTagUpdates,
-      nextIntent.tagOverrides,
-      nextIntent.digestPinLabelRewriteApprovals,
-      nextIntent.selections ?? [],
-    );
+    await replanIntent(nextIntent);
     if (updateIntent.value !== intent) {
       return false;
     }
     updateIntent.value = nextIntent;
     return true;
+  }
+
+  async function chooseTagStream(
+    issue: PlanIssue,
+    decision: TagStreamDecision,
+  ): Promise<boolean> {
+    const intent = updateIntent.value;
+    if (issue.line_no === null || !intent || updates.loading) {
+      return false;
+    }
+    retainedTagStreamDecisionIssues.value = [
+      ...retainedTagStreamDecisionIssues.value.filter(
+        (item) => item.line_no !== issue.line_no,
+      ),
+      issue,
+    ];
+    const decisions = new Map(
+      intent.tagStreamDecisions.map((item) => [item.line_no, item]),
+    );
+    decisions.set(issue.line_no, { line_no: issue.line_no, decision });
+    const nextIntent: PendingUpdateIntent = {
+      ...intent,
+      tagStreamDecisions: [...decisions.values()],
+      tagStreamLabelRewriteApprovals: intent.tagStreamLabelRewriteApprovals.filter(
+        (item) => item.line_no !== issue.line_no,
+      ),
+    };
+    await replanIntent(nextIntent);
+    if (updateIntent.value !== intent) {
+      return false;
+    }
+    updateIntent.value = nextIntent;
+    return true;
+  }
+
+  async function approveTagStreamLabelRewrite(issue: PlanIssue): Promise<boolean> {
+    const approval = tagStreamLabelApprovalFromIssue(issue);
+    const intent = updateIntent.value;
+    if (!approval || !intent || updates.loading) {
+      return false;
+    }
+    const approvals = new Map(
+      intent.tagStreamLabelRewriteApprovals.map((item) => [
+        tagStreamLabelApprovalKey(item),
+        item,
+      ]),
+    );
+    approvals.set(tagStreamLabelApprovalKey(approval), approval);
+    const nextIntent: PendingUpdateIntent = {
+      ...intent,
+      tagStreamLabelRewriteApprovals: [...approvals.values()],
+    };
+    await replanIntent(nextIntent);
+    if (updateIntent.value !== intent) {
+      return false;
+    }
+    updateIntent.value = nextIntent;
+    return true;
+  }
+
+  function tagStreamDecisionSelected(
+    issue: PlanIssue,
+    decision: TagStreamDecision,
+  ): boolean {
+    return updateIntent.value?.tagStreamDecisions.some(
+      (item) => item.line_no === issue.line_no && item.decision === decision,
+    ) ?? false;
+  }
+
+  function tagStreamLabelApprovalApproved(issue: PlanIssue): boolean {
+    const approval = tagStreamLabelApprovalFromIssue(issue);
+    return Boolean(
+      approval &&
+        updateIntent.value?.tagStreamLabelRewriteApprovals.some(
+          (item) => tagStreamLabelApprovalKey(item) === tagStreamLabelApprovalKey(approval),
+        ),
+    );
+  }
+
+  async function replanIntent(intent: PendingUpdateIntent): Promise<void> {
+    const createArgs = [
+      intent.lineNumbers,
+      intent.allowTagUpdates,
+      intent.tagOverrides,
+      intent.digestPinLabelRewriteApprovals,
+      intent.selections ?? [],
+    ] as const;
+    if (
+      intent.tagStreamDecisions.length ||
+      intent.tagStreamLabelRewriteApprovals.length
+    ) {
+      await updates.createPlan(
+        ...createArgs,
+        intent.tagStreamDecisions,
+        intent.tagStreamLabelRewriteApprovals,
+      );
+      return;
+    }
+    await updates.createPlan(...createArgs);
   }
 
   return {
@@ -542,6 +754,7 @@ export function usePendingPlanReviewState(
     cleanupLineLabel,
     cleanupReviewSummary,
     approveDigestPinLabelRewrite,
+    approveTagStreamLabelRewrite,
     clearUpdateIntent,
     digestPinLabelApprovalApproved,
     digestPinLabelApprovalIssues,
@@ -561,6 +774,9 @@ export function usePendingPlanReviewState(
     planDigestPinLabelRewrites,
     planDigestUnpinUpdates,
     planLines,
+    planTagStreamUpdates,
+    planMetadataWarning,
+    planStatusLabel,
     preflightDigestPinNotice,
     preflightDigestUnpinNotice,
     preflightServiceImpactLabel,
@@ -576,14 +792,21 @@ export function usePendingPlanReviewState(
     removeSelectedDisabled,
     removeSelectedDisabledMessage,
     selectedTagOverrideError,
+    selectedMetadataWarning,
     selectedUpdateContext,
     setUpdateIntent,
+    chooseTagStream,
     staleDiagnosticDetail,
     staleDiagnosticLabel,
     unmatchedIssueSummary,
     unmatchedReviewCountLabel,
     unmatchedReviewSummary,
     updateSelectedDisabled,
+    tagStreamDecisionIssues,
+    tagStreamDecisionSelected,
+    tagStreamLabelApprovalApproved,
+    tagStreamLabelApprovalIssues,
+    updateSelectedButtonLabel,
     visiblePlanIssues,
   };
 }
@@ -684,6 +907,54 @@ export function digestPinLabelApprovalKey(
     approval.planned_tag,
     approval.proposed_label_value,
   ].join("\u0000");
+}
+
+export function tagStreamLabelApprovalFromIssue(
+  issue: PlanIssue,
+): TagStreamLabelRewriteApprovalRequest | null {
+  if (
+    issue.code !== "compose-tag-stream-label-rewrite-unapproved" ||
+    issue.line_no === null
+  ) {
+    return null;
+  }
+  const approval = {
+    line_no: issue.line_no,
+    stack: issue.stack,
+    stack_directory: issueDetailString(issue, "stack_directory"),
+    compose_file: issueDetailString(issue, "compose_file"),
+    service: issue.service,
+    label_key: issueDetailString(issue, "label_key"),
+    current_label_value: issueDetailString(issue, "current_label_value"),
+    selected_tag: issueDetailString(issue, "selected_tag"),
+    proposed_label_value: issueDetailString(issue, "proposed_label_value"),
+  };
+  return Object.values(approval).every((value) => String(value).trim())
+    ? approval
+    : null;
+}
+
+export function tagStreamLabelApprovalKey(
+  approval: TagStreamLabelRewriteApprovalRequest,
+): string {
+  return [
+    approval.line_no,
+    approval.stack,
+    approval.stack_directory,
+    approval.compose_file,
+    approval.service,
+    approval.label_key,
+    approval.current_label_value,
+    approval.selected_tag,
+    approval.proposed_label_value,
+  ].join("\u0000");
+}
+
+export function tagStreamLabelApprovalIssueKey(issue: PlanIssue): string {
+  const approval = tagStreamLabelApprovalFromIssue(issue);
+  return approval === null
+    ? [issue.line_no, issue.stack, issue.service].join("\u0000")
+    : tagStreamLabelApprovalKey(approval);
 }
 
 function digestPinLabelIssueProposedRegex(issue: PlanIssue): string {

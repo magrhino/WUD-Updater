@@ -9,6 +9,7 @@ from typing import Any
 from . import compose_rewrite, updater_audit, updater_logging
 from .command import CommandError
 from .compose import ComposeBindMount, ComposeRuntimePortIssue, ComposeStack
+from .images import image_tag
 from .updater_digest_pin import _digest_pin_match_tag
 from .updater_matching import _preflight_status_reason, _stacks_to_update
 from .updater_models import (
@@ -105,6 +106,43 @@ def validate_tag_update_plan(runner: Any, matches: Sequence[Match]) -> bool:
         runner.log.error(
             f"[{stack_name}] Conflicting tag updates for service {service} "
             f"image {image}: {', '.join(sorted(desired))}"
+        )
+
+    available_stream_targets = {
+        (
+            match.target.line_no,
+            match.stack.name,
+            str(match.stack.directory.resolve(strict=False)),
+            match.stack.file,
+            match.service,
+            image_tag(match.compose_image),
+            match.target.desired_tag,
+        )
+        for match in matches
+    }
+    for update in runner.options.tag_stream_updates:
+        if update not in runner.matched_tag_stream_updates:
+            ok = False
+            runner.log.error(
+                f"[{update.stack}] Tag stream plan for {update.compose_file} "
+                f"service {update.service} line {update.line_no} is stale."
+            )
+            continue
+        target = (
+            update.line_no,
+            update.stack,
+            update.stack_directory,
+            update.compose_file,
+            update.service,
+            update.current_tag,
+            update.selected_tag,
+        )
+        if target in available_stream_targets:
+            continue
+        ok = False
+        runner.log.error(
+            f"[{update.stack}] Tag stream plan for {update.compose_file} "
+            f"service {update.service} line {update.line_no} is stale."
         )
     return ok
 
@@ -336,15 +374,32 @@ def validate_digest_pin_plan(runner: Any, matches: Sequence[Match]) -> bool:
         )
     try:
         for stack in _stacks_to_update(matches):
-            stack_updates = runner._digest_pin_updates(
-                [match for match in matches if match.stack.index == stack.index]
+            stack_matches = [
+                match for match in matches if match.stack.index == stack.index
+            ]
+            stack_updates = runner._digest_pin_updates(stack_matches)
+            stack_directory = str(stack.directory.resolve(strict=False))
+            tag_stream_updates = tuple(
+                update
+                for update in runner.options.tag_stream_updates
+                if update.stack_directory == stack_directory
+                and update.compose_file == stack.file
             )
+            selected_lines = {match.target.line_no for match in stack_matches}
+            if any(
+                update.line_no not in selected_lines
+                for update in tag_stream_updates
+            ):
+                raise ComposeTagRewriteError(
+                    f"{stack.name} tag stream plan references an unselected line."
+                )
             compose_rewrite.render_compose_digest_pins(
                 stack.directory / stack.file,
                 stack_updates,
                 label_rewrite_approvals=(
                     runner.options.digest_pin_label_rewrite_approvals
                 ),
+                tag_stream_updates=tag_stream_updates,
                 stack_name=stack.name,
             )
     except (ComposeTagRewriteError, UpdaterError) as exc:
