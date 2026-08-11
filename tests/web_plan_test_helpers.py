@@ -6,6 +6,7 @@ from pathlib import Path
 from wudup.db import init_db, open_db, upsert_known_image
 from wudup.digest_provenance import DigestTagProvenance
 
+
 def _seed_known_digest_provenance(
     tmp_path: Path,
     *,

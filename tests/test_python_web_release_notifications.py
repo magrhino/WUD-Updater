@@ -5,12 +5,6 @@ import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 
-from wudup import web_release_notifications as notifications_module
-from wudup.db import init_db, insert_pending_update, insert_update_run, open_db
-from wudup.lsio_updates import LSIOUpdateClassification, LSIOTagParts
-from wudup.release_notes import ReleaseNoteInfo as ReleaseNoteData
-from wudup.release_notes import ReleaseNoteLink as ReleaseNoteLinkData
-
 from tests.web_test_helpers import (
     _capture_discord_posts,
     _client,
@@ -20,6 +14,12 @@ from tests.web_test_helpers import (
     _store_web_setting,
     _wud_api_container,
 )
+
+from wudup import web_release_notifications as notifications_module
+from wudup.db import init_db, insert_pending_update, insert_update_run, open_db
+from wudup.lsio_updates import LSIOTagParts, LSIOUpdateClassification
+from wudup.release_notes import ReleaseNoteInfo as ReleaseNoteData
+from wudup.release_notes import ReleaseNoteLink as ReleaseNoteLinkData
 
 _RELEASE_NOTIFICATION_ENV = {
     "WUD_WEB_DEV_NO_AUTH": "true",

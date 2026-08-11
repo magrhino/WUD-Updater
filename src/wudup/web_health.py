@@ -9,8 +9,7 @@ from types import SimpleNamespace
 
 from fastapi import Request, Response
 
-from . import __version__
-from . import web_wud_api
+from . import __version__, web_wud_api
 from .config import (
     COMPOSE_IGNORE_PATHS_ENV,
     DIGEST_PIN_UPDATES_ENV,
@@ -19,11 +18,21 @@ from .config import (
 )
 from .doctor import (
     Doctor,
-    DoctorCheck as DoctorDataCheck,
     DoctorConfigError,
+)
+from .doctor import (
+    DoctorCheck as DoctorDataCheck,
+)
+from .doctor import (
     DoctorOptions as DoctorDataOptions,
+)
+from .doctor import (
     DoctorResult as DoctorDataResult,
+)
+from .doctor import (
     DoctorSuggestion as DoctorDataSuggestion,
+)
+from .doctor import (
     options_from_namespace as doctor_options_from_namespace,
 )
 from .web_auth import (

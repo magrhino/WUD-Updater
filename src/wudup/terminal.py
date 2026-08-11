@@ -7,7 +7,6 @@ import sys
 from collections.abc import Mapping, Sequence
 from typing import Any, TextIO
 
-
 try:  # pragma: no cover - exercised by Rich-specific tests when installed.
     from rich import box
     from rich.console import Console

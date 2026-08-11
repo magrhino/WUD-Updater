@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
-
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,

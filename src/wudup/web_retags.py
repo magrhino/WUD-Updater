@@ -15,8 +15,7 @@ from contextlib import closing
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from threading import Condition, Lock
-from typing import Any
-from typing import Protocol
+from typing import Any, Protocol
 
 from fastapi import HTTPException, Request
 
@@ -74,6 +73,7 @@ from .updater_models import (
 )
 from .web_auth import _redact_sensitive_text, _safe_exception_detail, _settings
 from .web_database import ReadOnlyDatabaseMissing
+from .web_metadata import json_object as _json_object
 from .web_models import (
     ApplyJobProgressEvent,
     ApplyJobResponse,
@@ -93,21 +93,37 @@ from .web_models import (
 from .web_release_notes import release_note_source_resolver
 from .web_retag_choices import validated_retag_choice_map
 from .web_retag_identity import retag_target_id as _retag_target_id_from_values
-from .web_metadata import json_object as _json_object
 from .web_retag_plans import (
     RetagPlanBuild as _RetagPlanBuild,
+)
+from .web_retag_plans import (
     RetagPlanUpdate as _RetagPlanUpdate,
+)
+from .web_retag_plans import (
     ordered_retag_stacks as _ordered_retag_stacks,
+)
+from .web_retag_plans import (
     retag_compose_hashes as _compose_hashes,
+)
+from .web_retag_plans import (
     retag_plan_digest_update as _retag_plan_digest_update,
+)
+from .web_retag_plans import (
     retag_plan_id as _retag_plan_id,
+)
+from .web_retag_plans import (
     retag_plan_stacks as _retag_plan_stacks,
+)
+from .web_retag_plans import (
     retag_plan_status as _retag_plan_status,
+)
+from .web_retag_plans import (
     retag_plan_tag_update as _retag_plan_tag_update,
+)
+from .web_retag_plans import (
     retag_update_service as _retag_update_service,
 )
 from .wud_file import WudTarget
-
 
 KEEP_CURRENT_CHOICE = "keep-current"
 SWITCH_TO_CONCRETE_CHOICE = "switch-to-concrete"

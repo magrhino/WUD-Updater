@@ -15,7 +15,6 @@ from .images import (
 )
 from .updater_models import DigestPinUpdate, DigestUnpinUpdate
 
-
 DIGEST_PROVENANCE_SQL_COLUMNS = (
     "digest_source_image",
     "digest_resolved_tag",

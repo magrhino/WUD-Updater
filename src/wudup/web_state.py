@@ -5,12 +5,14 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Mapping, Sequence
 from contextlib import closing
-from datetime import datetime, time as datetime_time, timezone
+from datetime import datetime, timezone
+from datetime import time as datetime_time
 from typing import Any
 
 from fastapi import HTTPException, Query, Request
 
 from . import web_scheduler
+from .compose_rewrite import js_regex_escape
 from .db import (
     DatabaseError,
     dependency_snooze_satisfied,
@@ -19,7 +21,6 @@ from .db import (
     utc_timestamp,
 )
 from .images import repo_key, tag_value_valid
-from .compose_rewrite import js_regex_escape
 from .web_auth import (
     _immediate_transaction,
     _request_actor_type,
@@ -28,8 +29,12 @@ from .web_auth import (
 )
 from .web_database import (
     ReadOnlyDatabaseMissing,
+)
+from .web_database import (
     connect_readonly_db as _connect_readonly_db,
 )
+from .web_metadata import json_list as _json_list
+from .web_metadata import json_object as _json_object
 from .web_models import (
     CreateDependencySnoozeOperation,
     CreateSnoozeOperation,
@@ -48,8 +53,6 @@ from .web_models import (
     UpsertTagExclusionOperation,
     WebSettings,
 )
-from .web_metadata import json_list as _json_list
-from .web_metadata import json_object as _json_object
 from .web_runs import _metadata_from_row
 
 AUTO_UPDATE_DAYS = web_scheduler.AUTO_UPDATE_DAYS

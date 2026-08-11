@@ -25,7 +25,6 @@ from .updater_models import (
     TagStreamUpdate,
 )
 
-
 _STRICT_VERSION_TAG_RE = re.compile(
     r"^(?P<version>v?\d+\.\d+\.\d+)(?P<suffix>[-_.].+)?$",
     re.ASCII,

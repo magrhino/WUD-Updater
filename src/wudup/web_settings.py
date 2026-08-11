@@ -46,6 +46,8 @@ from .web_auth import (
 )
 from .web_database import (
     ReadOnlyDatabaseMissing,
+)
+from .web_database import (
     connect_readonly_db as _connect_readonly_db,
 )
 from .web_models import (
@@ -67,6 +69,8 @@ from .web_release_notification_state import (
 from .web_state import _insert_managed_settings_audit
 from .web_static import (
     resolve_static_dir as _resolve_static_dir,
+)
+from .web_static import (
     static_spa_available as _static_spa_available,
 )
 

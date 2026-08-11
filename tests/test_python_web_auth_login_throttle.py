@@ -4,19 +4,18 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+from tests.web_test_helpers import (
+    _assert_generic_auth_failed,
+    _client,
+    _contains_key,
+    _csrf_headers,
+    _setup_admin,
+    _web_env,
+)
 
 from wudup import web_auth as web_auth_module
 from wudup.web import create_app
 
-
-from tests.web_test_helpers import (
-    _web_env,
-    _client,
-    _csrf_headers,
-    _setup_admin,
-    _contains_key,
-    _assert_generic_auth_failed,
-)
 
 def test_login_validation_redacts_submitted_inputs(tmp_path: Path) -> None:
     client = _client(tmp_path)

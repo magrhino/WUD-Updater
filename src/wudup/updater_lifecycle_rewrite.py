@@ -11,12 +11,12 @@ from .command import CommandError
 from .compose import ComposeStack, ServiceImage
 from .updater_lifecycle_state import _StackUpdateState
 from .updater_models import (
+    STALE_PENDING_DIGEST_REASON,
     AppliedDigestPinUpdate,
     AppliedDigestUnpinUpdate,
     AppliedTagUpdate,
     ComposeTagRewriteError,
     Match,
-    STALE_PENDING_DIGEST_REASON,
     StackStatus,
 )
 

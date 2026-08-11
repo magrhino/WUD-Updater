@@ -22,11 +22,11 @@ from .web_auth import (
 from .web_database import ReadOnlyDatabaseMissing, connect_readonly_db
 from .web_health import doctor_response, web_doctor_result
 from .web_models import (
+    DEFAULT_CORE_UPDATE_TOUR_STEP,
     CoreUpdateTourResponse,
     CoreUpdateTourStatus,
     CoreUpdateTourStep,
     CoreUpdateTourUpdateRequest,
-    DEFAULT_CORE_UPDATE_TOUR_STEP,
     DoctorCheckResponse,
     DoctorCheckStatus,
     DoctorSuggestionResponse,

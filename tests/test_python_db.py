@@ -8,28 +8,29 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tests.db_helpers import db_connection
+
 from wudup.db import (
-    DatabaseError,
-    SCHEMA_VERSION,
     _EXPECTED_SCHEMAS_BY_VERSION,
     _MIGRATIONS_BY_TARGET_VERSION,
     _SECURITY_SCAN_CACHE_SCHEMA_V9_SQL,
+    SCHEMA_VERSION,
+    DatabaseError,
     _validate_schema,
     active_dependency_snooze_rows,
     active_snooze,
     active_tag_exclusion_rules,
     blocking_dependency_snooze_rows,
     connect_db,
-    open_db,
     init_db,
     insert_dependency_snooze,
     insert_pending_update,
     insert_snooze,
     insert_update_event,
     insert_update_run,
-    upsert_tag_exclusion_rule,
+    open_db,
     update_pending_update,
     upsert_known_image,
+    upsert_tag_exclusion_rule,
 )
 from wudup.db_schema import _quote_identifier
 from wudup.digest_provenance import (

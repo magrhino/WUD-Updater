@@ -11,9 +11,9 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 
+from . import web_pending_sources, web_release_notification_state, web_wud_api
 from .command import CommandError, CommandRunner
 from .db import DatabaseError, init_db, open_db
-from . import web_pending_sources, web_release_notification_state, web_wud_api
 from .docker_cli import ContainerImage, DockerCli
 from .images import (
     image_has_tag,
@@ -40,6 +40,8 @@ from .web_auth import (
 )
 from .web_database import (
     ReadOnlyDatabaseMissing,
+)
+from .web_database import (
     connect_readonly_db as _connect_readonly_db,
 )
 from .web_models import (
@@ -50,11 +52,10 @@ from .web_models import (
     WudApiStatus,
 )
 from .web_settings import (
-    effective_release_notification_config,
     effective_release_notes_enabled,
+    effective_release_notification_config,
 )
 from .wud_file import WudTarget
-
 
 LOGGER = logging.getLogger(__name__)
 DOCKER_STDERR_LOG_LIMIT = 500

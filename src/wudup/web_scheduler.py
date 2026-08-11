@@ -7,7 +7,8 @@ import logging
 import sqlite3
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import replace
-from datetime import datetime, time as datetime_time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
+from datetime import time as datetime_time
 from threading import Event, Thread
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
@@ -30,6 +31,8 @@ from .plans import (
     resolve_pending_groups,
 )
 from .web_auth import _immediate_transaction
+from .web_metadata import json_object as _json_object
+from .web_metadata import json_object_or_empty
 from .web_models import (
     ApplyJobResponse,
     ApplyJobStatus,
@@ -37,8 +40,6 @@ from .web_models import (
     AutoUpdateSelection,
     WebSettings,
 )
-from .web_metadata import json_object as _json_object
-from .web_metadata import json_object_or_empty
 
 AUTO_UPDATE_POLL_SECONDS = 60.0
 AUTO_UPDATE_GRACE_SECONDS = 300

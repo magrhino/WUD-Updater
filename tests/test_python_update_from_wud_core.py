@@ -4,6 +4,12 @@ import json
 import unittest
 from unittest import mock
 
+from tests.update_from_wud_helpers import (
+    UpdateFromWudRunnerTestCase,
+    manifest_image,
+    manifest_index,
+)
+
 from wudup.compose import (
     ComposeStack,
     ServiceImage,
@@ -11,18 +17,12 @@ from wudup.compose import (
 from wudup.digest_verifier import DigestCheckResult
 from wudup.updater_lifecycle_health import _updated_images
 from wudup.updater_models import (
+    STALE_PENDING_DIGEST_REASON,
     ImageState,
     Match,
-    STALE_PENDING_DIGEST_REASON,
 )
 from wudup.wud_file import parse_wud_text
 
-
-from tests.update_from_wud_helpers import (
-    UpdateFromWudRunnerTestCase,
-    manifest_index,
-    manifest_image,
-)
 
 class UpdateFromWudFacadeTests(unittest.TestCase):
     def test_updater_facade_exposes_runner_entrypoints(self) -> None:

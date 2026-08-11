@@ -17,7 +17,6 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
-
 MANIFEST_ACCEPT = ", ".join(
     (
         "application/vnd.oci.image.index.v1+json",

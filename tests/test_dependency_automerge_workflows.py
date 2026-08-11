@@ -8,7 +8,6 @@ from pathlib import Path
 
 from ruamel.yaml import YAML
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PRIVILEGED_WORKFLOW = ROOT / ".github/workflows/dependency-automerge.yml"
 CANDIDATE_WORKFLOW = ROOT / ".github/workflows/dependency-automerge-candidate.yml"

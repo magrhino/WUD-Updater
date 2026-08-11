@@ -7,8 +7,8 @@ import json
 import logging
 import math
 import re
-import sqlite3
 import secrets
+import sqlite3
 import time
 import urllib.error
 import urllib.parse
@@ -23,7 +23,6 @@ from typing import cast
 from . import web_wud_config, web_wud_observation_store
 from .db import DatabaseError
 from .digest_verifier import DOCKER_HUB_REGISTRIES
-from .web_wud_config import _auth_required_detail
 from .images import (
     image_has_tag,
     image_matches_resolved_target,
@@ -32,34 +31,47 @@ from .images import (
     strip_digest,
     tag_value_valid,
 )
-from .release_notes import OCI_SOURCE_LABEL, github_repo_from_source
 from .platforms import ImagePlatform, parse_platform, platform_from_parts
+from .release_notes import OCI_SOURCE_LABEL, github_repo_from_source
 from .web_auth import (
     WebConfigError,
     _redact_sensitive_text,
     _redact_unknown_absolute_paths,
 )
 from .web_models import (
+    PendingMetadataStatus,
     ReleaseNotificationTrigger,
     WebSettings,
     WudApiClientConfig,
-    WudApiAppDiagnostics as WudApiAppDiagnostics,
     WudApiConfigurationDiagnostics,
-    WudApiDiagnosticEndpointStatus as WudApiDiagnosticEndpointStatus,
-    WudApiLogDiagnostics as WudApiLogDiagnostics,
     WudApiObservationCounts,
     WudApiObservationDiagnostic,
     WudApiObservationDiagnostics,
     WudApiObservationOutcome,
     WudApiObservationReason,
-    WudApiRegistryDiagnostics as WudApiRegistryDiagnostics,
     WudApiState,
     WudApiStatus,
-    WudApiStoreDiagnostics as WudApiStoreDiagnostics,
-    WudApiWatcherDiagnostics as WudApiWatcherDiagnostics,
     WudContainerMetadata,
-    PendingMetadataStatus,
 )
+from .web_models import (
+    WudApiAppDiagnostics as WudApiAppDiagnostics,
+)
+from .web_models import (
+    WudApiDiagnosticEndpointStatus as WudApiDiagnosticEndpointStatus,
+)
+from .web_models import (
+    WudApiLogDiagnostics as WudApiLogDiagnostics,
+)
+from .web_models import (
+    WudApiRegistryDiagnostics as WudApiRegistryDiagnostics,
+)
+from .web_models import (
+    WudApiStoreDiagnostics as WudApiStoreDiagnostics,
+)
+from .web_models import (
+    WudApiWatcherDiagnostics as WudApiWatcherDiagnostics,
+)
+from .web_wud_config import _auth_required_detail
 from .wud_file import WudTarget, parse_wud_text
 
 DEFAULT_WUD_API_BASE_URL = "http://wud:3000"

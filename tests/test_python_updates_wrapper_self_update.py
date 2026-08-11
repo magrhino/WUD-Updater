@@ -6,12 +6,13 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from unittest import mock
 
+from tests.updates_wrapper_helpers import UpdatesWrapperTestCase, _updater_arg_lines
+
 from wudup.updates import (
     _self_update_desired_tag,
     run_updates_from_namespace,
 )
 
-from tests.updates_wrapper_helpers import UpdatesWrapperTestCase, _updater_arg_lines
 
 class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
     def _run_github_release_self_update(

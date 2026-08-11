@@ -13,6 +13,7 @@ from io import StringIO
 from pathlib import Path
 
 from tests.db_helpers import db_connection
+
 from wudup.command import CommandRunner
 from wudup.digest_verifier import (
     DigestVerifier,

@@ -14,26 +14,6 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-
-from wudup import (
-    web as web_module,
-    web_jobs,
-    web_release_notifications,
-    web_release_notes as release_notes_module,
-    web_retags,
-    web_scheduler,
-    web_security,
-    web_wud_api,
-    web_wud_observation_store,
-)
-from wudup.config import ConfigError
-from wudup.release_notes import (
-    ReleaseNoteInfo as ReleaseNoteData,
-    release_note_contexts,
-)
-from wudup.web import create_app, load_web_settings
-from wudup.web_auth import WebConfigError
-
 from tests.web_test_helpers import (
     WUD_API_ACCESS_KEY_ID,
     WUD_API_AUTHORIZATION_HEADER,
@@ -44,6 +24,31 @@ from tests.web_test_helpers import (
     _web_env,
     _wud_image_payload,
 )
+
+from wudup import (
+    web as web_module,
+)
+from wudup import (
+    web_jobs,
+    web_release_notifications,
+    web_retags,
+    web_scheduler,
+    web_security,
+    web_wud_api,
+    web_wud_observation_store,
+)
+from wudup import (
+    web_release_notes as release_notes_module,
+)
+from wudup.config import ConfigError
+from wudup.release_notes import (
+    ReleaseNoteInfo as ReleaseNoteData,
+)
+from wudup.release_notes import (
+    release_note_contexts,
+)
+from wudup.web import create_app, load_web_settings
+from wudup.web_auth import WebConfigError
 
 
 def _settings(

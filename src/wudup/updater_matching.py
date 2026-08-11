@@ -23,7 +23,6 @@ from .updater_models import (
 )
 from .wud_file import WudTarget, is_digest_target_line
 
-
 RECREATE_STACK_LABEL = "WUD-UPDATER-RECREATE-STACK"
 RECREATE_STACK_LABEL_FORMAT = f'{{{{ index .Config.Labels "{RECREATE_STACK_LABEL}" }}}}'
 

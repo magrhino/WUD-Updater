@@ -1,19 +1,23 @@
 from __future__ import annotations
+
 import sqlite3
 import stat
 from pathlib import Path
-from wudup import web_pending as pending_module
-from wudup.locks import lock_dir_for
-from wudup.web_models import WebApplyJob
+
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
-    _fake_docker_env,
-    _make_fake_stack,
     _fake_docker_calls,
+    _fake_docker_env,
     _install_wud_api,
+    _make_fake_stack,
     _wud_api_container,
 )
+
+from wudup import web_pending as pending_module
+from wudup.locks import lock_dir_for
+from wudup.web_models import WebApplyJob
+
 
 def test_pending_cleanup_endpoint_enforces_auth_csrf_and_read_only(
     tmp_path: Path,

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 from tests.updates_wrapper_helpers import UpdatesWrapperTestCase
+
 
 class UpdatesWrapperInteractiveTests(UpdatesWrapperTestCase):
     def test_interactive_select_remove_passes_original_line_numbers(self) -> None:

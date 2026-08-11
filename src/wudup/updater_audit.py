@@ -20,6 +20,8 @@ from .db import (
     update_pending_update,
     upsert_known_image,
     upsert_tag_exclusion_rule,
+)
+from .db import (
     utc_timestamp as db_utc_timestamp,
 )
 from .digest_provenance import (
@@ -31,10 +33,13 @@ from .digest_provenance import (
 from .file_ops import (
     OwnerConfig,
     OwnerConfigError,
+)
+from .file_ops import (
     apply_configured_owner as _apply_configured_owner,
 )
 from .images import image_repo_ref
 from .naming import DB_FILENAME
+from .updater_digest_pin import _digest_pin_match_tag
 from .updater_matching import (
     _failed_line_numbers,
     _failed_match_for_line,
@@ -43,12 +48,11 @@ from .updater_matching import (
     _service_key,
     _stacks_to_update,
 )
-from .updater_digest_pin import _digest_pin_match_tag
 from .updater_models import (
+    STALE_PENDING_DIGEST_REASON,
     FailureRecord,
     ImageState,
     Match,
-    STALE_PENDING_DIGEST_REASON,
     StackStatus,
     TagExclusionUpdate,
     UpdaterError,
@@ -56,7 +60,6 @@ from .updater_models import (
 )
 from .updater_planning import _first_tag_exclusion_by_line
 from .wud_file import ParsedWudFile, WudTarget, parse_wud_file
-
 
 ApplyOwner = Callable[[str | Path, OwnerConfig | None], None]
 InsertUpdateEvent = Callable[..., Any]

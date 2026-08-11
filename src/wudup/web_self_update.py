@@ -29,6 +29,11 @@ from .banner import (
 )
 from .command import CommandError, CommandRunner
 from .compose import ComposeCli
+from .compose_rewrite import (
+    _backup_compose,
+    apply_compose_digest_pins,
+    apply_compose_tag_updates,
+)
 from .config import UpdaterConfig
 from .db import DatabaseError, init_db, open_db, utc_timestamp
 from .digest_verifier import DigestVerifier, DockerManifestResolver
@@ -46,11 +51,6 @@ from .self_update import (
     current_container_image,
     release_self_update_target,
     self_update_image_variant_known,
-)
-from .compose_rewrite import (
-    _backup_compose,
-    apply_compose_digest_pins,
-    apply_compose_tag_updates,
 )
 from .updater_digest_pin import digest_pin_update_from_values
 from .updater_models import ComposeTagRewriteError, DigestPinUpdate, TagUpdate

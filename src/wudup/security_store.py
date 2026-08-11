@@ -16,8 +16,8 @@ from .security_subjects import PendingSecurityRequest, subject_id
 from .web_models import (
     SecurityScanFinding,
     SecurityScanInfo,
-    SecurityScanSubject,
     SecurityScanSeverityCounts,
+    SecurityScanSubject,
 )
 
 

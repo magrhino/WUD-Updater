@@ -1,25 +1,25 @@
 from __future__ import annotations
+
 import json
 from pathlib import Path
 
 from fastapi import HTTPException
-
-from wudup import web_runs as runs_module
-from wudup.db import (
-    open_db,
-    init_db,
-    insert_pending_update,
-    insert_update_event,
-    insert_update_run,
-)
-from wudup.digest_provenance import DigestTagProvenance
-from wudup.updater_models import STALE_PENDING_DIGEST_REASON
-from wudup.web_models import LogTail
 from tests.web_test_helpers import (
     _client,
     _insert_run,
 )
 
+from wudup import web_runs as runs_module
+from wudup.db import (
+    init_db,
+    insert_pending_update,
+    insert_update_event,
+    insert_update_run,
+    open_db,
+)
+from wudup.digest_provenance import DigestTagProvenance
+from wudup.updater_models import STALE_PENDING_DIGEST_REASON
+from wudup.web_models import LogTail
 
 EMPTY_VERIFICATION = {
     "status": "verified",

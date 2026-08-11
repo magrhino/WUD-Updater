@@ -6,7 +6,6 @@ from types import SimpleNamespace
 from wudup import web_scheduler
 
 
-
 def test_auto_update_selection_prefers_earliest_scheduled_mode() -> None:
     earlier = datetime(2026, 5, 30, 14, 0, tzinfo=timezone.utc)
     later = datetime(2026, 5, 30, 15, 0, tzinfo=timezone.utc)

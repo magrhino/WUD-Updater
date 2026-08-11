@@ -1,7 +1,20 @@
 from __future__ import annotations
+
 import json
 from pathlib import Path
 from types import SimpleNamespace
+
+from tests.web_test_helpers import (
+    _client,
+    _csrf_headers,
+    _fake_docker_calls,
+    _fake_docker_env,
+    _install_wud_api,
+    _make_fake_stack,
+    _write_fake_container_labels,
+    _wud_api_container,
+)
+
 from wudup import plans as core_plans
 from wudup import web_plans as plans_module
 from wudup.compose import ComposeStack, ServiceImage
@@ -13,16 +26,6 @@ from wudup.plan_matching import (
 from wudup.plan_models import DryRunPlanSource
 from wudup.updater_models import Match
 from wudup.wud_file import parse_wud_text
-from tests.web_test_helpers import (
-    _client,
-    _csrf_headers,
-    _fake_docker_env,
-    _make_fake_stack,
-    _write_fake_container_labels,
-    _fake_docker_calls,
-    _install_wud_api,
-    _wud_api_container,
-)
 
 
 def test_pending_source_plan_builder_preserves_source_hash_keyword(

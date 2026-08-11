@@ -5,6 +5,12 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
+from tests.update_from_wud_helpers import (
+    UpdateFromWudRunnerTestCase,
+    manifest_image,
+    manifest_index,
+)
+
 from wudup.command import CommandRunner
 from wudup.compose import (
     ComposeStack,
@@ -18,12 +24,6 @@ from wudup.updater_models import (
     UpdaterOptions,
 )
 
-
-from tests.update_from_wud_helpers import (
-    UpdateFromWudRunnerTestCase,
-    manifest_index,
-    manifest_image,
-)
 
 class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
     def make_tag_stream_runner(

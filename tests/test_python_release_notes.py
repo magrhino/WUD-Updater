@@ -21,8 +21,8 @@ from wudup.release_notes import (
     cached_release_notes,
     detect_breaking,
     github_latest_candidate_from_info,
-    release_note_contexts,
     refresh_release_notes,
+    release_note_contexts,
 )
 from wudup.wud_file import parse_wud_text
 

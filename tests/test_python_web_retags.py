@@ -5,7 +5,6 @@ from pathlib import Path
 from threading import Event
 
 import pytest
-
 from tests.web_retag_test_helpers import (
     _create_retag_plan,
     _make_retag_fixture,
@@ -24,6 +23,7 @@ from tests.web_test_helpers import (
     _fake_docker_env,
     _make_fake_stack,
 )
+
 from wudup import web_database
 from wudup import web_retags as web_retags_module
 from wudup.db import init_db, open_db, upsert_known_image

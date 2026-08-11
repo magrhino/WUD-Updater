@@ -3,21 +3,20 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from tests.web_test_helpers import (
+    _client,
+    _csrf_headers,
+    _setup_admin,
+    _web_env,
+)
 
 from wudup import web as web_module
 from wudup import web_auth as web_auth_module
 from wudup.db import (
-    open_db,
     init_db,
+    open_db,
 )
 
-
-from tests.web_test_helpers import (
-    _web_env,
-    _client,
-    _csrf_headers,
-    _setup_admin,
-)
 
 def test_session_endpoint_reports_cookie_auth_state(tmp_path: Path) -> None:
     setup_client = _client(tmp_path)

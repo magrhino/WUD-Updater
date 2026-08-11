@@ -30,8 +30,8 @@ from .updater_models import (
     StackStatus,
     TagExclusionUpdate,
     TagUpdate,
-    UpResult,
     UpdateScope,
+    UpResult,
 )
 from .wud_file import ParsedWudFile, WudTarget
 

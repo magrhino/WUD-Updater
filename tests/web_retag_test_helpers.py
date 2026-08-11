@@ -7,13 +7,13 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
-
 from tests.web_test_helpers import (
     _client,
     _fake_docker_env,
     _make_fake_stack,
     _poll_until,
 )
+
 from wudup import web_retags as web_retags_module
 from wudup.config import UpdaterConfig
 from wudup.db import init_db, open_db, upsert_known_image

@@ -1,23 +1,26 @@
 from __future__ import annotations
+
 import hashlib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from tests.web_test_helpers import (
+    _assert_pending_grouping_did_not_mutate,
+    _client,
+    _csrf_headers,
+    _fake_docker_calls,
+    _fake_docker_env,
+    _install_wud_api,
+    _make_fake_stack,
+    _write_fake_container_labels,
+    _wud_api_container,
+)
+from tests.web_wud_rescan_helpers import install_recording_wud_api
+
 from wudup import web_pending as pending_module
 from wudup import web_wud_api
 from wudup.config import ConfigError
 from wudup.db import init_db, insert_snooze, open_db
-from tests.web_test_helpers import (
-    _client,
-    _csrf_headers,
-    _fake_docker_env,
-    _make_fake_stack,
-    _write_fake_container_labels,
-    _fake_docker_calls,
-    _assert_pending_grouping_did_not_mutate,
-    _install_wud_api,
-    _wud_api_container,
-)
-from tests.web_wud_rescan_helpers import install_recording_wud_api
 
 
 def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> None:

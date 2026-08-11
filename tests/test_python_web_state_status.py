@@ -3,9 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from wudup.web import create_app
-
-
 from tests.web_test_helpers import (
     _client,
     _fake_docker_calls,
@@ -15,6 +12,8 @@ from tests.web_test_helpers import (
     _web_env,
     _wud_api_container,
 )
+
+from wudup.web import create_app
 
 
 def test_status_reports_missing_database_without_creating_it(tmp_path: Path) -> None:

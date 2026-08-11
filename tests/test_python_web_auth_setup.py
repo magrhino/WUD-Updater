@@ -6,18 +6,17 @@ from pathlib import Path
 from threading import Event, Lock
 
 from fastapi import HTTPException
+from tests.web_test_helpers import (
+    _client,
+    _contains_key,
+    _csrf_headers,
+)
 
 from wudup import web_auth as web_auth_module
 from wudup.db import (
     open_db,
 )
 
-
-from tests.web_test_helpers import (
-    _client,
-    _csrf_headers,
-    _contains_key,
-)
 
 def test_first_run_setup_claim_creates_admin_and_burns_claim(tmp_path: Path) -> None:
     client = _client(tmp_path)

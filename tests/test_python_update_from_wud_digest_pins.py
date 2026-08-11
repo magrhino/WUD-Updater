@@ -5,6 +5,16 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from unittest import mock
 
+from tests.update_from_wud_helpers import (
+    FailingManifestResolver,
+    FakeDockerTestCase,
+    UpdateFromWudRunnerTestCase,
+    manifest_image,
+    manifest_index,
+    manifest_index_digest,
+    verbose_manifest_item,
+)
+
 from wudup.command import CommandRunner
 from wudup.compose import (
     ComposeStack,
@@ -27,16 +37,6 @@ from wudup.updater_models import (
     UpdaterOptions,
 )
 
-
-from tests.update_from_wud_helpers import (
-    FailingManifestResolver,
-    FakeDockerTestCase,
-    UpdateFromWudRunnerTestCase,
-    manifest_index,
-    manifest_index_digest,
-    manifest_image,
-    verbose_manifest_item,
-)
 
 class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
     def test_digest_pin_tag_update_writes_pinned_compose_and_metadata(self) -> None:

@@ -27,18 +27,17 @@ from .self_update import (
     self_update_enabled,
 )
 from .terminal import TerminalRenderer
-from .wud_file import WudTarget, parse_wud_text
-
 from .truenas import (
     DEFAULT_TRUENAS_STATUS_TIMEOUT,
     TrueNasCallResult,
     _refresh_truenas_status,
     _truenas_active_alerts,
     _truenas_unreachable_message,
+    _truenas_update_error_reason,
     _truenas_update_status,
     _truenas_update_version,
-    _truenas_update_error_reason,
 )
+from .wud_file import WudTarget, parse_wud_text
 
 DEFAULT_UPDATE_MODE = "stop"
 DEFAULT_MAX_WAIT = "180"

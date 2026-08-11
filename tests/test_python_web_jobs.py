@@ -1,30 +1,30 @@
 from __future__ import annotations
+
 import logging
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
-from wudup import web_jobs
-from wudup import web_wud_api
-from wudup import web_self_update as self_update_module
-from wudup.config import UpdaterConfig
-from wudup.updater_models import CompletedUpdateSelection
-from wudup.web_models import WebApplyJob, WebSettings
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
-    _self_update_payload,
+    _fake_docker_calls,
     _fake_docker_env,
     _make_fake_stack,
-    _fake_docker_calls,
-    _write_fake_image_after_pull,
-    _wait_apply_job,
+    _self_update_payload,
     _sse_event_names,
     _sse_job_events,
     _sse_log_events,
     _sse_progress_events,
+    _wait_apply_job,
+    _write_fake_image_after_pull,
 )
+
+from wudup import web_jobs, web_wud_api
+from wudup import web_self_update as self_update_module
+from wudup.config import UpdaterConfig
+from wudup.updater_models import CompletedUpdateSelection
+from wudup.web_models import WebApplyJob, WebSettings
 
 
 def _settings_for_lock_timeout(

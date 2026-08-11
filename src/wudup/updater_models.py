@@ -10,7 +10,6 @@ from .compose import ComposeStack
 from .config import DEFAULT_MAX_WAIT, DEFAULT_UPDATE_MODE
 from .wud_file import WudTarget
 
-
 STALE_PENDING_DIGEST_REASON = "stale-pending-digest"
 
 

@@ -1,15 +1,16 @@
 from __future__ import annotations
+
 from pathlib import Path
 from types import SimpleNamespace
 
 import uvicorn
-
-from wudup import web as web_module
-from wudup import web_startup
 from tests.web_test_helpers import (
     _client,
     _web_env,
 )
+
+from wudup import web as web_module
+from wudup import web_startup
 
 
 def test_web_startup_rejects_bind_host_missing_from_allowed_hosts(

@@ -1,10 +1,14 @@
 from __future__ import annotations
+
 import json
 from pathlib import Path
-from wudup import web_self_update as self_update_module
+
 from tests.web_test_helpers import (
     _client,
 )
+
+from wudup import web_self_update as self_update_module
+
 
 def test_self_update_get_reports_available_up_to_date_disabled_and_unavailable(
     tmp_path: Path,

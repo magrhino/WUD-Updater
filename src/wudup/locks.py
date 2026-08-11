@@ -13,7 +13,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-
 _SECONDS_RE = re.compile(r"^\d+$", re.ASCII)
 
 

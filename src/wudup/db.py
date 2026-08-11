@@ -7,22 +7,37 @@ from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Generator, Iterable
 
+from .db_schema import (
+    _EXPECTED_SCHEMAS_BY_VERSION as _EXPECTED_SCHEMAS_BY_VERSION,
+)
+from .db_schema import (
+    _MIGRATIONS_BY_TARGET_VERSION as _MIGRATIONS_BY_TARGET_VERSION,
+)
+from .db_schema import (
+    _SECURITY_SCAN_CACHE_SCHEMA_V9_SQL as _SECURITY_SCAN_CACHE_SCHEMA_V9_SQL,
+)
+from .db_schema import (
+    SCHEMA_VERSION as SCHEMA_VERSION,
+)
+from .db_schema import (
+    DatabaseError as DatabaseError,
+)
+from .db_schema import (
+    _user_version as _user_version,
+)
+from .db_schema import (
+    _validate_schema as _validate_schema,
+)
+from .db_schema import (
+    init_schema as init_db,  # noqa: F401 - compatibility re-export
+)
+from .db_schema import (
+    utc_timestamp as utc_timestamp,
+)
 from .digest_provenance import (
     DIGEST_PROVENANCE_SQL_COLUMNS,
     DigestTagProvenance,
     digest_provenance_or_empty,
-)
-
-from .db_schema import (
-    SCHEMA_VERSION as SCHEMA_VERSION,
-    DatabaseError as DatabaseError,
-    _EXPECTED_SCHEMAS_BY_VERSION as _EXPECTED_SCHEMAS_BY_VERSION,
-    _MIGRATIONS_BY_TARGET_VERSION as _MIGRATIONS_BY_TARGET_VERSION,
-    _SECURITY_SCAN_CACHE_SCHEMA_V9_SQL as _SECURITY_SCAN_CACHE_SCHEMA_V9_SQL,
-    _user_version as _user_version,
-    _validate_schema as _validate_schema,
-    init_schema as init_db,  # noqa: F401 - compatibility re-export
-    utc_timestamp as utc_timestamp,
 )
 
 

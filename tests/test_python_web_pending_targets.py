@@ -1,12 +1,15 @@
 from __future__ import annotations
+
 from pathlib import Path
+
 from tests.web_test_helpers import (
+    _assert_pending_grouping_did_not_mutate,
     _client,
+    _fake_docker_calls,
     _fake_docker_env,
     _make_fake_stack,
-    _fake_docker_calls,
-    _assert_pending_grouping_did_not_mutate,
 )
+
 
 def test_update_targets_endpoint_lists_compose_service_images_without_mutation(
     tmp_path: Path,

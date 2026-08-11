@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -14,6 +13,7 @@ from tests.web_test_helpers import (
     _manifest_index_digest,
     _write_fake_manifest,
 )
+
 from wudup.compose import ComposeStack, ServiceImage
 from wudup.tag_streams import (
     pending_tag_stream_hint,

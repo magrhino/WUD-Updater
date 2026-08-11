@@ -1,16 +1,20 @@
 from __future__ import annotations
+
 import json
 from pathlib import Path
+
+from tests.web_test_helpers import (
+    _client,
+    _csrf_headers,
+    _fake_docker_calls,
+    _fake_docker_env,
+)
+
 from wudup.db import (
     open_db,
 )
 from wudup.web_models import WebApplyJob
-from tests.web_test_helpers import (
-    _client,
-    _csrf_headers,
-    _fake_docker_env,
-    _fake_docker_calls,
-)
+
 
 def test_container_restart_endpoint_enforces_auth_csrf_read_only_and_post(
     tmp_path: Path,

@@ -34,12 +34,13 @@ from .updater_models import (
     DigestUnpinUpdate,
     TagOverride,
     TagStreamUpdate,
-    UpdateSelection,
     UpdaterOptions,
     UpdaterProgressEvent,
+    UpdateSelection,
 )
 from .web_models import (
     APPLY_JOB_PROGRESS_STATUSES,
+    TERMINAL_APPLY_JOB_STATUSES,
     ApplyJobLogResponse,
     ApplyJobProgressEvent,
     ApplyJobProgressStatus,
@@ -47,7 +48,6 @@ from .web_models import (
     ApplyJobStatus,
     LogTail,
     PendingSourceActive,
-    TERMINAL_APPLY_JOB_STATUSES,
     WebApplyJob,
     WebApplyJobProgressEvent,
     WebSettings,

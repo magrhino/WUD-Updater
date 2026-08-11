@@ -10,8 +10,8 @@ from pathlib import Path
 from urllib.parse import quote
 
 from .db import (
-    DatabaseError,
     SCHEMA_VERSION,
+    DatabaseError,
 )
 from .db import _user_version as db_user_version
 from .db import _validate_schema as validate_db_schema

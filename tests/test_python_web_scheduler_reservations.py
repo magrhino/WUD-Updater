@@ -4,10 +4,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from wudup import web_jobs, web_scheduler
-from wudup.db import init_db, open_db
-from wudup.locks import DirectoryLock
-
+from tests.web_scheduler_test_helpers import _auto_update_tick
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -17,7 +14,10 @@ from tests.web_test_helpers import (
     _wait_apply_job,
 )
 
-from tests.web_scheduler_test_helpers import _auto_update_tick
+from wudup import web_jobs, web_scheduler
+from wudup.db import init_db, open_db
+from wudup.locks import DirectoryLock
+
 
 def test_auto_update_scheduler_submits_after_reservation_commit(
     tmp_path: Path,

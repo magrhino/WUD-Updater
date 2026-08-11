@@ -26,7 +26,6 @@ from .lsio_updates import (
 )
 from .wud_file import WudTarget
 
-
 SUCCESS_CACHE_TTL_SECONDS = 21_600
 ERROR_CACHE_TTL_SECONDS = 900
 DEFAULT_GITHUB_TIMEOUT_SECONDS = 6.0

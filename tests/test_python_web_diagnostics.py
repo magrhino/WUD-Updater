@@ -5,6 +5,16 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from tests.web_test_helpers import (
+    WUD_API_AUTH_CONFIG_KEY,
+    WUD_API_AUTHORIZATION_HEADER,
+    _client,
+    _doctor_client,
+    _insert_run,
+    _install_wud_api,
+    _store_web_setting,
+    _wud_api_container,
+)
 
 from wudup import web_pending, web_settings, web_wud_api
 from wudup.db import open_db
@@ -12,17 +22,6 @@ from wudup.web_models import (
     WudApiObservationCounts,
     WudApiObservationDiagnostic,
     WudApiObservationDiagnostics,
-)
-
-from tests.web_test_helpers import (
-    WUD_API_AUTH_CONFIG_KEY,
-    WUD_API_AUTHORIZATION_HEADER,
-    _client,
-    _doctor_client,
-    _install_wud_api,
-    _insert_run,
-    _store_web_setting,
-    _wud_api_container,
 )
 
 

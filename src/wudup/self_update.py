@@ -20,7 +20,6 @@ from .container_identity import container_identity_candidates
 from .images import image_repo_ref, repo_key, tag_value_valid
 from .naming import IMAGE_REPOSITORY, LEGACY_IMAGE_REPOSITORY, env_value
 
-
 DEFAULT_SELF_UPDATE_IMAGE = f"{IMAGE_REPOSITORY}:latest"
 DEFAULT_SELF_UPDATE_REPOSITORY = IMAGE_REPOSITORY
 SELF_UPDATE_REPOS = frozenset(

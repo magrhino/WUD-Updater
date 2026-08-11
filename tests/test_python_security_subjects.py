@@ -11,9 +11,9 @@ from wudup.platforms import ImagePlatform
 from wudup.security_subjects import (
     PendingSecurityOptions,
     PendingSecurityRequest,
-    current_security_request,
-    _resolve_missing_reported_digests,
     _request_for_target,
+    _resolve_missing_reported_digests,
+    current_security_request,
     pending_security_context,
 )
 from wudup.web_pending_sources import PendingSourceResult

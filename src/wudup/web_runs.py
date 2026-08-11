@@ -22,6 +22,8 @@ from .web_auth import (
 )
 from .web_database import (
     ReadOnlyDatabaseMissing,
+)
+from .web_database import (
     connect_readonly_db as _connect_readonly_db,
 )
 from .web_models import (

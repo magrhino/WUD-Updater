@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from tests.web_retag_test_helpers import (
     _patch_digest_resolution,
     _patch_digest_resolution_map,
@@ -20,6 +19,7 @@ from tests.web_test_helpers import (
     _make_fake_stack,
     _wait_apply_job,
 )
+
 from wudup import web_retags as web_retags_module
 from wudup.compose import ComposeStack, ServiceImage
 from wudup.db import init_db, open_db

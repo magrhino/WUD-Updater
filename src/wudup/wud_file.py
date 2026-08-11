@@ -20,7 +20,6 @@ from wudup.images import (
 from wudup.locks import DirectoryLock
 from wudup.platforms import ImagePlatform, parse_platform, platform_value
 
-
 _SHELL_SPACE_RE = re.compile(r"[ \t\n\r\v\f]")
 
 

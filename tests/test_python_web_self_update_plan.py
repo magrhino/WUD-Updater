@@ -1,14 +1,17 @@
 from __future__ import annotations
+
 from pathlib import Path
-from wudup import web_self_update as self_update_module
-from wudup.web_models import WebApplyJob
+
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
+    _fake_docker_calls,
     _fake_docker_env,
     _make_fake_stack,
-    _fake_docker_calls,
 )
+
+from wudup import web_self_update as self_update_module
+from wudup.web_models import WebApplyJob
 
 
 def test_self_update_plan_endpoint_returns_pinned_tag_preview(
