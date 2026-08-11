@@ -1263,8 +1263,8 @@ def test_apply_endpoint_preserves_stream_only_for_candidate_service(
     assert apply_response.status_code == 202
     assert job["status"] == "success"
     rendered = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "image: n8nio/runners:2.34.4-distroless" in rendered
-    assert "image: n8nio/runners:2.34.4" in rendered
+    assert "    image: n8nio/runners:2.34.4-distroless\n" in rendered
+    assert "    image: n8nio/runners:2.33.5\n" in rendered
     assert rendered.count(r"wud.tag.include=^\d+\.\d+\.\d+-distroless$$") == 1
     assert wud_file.read_text(encoding="utf-8") == ""
 
@@ -1316,8 +1316,8 @@ def test_apply_endpoint_coalesces_duplicate_stream_entries(tmp_path: Path) -> No
     assert apply_response.status_code == 202
     assert job["status"] == "success"
     rendered = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "image: n8nio/runners:2.34.4-distroless" in rendered
-    assert r"wud.tag.include=^\d+\.\d+\.\d+-distroless$$" in rendered
+    assert rendered.count("    image: n8nio/runners:2.34.4-distroless\n") == 1
+    assert rendered.count(r"wud.tag.include=^\d+\.\d+\.\d+-distroless$$") == 1
     assert wud_file.read_text(encoding="utf-8") == ""
 
 
