@@ -68,6 +68,84 @@ class ComposeTagUpdateTests(ComposeRewriteTestCase):
         )
         assert stat.S_IMODE(compose_file.stat().st_mode) == 0o640
 
+    def test_stream_rewrite_preserves_unrelated_compose_text(self) -> None:
+        original = (
+            'name: "jarvis"\n'
+            "x-runtime: &runtime\n"
+            "  restart: unless-stopped\n"
+            "  logging:\n"
+            "    driver: json-file\n"
+            "    options:\n"
+            '      max-size: "10m"\n'
+            "services:\n"
+            "  task-runner:\n"
+            '    image: "n8nio/runners:2.33.5-distroless" # selected image\n'
+            "    init: true\n"
+            "    environment:\n"
+            '      JSON_PAYLOAD: \'{"enabled":true,"items":[1,2]}\'\n'
+            "      KEEP_EMPTY: \"\"\n"
+            "    labels:\n"
+            '      - "traefik.enable=true"\n'
+            "      - 'wud.tag.include=^2\\.33\\.5-distroless$$' # managed stream\n"
+            "      - keep=this-label-byte-for-byte\n"
+            "    command: [\"run\", \"--mode=worker\"]\n"
+            "    volumes:\n"
+            "      - ./data:/data:ro\n"
+            "  database:\n"
+            "    <<: *runtime\n"
+            "    image: postgres:17\n"
+            "    environment:\n"
+            "      POSTGRES_DB: app\n"
+            "      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}\n"
+            "networks:\n"
+            "  default:\n"
+            "    name: jarvis_default\n"
+        )
+        compose_file = self.write_compose(original)
+
+        apply_compose_tag_updates(
+            compose_file,
+            (
+                TagUpdate(
+                    old_image="n8nio/runners:2.33.5-distroless",
+                    desired_tag="2.34.4-distroless",
+                    new_image="n8nio/runners:2.34.4-distroless",
+                    services=("task-runner",),
+                ),
+            ),
+            tag_stream_updates=(
+                TagStreamUpdate(
+                    line_no=1,
+                    stack="jarvis",
+                    stack_directory=str(compose_file.parent.resolve(strict=False)),
+                    compose_file=compose_file.name,
+                    service="task-runner",
+                    current_tag="2.33.5-distroless",
+                    reported_tag="2.34.4",
+                    selected_tag="2.34.4-distroless",
+                    decision="preserve",
+                    label_key="wud.tag.include",
+                    current_label_value=r"^2\.33\.5-distroless$",
+                    proposed_label_value=r"^\d+\.\d+\.\d+-distroless$$",
+                    proposed_label_regex=r"^\d+\.\d+\.\d+-distroless$",
+                    approved=True,
+                    reason="exact-regex-normalized",
+                ),
+            ),
+            stack_name="jarvis",
+        )
+
+        expected = original.replace(
+            "n8nio/runners:2.33.5-distroless",
+            "n8nio/runners:2.34.4-distroless",
+            1,
+        ).replace(
+            r"^2\.33\.5-distroless$$",
+            r"^\d+\.\d+\.\d+-distroless$$",
+            1,
+        )
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), expected)
+
     def test_stream_map_label_stale_value_leaves_image_and_label_unchanged(self) -> None:
         original = (
             "services:\n"
