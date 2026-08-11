@@ -146,6 +146,110 @@ class ComposeTagUpdateTests(ComposeRewriteTestCase):
         )
         self.assertEqual(compose_file.read_text(encoding="utf-8"), expected)
 
+    def test_stream_rewrite_uses_existing_block_label_indentation(self) -> None:
+        cases = (
+            (
+                "    labels:\n        - keep=value\n",
+                "    labels:\n"
+                "        - keep=value\n"
+                "        - wud.tag.include=^\\d+-distroless$$\n",
+            ),
+            (
+                "    labels:\n        keep: value\n",
+                "    labels:\n"
+                "        keep: value\n"
+                "        wud.tag.include: ^\\d+-distroless$$\n",
+            ),
+        )
+        for original_labels, expected_labels in cases:
+            with self.subTest(labels=original_labels):
+                original = (
+                    "services:\n"
+                    "  app:\n"
+                    "    image: repo/app:1.0-distroless\n"
+                    f"{original_labels}"
+                    "    command: run\n"
+                )
+                compose_file = self.write_compose(original)
+
+                self._apply_preserved_stream(compose_file)
+
+                self.assertEqual(
+                    compose_file.read_text(encoding="utf-8"),
+                    original.replace("repo/app:1.0-distroless", "repo/app:2.0-distroless")
+                    .replace(original_labels, expected_labels),
+                )
+
+    def test_stream_rewrite_supports_flow_and_empty_labels(self) -> None:
+        cases = (
+            (
+                '    labels: ["keep=value"] # list\n',
+                '    labels: ["keep=value", '
+                "wud.tag.include=^\\d+-distroless$$] # list\n",
+            ),
+            (
+                '    labels: {"keep": "value"} # map\n',
+                '    labels: {"keep": "value", '
+                "wud.tag.include: ^\\d+-distroless$$} # map\n",
+            ),
+            (
+                "    labels: null # empty\n",
+                "    labels: # empty\n"
+                "      - wud.tag.include=^\\d+-distroless$$\n",
+            ),
+        )
+        for original_labels, expected_labels in cases:
+            with self.subTest(labels=original_labels):
+                original = (
+                    "services:\n"
+                    "  app:\n"
+                    "    image: repo/app:1.0-distroless\n"
+                    f"{original_labels}"
+                    "    command: run\n"
+                )
+                compose_file = self.write_compose(original)
+
+                self._apply_preserved_stream(compose_file)
+
+                self.assertEqual(
+                    compose_file.read_text(encoding="utf-8"),
+                    original.replace("repo/app:1.0-distroless", "repo/app:2.0-distroless")
+                    .replace(original_labels, expected_labels),
+                )
+
+    def _apply_preserved_stream(self, compose_file: Path) -> None:
+        apply_compose_tag_updates(
+            compose_file,
+            (
+                TagUpdate(
+                    old_image="repo/app:1.0-distroless",
+                    desired_tag="2.0-distroless",
+                    new_image="repo/app:2.0-distroless",
+                    services=("app",),
+                ),
+            ),
+            tag_stream_updates=(
+                TagStreamUpdate(
+                    line_no=1,
+                    stack="stack",
+                    stack_directory=str(compose_file.parent.resolve(strict=False)),
+                    compose_file=compose_file.name,
+                    service="app",
+                    current_tag="1.0-distroless",
+                    reported_tag="2.0",
+                    selected_tag="2.0-distroless",
+                    decision="preserve",
+                    label_key="wud.tag.include",
+                    current_label_value="",
+                    proposed_label_value=r"^\d+-distroless$$",
+                    proposed_label_regex=r"^\d+-distroless$",
+                    approved=True,
+                    reason="label-added",
+                ),
+            ),
+            stack_name="stack",
+        )
+
     def test_stream_map_label_stale_value_leaves_image_and_label_unchanged(self) -> None:
         original = (
             "services:\n"
