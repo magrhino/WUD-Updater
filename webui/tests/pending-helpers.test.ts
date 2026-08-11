@@ -1502,7 +1502,8 @@ describe("pending helper modules", () => {
     const keep = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Keep distroless"));
-    expect(keep?.attributes("type")).not.toBe("div");
+    expect(keep).toBeDefined();
+    expect(keep?.attributes("type")).toBe("button");
     await keep?.trigger("click");
     expect(wrapper.emitted("choose-tag-stream")?.[0]).toEqual([issue, "preserve"]);
   });
