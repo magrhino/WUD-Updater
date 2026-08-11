@@ -826,8 +826,8 @@ def build_dry_run_plan(
     ).build()
 
 
-def build_dry_run_plan_from_pending_source(  # NOSONAR - compatibility facade
-    config: UpdaterConfig,
+def build_dry_run_plan_from_pending_source(
+    config: UpdaterConfig,  # NOSONAR - compatibility facade
     parsed: ParsedWudFile,
     *,
     source_file: str,
