@@ -4,6 +4,15 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.57.2](https://github.com/magrhino/wudup/compare/v0.57.1...v0.57.2) (2026-08-10)
+
+
+### Bug Fixes
+
+* **updates:** enforce WUD metadata freshness before apply ([#594](https://github.com/magrhino/wudup/issues/594)) ([5e518a2](https://github.com/magrhino/wudup/commit/5e518a2b5e815336c5c3920ff9b7029cad3385b7))
+* **webui:** restore file-backed dev fixtures ([#595](https://github.com/magrhino/wudup/issues/595)) ([25eb209](https://github.com/magrhino/wudup/commit/25eb209c9d2224fbbb6ef6525b1142d978255def))
+* **webui:** treat empty pending source as unset ([#597](https://github.com/magrhino/wudup/issues/597)) ([90715bf](https://github.com/magrhino/wudup/commit/90715bff6f3622e60afeff09678fb4116bb19904))
+
 ## [0.57.1](https://github.com/magrhino/wudup/compare/v0.57.0...v0.57.1) (2026-08-09)
 
 
