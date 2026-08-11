@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 
 from .command import CommandError
-from .compose_rewrite import plan_compose_tag_stream_update
+from .compose_rewrite import WUD_TAG_INCLUDE_LABEL, plan_compose_tag_stream_update
 from .docker_cli import DockerCli
 from .images import image_repo_ref, image_tag, image_with_tag
 from .lsio_updates import is_lsio_repo, parse_lsio_tag
@@ -361,6 +361,11 @@ def _plan_decided_tag_stream_change(
                     service=match.service,
                 )
             )
+            used_approvals.extend(
+                approval
+                for approval in label_rewrite_approvals
+                if _approval_targets_match(approval, line_no, match)
+            )
             continue
         updates.append((match.stack.index, stream_update))
         matching_approval = (
@@ -488,3 +493,19 @@ def _matching_approval(
         ):
             return approval
     return None
+
+
+def _approval_targets_match(
+    approval: TagStreamLabelRewriteApproval,
+    line_no: int,
+    match: Match,
+) -> bool:
+    return (
+        approval.line_no == line_no
+        and approval.stack == match.stack.name
+        and approval.stack_directory
+        == str(match.stack.directory.resolve(strict=False))
+        and approval.compose_file == match.stack.file
+        and approval.service == match.service
+        and approval.label_key == WUD_TAG_INCLUDE_LABEL
+    )

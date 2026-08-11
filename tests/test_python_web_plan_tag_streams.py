@@ -324,6 +324,64 @@ def test_custom_stream_label_requires_exact_stale_bound_approval(
     assert "stale or forged" in rejected.json()["detail"]
 
 
+def test_stream_label_approval_retains_later_compose_unsafe_issue(
+    tmp_path: Path,
+) -> None:
+    client, _fake_root, compose_dir = _stream_client(tmp_path)
+    compose_path = compose_dir / "docker-compose.yml"
+    compose_path.write_text(
+        "services:\n"
+        "  task-runner:\n"
+        "    image: n8nio/runners:2.33.5-distroless\n"
+        "    labels:\n"
+        "      wud.tag.include: ^stable-.+$$\n",
+        encoding="utf-8",
+    )
+    decision = {"line_no": 1, "decision": "preserve"}
+    blocked = _plan(client, {"tag_stream_decisions": [decision]}).json()
+    issue = next(
+        item
+        for item in blocked["issues"]
+        if item["code"] == "compose-tag-stream-label-rewrite-unapproved"
+    )
+    approval = {
+        "line_no": 1,
+        "stack": issue["stack"],
+        "stack_directory": issue["details"]["stack_directory"],
+        "compose_file": issue["details"]["compose_file"],
+        "service": issue["service"],
+        "label_key": issue["details"]["label_key"],
+        "current_label_value": issue["details"]["current_label_value"],
+        "selected_tag": issue["details"]["selected_tag"],
+        "proposed_label_value": issue["details"]["proposed_label_value"],
+    }
+    compose_path.write_text(
+        "x-labels: &labels\n"
+        "  wud.tag.include: ^stable-.+$$\n"
+        "services:\n"
+        "  task-runner:\n"
+        "    image: n8nio/runners:2.33.5-distroless\n"
+        "    labels: *labels\n",
+        encoding="utf-8",
+    )
+
+    response = _plan(
+        client,
+        {
+            "tag_stream_decisions": [decision],
+            "tag_stream_label_rewrite_approvals": [approval],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "blocked"
+    assert any(
+        item["code"] == "compose-tag-stream-rewrite-unsafe"
+        for item in body["issues"]
+    )
+
+
 def test_stream_label_approval_is_bound_to_one_compose_file(
     tmp_path: Path,
 ) -> None:
