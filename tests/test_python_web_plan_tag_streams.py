@@ -380,6 +380,20 @@ def test_stream_label_approval_retains_later_compose_unsafe_issue(
         item["code"] == "compose-tag-stream-rewrite-unsafe"
         for item in body["issues"]
     )
+    for field, value in (
+        ("selected_tag", "9.9.9-forged"),
+        ("proposed_label_value", "^forged$$"),
+    ):
+        forged = dict(approval, **{field: value})
+        rejected = _plan(
+            client,
+            {
+                "tag_stream_decisions": [decision],
+                "tag_stream_label_rewrite_approvals": [forged],
+            },
+        )
+        assert rejected.status_code == 422
+        assert "stale or forged" in rejected.json()["detail"]
 
 
 def test_stream_label_approval_is_bound_to_one_compose_file(

@@ -7,7 +7,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 
 from .command import CommandError
-from .compose_rewrite import WUD_TAG_INCLUDE_LABEL, plan_compose_tag_stream_update
+from .compose_rewrite import (
+    WUD_TAG_INCLUDE_LABEL,
+    compose_escape_dollars,
+    plan_compose_tag_stream_update,
+)
 from .docker_cli import DockerCli
 from .images import image_repo_ref, image_tag, image_with_tag
 from .lsio_updates import is_lsio_repo, parse_lsio_tag
@@ -364,7 +368,13 @@ def _plan_decided_tag_stream_change(
             used_approvals.extend(
                 approval
                 for approval in label_rewrite_approvals
-                if _approval_targets_match(approval, line_no, match)
+                if _approval_targets_match(
+                    approval,
+                    line_no,
+                    match,
+                    selected_tag=selected_tag,
+                    proposed_label_value=compose_escape_dollars(selected_regex),
+                )
             )
             continue
         updates.append((match.stack.index, stream_update))
@@ -499,6 +509,9 @@ def _approval_targets_match(
     approval: TagStreamLabelRewriteApproval,
     line_no: int,
     match: Match,
+    *,
+    selected_tag: str,
+    proposed_label_value: str,
 ) -> bool:
     return (
         approval.line_no == line_no
@@ -508,4 +521,6 @@ def _approval_targets_match(
         and approval.compose_file == match.stack.file
         and approval.service == match.service
         and approval.label_key == WUD_TAG_INCLUDE_LABEL
+        and approval.selected_tag == selected_tag
+        and approval.proposed_label_value == proposed_label_value
     )
