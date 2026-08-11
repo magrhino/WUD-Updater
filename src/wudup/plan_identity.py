@@ -10,7 +10,12 @@ from pathlib import Path
 
 from .config import UpdaterConfig
 from .plan_models import DryRunPlan, DryRunPlanCleanupItem, PlanFileMissing
-from .updater_models import DigestPinLabelRewriteApproval, TagOverride
+from .updater_models import (
+    DigestPinLabelRewriteApproval,
+    TagOverride,
+    TagStreamDecision,
+    TagStreamLabelRewriteApproval,
+)
 
 
 def _file_sha256(path: Path) -> str:
@@ -27,6 +32,8 @@ def _plan_id(
     config: UpdaterConfig,
     allow_tag_updates: bool,
     tag_overrides: Sequence[TagOverride],
+    tag_stream_decisions: Sequence[TagStreamDecision],
+    tag_stream_label_rewrite_approvals: Sequence[TagStreamLabelRewriteApproval],
     digest_pin_label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval],
     host_docker_base: Path | None,
     wud_file_hash: str,
@@ -51,6 +58,40 @@ def _plan_id(
         "tag_overrides": [
             {"line_no": item.line_no, "tag": item.tag}
             for item in sorted(tag_overrides, key=lambda item: item.line_no)
+        ],
+        "tag_stream_decisions": [
+            {"line_no": item.line_no, "decision": item.decision}
+            for item in sorted(
+                tag_stream_decisions,
+                key=lambda item: (item.line_no, item.decision),
+            )
+        ],
+        "tag_stream_label_rewrite_approvals": [
+            {
+                "line_no": item.line_no,
+                "stack": item.stack,
+                "stack_directory": item.stack_directory,
+                "compose_file": item.compose_file,
+                "service": item.service,
+                "label_key": item.label_key,
+                "current_label_value": item.current_label_value,
+                "selected_tag": item.selected_tag,
+                "proposed_label_value": item.proposed_label_value,
+            }
+            for item in sorted(
+                tag_stream_label_rewrite_approvals,
+                key=lambda item: (
+                    item.line_no,
+                    item.stack,
+                    item.stack_directory,
+                    item.compose_file,
+                    item.service,
+                    item.label_key,
+                    item.current_label_value,
+                    item.selected_tag,
+                    item.proposed_label_value,
+                ),
+            )
         ],
         "digest_pin_label_rewrite_approvals": [
             {

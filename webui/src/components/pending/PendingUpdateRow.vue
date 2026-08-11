@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { InputHTMLAttributes } from "vue";
-import { NAlert, NCheckbox, NInput, NTag } from "naive-ui";
+import { Repeat2 } from "@lucide/vue";
+import { NAlert, NButton, NCheckbox, NInput, NTag } from "naive-ui";
 
 import type {
   PendingGroupedItem,
@@ -60,6 +61,7 @@ withDefaults(defineProps<{
 
 const emit = defineEmits<{
   toggle: [lineNo: number, checked: boolean];
+  reviewStream: [];
   updateTag: [value: string];
 }>();
 
@@ -116,6 +118,9 @@ function groupedItemTarget(item: PendingGroupedItem): string {
         <n-tag size="small" type="warning">Tag rewrite</n-tag>
         {{ tagRewriteLabel }}
       </span>
+      <span v-if="item.tag_stream" class="tag-stream-detail wrap-anywhere">
+        {{ item.tag_stream.current_stream }} → {{ item.tag_stream.reported_stream }}
+      </span>
       <span v-if="metaDetail" class="wrap-anywhere">{{ metaDetail }}</span>
       <PendingReleaseNotes
         v-if="showReleaseNotes"
@@ -135,7 +140,24 @@ function groupedItemTarget(item: PendingGroupedItem): string {
     </div>
     <div v-if="showTagInput" class="pending-update-tag">
       <span>New tag</span>
+      <template v-if="item.tag_stream">
+        <code>{{ item.desired_tag }}</code>
+        <n-button
+          size="small"
+          secondary
+          type="info"
+          aria-haspopup="dialog"
+          :aria-label="`Choose update stream for ${item.image}`"
+          @click="emit('reviewStream')"
+        >
+          <template #icon>
+            <Repeat2 :size="15" aria-hidden="true" />
+          </template>
+          Choose stream
+        </n-button>
+      </template>
       <n-input
+        v-else
         :value="tagOverrideValue"
         size="small"
         class="tag-override-input"
@@ -183,6 +205,11 @@ function groupedItemTarget(item: PendingGroupedItem): string {
   align-items: center;
   gap: 6px 8px;
   min-width: 0;
+}
+
+.tag-stream-detail {
+  color: var(--color-error-fg);
+  font-weight: 600;
 }
 
 .pending-update-detail {

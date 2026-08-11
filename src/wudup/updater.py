@@ -43,12 +43,14 @@ if TYPE_CHECKING:
         ImageState,
         Match,
         TagExclusionUpdate,
+        TagStreamUpdate,
         UpdaterOptions,
         UpdaterProgressEvent,
     )
     from .wud_file import ParsedWudFile, WudTarget
 
 VALID_MODES = frozenset({"pause", "stop", "live"})
+TAG_UPDATE_PLAN_VALIDATION_FAILED = "Tag update plan validation failed."
 
 
 class UpdateFromWudRunner(
@@ -87,6 +89,7 @@ class UpdateFromWudRunner(
         self.discovered_completed_update_selections: tuple[
             CompletedUpdateSelection, ...
         ] = ()
+        self.matched_tag_stream_updates: set[TagStreamUpdate] = set()
         self.audit_conn: sqlite3.Connection | None = None
         self.audit_run_id: int | None = None
         self.audit_db_path: Path | None = None
@@ -143,6 +146,13 @@ class UpdateFromWudRunner(
                 lock.release_parent()
 
             if not parsed.targets and not excluded_tags.targets:
+                if opts.tag_stream_updates and not self._validate_tag_update_plan(()):
+                    self._progress(
+                        "preflight",
+                        "failure",
+                        TAG_UPDATE_PLAN_VALIDATION_FAILED,
+                    )
+                    return 1
                 self.log.info("Nothing to do; list is empty.")
                 self._progress("preflight", "success", "Pending list is empty.")
                 self._progress("completion", "success", "No updates were pending.")
@@ -170,6 +180,16 @@ class UpdateFromWudRunner(
             self._print_skipped_tag_updates(skipped_tags)
 
             if not matches and not exclusion_updates:
+                if opts.tag_stream_updates and not self._validate_tag_update_plan(
+                    matches
+                ):
+                    self._progress(
+                        "preflight",
+                        "failure",
+                        TAG_UPDATE_PLAN_VALIDATION_FAILED,
+                        matches=matches,
+                    )
+                    return 1
                 return self._handle_no_matches(
                     parsed,
                     excluded_tags,
@@ -298,7 +318,7 @@ class UpdateFromWudRunner(
             self._progress(
                 "preflight",
                 "failure",
-                "Tag update plan validation failed.",
+                TAG_UPDATE_PLAN_VALIDATION_FAILED,
                 matches=matches,
             )
             return 1

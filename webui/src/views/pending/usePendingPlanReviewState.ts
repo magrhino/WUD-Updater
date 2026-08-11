@@ -13,6 +13,9 @@ import type {
   PlanIssue,
   PlanSelectionRequest,
   TagOverrideRequest,
+  TagStreamDecision,
+  TagStreamDecisionRequest,
+  TagStreamLabelRewriteApprovalRequest,
 } from "../../api/client";
 import { useAuthStore } from "../../stores/auth";
 import { useUpdatesStore } from "../../stores/updates";
@@ -41,6 +44,8 @@ export type PendingUpdateIntent = {
   allowTagUpdates: boolean;
   tagOverrides: TagOverrideRequest[];
   digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[];
+  tagStreamDecisions: TagStreamDecisionRequest[];
+  tagStreamLabelRewriteApprovals: TagStreamLabelRewriteApprovalRequest[];
   blockedMetadataCount?: number;
 };
 
@@ -48,6 +53,8 @@ export type PendingApplyPlanPayload = {
   allowTagUpdates: boolean;
   tagOverrides: TagOverrideRequest[];
   digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[];
+  tagStreamDecisions: TagStreamDecisionRequest[];
+  tagStreamLabelRewriteApprovals: TagStreamLabelRewriteApprovalRequest[];
 };
 
 type AssistantDetailKey =
@@ -75,6 +82,7 @@ export function usePendingPlanReviewState(
   const updates = useUpdatesStore();
   const auth = useAuthStore();
   const updateIntent = ref<PendingUpdateIntent | null>(null);
+  const retainedTagStreamDecisionIssues = ref<PlanIssue[]>([]);
 
   const mutationStateLabel = computed(() =>
     auth.session?.mutations_enabled ? "Mutations enabled" : "Read-only",
@@ -276,7 +284,7 @@ export function usePendingPlanReviewState(
   });
   const cleanupItems = computed(() => updates.plan?.cleanup.items ?? []);
   const cleanupAvailable = computed(() => cleanupItems.value.length > 0);
-  const visiblePlanIssues = computed(() => {
+  const allPlanIssues = computed(() => {
     const issues = updates.plan?.issues ?? [];
     if (!cleanupItems.value.length) {
       return issues;
@@ -287,11 +295,47 @@ export function usePendingPlanReviewState(
     );
   });
   const digestPinLabelApprovalIssues = computed(() =>
-    visiblePlanIssues.value.filter(
+    allPlanIssues.value.filter(
       (issue) =>
         issue.code === "compose-digest-pin-label-rewrite-unapproved" &&
         digestPinLabelApprovalFromIssue(issue) !== null,
     ),
+  );
+  const tagStreamDecisionIssues = computed(() => {
+    const issuesByLine = new Map(
+      retainedTagStreamDecisionIssues.value.map((issue) => [issue.line_no, issue]),
+    );
+    for (const issue of allPlanIssues.value) {
+      if (issue.code === "tag-stream-change") {
+        issuesByLine.set(issue.line_no, issue);
+      }
+    }
+    return [...issuesByLine.values()];
+  });
+  const tagStreamLabelApprovalIssues = computed(() =>
+    allPlanIssues.value.filter(
+      (issue) =>
+        issue.code === "compose-tag-stream-label-rewrite-unapproved" &&
+        tagStreamLabelApprovalFromIssue(issue) !== null,
+    ),
+  );
+  const visiblePlanIssues = computed(() =>
+    allPlanIssues.value.filter(
+      (issue) =>
+        issue.code !== "tag-stream-change" &&
+        (issue.code !== "compose-tag-stream-label-rewrite-unapproved" ||
+          tagStreamLabelApprovalFromIssue(issue) === null) &&
+        (issue.code !== "compose-digest-pin-label-rewrite-unapproved" ||
+          digestPinLabelApprovalFromIssue(issue) === null),
+    ),
+  );
+  const planTagStreamUpdates = computed(() =>
+    updates.plan?.stacks.flatMap((stack) =>
+      (stack.tag_stream_updates ?? []).map((update) => ({
+        stack: stack.name,
+        update,
+      })),
+    ) ?? [],
   );
   const planDigestPinLabelRewrites = computed(() =>
     planDigestPinLabelRewritesFromPlan(updates.plan),
@@ -526,10 +570,17 @@ export function usePendingPlanReviewState(
   }
 
   function setUpdateIntent(intent: PendingUpdateIntent): void {
-    updateIntent.value = intent;
+    retainedTagStreamDecisionIssues.value = [];
+    updateIntent.value = {
+      ...intent,
+      tagStreamDecisions: intent.tagStreamDecisions ?? [],
+      tagStreamLabelRewriteApprovals:
+        intent.tagStreamLabelRewriteApprovals ?? [],
+    };
   }
 
   function clearUpdateIntent(): void {
+    retainedTagStreamDecisionIssues.value = [];
     updateIntent.value = null;
   }
 
@@ -543,6 +594,9 @@ export function usePendingPlanReviewState(
       tagOverrides: intent?.tagOverrides ?? fallback.tagOverrides,
       digestPinLabelRewriteApprovals:
         intent?.digestPinLabelRewriteApprovals ?? [],
+      tagStreamDecisions: intent?.tagStreamDecisions ?? [],
+      tagStreamLabelRewriteApprovals:
+        intent?.tagStreamLabelRewriteApprovals ?? [],
     };
   }
 
@@ -565,18 +619,111 @@ export function usePendingPlanReviewState(
       ...intent,
       digestPinLabelRewriteApprovals: [...approvalsByKey.values()],
     };
-    await updates.createPlan(
-      nextIntent.lineNumbers,
-      nextIntent.allowTagUpdates,
-      nextIntent.tagOverrides,
-      nextIntent.digestPinLabelRewriteApprovals,
-      nextIntent.selections ?? [],
-    );
+    await replanIntent(nextIntent);
     if (updateIntent.value !== intent) {
       return false;
     }
     updateIntent.value = nextIntent;
     return true;
+  }
+
+  async function chooseTagStream(
+    issue: PlanIssue,
+    decision: TagStreamDecision,
+  ): Promise<boolean> {
+    const intent = updateIntent.value;
+    if (issue.line_no === null || !intent || updates.loading) {
+      return false;
+    }
+    retainedTagStreamDecisionIssues.value = [
+      ...retainedTagStreamDecisionIssues.value.filter(
+        (item) => item.line_no !== issue.line_no,
+      ),
+      issue,
+    ];
+    const decisions = new Map(
+      intent.tagStreamDecisions.map((item) => [item.line_no, item]),
+    );
+    decisions.set(issue.line_no, { line_no: issue.line_no, decision });
+    const nextIntent: PendingUpdateIntent = {
+      ...intent,
+      tagStreamDecisions: [...decisions.values()],
+      tagStreamLabelRewriteApprovals: intent.tagStreamLabelRewriteApprovals.filter(
+        (item) => item.line_no !== issue.line_no,
+      ),
+    };
+    await replanIntent(nextIntent);
+    if (updateIntent.value !== intent) {
+      return false;
+    }
+    updateIntent.value = nextIntent;
+    return true;
+  }
+
+  async function approveTagStreamLabelRewrite(issue: PlanIssue): Promise<boolean> {
+    const approval = tagStreamLabelApprovalFromIssue(issue);
+    const intent = updateIntent.value;
+    if (!approval || !intent || updates.loading) {
+      return false;
+    }
+    const approvals = new Map(
+      intent.tagStreamLabelRewriteApprovals.map((item) => [
+        tagStreamLabelApprovalKey(item),
+        item,
+      ]),
+    );
+    approvals.set(tagStreamLabelApprovalKey(approval), approval);
+    const nextIntent: PendingUpdateIntent = {
+      ...intent,
+      tagStreamLabelRewriteApprovals: [...approvals.values()],
+    };
+    await replanIntent(nextIntent);
+    if (updateIntent.value !== intent) {
+      return false;
+    }
+    updateIntent.value = nextIntent;
+    return true;
+  }
+
+  function tagStreamDecisionSelected(
+    issue: PlanIssue,
+    decision: TagStreamDecision,
+  ): boolean {
+    return updateIntent.value?.tagStreamDecisions.some(
+      (item) => item.line_no === issue.line_no && item.decision === decision,
+    ) ?? false;
+  }
+
+  function tagStreamLabelApprovalApproved(issue: PlanIssue): boolean {
+    const approval = tagStreamLabelApprovalFromIssue(issue);
+    return Boolean(
+      approval &&
+        updateIntent.value?.tagStreamLabelRewriteApprovals.some(
+          (item) => tagStreamLabelApprovalKey(item) === tagStreamLabelApprovalKey(approval),
+        ),
+    );
+  }
+
+  async function replanIntent(intent: PendingUpdateIntent): Promise<void> {
+    const createArgs = [
+      intent.lineNumbers,
+      intent.allowTagUpdates,
+      intent.tagOverrides,
+      intent.digestPinLabelRewriteApprovals,
+      intent.selections ?? [],
+    ] as const;
+    if (
+      intent.tagStreamDecisions.length ||
+      intent.tagStreamLabelRewriteApprovals.length
+    ) {
+      await updates.createPlan(
+        ...createArgs,
+        intent.tagStreamDecisions,
+        intent.tagStreamLabelRewriteApprovals,
+      );
+      return;
+    }
+    await updates.createPlan(...createArgs);
   }
 
   return {
@@ -607,6 +754,7 @@ export function usePendingPlanReviewState(
     cleanupLineLabel,
     cleanupReviewSummary,
     approveDigestPinLabelRewrite,
+    approveTagStreamLabelRewrite,
     clearUpdateIntent,
     digestPinLabelApprovalApproved,
     digestPinLabelApprovalIssues,
@@ -626,6 +774,7 @@ export function usePendingPlanReviewState(
     planDigestPinLabelRewrites,
     planDigestUnpinUpdates,
     planLines,
+    planTagStreamUpdates,
     planMetadataWarning,
     planStatusLabel,
     preflightDigestPinNotice,
@@ -646,12 +795,17 @@ export function usePendingPlanReviewState(
     selectedMetadataWarning,
     selectedUpdateContext,
     setUpdateIntent,
+    chooseTagStream,
     staleDiagnosticDetail,
     staleDiagnosticLabel,
     unmatchedIssueSummary,
     unmatchedReviewCountLabel,
     unmatchedReviewSummary,
     updateSelectedDisabled,
+    tagStreamDecisionIssues,
+    tagStreamDecisionSelected,
+    tagStreamLabelApprovalApproved,
+    tagStreamLabelApprovalIssues,
     updateSelectedButtonLabel,
     visiblePlanIssues,
   };
@@ -753,6 +907,54 @@ export function digestPinLabelApprovalKey(
     approval.planned_tag,
     approval.proposed_label_value,
   ].join("\u0000");
+}
+
+export function tagStreamLabelApprovalFromIssue(
+  issue: PlanIssue,
+): TagStreamLabelRewriteApprovalRequest | null {
+  if (
+    issue.code !== "compose-tag-stream-label-rewrite-unapproved" ||
+    issue.line_no === null
+  ) {
+    return null;
+  }
+  const approval = {
+    line_no: issue.line_no,
+    stack: issue.stack,
+    stack_directory: issueDetailString(issue, "stack_directory"),
+    compose_file: issueDetailString(issue, "compose_file"),
+    service: issue.service,
+    label_key: issueDetailString(issue, "label_key"),
+    current_label_value: issueDetailString(issue, "current_label_value"),
+    selected_tag: issueDetailString(issue, "selected_tag"),
+    proposed_label_value: issueDetailString(issue, "proposed_label_value"),
+  };
+  return Object.values(approval).every((value) => String(value).trim())
+    ? approval
+    : null;
+}
+
+export function tagStreamLabelApprovalKey(
+  approval: TagStreamLabelRewriteApprovalRequest,
+): string {
+  return [
+    approval.line_no,
+    approval.stack,
+    approval.stack_directory,
+    approval.compose_file,
+    approval.service,
+    approval.label_key,
+    approval.current_label_value,
+    approval.selected_tag,
+    approval.proposed_label_value,
+  ].join("\u0000");
+}
+
+export function tagStreamLabelApprovalIssueKey(issue: PlanIssue): string {
+  const approval = tagStreamLabelApprovalFromIssue(issue);
+  return approval === null
+    ? [issue.line_no, issue.stack, issue.service].join("\u0000")
+    : tagStreamLabelApprovalKey(approval);
 }
 
 function digestPinLabelIssueProposedRegex(issue: PlanIssue): string {

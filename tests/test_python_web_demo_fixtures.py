@@ -27,7 +27,16 @@ def test_static_demo_fixture_generation_matches_read_only_contract() -> None:
     assert set(data["runs"]["rollbackPlans"]) == {
         str(run["id"]) for run in data["runs"]["summaries"]
     }
-    assert data["pending"]["count"] == 7
+    assert data["pending"]["count"] == 8
+    runner = next(
+        item
+        for item in data["pending"]["items"]
+        if item["image"] == web_demo_fixtures.DEMO_RUNNER_CURRENT_IMAGE
+    )
+    assert runner["tag_stream"] == {
+        "current_stream": "distroless",
+        "reported_stream": "default",
+    }
     assert data["pending"]["snoozed_candidates"] == [
         web_demo_fixtures.DEMO_PENDING_SNOOZED_CANDIDATE
     ]

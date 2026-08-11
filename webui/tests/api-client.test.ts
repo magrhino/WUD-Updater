@@ -478,6 +478,8 @@ describe("webApi", () => {
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
+      tag_stream_decisions: [],
+      tag_stream_label_rewrite_approvals: [],
       digest_pin_label_rewrite_approvals: [],
     });
     expect(jsonRequestBody(fetchMock.mock.calls[10])).toEqual({
@@ -485,6 +487,8 @@ describe("webApi", () => {
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
+      tag_stream_decisions: [],
+      tag_stream_label_rewrite_approvals: [],
       digest_pin_label_rewrite_approvals: [],
       confirmation: "apply",
     });
@@ -493,6 +497,8 @@ describe("webApi", () => {
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
+      tag_stream_decisions: [],
+      tag_stream_label_rewrite_approvals: [],
       digest_pin_label_rewrite_approvals: [],
       confirmation: "apply",
     });
@@ -505,7 +511,7 @@ describe("webApi", () => {
       { line_no: 1, selection_id: "selection-backup" },
     ];
 
-    await webApi.createPlan([1], false, [], [], "csrf", selections);
+    await webApi.createPlan([1], false, [], [], "csrf", { selections });
     await webApi.createJob(
       "plan-id",
       [1],
@@ -513,7 +519,7 @@ describe("webApi", () => {
       [],
       [],
       "csrf",
-      selections,
+      { selections },
     );
     await webApi.applyPlan(
       "plan-id",
@@ -522,13 +528,15 @@ describe("webApi", () => {
       [],
       [],
       "csrf",
-      selections,
+      { selections },
     );
 
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       selections,
       allow_tag_updates: false,
       tag_overrides: [],
+      tag_stream_decisions: [],
+      tag_stream_label_rewrite_approvals: [],
       digest_pin_label_rewrite_approvals: [],
     });
     expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual({
@@ -536,6 +544,8 @@ describe("webApi", () => {
       selections,
       allow_tag_updates: false,
       tag_overrides: [],
+      tag_stream_decisions: [],
+      tag_stream_label_rewrite_approvals: [],
       digest_pin_label_rewrite_approvals: [],
       confirmation: "apply",
     });
@@ -544,9 +554,58 @@ describe("webApi", () => {
       selections,
       allow_tag_updates: false,
       tag_overrides: [],
+      tag_stream_decisions: [],
+      tag_stream_label_rewrite_approvals: [],
       digest_pin_label_rewrite_approvals: [],
       confirmation: "apply",
     });
+  });
+
+  it("serializes populated tag stream decisions and label approvals", async () => {
+    const fetchMock = mockFetch({});
+    const decisions = [{ line_no: 4, decision: "preserve" as const }];
+    const approvals = [
+      {
+        line_no: 4,
+        stack: "jarvis",
+        stack_directory: "/docker/jarvis",
+        compose_file: "docker-compose.yml",
+        service: "task-runner",
+        label_key: "wud.tag.include",
+        current_label_value: "^stable-.+$",
+        selected_tag: "2.34.4-distroless",
+        proposed_label_value: String.raw`^\d+\.\d+\.\d+-distroless$$`,
+      },
+    ];
+    const options = {
+      tagStreamDecisions: decisions,
+      tagStreamLabelRewriteApprovals: approvals,
+    };
+
+    await webApi.createPlan([4], true, [], [], "csrf", options);
+    await webApi.createJob("plan-id", [4], true, [], [], "csrf", options);
+    await webApi.applyPlan("plan-id", [4], true, [], [], "csrf", options);
+
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      line_numbers: [4],
+      allow_tag_updates: true,
+      tag_overrides: [],
+      tag_stream_decisions: decisions,
+      tag_stream_label_rewrite_approvals: approvals,
+      digest_pin_label_rewrite_approvals: [],
+    });
+    const expectedApplyBody = {
+      plan_id: "plan-id",
+      line_numbers: [4],
+      allow_tag_updates: true,
+      tag_overrides: [],
+      tag_stream_decisions: decisions,
+      tag_stream_label_rewrite_approvals: approvals,
+      digest_pin_label_rewrite_approvals: [],
+      confirmation: "apply",
+    };
+    expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual(expectedApplyBody);
+    expect(jsonRequestBody(fetchMock.mock.calls[2])).toEqual(expectedApplyBody);
   });
 
   it("serializes pending rescan payload exactly", async () => {

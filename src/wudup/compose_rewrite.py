@@ -7,6 +7,7 @@ import re
 import shutil
 import tempfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import replace
 from io import StringIO
 from pathlib import Path
 
@@ -31,6 +32,8 @@ from .updater_models import (
     DigestPinUpdate,
     DigestUnpinUpdate,
     TagExclusionUpdate,
+    TagStreamLabelRewriteApproval,
+    TagStreamUpdate,
     TagUpdate,
 )
 
@@ -41,6 +44,13 @@ RESOLVED_TAG_MARKER_PREFIXES = (
 )
 WUD_TAG_INCLUDE_LABEL = "wud.tag.include"
 _JS_REGEX_SPECIAL_RE = re.compile(r"([\\^$.*+?()[\]{}|])")
+_UNSUPPORTED_NON_STRING_LABEL_ENTRY = (
+    "Service labels use unsupported non-string list entries."
+)
+_SERVICE_LABELS_SOURCE_LOCATION_UNAVAILABLE = (
+    "Service labels source location is unavailable."
+)
+_UNSUPPORTED_SERVICE_LABELS_YAML = "Service labels use unsupported YAML syntax."
 
 
 class _CommentTokenList:
@@ -265,9 +275,22 @@ def _validate_service_resolved_tag_marker(
 def apply_compose_tag_updates(
     compose_path: Path,
     updates: Sequence[TagUpdate],
+    *,
+    tag_stream_updates: Sequence[TagStreamUpdate] = (),
+    stack_name: str = "",
 ) -> tuple[AppliedTagUpdate, ...]:
     if not updates:
         return ()
+
+    if tag_stream_updates:
+        rendered, applied = render_compose_tag_stream_updates(
+            compose_path,
+            updates,
+            tag_stream_updates=tag_stream_updates,
+            stack_name=stack_name,
+        )
+        _atomic_replace_compose(compose_path, rendered, prefix="tag-stream")
+        return applied
 
     source, _yaml, _parsed, services = _load_compose_yaml(compose_path)
     line_offsets = _line_start_offsets(source)
@@ -326,6 +349,766 @@ def apply_compose_tag_updates(
     return applied
 
 
+def plan_compose_tag_stream_update(
+    compose_path: Path,
+    *,
+    line_no: int,
+    stack_name: str,
+    stack_directory: str,
+    service: str,
+    current_image: str,
+    current_tag: str,
+    reported_tag: str,
+    selected_tag: str,
+    decision: str,
+    proposed_label_regex: str,
+    approvals: Sequence[TagStreamLabelRewriteApproval] = (),
+) -> TagStreamUpdate:
+    """Inspect one service and return its exact stream-label rewrite plan."""
+
+    _source, _yaml, _parsed, services = _load_compose_yaml(compose_path)
+    service_config = _rewrite_service_config(
+        services,
+        service,
+        direct_image_required=True,
+    )
+    _validate_service_image(service, service_config.get("image"), current_image)
+    _prepare_service_labels(services, service, service_config)
+    current_label_value = compose_unescape_dollars(
+        _get_service_label_value(service_config, WUD_TAG_INCLUDE_LABEL)
+    )
+    proposed_label_value = compose_escape_dollars(proposed_label_regex)
+
+    if not current_label_value:
+        approved, reason = True, "label-added"
+    elif current_label_value == proposed_label_regex:
+        approved, reason = True, "label-matches"
+    elif current_label_value == exact_tags_regex((current_tag,)) or (
+        tag_value_valid(current_label_value) and current_label_value == current_tag
+    ):
+        approved, reason = True, "exact-tag-normalized"
+    else:
+        approved = any(
+            _tag_stream_label_rewrite_approval_matches(
+                approval,
+                line_no=line_no,
+                stack_name=stack_name,
+                stack_directory=stack_directory,
+                compose_file=compose_path.name,
+                service=service,
+                current_label_value=current_label_value,
+                selected_tag=selected_tag,
+                proposed_label_value=proposed_label_value,
+            )
+            for approval in approvals
+        )
+        reason = "approved" if approved else "approval-required"
+
+    return TagStreamUpdate(
+        line_no=line_no,
+        stack=stack_name,
+        stack_directory=stack_directory,
+        compose_file=compose_path.name,
+        service=service,
+        current_tag=current_tag,
+        reported_tag=reported_tag,
+        selected_tag=selected_tag,
+        decision=decision,
+        label_key=WUD_TAG_INCLUDE_LABEL,
+        current_label_value=current_label_value,
+        proposed_label_value=proposed_label_value,
+        proposed_label_regex=proposed_label_regex,
+        approved=approved,
+        reason=reason,
+    )
+
+
+def render_compose_tag_stream_updates(
+    compose_path: Path,
+    updates: Sequence[TagUpdate],
+    *,
+    tag_stream_updates: Sequence[TagStreamUpdate],
+    stack_name: str = "",
+) -> tuple[str, tuple[AppliedTagUpdate, ...]]:
+    """Render tag image and WUD stream-label changes into one document."""
+
+    source, _yaml, _parsed, services = _load_compose_yaml(compose_path, width=4096)
+    line_offsets = _line_start_offsets(source)
+    counts = {id(update): 0 for update in updates}
+    seen_spans: set[tuple[int, int]] = set()
+    rewrites: list[tuple[int, int, str]] = []
+    stream_by_service = _tag_stream_updates_by_service(
+        compose_path,
+        tag_stream_updates,
+        stack_name=stack_name,
+    )
+
+    rewritten_services: set[str] = set()
+    for update in updates:
+        _require_update_services(update.old_image, update.services)
+        for service in update.services:
+            service_config = _rewrite_service_config(
+                services,
+                service,
+                direct_image_required=True,
+            )
+            _validate_service_image(service, service_config.get("image"), update.old_image)
+            image_start, image_end, replacement_prefix = _unique_image_rewrite(
+                services,
+                service,
+                update.old_image,
+                source,
+                line_offsets,
+                seen_spans,
+            )
+            rewrites.append(
+                (image_start, image_end, f"{replacement_prefix}{update.new_image}")
+            )
+            stream_update = stream_by_service.get(service)
+            if stream_update is not None and _rewrite_tag_stream_label(
+                services,
+                service,
+                service_config,
+                update,
+                stream_update,
+            ):
+                rewritten_services.add(service)
+                rewrites.extend(
+                    _service_label_source_rewrite(
+                        service_config,
+                        stream_update.label_key,
+                        stream_update.proposed_label_value,
+                        source,
+                        line_offsets,
+                    )
+                )
+            counts[id(update)] += 1
+
+    missing = sorted(set(stream_by_service) - rewritten_services)
+    if missing:
+        raise ComposeTagRewriteError(
+            "Tag stream update did not match selected service(s): " + ", ".join(missing)
+        )
+    applied = tuple(
+        AppliedTagUpdate(
+            old_image=update.old_image,
+            desired_tag=update.desired_tag,
+            new_image=update.new_image,
+            services=update.services,
+            replacements=counts[id(update)],
+        )
+        for update in updates
+    )
+    if any(item.replacements < 1 for item in applied):
+        raise ComposeTagRewriteError("Compose tag stream rewrite produced no output.")
+    rendered = source
+    for start, end, replacement in sorted(rewrites, reverse=True):
+        rendered = f"{rendered[:start]}{replacement}{rendered[end:]}"
+    return rendered, applied
+
+
+def _rewrite_tag_stream_label(
+    services: CommentedMap,
+    service: str,
+    service_config: CommentedMap,
+    update: TagUpdate,
+    stream_update: TagStreamUpdate | None,
+) -> bool:
+    if stream_update is None:
+        return False
+    if stream_update.selected_tag != update.desired_tag:
+        raise ComposeTagRewriteError(
+            f"Service {service} tag stream selected {stream_update.selected_tag}, "
+            f"expected {update.desired_tag}."
+        )
+    _prepare_service_labels(services, service, service_config)
+    current_label = compose_unescape_dollars(
+        _get_service_label_value(service_config, stream_update.label_key)
+    )
+    if current_label != stream_update.current_label_value:
+        raise ComposeTagRewriteError(
+            f"Service {service} {stream_update.label_key} changed since planning."
+        )
+    return True
+
+
+def _service_label_source_rewrite(
+    service_config: CommentedMap,
+    key: str,
+    value: str,
+    source: str,
+    line_offsets: Sequence[int],
+) -> tuple[tuple[int, int, str], ...]:
+    labels = service_config.get("labels")
+    if labels is None:
+        if _commented_map_has_direct_key(service_config, "labels"):
+            return (
+                _empty_service_labels_rewrite(
+                    service_config,
+                    key,
+                    value,
+                    source,
+                    line_offsets,
+                ),
+            )
+        return (
+            _new_service_labels_rewrite(
+                service_config,
+                key,
+                value,
+                source,
+                line_offsets,
+            ),
+        )
+
+    flow_start = _service_labels_flow_start(labels, source, line_offsets)
+    if isinstance(labels, CommentedMap):
+        return _mapping_label_source_rewrites(
+            service_config,
+            labels,
+            key,
+            value,
+            source,
+            line_offsets,
+            flow_start,
+        )
+    if isinstance(labels, CommentedSeq):
+        return _sequence_label_source_rewrites(
+            service_config,
+            labels,
+            key,
+            value,
+            source,
+            line_offsets,
+            flow_start,
+        )
+
+    raise ComposeTagRewriteError(_UNSUPPORTED_SERVICE_LABELS_YAML)
+
+
+def _service_labels_flow_start(
+    labels: object,
+    source: str,
+    line_offsets: Sequence[int],
+) -> int | None:
+    if not isinstance(labels, (CommentedMap, CommentedSeq)):
+        return None
+    try:
+        collection_start = line_offsets[labels.lc.line] + labels.lc.col
+    except (AttributeError, IndexError, TypeError, ValueError) as exc:
+        raise ComposeTagRewriteError(
+            _SERVICE_LABELS_SOURCE_LOCATION_UNAVAILABLE
+        ) from exc
+    if collection_start < len(source) and source[collection_start] in "[{":
+        return collection_start
+    return None
+
+
+def _mapping_label_source_rewrites(
+    service_config: CommentedMap,
+    labels: CommentedMap,
+    key: str,
+    value: str,
+    source: str,
+    line_offsets: Sequence[int],
+    flow_start: int | None,
+) -> tuple[tuple[int, int, str], ...]:
+    flow = flow_start is not None
+    if key in labels:
+        if not _commented_map_has_direct_key(labels, key):
+            raise ComposeTagRewriteError(
+                f"Label {key} is inherited and needs manual review."
+            )
+        try:
+            line_no, col = labels.lc.value(key)
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            raise ComposeTagRewriteError(
+                f"Label {key} source location is unavailable."
+            ) from exc
+        current = labels[key]
+        if not isinstance(current, str):
+            raise ComposeTagRewriteError(f"Label {key} is not a string value.")
+        return (
+            _yaml_scalar_source_rewrite(
+                source,
+                line_offsets,
+                line_no,
+                col,
+                current,
+                value,
+                flow=flow,
+            ),
+        )
+    entry = f"{key}: {_render_yaml_scalar_like('', value, flow=flow)}"
+    if flow_start is not None:
+        return _flow_label_addition_rewrites(
+            labels,
+            entry,
+            source,
+            line_offsets,
+            flow_start,
+        )
+    return (
+        _append_block_label_rewrite(
+            service_config,
+            labels,
+            entry,
+            source,
+            line_offsets,
+        ),
+    )
+
+
+def _sequence_label_source_rewrites(
+    service_config: CommentedMap,
+    labels: CommentedSeq,
+    key: str,
+    value: str,
+    source: str,
+    line_offsets: Sequence[int],
+    flow_start: int | None,
+) -> tuple[tuple[int, int, str], ...]:
+    replacement = f"{key}={value}"
+    flow = flow_start is not None
+    for index, item in enumerate(labels):
+        if not isinstance(item, str):
+            raise ComposeTagRewriteError(_UNSUPPORTED_NON_STRING_LABEL_ENTRY)
+        label_key, sep, _label_value = item.partition("=")
+        if sep and label_key == key:
+            try:
+                line_no, col = labels.lc.item(index)
+            except (AttributeError, KeyError, TypeError, ValueError) as exc:
+                raise ComposeTagRewriteError(
+                    f"Label {key} source location is unavailable."
+                ) from exc
+            return (
+                _yaml_scalar_source_rewrite(
+                    source,
+                    line_offsets,
+                    line_no,
+                    col,
+                    item,
+                    replacement,
+                    flow=flow,
+                ),
+            )
+    inserted_replacement = _render_yaml_scalar_like("", replacement, flow=flow)
+    if flow_start is not None:
+        return _flow_label_addition_rewrites(
+            labels,
+            inserted_replacement,
+            source,
+            line_offsets,
+            flow_start,
+        )
+    return (
+        _append_block_label_rewrite(
+            service_config,
+            labels,
+            f"- {inserted_replacement}",
+            source,
+            line_offsets,
+        ),
+    )
+
+
+def _new_service_labels_rewrite(
+    service_config: CommentedMap,
+    key: str,
+    value: str,
+    source: str,
+    line_offsets: Sequence[int],
+) -> tuple[int, int, str]:
+    try:
+        image_line_no, _image_col = service_config.lc.value("image")
+        _key_line_no, key_col = service_config.lc.key("image")
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise ComposeTagRewriteError(
+            "Service image source location is unavailable."
+        ) from exc
+    _line_start, line_end, _body = _source_line(
+        source, line_offsets, image_line_no
+    )
+    insertion = line_end + 1 if line_end < len(source) else line_end
+    indent = " " * key_col
+    label = _render_yaml_scalar_like("", f"{key}={value}")
+    replacement = _source_lines_insertion(
+        source,
+        insertion,
+        (
+            f"{indent}labels:",
+            f"{indent}  - {label}",
+        ),
+    )
+    return insertion, insertion, replacement
+
+
+def _empty_service_labels_rewrite(
+    service_config: CommentedMap,
+    key: str,
+    value: str,
+    source: str,
+    line_offsets: Sequence[int],
+) -> tuple[int, int, str]:
+    try:
+        line_no, key_col = service_config.lc.key("labels")
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise ComposeTagRewriteError(
+            _SERVICE_LABELS_SOURCE_LOCATION_UNAVAILABLE
+        ) from exc
+    line_start, _line_end, body = _source_line(source, line_offsets, line_no)
+    pattern = re.compile(
+        r"^([ \t]*(?:[\"']labels[\"']|labels)[ \t]*:[ \t]*)"
+        r"(?:(?:null|Null|NULL|~)[ \t]*)?(#.*)?$"
+    )
+    match = pattern.fullmatch(body)
+    if match is None:
+        raise ComposeTagRewriteError(
+            "Service labels use unsupported empty YAML syntax."
+        )
+    comment = match.group(2) or ""
+    label = _render_yaml_scalar_like("", f"{key}={value}")
+    replacement = f"{comment}\n{' ' * (key_col + 2)}- {label}"
+    return line_start + len(match.group(1)), line_start + len(body), replacement
+
+
+def _flow_label_addition_rewrites(
+    labels: CommentedMap | CommentedSeq,
+    entry: str,
+    source: str,
+    line_offsets: Sequence[int],
+    start: int,
+) -> tuple[tuple[int, int, str], ...]:
+    end, last_significant = _flow_collection_bounds(source, start)
+    rewrites: list[tuple[int, int, str]] = []
+    needs_comma = last_significant != start and source[last_significant] != ","
+
+    if "\n" not in source[start:end]:
+        if needs_comma and last_significant + 1 == end - 1:
+            prefix = ", "
+        else:
+            if needs_comma:
+                rewrites.append((last_significant + 1, last_significant + 1, ","))
+            prefix = "" if last_significant == start else " "
+        rewrites.append((end - 1, end - 1, f"{prefix}{entry},"))
+        return tuple(rewrites)
+
+    if needs_comma:
+        rewrites.append((last_significant + 1, last_significant + 1, ","))
+
+    closing_line_start = source.rfind("\n", start, end - 1) + 1
+    closing_prefix = source[closing_line_start : end - 1]
+    if closing_prefix.strip():
+        raise ComposeTagRewriteError(
+            "Service labels use unsupported multiline flow-style YAML syntax."
+        )
+    entry_indent = _multiline_flow_label_indent(
+        labels,
+        source,
+        line_offsets,
+        start,
+        closing_prefix,
+    )
+    rewrites.append(
+        (closing_line_start, closing_line_start, f"{entry_indent}{entry},\n")
+    )
+    return tuple(rewrites)
+
+
+def _flow_collection_bounds(source: str, start: int) -> tuple[int, int]:
+    pairs = {"[": "]", "{": "}"}
+    stack: list[str] = []
+    quote = ""
+    escaped = False
+    comment = False
+    last_significant = start
+    index = start
+    while index < len(source):
+        char = source[index]
+        end: int | None = None
+        if comment:
+            comment = char != "\n"
+        elif quote:
+            quote, escaped, index, last_significant = _quoted_flow_character(
+                source,
+                index,
+                quote,
+                escaped,
+            )
+        else:
+            quote, comment, last_significant, end = _unquoted_flow_character(
+                source,
+                start,
+                index,
+                pairs,
+                stack,
+                last_significant,
+            )
+        if end is not None:
+            return end, last_significant
+        index += 1
+    raise ComposeTagRewriteError("Service labels use an unterminated flow collection.")
+
+
+def _quoted_flow_character(
+    source: str,
+    index: int,
+    quote: str,
+    escaped: bool,
+) -> tuple[str, bool, int, int]:
+    char = source[index]
+    if quote == "'" and char == "'" and source[index + 1 : index + 2] == "'":
+        return quote, escaped, index + 1, index + 1
+    if quote == '"' and escaped:
+        return quote, False, index, index
+    if quote == '"' and char == "\\":
+        return quote, True, index, index
+    if char == quote:
+        quote = ""
+    return quote, escaped, index, index
+
+
+def _unquoted_flow_character(
+    source: str,
+    start: int,
+    index: int,
+    pairs: Mapping[str, str],
+    stack: list[str],
+    last_significant: int,
+) -> tuple[str, bool, int, int | None]:
+    char = source[index]
+    if char == "#" and (index == start or source[index - 1].isspace()):
+        return "", True, last_significant, None
+    if char in "'\"":
+        return char, False, index, None
+    if char in pairs:
+        stack.append(char)
+        return "", False, index, None
+    if char in "]}":
+        if not stack or pairs[stack[-1]] != char:
+            raise ComposeTagRewriteError(
+                "Service labels use a malformed flow collection."
+            )
+        stack.pop()
+        if not stack:
+            return "", False, last_significant, index + 1
+        return "", False, index, None
+    if not char.isspace():
+        last_significant = index
+    return "", False, last_significant, None
+
+
+def _multiline_flow_label_indent(
+    labels: CommentedMap | CommentedSeq,
+    source: str,
+    line_offsets: Sequence[int],
+    collection_start: int,
+    closing_prefix: str,
+) -> str:
+    locations: list[tuple[int, int]] = []
+    try:
+        if isinstance(labels, CommentedMap):
+            locations = [labels.lc.key(item_key) for item_key in labels]
+        else:
+            locations = [labels.lc.item(index) for index in range(len(labels))]
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise ComposeTagRewriteError(
+            _SERVICE_LABELS_SOURCE_LOCATION_UNAVAILABLE
+        ) from exc
+    opening_line_no = source.count("\n", 0, collection_start)
+    for line_no, col in locations:
+        if line_no > opening_line_no:
+            _line_start, _line_end, body = _source_line(
+                source, line_offsets, line_no
+            )
+            if not body[:col].strip():
+                return body[:col]
+    return f"{closing_prefix}  "
+
+
+def _append_block_label_rewrite(
+    service_config: CommentedMap,
+    labels: CommentedMap | CommentedSeq,
+    entry: str,
+    source: str,
+    line_offsets: Sequence[int],
+) -> tuple[int, int, str]:
+    try:
+        labels_line_no, labels_col = service_config.lc.key("labels")
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise ComposeTagRewriteError(
+            _SERVICE_LABELS_SOURCE_LOCATION_UNAVAILABLE
+        ) from exc
+    insertion = _yaml_block_end_offset(
+        source,
+        line_offsets,
+        labels_line_no,
+        labels_col,
+    )
+    replacement = _source_lines_insertion(
+        source,
+        insertion,
+        (
+            f"{_block_label_entry_indent(labels, source, line_offsets, labels_col)}"
+            f"{entry}",
+        ),
+    )
+    return insertion, insertion, replacement
+
+
+def _block_label_entry_indent(
+    labels: CommentedMap | CommentedSeq,
+    source: str,
+    line_offsets: Sequence[int],
+    labels_col: int,
+) -> str:
+    if isinstance(labels, CommentedMap) and labels:
+        first_key = next(iter(labels))
+        try:
+            _line_no, col = labels.lc.key(first_key)
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            raise ComposeTagRewriteError(
+                _SERVICE_LABELS_SOURCE_LOCATION_UNAVAILABLE
+            ) from exc
+        return " " * col
+    if isinstance(labels, CommentedSeq) and labels:
+        try:
+            line_no, _col = labels.lc.item(0)
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            raise ComposeTagRewriteError(
+                _SERVICE_LABELS_SOURCE_LOCATION_UNAVAILABLE
+            ) from exc
+        _line_start, _line_end, body = _source_line(source, line_offsets, line_no)
+        match = re.match(r"^([ \t]*)-", body)
+        if match is None:
+            raise ComposeTagRewriteError(
+                "Service labels use unsupported YAML syntax for automatic rewrite."
+            )
+        return match.group(1)
+    return " " * (labels_col + 2)
+
+
+def _yaml_scalar_source_rewrite(
+    source: str,
+    line_offsets: Sequence[int],
+    line_no: int,
+    col: int,
+    expected: str,
+    replacement: str,
+    *,
+    flow: bool = False,
+) -> tuple[int, int, str]:
+    line_start, _line_end, body = _source_line(source, line_offsets, line_no)
+    if col < 0 or col >= len(body):
+        raise ComposeTagRewriteError("Label source location is invalid.")
+    representations = (
+        expected,
+        f"'{expected.replace(chr(39), chr(39) * 2)}'",
+        _render_yaml_scalar_like('"', expected),
+    )
+    token = next(
+        (
+            candidate
+            for candidate in representations
+            if body.startswith(candidate, col)
+            and _yaml_scalar_boundary_matches(
+                body[col + len(candidate) :],
+                flow=flow,
+            )
+        ),
+        "",
+    )
+    if not token:
+        raise ComposeTagRewriteError(
+            "Label uses unsupported YAML syntax for automatic rewrite."
+        )
+    rendered = _render_yaml_scalar_like(token, replacement, flow=flow)
+    return line_start + col, line_start + col + len(token), rendered
+
+
+def _yaml_scalar_boundary_matches(tail: str, *, flow: bool) -> bool:
+    if flow:
+        return re.match(r"[ \t]*(?:[,}\]]|#)", tail) is not None
+    return re.fullmatch(r"[ \t]*(?:#.*)?", tail) is not None
+
+
+def _render_yaml_scalar_like(token: str, value: str, *, flow: bool = False) -> str:
+    if "\n" in value or "\r" in value:
+        raise ComposeTagRewriteError("Label value cannot contain a line break.")
+    if token.startswith("'"):
+        return f"'{value.replace(chr(39), chr(39) * 2)}'"
+    if token.startswith('"'):
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    unsafe_initial = bool(value) and value[0] in "-?:,[]{}#&*!|>'\"%@`"
+    unsafe_content = any(marker in value for marker in (" #", "\t#", ": ", ":\t"))
+    unsafe_flow = flow and re.search(r"[\[\]{},]", value) is not None
+    if unsafe_initial or unsafe_content or unsafe_flow:
+        return f"'{value.replace(chr(39), chr(39) * 2)}'"
+    return value
+
+
+def _yaml_block_end_offset(
+    source: str,
+    line_offsets: Sequence[int],
+    key_line_no: int,
+    key_col: int,
+) -> int:
+    for line_no in range(key_line_no + 1, len(line_offsets)):
+        line_start, _line_end, body = _source_line(source, line_offsets, line_no)
+        if body.strip() and _line_indent_width(body) <= key_col:
+            return line_start
+    return len(source)
+
+
+def _source_lines_insertion(
+    source: str,
+    offset: int,
+    lines: Sequence[str],
+) -> str:
+    leading = "" if offset == 0 or source[offset - 1] == "\n" else "\n"
+    trailing = "\n" if offset < len(source) or source.endswith("\n") else ""
+    return leading + "\n".join(lines) + trailing
+
+
+def _tag_stream_updates_by_service(
+    compose_path: Path,
+    updates: Sequence[TagStreamUpdate],
+    *,
+    stack_name: str,
+) -> dict[str, TagStreamUpdate]:
+    compose_directory = compose_path.parent.resolve(strict=False)
+    by_service: dict[str, TagStreamUpdate] = {}
+    for update in updates:
+        if update.stack != stack_name:
+            raise ComposeTagRewriteError(
+                f"Tag stream update targets stack {update.stack}, expected {stack_name}."
+            )
+        if Path(update.stack_directory).resolve(strict=False) != compose_directory:
+            raise ComposeTagRewriteError(
+                f"Tag stream update for service {update.service} targets "
+                "a different Compose directory."
+            )
+        if update.compose_file != compose_path.name:
+            raise ComposeTagRewriteError(
+                f"Tag stream update for service {update.service} targets "
+                "a different Compose file."
+            )
+        if not update.approved:
+            raise ComposeTagRewriteError(
+                f"Service {update.service} tag stream label rewrite is not approved."
+            )
+        if update.service in by_service:
+            existing = by_service[update.service]
+            if replace(update, line_no=existing.line_no) == existing:
+                continue
+            raise ComposeTagRewriteError(
+                f"Service {update.service} has more than one tag stream update."
+            )
+        by_service[update.service] = update
+    return by_service
+
+
 def apply_compose_tag_exclusions(
     compose_path: Path,
     updates: Sequence[TagExclusionUpdate],
@@ -349,6 +1132,7 @@ def apply_compose_digest_pins(
     updates: Sequence[DigestPinUpdate],
     *,
     label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval] = (),
+    tag_stream_updates: Sequence[TagStreamUpdate] = (),
     stack_name: str = "",
 ) -> tuple[AppliedDigestPinUpdate, ...]:
     """Write final digest-pinned images plus WUD watch metadata."""
@@ -357,6 +1141,7 @@ def apply_compose_digest_pins(
         compose_path,
         updates,
         label_rewrite_approvals=label_rewrite_approvals,
+        tag_stream_updates=tag_stream_updates,
         stack_name=stack_name,
     )
     if updates and not rendered:
@@ -408,6 +1193,7 @@ def render_compose_digest_pins(
     updates: Sequence[DigestPinUpdate],
     *,
     label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval] = (),
+    tag_stream_updates: Sequence[TagStreamUpdate] = (),
     stack_name: str = "",
 ) -> tuple[str, tuple[AppliedDigestPinUpdate, ...]]:
     """Return Compose YAML with digest-pin image and watch metadata applied."""
@@ -416,6 +1202,7 @@ def render_compose_digest_pins(
         compose_path,
         updates,
         label_rewrite_approvals=label_rewrite_approvals,
+        tag_stream_updates=tag_stream_updates,
         stack_name=stack_name,
     )
 
@@ -440,6 +1227,7 @@ def _render_compose_retag_updates(
     updates: Sequence[DigestPinUpdate],
     *,
     label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval] = (),
+    tag_stream_updates: Sequence[TagStreamUpdate] = (),
     stack_name: str = "",
 ) -> tuple[str, tuple[AppliedDigestPinUpdate, ...]]:
 
@@ -451,6 +1239,12 @@ def _render_compose_retag_updates(
     counts = {id(update): 0 for update in updates}
     label_rewrites = {id(update): [] for update in updates}
     seen_spans: set[tuple[int, int]] = set()
+    stream_by_service = _tag_stream_updates_by_service(
+        compose_path,
+        tag_stream_updates,
+        stack_name=stack_name,
+    )
+    rewritten_stream_services: set[str] = set()
 
     for update in updates:
         _require_update_services(update.old_image, update.services)
@@ -476,20 +1270,26 @@ def _render_compose_retag_updates(
             current_include = compose_unescape_dollars(
                 _get_service_label_value(service_config, update.label_key)
             )
-            label_rewrite = _digest_pin_label_rewrite_or_raise(
-                stack_name=stack_name,
-                service=service,
-                current_image=str(current_image),
-                current_label_value=current_include,
-                update=update,
-                approvals=label_rewrite_approvals,
+            stream_update = stream_by_service.get(service)
+            next_label_value, label_rewrite, stream_rewritten = (
+                _retag_label_rewrite(
+                    stack_name=stack_name,
+                    service=service,
+                    current_image=str(current_image),
+                    current_label_value=current_include,
+                    update=update,
+                    stream_update=stream_update,
+                    approvals=label_rewrite_approvals,
+                )
             )
             if label_rewrite is not None:
                 label_rewrites[id(update)].append(label_rewrite)
+            if stream_rewritten:
+                rewritten_stream_services.add(service)
             _set_service_label_value(
                 service_config,
                 update.label_key,
-                update.label_value,
+                next_label_value,
             )
             service_config["image"] = update.final_image
             _update_service_resolved_tag_marker(
@@ -499,6 +1299,13 @@ def _render_compose_retag_updates(
                 update.marker,
             )
             counts[id(update)] += 1
+
+    missing_stream_services = sorted(set(stream_by_service) - rewritten_stream_services)
+    if missing_stream_services:
+        raise ComposeTagRewriteError(
+            "Tag stream update did not match digest-pin service(s): "
+            + ", ".join(missing_stream_services)
+        )
 
     applied = tuple(
         AppliedDigestPinUpdate(
@@ -520,6 +1327,48 @@ def _render_compose_retag_updates(
     if any(item.replacements < 1 for item in applied):
         return "", ()
     return _dump_compose_yaml(yaml, parsed), applied
+
+
+def _retag_label_rewrite(
+    *,
+    stack_name: str,
+    service: str,
+    current_image: str,
+    current_label_value: str,
+    update: DigestPinUpdate,
+    stream_update: TagStreamUpdate | None,
+    approvals: Sequence[DigestPinLabelRewriteApproval],
+) -> tuple[str, DigestPinLabelRewrite | None, bool]:
+    if stream_update is None:
+        return (
+            update.label_value,
+            _digest_pin_label_rewrite_or_raise(
+                stack_name=stack_name,
+                service=service,
+                current_image=current_image,
+                current_label_value=current_label_value,
+                update=update,
+                approvals=approvals,
+            ),
+            False,
+        )
+    if (
+        stream_update.current_tag != image_tag(update.old_image)
+        or stream_update.selected_tag != update.watch_tag
+        or stream_update.label_key != update.label_key
+    ):
+        raise ComposeTagRewriteError(
+            f"Service {service} tag stream update does not match "
+            "the digest-pin update."
+        )
+    if current_label_value not in {
+        stream_update.current_label_value,
+        stream_update.proposed_label_regex,
+    }:
+        raise ComposeTagRewriteError(
+            f"Service {service} {stream_update.label_key} changed since planning."
+        )
+    return stream_update.proposed_label_value, None, True
 
 
 def render_compose_digest_unpins(
@@ -974,14 +1823,12 @@ def _get_service_label_value(service_config: CommentedMap, key: str) -> str:
     if isinstance(labels, CommentedSeq):
         for item in labels:
             if not isinstance(item, str):
-                raise ComposeTagRewriteError(
-                    "Service labels use unsupported non-string list entries."
-                )
+                raise ComposeTagRewriteError(_UNSUPPORTED_NON_STRING_LABEL_ENTRY)
             label_key, sep, label_value = item.partition("=")
             if sep and label_key == key:
                 return label_value
         return ""
-    raise ComposeTagRewriteError("Service labels use unsupported YAML syntax.")
+    raise ComposeTagRewriteError(_UNSUPPORTED_SERVICE_LABELS_YAML)
 
 
 def _is_simple_exact_tag_include(value: str) -> bool:
@@ -1324,6 +2171,31 @@ def _digest_pin_label_rewrite_approval_matches(
     )
 
 
+def _tag_stream_label_rewrite_approval_matches(
+    approval: TagStreamLabelRewriteApproval,
+    *,
+    line_no: int,
+    stack_name: str,
+    stack_directory: str,
+    compose_file: str,
+    service: str,
+    current_label_value: str,
+    selected_tag: str,
+    proposed_label_value: str,
+) -> bool:
+    return (
+        approval.line_no == line_no
+        and approval.stack == stack_name
+        and approval.stack_directory == stack_directory
+        and approval.compose_file == compose_file
+        and approval.service == service
+        and approval.label_key == WUD_TAG_INCLUDE_LABEL
+        and approval.current_label_value == current_label_value
+        and approval.selected_tag == selected_tag
+        and approval.proposed_label_value == proposed_label_value
+    )
+
+
 def _reject_yaml_anchor_or_alias_service_config(
     services: CommentedMap,
     service: str,
@@ -1378,16 +2250,14 @@ def _set_service_label_value(
         replacement = f"{key}={value}"
         for index, item in enumerate(labels):
             if not isinstance(item, str):
-                raise ComposeTagRewriteError(
-                    "Service labels use unsupported non-string list entries."
-                )
+                raise ComposeTagRewriteError(_UNSUPPORTED_NON_STRING_LABEL_ENTRY)
             label_key, sep, _label_value = item.partition("=")
             if sep and label_key == key:
                 labels[index] = replacement
                 return
         labels.append(replacement)
         return
-    raise ComposeTagRewriteError("Service labels use unsupported YAML syntax.")
+    raise ComposeTagRewriteError(_UNSUPPORTED_SERVICE_LABELS_YAML)
 
 
 def _backup_compose(compose_path: Path) -> Path:

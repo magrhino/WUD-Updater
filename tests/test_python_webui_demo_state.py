@@ -47,6 +47,10 @@ class WebuiDemoStateTests(unittest.TestCase):
 
             self.assertIn("home-assistant", wud_file.read_text(encoding="utf-8"))
             self.assertIn("gethomepage/homepage", wud_file.read_text(encoding="utf-8"))
+            self.assertIn(
+                "n8nio/runners:2.33.5-distroless tag=2.34.4",
+                wud_file.read_text(encoding="utf-8"),
+            )
             containers = (fake_docker_root / "containers.tsv").read_text(
                 encoding="utf-8"
             )
@@ -65,8 +69,15 @@ class WebuiDemoStateTests(unittest.TestCase):
                 [
                     "data/docker-compose.yml",
                     "home/docker-compose.yml",
+                    "jarvis/docker-compose.yml",
                     "media/docker-compose.yml",
                 ],
+            )
+            self.assertIn(
+                "n8nio/runners:2.33.5-distroless",
+                (docker_base / "jarvis" / "docker-compose.yml").read_text(
+                    encoding="utf-8"
+                ),
             )
             self.assertIn(
                 "lscr.io/linuxserver/radarr:5.21.1",
@@ -89,6 +100,20 @@ class WebuiDemoStateTests(unittest.TestCase):
                     fake_docker_root
                     / "containers"
                     / "demo-wudup.summary"
+                ).exists()
+            )
+            self.assertTrue(
+                (
+                    fake_docker_root
+                    / "manifests"
+                    / "n8nio_runners_2.34.4-distroless.stdout"
+                ).exists()
+            )
+            self.assertTrue(
+                (
+                    fake_docker_root
+                    / "images"
+                    / "n8nio_runners_2.34.4.after_digests"
                 ).exists()
             )
             self.assertIn(
@@ -223,7 +248,7 @@ class WebuiDemoStateTests(unittest.TestCase):
                 None,
             )
             scan_request = next(
-                request for request in scan_context.requests if request.line_no == 4
+                request for request in scan_context.requests if request.line_no == 5
             )
 
         self.assertEqual(run_count[0], 6)
@@ -269,7 +294,7 @@ class WebuiDemoStateTests(unittest.TestCase):
         )
         self.assertIn(seeded_finding_id, security_scan[5])
         self.assertIsNotNone(finding_scan)
-        self.assertEqual(finding_scan.line_no, 4)
+        self.assertEqual(finding_scan.line_no, 5)
         self.assertIsNotNone(seeded_finding)
         self.assertEqual(seeded_finding.vulnerability_id, seeded_finding_id)
         self.assertEqual(scan_request.platform, ImagePlatform("linux", "amd64"))

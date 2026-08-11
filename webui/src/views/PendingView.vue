@@ -381,6 +381,7 @@ const {
   cleanupLineLabel,
   cleanupReviewSummary,
   approveDigestPinLabelRewrite,
+  approveTagStreamLabelRewrite,
   clearUpdateIntent,
   digestPinLabelApprovalApproved,
   digestPinLabelApprovalIssues,
@@ -399,6 +400,7 @@ const {
   planDigestPinLabelRewrites,
   planDigestUnpinUpdates,
   planLines,
+  planTagStreamUpdates,
   planMetadataWarning,
   planStatusLabel,
   preflightDigestPinNotice,
@@ -418,12 +420,17 @@ const {
   selectedMetadataWarning,
   selectedUpdateContext,
   setUpdateIntent,
+  chooseTagStream,
   staleDiagnosticDetail,
   staleDiagnosticLabel,
   unmatchedIssueSummary,
   unmatchedReviewCountLabel,
   unmatchedReviewSummary,
   updateSelectedDisabled,
+  tagStreamDecisionIssues,
+  tagStreamDecisionSelected,
+  tagStreamLabelApprovalApproved,
+  tagStreamLabelApprovalIssues,
   updateSelectedButtonLabel,
   visiblePlanIssues,
 } = usePendingPlanReviewState({
@@ -1066,6 +1073,10 @@ onBeforeUnmount(() => {
       :digest-pin-label-approval-approved="digestPinLabelApprovalApproved"
       :digest-pin-label-approval-issues="digestPinLabelApprovalIssues"
       :digest-pin-label-issue-proposed-regex="digestPinLabelIssueProposedRegex"
+      :tag-stream-decision-issues="tagStreamDecisionIssues"
+      :tag-stream-decision-selected="tagStreamDecisionSelected"
+      :tag-stream-label-approval-approved="tagStreamLabelApprovalApproved"
+      :tag-stream-label-approval-issues="tagStreamLabelApprovalIssues"
       :issue-detail-string="issueDetailString"
       :issue-hint="issueHint"
       :issue-label="issueLabel"
@@ -1077,6 +1088,7 @@ onBeforeUnmount(() => {
       :plan-digest-pin-label-rewrites="planDigestPinLabelRewrites"
       :plan-digest-unpin-updates="planDigestUnpinUpdates"
       :plan-lines="planLines"
+      :plan-tag-stream-updates="planTagStreamUpdates"
       :plan-metadata-warning="planMetadataWarning"
       :plan-status-label="planStatusLabel"
       :preflight-digest-pin-notice="preflightDigestPinNotice"
@@ -1090,6 +1102,8 @@ onBeforeUnmount(() => {
       :visible-plan-issues="visiblePlanIssues"
       @apply="confirmApply"
       @approve-digest-pin-label-rewrite="approveDigestPinLabelRewrite"
+      @approve-tag-stream-label-rewrite="approveTagStreamLabelRewrite"
+      @choose-tag-stream="chooseTagStream"
       @close="closePreflightModal"
       @open-cleanup="openCleanupModal"
     />

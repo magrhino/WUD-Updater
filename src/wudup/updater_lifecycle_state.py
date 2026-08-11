@@ -17,6 +17,7 @@ from .updater_models import (
     ImageState,
     Match,
     TagUpdate,
+    TagStreamUpdate,
     UpdateScope,
 )
 
@@ -33,6 +34,7 @@ class _StackUpdateState:
     digest_pin_updates: tuple[DigestPinUpdate, ...]
     digest_unpin_updates: tuple[DigestUnpinUpdate, ...]
     compose_tag_updates: tuple[TagUpdate, ...]
+    tag_stream_updates: tuple[TagStreamUpdate, ...] = ()
     applied_tags: tuple[AppliedTagUpdate, ...] = ()
     applied_digest_pins: tuple[AppliedDigestPinUpdate, ...] = ()
     applied_digest_unpins: tuple[AppliedDigestUnpinUpdate, ...] = ()

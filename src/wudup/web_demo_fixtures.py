@@ -159,11 +159,15 @@ DEMO_POSTGRES_DIGEST = (
 DEMO_POSTGRES_PENDING_IMAGE = f"{DEMO_POSTGRES_IMAGE}@{DEMO_POSTGRES_DIGEST}"
 DEMO_POSTGRES_PLATFORM = "linux/amd64"
 DEMO_RADARR_SERVICE_KEY = "media/radarr"
+DEMO_RUNNER_CURRENT_IMAGE = "n8nio/runners:2.33.5-distroless"
+DEMO_RUNNER_REPORTED_IMAGE = "n8nio/runners:2.34.4"
+DEMO_RUNNER_PRESERVED_IMAGE = "n8nio/runners:2.34.4-distroless"
 DEMO_SOURCE_METADATA_JSON = '{"source":"demo"}'
 DEMO_CREATED_AT = "2026-05-28T12:00:00+00:00"
 
 PENDING_LINES = (
     "# Demo WUD pending update file for local WebUI development.",
+    f"{DEMO_RUNNER_CURRENT_IMAGE} tag=2.34.4",
     "ghcr.io/home-assistant/home-assistant:2026.5.1 tag=2026.5.3",
     "lscr.io/linuxserver/radarr:5.21.1 tag=5.22.4",
     f"{DEMO_POSTGRES_PENDING_IMAGE} platform={DEMO_POSTGRES_PLATFORM}",
@@ -178,6 +182,12 @@ DEMO_WUDUP_DIGEST = (
 )
 
 DEMO_STACKS = (
+    {
+        "name": "jarvis",
+        "services": (
+            ("task-runner", DEMO_RUNNER_CURRENT_IMAGE),
+        ),
+    },
     {
         "name": "home",
         "services": (
@@ -236,6 +246,16 @@ DEMO_KNOWN_IMAGES = (
 )
 
 DEMO_PULL_TARGETS = (
+    (
+        DEMO_RUNNER_REPORTED_IMAGE,
+        "sha256:demo-runner-default-new",
+        "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    ),
+    (
+        DEMO_RUNNER_PRESERVED_IMAGE,
+        "sha256:demo-runner-distroless-new",
+        "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    ),
     (
         "ghcr.io/home-assistant/home-assistant:2026.5.3",
         "sha256:demo-home-assistant-new",
@@ -1890,6 +1910,9 @@ def _write_demo_stacks(docker_base: Path, fake_docker_root: Path) -> None:
             digest=digest,
         )
 
+    for image in (DEMO_RUNNER_REPORTED_IMAGE, DEMO_RUNNER_PRESERVED_IMAGE):
+        _write_fake_manifest_state(fake_docker_root, image)
+
     (fake_docker_root / "containers.tsv").write_text(
         "".join(containers),
         encoding="utf-8",
@@ -1990,6 +2013,14 @@ def _write_fake_image_after_pull(
     (image_dir / f"{safe}.after_id").write_text(f"{image_id}\n", encoding="utf-8")
     (image_dir / f"{safe}.after_digests").write_text(
         f"{image}@{digest}\n",
+        encoding="utf-8",
+    )
+
+
+def _write_fake_manifest_state(fake_docker_root: Path, image: str) -> None:
+    safe = _safe_fake_name(image)
+    (fake_docker_root / "manifests" / f"{safe}.stdout").write_text(
+        "{}\n",
         encoding="utf-8",
     )
 

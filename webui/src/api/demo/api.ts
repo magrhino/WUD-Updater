@@ -8,7 +8,7 @@ import type {
   PendingMetadataRefreshRequest,
   PendingRescanLine,
   PendingRescanScope,
-  PlanSelectionRequest,
+  PlanMutationOptions,
   RetagChoiceRequest,
   SelfUpdatePlanResponse,
   SelfUpdateResponse,
@@ -147,14 +147,14 @@ export function createDemoWebApi(): WebApi {
       tagOverrides: TagOverrideRequest[],
       digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
       _csrfToken: string,
-      selections: PlanSelectionRequest[] = [],
+      options: PlanMutationOptions = {},
     ) =>
       state.createPlan(
         lineNumbers,
         allowTagUpdates,
         tagOverrides,
         digestPinLabelRewriteApprovals,
-        selections,
+        options,
       ),
     createJob: async (
       _planId: string,
@@ -163,7 +163,7 @@ export function createDemoWebApi(): WebApi {
       _tagOverrides: TagOverrideRequest[],
       _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
       _csrfToken: string,
-      _selections: PlanSelectionRequest[] = [],
+      _options: PlanMutationOptions = {},
     ) => rejectStaticDemoMutation(),
     applyPlan: async (
       _planId: string,
@@ -172,7 +172,7 @@ export function createDemoWebApi(): WebApi {
       _tagOverrides: TagOverrideRequest[],
       _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
       _csrfToken: string,
-      _selections: PlanSelectionRequest[] = [],
+      _options: PlanMutationOptions = {},
     ) => rejectStaticDemoMutation(),
     job: async (_jobId: string) => rejectStaticDemoMutation(),
     applyJob: async (_jobId: string) => rejectStaticDemoMutation(),

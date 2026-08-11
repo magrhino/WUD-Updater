@@ -17,6 +17,7 @@ import {
   type PendingRescanScope,
   type PendingItem,
   type PlanResponse,
+  type PlanMutationOptions,
   type PlanSelectionRequest,
   type PendingResponse,
   type ReleaseNoteInfo,
@@ -37,6 +38,8 @@ import {
   type SecurityScanJobResponse,
   type SecurityScansResponse,
   type TagOverrideRequest,
+  type TagStreamDecisionRequest,
+  type TagStreamLabelRewriteApprovalRequest,
   type WudContainerMetadata,
   type UpdateTargetsResponse,
   webApi,
@@ -852,6 +855,8 @@ export const useUpdatesStore = defineStore("updates", () => {
     tagOverrides: TagOverrideRequest[] = [],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
     selections: PlanSelectionRequest[] = [],
+    tagStreamDecisions: TagStreamDecisionRequest[] = [],
+    tagStreamLabelRewriteApprovals: TagStreamLabelRewriteApprovalRequest[] = [],
   ): Promise<void> {
     const auth = useAuthStore();
     await loadWithState(async () => {
@@ -866,7 +871,11 @@ export const useUpdatesStore = defineStore("updates", () => {
         tagOverrides,
         digestPinLabelRewriteApprovals,
         await auth.ensureCsrf(),
-        selections,
+        {
+          selections,
+          tagStreamDecisions,
+          tagStreamLabelRewriteApprovals,
+        },
       );
     });
   }
@@ -1070,7 +1079,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[] = [],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
-    selections: PlanSelectionRequest[] = [],
+    options: PlanMutationOptions = {},
   ): Promise<ApplyJobResponse> {
     const auth = useAuthStore();
     await loadWithState(async () => {
@@ -1082,7 +1091,7 @@ export const useUpdatesStore = defineStore("updates", () => {
         tagOverrides,
         digestPinLabelRewriteApprovals,
         await auth.ensureCsrf(),
-        selections,
+        options,
       );
       setApplyJob(job);
     });
@@ -1098,7 +1107,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[] = [],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
-    selections: PlanSelectionRequest[] = [],
+    options: PlanMutationOptions = {},
   ): Promise<ApplyJobResponse> {
     const auth = useAuthStore();
     await loadWithState(async () => {
@@ -1110,7 +1119,7 @@ export const useUpdatesStore = defineStore("updates", () => {
         tagOverrides,
         digestPinLabelRewriteApprovals,
         await auth.ensureCsrf(),
-        selections,
+        options,
       );
       setApplyJob(job);
     });

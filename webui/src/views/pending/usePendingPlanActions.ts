@@ -119,6 +119,8 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
       allowTagUpdates: options.lineNumbersHaveTagUpdates(lineNumbers),
       tagOverrides: options.tagOverridesForLines(lineNumbers),
       digestPinLabelRewriteApprovals: [],
+      tagStreamDecisions: [],
+      tagStreamLabelRewriteApprovals: [],
       blockedMetadataCount,
     };
     options.setUpdateIntent(intent);
@@ -248,7 +250,12 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
       payload.allowTagUpdates,
       payload.tagOverrides,
       payload.digestPinLabelRewriteApprovals,
-      updates.plan.selected_selections ?? [],
+      {
+        selections: updates.plan.selected_selections ?? [],
+        tagStreamDecisions: payload.tagStreamDecisions,
+        tagStreamLabelRewriteApprovals:
+          payload.tagStreamLabelRewriteApprovals,
+      },
     );
     options.applyJobSnapshot.value = snapshot;
     options.subscribeApplyJob(job.job_id);

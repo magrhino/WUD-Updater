@@ -170,6 +170,10 @@ function pendingPlanReviewModalProps(
     digestPinLabelApprovalApproved: () => false,
     digestPinLabelApprovalIssues: [],
     digestPinLabelIssueProposedRegex: () => "",
+    tagStreamDecisionIssues: [],
+    tagStreamDecisionSelected: () => false,
+    tagStreamLabelApprovalApproved: () => false,
+    tagStreamLabelApprovalIssues: [],
     issueDetailString: () => "",
     issueHint: () => "",
     issueLabel: () => "",
@@ -182,6 +186,7 @@ function pendingPlanReviewModalProps(
     planDigestPinLabelRewrites: [],
     planDigestUnpinUpdates: [],
     planLines: [],
+    planTagStreamUpdates: [],
     preflightDigestPinNotice: "",
     preflightDigestUnpinNotice: "",
     preflightServiceImpactLabel: "",
@@ -334,6 +339,33 @@ describe("pending helper modules", () => {
     expect(majorLabels).toContain("Possible breaking");
     expect(majorLabels).toContain("Snoozed");
     expect(majorLabels).toContain("Auto-update");
+
+    const streamChange = pendingItem({
+      current_tag: "2.33.5-distroless",
+      desired_tag: "2.34.4",
+      tag_stream: {
+        current_stream: "distroless",
+        reported_stream: "default",
+      },
+    });
+    const streamCues = safetyCues(streamChange, {
+      pending,
+      releaseNote: null,
+      releaseNotesLoaded: false,
+      releaseNotesLoading: false,
+      securityScan: null,
+      securityScansCurrent: false,
+      securityScansEnabled: false,
+      securityScansLoaded: false,
+      securityScansLoading: false,
+      servicePolicies: [],
+      snoozes: [],
+    });
+    expect(streamCues).toContainEqual({
+      key: "possible-stream-change",
+      label: "Possible stream change",
+      type: "error",
+    });
 
     expect(
       safetyCues(minor, {
@@ -1433,5 +1465,49 @@ describe("pending helper modules", () => {
     expect(wrapper.text()).toContain("repo/app@sha256:old");
     expect(wrapper.text()).toContain("repo/app:latest");
     expect(wrapper.text()).toContain("Digest unpin");
+  });
+
+  it("renders both update-stream decisions and emits the keyboard-safe choice", async () => {
+    const issue = {
+      severity: "error",
+      code: "tag-stream-change",
+      message: "Choose an update stream.",
+      line_no: 9,
+      stack: "jarvis",
+      service: "task-runner",
+      hint: "",
+      details: {
+        current_stream: "distroless",
+        reported_stream: "default",
+        reported_tag: "2.34.4",
+        same_stream_tag: "2.34.4-distroless",
+        preserve_label_regex: String.raw`^\d+\.\d+\.\d+-distroless$`,
+      },
+    };
+    const wrapper = mountPendingModal(
+      PendingPlanReviewModal,
+      pendingPlanReviewModalProps({
+        plan: planResponse({ status: "blocked", issues: [issue] }),
+        tagStreamDecisionIssues: [issue],
+        issueDetailString: (item: typeof issue, key: string) =>
+          typeof item.details[key as keyof typeof item.details] === "string"
+            ? item.details[key as keyof typeof item.details]
+            : "",
+      }),
+    );
+
+    expect(wrapper.text()).toContain("Update stream change");
+    expect(wrapper.text()).toContain("Keep distroless");
+    expect(wrapper.text()).toContain("Switch to default");
+    expect(wrapper.find("fieldset.stream-choice-group legend").text()).toBe(
+      "Update stream choice for line 9",
+    );
+    const keep = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Keep distroless"));
+    expect(keep).toBeDefined();
+    expect(keep?.attributes("type")).toBe("button");
+    await keep?.trigger("click");
+    expect(wrapper.emitted("choose-tag-stream")?.[0]).toEqual([issue, "preserve"]);
   });
 });

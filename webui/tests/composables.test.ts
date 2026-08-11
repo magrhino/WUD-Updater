@@ -32,6 +32,7 @@ import {
   type PendingApplyJobPanelRef,
 } from "../src/views/pending/usePendingApplyJob";
 import {
+  tagStreamLabelApprovalIssueKey,
   usePendingPlanReviewState,
 } from "../src/views/pending/usePendingPlanReviewState";
 import { usePendingQueueState } from "../src/views/pending/usePendingQueueState";
@@ -578,6 +579,8 @@ describe("usePendingPlanReviewState", () => {
       allowTagUpdates: true,
       tagOverrides,
       digestPinLabelRewriteApprovals: [],
+      tagStreamDecisions: [],
+      tagStreamLabelRewriteApprovals: [],
     });
 
     expect(state.planContextLabel.value).toBe("media");
@@ -591,6 +594,8 @@ describe("usePendingPlanReviewState", () => {
       allowTagUpdates: true,
       tagOverrides,
       digestPinLabelRewriteApprovals: [],
+      tagStreamDecisions: [],
+      tagStreamLabelRewriteApprovals: [],
     });
 
     state.clearUpdateIntent();
@@ -605,6 +610,8 @@ describe("usePendingPlanReviewState", () => {
       allowTagUpdates: false,
       tagOverrides: [],
       digestPinLabelRewriteApprovals: [],
+      tagStreamDecisions: [],
+      tagStreamLabelRewriteApprovals: [],
     });
   });
 
@@ -821,6 +828,37 @@ describe("usePendingPlanReviewState", () => {
     ]);
   });
 
+  it("keeps unparseable label approval blockers visible", () => {
+    const { state, updates } = setupPendingPlanReview();
+    const malformedIssues = [
+      {
+        severity: "error",
+        code: "compose-tag-stream-label-rewrite-unapproved",
+        message: "Malformed stream approval issue.",
+        line_no: 1,
+        stack: "media",
+        service: "app",
+        hint: "",
+        details: {},
+      },
+      {
+        severity: "error",
+        code: "compose-digest-pin-label-rewrite-unapproved",
+        message: "Malformed digest approval issue.",
+        line_no: 1,
+        stack: "media",
+        service: "app",
+        hint: "",
+        details: {},
+      },
+    ];
+    updates.plan = planResponse({ issues: malformedIssues });
+
+    expect(state.tagStreamLabelApprovalIssues.value).toEqual([]);
+    expect(state.digestPinLabelApprovalIssues.value).toEqual([]);
+    expect(state.visiblePlanIssues.value).toEqual(malformedIssues);
+  });
+
   it("replans with digest-pin label rewrite approval before marking it approved", async () => {
     const { state, updates } = setupPendingPlanReview();
     const issue = digestPinApprovalIssue();
@@ -857,6 +895,142 @@ describe("usePendingPlanReviewState", () => {
       [{ line_no: 1, selection_id: "selection-media-app" }],
     );
     expect(state.digestPinLabelApprovalApproved(issue)).toBe(true);
+  });
+
+  it("replans stream decisions and exact label approvals", async () => {
+    const { state, updates } = setupPendingPlanReview();
+    const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue(undefined);
+    const decisionIssue = {
+      severity: "error",
+      code: "tag-stream-change",
+      message: "Choose a stream.",
+      line_no: 1,
+      stack: "media",
+      service: "app",
+      hint: "",
+      details: {},
+    };
+    const labelIssue = {
+      ...decisionIssue,
+      code: "compose-tag-stream-label-rewrite-unapproved",
+      details: {
+        stack_directory: "/docker/media",
+        compose_file: "docker-compose.yml",
+        label_key: "wud.tag.include",
+        current_label_value: "^stable-.+$",
+        selected_tag: "1.2.0-distroless",
+        proposed_label_value: String.raw`^\d+\.\d+\.\d+-distroless$$`,
+      },
+    };
+    const siblingLabelIssue = {
+      ...labelIssue,
+      details: { ...labelIssue.details, compose_file: "compose.yml" },
+    };
+    expect(tagStreamLabelApprovalIssueKey(labelIssue)).not.toBe(
+      tagStreamLabelApprovalIssueKey(siblingLabelIssue),
+    );
+    state.setUpdateIntent({
+      title: "Preview media plan",
+      contextLabel: "media",
+      lineNumbers: [1],
+      selections: [{ line_no: 1, selection_id: "selection-media-app" }],
+      allowTagUpdates: true,
+      tagOverrides: [],
+      digestPinLabelRewriteApprovals: [],
+      tagStreamDecisions: [],
+      tagStreamLabelRewriteApprovals: [],
+    });
+
+    await expect(state.chooseTagStream(decisionIssue, "preserve")).resolves.toBe(true);
+    expect(createPlan).toHaveBeenNthCalledWith(
+      1,
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-media-app" }],
+      [{ line_no: 1, decision: "preserve" }],
+      [],
+    );
+    expect(state.tagStreamDecisionSelected(decisionIssue, "preserve")).toBe(true);
+    expect(state.tagStreamDecisionIssues.value).toEqual([decisionIssue]);
+    const retainedDecisionIssue = state.tagStreamDecisionIssues.value[0];
+    expect(retainedDecisionIssue).toBeDefined();
+
+    await expect(
+      state.chooseTagStream(retainedDecisionIssue!, "switch"),
+    ).resolves.toBe(true);
+    expect(createPlan).toHaveBeenNthCalledWith(
+      2,
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-media-app" }],
+      [{ line_no: 1, decision: "switch" }],
+      [],
+    );
+    expect(state.tagStreamDecisionSelected(decisionIssue, "preserve")).toBe(false);
+    expect(state.tagStreamDecisionSelected(decisionIssue, "switch")).toBe(true);
+
+    await expect(
+      state.chooseTagStream(retainedDecisionIssue!, "preserve"),
+    ).resolves.toBe(true);
+    expect(createPlan).toHaveBeenNthCalledWith(
+      3,
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-media-app" }],
+      [{ line_no: 1, decision: "preserve" }],
+      [],
+    );
+
+    await expect(state.approveTagStreamLabelRewrite(labelIssue)).resolves.toBe(true);
+    const approval = {
+      line_no: 1,
+      stack: "media",
+      stack_directory: "/docker/media",
+      compose_file: "docker-compose.yml",
+      service: "app",
+      label_key: "wud.tag.include",
+      current_label_value: "^stable-.+$",
+      selected_tag: "1.2.0-distroless",
+      proposed_label_value: String.raw`^\d+\.\d+\.\d+-distroless$$`,
+    };
+    expect(createPlan).toHaveBeenNthCalledWith(
+      4,
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-media-app" }],
+      [{ line_no: 1, decision: "preserve" }],
+      [approval],
+    );
+    expect(state.tagStreamLabelApprovalApproved(labelIssue)).toBe(true);
+    expect(
+      state.applyPlanPayload({ allowTagUpdates: false, tagOverrides: [] }),
+    ).toMatchObject({
+      tagStreamDecisions: [{ line_no: 1, decision: "preserve" }],
+      tagStreamLabelRewriteApprovals: [approval],
+    });
+
+    await expect(
+      state.chooseTagStream(retainedDecisionIssue!, "switch"),
+    ).resolves.toBe(true);
+    expect(createPlan).toHaveBeenNthCalledWith(
+      5,
+      [1],
+      true,
+      [],
+      [],
+      [{ line_no: 1, selection_id: "selection-media-app" }],
+      [{ line_no: 1, decision: "switch" }],
+      [],
+    );
+    expect(state.tagStreamLabelApprovalApproved(labelIssue)).toBe(false);
   });
 
   it("surfaces digest-pin notice only when the plan contains digest-pin rewrites", () => {

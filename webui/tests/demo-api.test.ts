@@ -19,7 +19,7 @@ describe("demo web API", () => {
     await expect(api.status()).resolves.toMatchObject({
       wud_file: "demo/out/images.todo",
       db_path: "demo/logs/wudup.sqlite",
-      pending_count: 7,
+      pending_count: 8,
       dev_auth_bypass: false,
       mutations_enabled: false,
       auto_update_scheduler_enabled: false,
@@ -40,17 +40,18 @@ describe("demo web API", () => {
     });
 
     const pending = await api.pending();
-    expect(pending.count).toBe(7);
+    expect(pending.count).toBe(8);
     expect(pending.source_file).toBe("demo/out/images.todo");
     expect(pending.grouping.groups.map((group) => group.name)).toEqual([
       "data",
       "home",
+      "jarvis",
       "media",
     ]);
     expect(pending.grouping.unmatched.map((item) => item.line_no)).toEqual([
-      6,
       7,
       8,
+      9,
     ]);
 
     const doctor = await api.doctor("csrf");
@@ -82,10 +83,10 @@ describe("demo web API", () => {
         ]),
       },
     });
-    await expect(api.releaseNotes()).resolves.toMatchObject({ count: 7 });
-    await expect(api.updateTargets()).resolves.toMatchObject({ count: 4 });
+    await expect(api.releaseNotes()).resolves.toMatchObject({ count: 8 });
+    await expect(api.updateTargets()).resolves.toMatchObject({ count: 5 });
     const retagTargets = await api.retagTargets();
-    expect(retagTargets).toMatchObject({ count: 4 });
+    expect(retagTargets).toMatchObject({ count: 5 });
     expect(retagTargets.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -119,28 +120,28 @@ describe("demo web API", () => {
 
   it("previews pending plans and blocks apply in the static demo", async () => {
     const api = createDemoWebApi();
-    const tagOverrides = [{ line_no: 2, tag: "2026.6.0" }];
+    const tagOverrides = [{ line_no: 3, tag: "2026.6.0" }];
     const pending = await api.pending();
     const homeItem = pending.grouping.groups.find(
       (group) => group.name === "home",
     )?.items[0];
     expect(homeItem?.selection_id).toBeTruthy();
     const selections = [
-      { line_no: 2, selection_id: homeItem?.selection_id ?? "" },
+      { line_no: 3, selection_id: homeItem?.selection_id ?? "" },
     ];
     const plan = await api.createPlan(
-      [2],
+      [3],
       true,
       tagOverrides,
       [],
       "csrf",
-      selections,
+      { selections },
     );
 
     expect(plan).toMatchObject({
       can_apply: false,
       status: "ready",
-      selected_line_numbers: [2],
+      selected_line_numbers: [3],
       selected_selections: selections,
       summary: {
         target_count: 1,
@@ -160,7 +161,7 @@ describe("demo web API", () => {
       status: "FAIL",
     });
     expect(plan.stacks[0]?.lines[0]).toMatchObject({
-      line_no: 2,
+      line_no: 3,
       service: "home-assistant",
       action: "tag-update",
       desired_tag: "2026.6.0",
@@ -168,56 +169,58 @@ describe("demo web API", () => {
     });
     await expect(
       api.createPlan(
-        [2],
+        [3],
         true,
         tagOverrides,
         [],
         "csrf",
-        [{ line_no: 2, selection_id: "selection-forged" }],
+        {
+          selections: [{ line_no: 3, selection_id: "selection-forged" }],
+        },
       ),
     ).rejects.toThrow("stale or no longer available");
 
     await expect(
       api.applyPlan(
         plan.plan_id,
-        [2],
+        [3],
         true,
-        [{ line_no: 2, tag: "2026.6.1" }],
+        [{ line_no: 3, tag: "2026.6.1" }],
         [],
         "csrf",
       ),
     ).rejects.toThrow(READ_ONLY_MESSAGE);
 
     await expect(
-      api.applyPlan(plan.plan_id, [2], true, tagOverrides, [], "csrf"),
+      api.applyPlan(plan.plan_id, [3], true, tagOverrides, [], "csrf"),
     ).rejects.toThrow(READ_ONLY_MESSAGE);
-    await expect(api.status()).resolves.toMatchObject({ pending_count: 7 });
-    await expect(api.pending()).resolves.toMatchObject({ count: 7 });
+    await expect(api.status()).resolves.toMatchObject({ pending_count: 8 });
+    await expect(api.pending()).resolves.toMatchObject({ count: 8 });
   });
 
   it("mirrors tag update and approval validation in demo plans", async () => {
     const api = createDemoWebApi();
 
-    await expect(api.createPlan([2], false, [], [], "csrf")).resolves.toMatchObject({
+    await expect(api.createPlan([3], false, [], [], "csrf")).resolves.toMatchObject({
       can_apply: false,
       status: "empty",
       skipped: [
         expect.objectContaining({
-          line_no: 2,
+          line_no: 3,
           reason: "tag-updates-disabled",
         }),
       ],
       stacks: [],
     });
     await expect(
-      api.createPlan([2], false, [{ line_no: 2, tag: "2026.6.0" }], [], "csrf"),
+      api.createPlan([3], false, [{ line_no: 3, tag: "2026.6.0" }], [], "csrf"),
     ).rejects.toThrow("allow_tag_updates=true");
     await expect(
-      api.createPlan([4], true, [{ line_no: 4, tag: "17" }], [], "csrf"),
+      api.createPlan([5], true, [{ line_no: 5, tag: "17" }], [], "csrf"),
     ).rejects.toThrow("does not target a tag update");
     await expect(
       api.createPlan(
-        [2],
+        [3],
         true,
         [],
         [
@@ -235,7 +238,7 @@ describe("demo web API", () => {
     ).rejects.toThrow("wud.tag.include");
     await expect(
       api.createPlan(
-        [4],
+        [5],
         true,
         [],
         [
@@ -251,8 +254,80 @@ describe("demo web API", () => {
         "csrf",
       ),
     ).resolves.toMatchObject({
-      plan_id: "demo-session-4-allow-tags-data--postgres--16",
+      plan_id: "demo-session-5-allow-tags-data--postgres--16",
     });
+  });
+
+  it("replans update-stream choices in the static demo", async () => {
+    const api = createDemoWebApi();
+
+    const unresolved = await api.createPlan([2], true, [], [], "csrf");
+    expect(unresolved).toMatchObject({
+      status: "blocked",
+      issues: [
+        expect.objectContaining({
+          code: "tag-stream-change",
+          line_no: 2,
+          details: expect.objectContaining({
+            same_stream_tag: "2.34.4-distroless",
+          }),
+        }),
+      ],
+    });
+
+    const preserved = await api.createPlan([2], true, [], [], "csrf", {
+      tagStreamDecisions: [{ line_no: 2, decision: "preserve" }],
+    });
+    const switched = await api.createPlan([2], true, [], [], "csrf", {
+      tagStreamDecisions: [{ line_no: 2, decision: "switch" }],
+    });
+
+    expect(preserved).toMatchObject({
+      status: "ready",
+      stacks: [{
+        tag_stream_updates: [expect.objectContaining({
+          selected_tag: "2.34.4-distroless",
+          decision: "preserve",
+          proposed_label_value: String.raw`^\d+\.\d+\.\d+-distroless$$`,
+          proposed_label_regex: String.raw`^\d+\.\d+\.\d+-distroless$`,
+        })],
+        lines: [expect.objectContaining({
+          target_image: "n8nio/runners:2.34.4-distroless",
+        })],
+      }],
+    });
+    expect(switched).toMatchObject({
+      status: "ready",
+      stacks: [{
+        tag_stream_updates: [expect.objectContaining({
+          selected_tag: "2.34.4",
+          decision: "switch",
+          proposed_label_value: String.raw`^\d+\.\d+\.\d+$$`,
+          proposed_label_regex: String.raw`^\d+\.\d+\.\d+$`,
+        })],
+        lines: [expect.objectContaining({
+          target_image: "n8nio/runners:2.34.4",
+        })],
+      }],
+    });
+    expect(preserved.plan_id).not.toBe(switched.plan_id);
+
+    await expect(
+      api.createPlan([2], true, [], [], "csrf", {
+        tagStreamDecisions: [{ line_no: 2, decision: "preserve" }],
+        tagStreamLabelRewriteApprovals: [{
+          line_no: 2,
+          stack: "jarvis",
+          stack_directory: "demo/docker/jarvis",
+          compose_file: "docker-compose.yml",
+          service: "task-runner",
+          label_key: "wud.tag.include",
+          current_label_value: "^custom$",
+          selected_tag: "2.34.4-distroless",
+          proposed_label_value: String.raw`^\d+\.\d+\.\d+-distroless$$`,
+        }],
+      }),
+    ).rejects.toThrow("stale or forged");
   });
 
   it("previews retag plans and blocks apply in the static demo", async () => {
@@ -287,7 +362,7 @@ describe("demo web API", () => {
     await expect(api.applyRetagPlan(planId, choices, "csrf")).rejects.toThrow(
       READ_ONLY_MESSAGE,
     );
-    await expect(api.status()).resolves.toMatchObject({ pending_count: 7 });
+    await expect(api.status()).resolves.toMatchObject({ pending_count: 8 });
   });
 
   it("matches target_id-keyed retag choices in generated demo plans", async () => {
@@ -401,7 +476,7 @@ describe("demo web API", () => {
     for (const promise of mutationExpectations) {
       await expect(promise).rejects.toThrow(READ_ONLY_MESSAGE);
     }
-    await expect(api.status()).resolves.toMatchObject({ pending_count: 7 });
+    await expect(api.status()).resolves.toMatchObject({ pending_count: 8 });
   });
 
   it("keeps static fixture catalogs empty", () => {
