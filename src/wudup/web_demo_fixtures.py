@@ -1353,7 +1353,7 @@ def _demo_advisory_payload(repo: str, advisory_id: str) -> dict[str, object]:
     normalized = (repo.lower(), advisory_id.upper())
     advisories = {
         ("home-assistant/core", DEMO_HOME_ASSISTANT_ADVISORY.upper()): (
-            "high",
+            "critical",
             "< 2026.5.3",
             "2026.5.3",
         ),

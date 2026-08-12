@@ -40,13 +40,16 @@ def test_static_demo_fixture_generation_matches_read_only_contract() -> None:
     assert data["pending"]["snoozed_candidates"] == [
         web_demo_fixtures.DEMO_PENDING_SNOOZED_CANDIDATE
     ]
-    security_outcomes = {
-        item["image_repo"]: item["security"]["outcome"]
+    security_assessments = {
+        item["image_repo"]: item["security"]
         for item in data["releaseNotes"]["items"]
     }
-    assert security_outcomes["home-assistant/core"] == "verified_critical_high"
-    assert security_outcomes["magrhino/wudup"] == "needs_review"
-    assert security_outcomes["linuxserver/docker-radarr"] == "ordinary"
+    assert security_assessments["home-assistant/core"]["outcome"] == (
+        "verified_critical_high"
+    )
+    assert security_assessments["home-assistant/core"]["severity"] == "critical"
+    assert security_assessments["magrhino/wudup"]["outcome"] == "needs_review"
+    assert security_assessments["linuxserver/docker-radarr"]["outcome"] == "ordinary"
 
     doctor_checks = {check["code"]: check for check in data["doctor"]["checks"]}
     assert doctor_checks["webui-authentication"]["status"] == "PASS"
