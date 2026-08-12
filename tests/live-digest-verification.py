@@ -320,8 +320,7 @@ def docker(*args: str) -> None:
         subprocess.run(
             ("docker", *args),
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
         )
     except FileNotFoundError as exc:
@@ -336,8 +335,7 @@ def docker_output(*args: str) -> str:
         return subprocess.run(
             ("docker", *args),
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
         ).stdout
     except FileNotFoundError as exc:

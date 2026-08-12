@@ -754,7 +754,7 @@ def _prepare_self_update_tag_update(
         try:
             shutil.copy2(backup, compose_path)
             restore_succeeded = True
-        except Exception as restore_exc:
+        except Exception as restore_exc:  # noqa: BLE001 - preserve the original apply error.
             restore_error = f"; compose rollback failed: {restore_exc}"
         raise RuntimeError(f"{exc}{restore_error}") from exc
     finally:

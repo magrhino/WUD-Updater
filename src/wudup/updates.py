@@ -978,7 +978,7 @@ def options_from_namespace(
 
     env_wud_file = environ.get("WUD_OUT_FILE") or ""
     if getattr(args, "file", None) is not None:
-        wud_file = str(getattr(args, "file"))
+        wud_file = str(args.file)
     elif env_wud_file:
         wud_file = env_wud_file
     else:
@@ -1161,8 +1161,7 @@ def _read_todo_entries_with_sudo(
             ["sudo", "awk", awk_script, wud_file],
             env=dict(environ),
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             check=False,
         )

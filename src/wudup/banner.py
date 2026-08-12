@@ -75,7 +75,7 @@ def fetch_latest_release_tag(*, timeout: float = DEFAULT_RELEASE_TIMEOUT) -> str
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = response.read(65536)
         data = json.loads(payload.decode("utf-8"))
-    except Exception:
+    except Exception:  # noqa: BLE001 - the release lookup is best-effort.
         return None
 
     tag = data.get("tag_name") if isinstance(data, dict) else None

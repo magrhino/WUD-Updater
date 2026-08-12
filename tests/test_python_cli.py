@@ -47,8 +47,7 @@ class CliTests(unittest.TestCase):
             ],
             env=env,
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             check=False,
         )

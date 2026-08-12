@@ -1646,7 +1646,7 @@ def test_apply_endpoint_holds_wud_lock_for_worker_handoff(
     observed: dict[str, object] = {}
 
     def fake_run(runner: object) -> int:
-        environ = getattr(runner, "environ")
+        environ = runner.environ
         observed["lock_flag"] = environ.get("WUD_LOCK_HELD_BY_PARENT")
         observed["lock_exists"] = lock_dir_for(wud_file).is_dir()
         contender = DirectoryLock(wud_file, timeout_seconds=0)

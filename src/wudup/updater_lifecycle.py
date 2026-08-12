@@ -1,5 +1,7 @@
 """Stack lifecycle execution for ``update-from-wud``."""
 
+# Compatibility imports deliberately re-export these names unchanged.
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -187,7 +189,7 @@ class StackLifecycleExecutor(
             if service_scoped:
                 self.log.info(f"[{stack.name}] Matched compose service(s): {services_label}")
             else:
-                self.log.warn(f"[{stack.name}] {_stack_level_scope_message(scope)}")
+                self.log.warning(f"[{stack.name}] {_stack_level_scope_message(scope)}")
                 if pull_services is not None:
                     self.log.info(
                         f"[{stack.name}] Pulling matched compose service(s): {pull_services_label}"

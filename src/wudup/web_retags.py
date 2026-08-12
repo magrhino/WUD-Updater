@@ -357,7 +357,7 @@ def _run_retag_plan_preview_job(
             plan=build.response,
             warnings=tuple(build.response.warnings),
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - the preview job records all failures.
         safe_error = _safe_exception_detail(settings, "retag preview failed", exc)
         _append_retag_preview_progress(
             state,
@@ -713,7 +713,7 @@ def _manual_retag_plan_update_for_choice(
         result = DigestVerifier(
             DockerCli(runner=_command_runner(settings)),
         ).resolve_tag_digest(target_image)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - resolver failures become preview issues.
         return None, _manual_retag_issue(
             item,
             code="retag-manual-digest-error",
@@ -1341,7 +1341,7 @@ def _preview_retag_stack(
             tuple(item.update for item in stack_updates),
             stack_name=stack.name,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - renderer failures become preview issues.
         return [], _retag_preview_failed_issues(settings, stack, stack_updates, exc)
 
     applied_by_service = {
@@ -1547,7 +1547,7 @@ def _run_retag_apply_job(
             run_id=run_id,
             finished_at=utc_timestamp(),
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - the apply job records all failures.
         if isinstance(exc, _RetagApplyFailed):
             successful_updates = exc.successful_updates
         safe_error = _safe_retag_apply_error(settings, exc)

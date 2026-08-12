@@ -242,8 +242,10 @@ class SecuritySubjectTests(unittest.TestCase):
         self.assertEqual(
             request.warnings,
             (
-                "Could not resolve reported digest for repo/app:2.0: "
-                "registry auth failed",
+                (
+                    "Could not resolve reported digest for repo/app:2.0: "
+                    "registry auth failed"
+                ),
             ),
         )
 

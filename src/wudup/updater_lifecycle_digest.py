@@ -92,7 +92,7 @@ class _LifecycleDigestMixin:
             images,
         )
         if digest_result is not None and digest_result.status == "untrusted":
-            self.log.warn(
+            self.log.warning(
                 f"[{stack.name}] Digest verification was inconclusive for line {line_no} ({target}): wanted {expected}"
             )
             self._log_digest_untrusted(stack.name, digest_result)

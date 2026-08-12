@@ -1,5 +1,7 @@
 """Best-effort WUD API discovery and metadata enrichment."""
 
+# Compatibility imports deliberately re-export these diagnostic model names.
+
 from __future__ import annotations
 
 import base64

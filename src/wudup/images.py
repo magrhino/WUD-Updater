@@ -121,6 +121,4 @@ def image_matches_resolved_target(
 
     if image_has_tag(resolved) and image_match_key == resolved_key:
         return True
-    if allow_repo and image_repo_match_key == resolved_repo:
-        return True
-    return False
+    return allow_repo and image_repo_match_key == resolved_repo

@@ -4,7 +4,7 @@ import unittest
 from io import StringIO
 from unittest import mock
 
-import wudup.terminal as terminal
+from wudup import terminal
 from wudup.terminal import RICH_AVAILABLE, TerminalRenderer
 
 

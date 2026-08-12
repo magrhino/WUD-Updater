@@ -1,11 +1,13 @@
 """SQLite persistence helpers for WUDup."""
 
+# Compatibility imports deliberately re-export these names unchanged.
+
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Generator, Iterable
 from contextlib import closing, contextmanager
 from pathlib import Path
-from typing import Generator, Iterable
 
 from .db_schema import (
     _EXPECTED_SCHEMAS_BY_VERSION as _EXPECTED_SCHEMAS_BY_VERSION,

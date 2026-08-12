@@ -329,8 +329,10 @@ def bind_mount_path_issue_messages(
 ) -> list[str]:
     target = f" -> {mount.target}" if mount.target else ""
     messages = [
-        f"[{stack.name}] Compose bind mount for service {mount.service} "
-        f"resolves to {mount.source}{target}; {issue}."
+        (
+            f"[{stack.name}] Compose bind mount for service {mount.service} "
+            f"resolves to {mount.source}{target}; {issue}."
+        )
     ]
     if runner.options.host_docker_base is not None:
         messages.append(

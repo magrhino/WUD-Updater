@@ -66,7 +66,7 @@ class ManifestLookupError(RuntimeError):
 
 
 class ManifestResolver(Protocol):
-    def fetch(self, image: "RegistryImageRef", reference: str) -> "ManifestDocument":
+    def fetch(self, image: RegistryImageRef, reference: str) -> ManifestDocument:
         """Return a manifest or index document for ``image`` and ``reference``."""
 
 
