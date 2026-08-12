@@ -70,8 +70,13 @@ VERSION_COMPARISON_RE = re.compile(
 SECURITY_SIGNAL_SCAN_MAX_CHARS = 100_000
 SECURITY_ADVISORY_ID_MAX = 8
 SECURITY_ADVISORY_FETCH_MAX = 4
+SECURITY_BACKFILL_FAILURE_REASON_CODE = "security_backfill_failed"
 SECURITY_RETRYABLE_REASON_CODES = frozenset(
-    {"advisory_lookup_failed", "advisory_unresolved"}
+    {
+        "advisory_lookup_failed",
+        "advisory_unresolved",
+        SECURITY_BACKFILL_FAILURE_REASON_CODE,
+    }
 )
 
 ReleaseNoteStatus = Literal[
@@ -302,18 +307,37 @@ def refresh_release_notes(
         try:
             info = _fetch_release_note(context, active_client, timestamp)
         except Exception as exc:  # noqa: BLE001 - surfaced as structured metadata.
-            error = str(exc)
-            if redact_error is not None:
-                error = redact_error(error)
-            info = ReleaseNoteInfo(
-                line_no=context.line_no,
-                status="error",
-                provider=context.provider,
-                image_repo=context.image_repo,
-                upstream_repo=context.upstream_repo,
-                refreshed_at=timestamp,
-                error=error,
-            )
+            if cached.status == "ready" and (
+                legacy_metadata_cache
+                or cached.security.reason_code
+                == SECURITY_BACKFILL_FAILURE_REASON_CODE
+            ):
+                info = replace(
+                    cached,
+                    refreshed_at=timestamp,
+                    security=ReleaseSecurityAssessment(
+                        outcome="needs_review",
+                        severity="unknown",
+                        reason_code=SECURITY_BACKFILL_FAILURE_REASON_CODE,
+                        reason=(
+                            "Existing release metadata was preserved, but GitHub "
+                            "security evidence could not be checked."
+                        ),
+                    ),
+                )
+            else:
+                error = str(exc)
+                if redact_error is not None:
+                    error = redact_error(error)
+                info = ReleaseNoteInfo(
+                    line_no=context.line_no,
+                    status="error",
+                    provider=context.provider,
+                    image_repo=context.image_repo,
+                    upstream_repo=context.upstream_repo,
+                    refreshed_at=timestamp,
+                    error=error,
+                )
         _upsert_cache(conn, context, info, timestamp)
         infos.append(info)
     return infos
@@ -519,11 +543,18 @@ def assess_release_security(
             links,
         )
     if not advisories:
-        reason_code = "advisory_unresolved"
-        reason = (
-            "Security language or advisory identifiers were found, but no "
-            "structured advisory could be resolved."
-        )
+        if advisory_ids:
+            reason_code = "advisory_unresolved"
+            reason = (
+                "Security language or advisory identifiers were found, but no "
+                "structured advisory could be resolved."
+            )
+        else:
+            reason_code = "security_signal_only"
+            reason = (
+                "Security language was found, but no advisory identifier was "
+                "available for structured exposure verification."
+            )
     elif severity in {"low", "moderate", "unknown", "none"}:
         reason_code = "severity_below_high"
         reason = (

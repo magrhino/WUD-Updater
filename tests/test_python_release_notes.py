@@ -432,6 +432,49 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertEqual(first[0].security.reason_code, "advisory_unresolved")
         self.assertEqual(advisory_calls, 4)
 
+    def test_security_keyword_without_advisory_uses_success_cache_ttl(self) -> None:
+        parsed = parse_wud_text("ghcr.io/acme/app:1.2.0 tag=1.2.1\n")
+        calls = 0
+
+        def fetch_json(_url: str) -> object:
+            nonlocal calls
+            calls += 1
+            return {
+                "tag_name": "v1.2.1",
+                "name": "Security update",
+                "html_url": "https://github.com/acme/app/releases/tag/v1.2.1",
+                "body": "Security hardening without a linked advisory.",
+                "published_at": "2026-01-02T00:00:00Z",
+            }
+
+        client = GitHubClient(fetch_json=fetch_json)
+        with open_db(":memory:") as conn:
+            init_db(conn)
+            first = refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=client,
+                now="2026-01-02T00:00:00+00:00",
+            )
+            refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=client,
+                now="2026-01-02T00:15:00+00:00",
+            )
+            refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=client,
+                now="2026-01-02T06:00:00+00:00",
+            )
+
+        self.assertEqual(first[0].security.reason_code, "security_signal_only")
+        self.assertEqual(calls, 2)
+
     def test_security_assessment_caps_advisory_lookups(self) -> None:
         advisory_ids = [f"GHSA-aaaa-bbbb-{index:04d}" for index in range(5)]
         context = release_note_contexts(
@@ -1079,6 +1122,70 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertGreater(len(calls), 0)
         self.assertEqual(refreshed[0].classification.change_type, "image_rebuild")
         self.assertIn("classification", json.loads(str(row["metadata_json"])))
+
+    def test_failed_legacy_security_backfill_preserves_release_metadata(self) -> None:
+        parsed = parse_wud_text("ghcr.io/acme/app:1.2.0 tag=1.2.1\n")
+        release = {
+            "tag_name": "v1.2.1",
+            "name": "v1.2.1",
+            "html_url": "https://github.com/acme/app/releases/tag/v1.2.1",
+            "body": "Routine fixes.",
+            "published_at": "2026-01-02T00:00:00Z",
+        }
+        failed_calls = 0
+
+        def fail_fetch(_url: str) -> object:
+            nonlocal failed_calls
+            failed_calls += 1
+            raise TimeoutError("timed out")
+
+        with open_db(":memory:") as conn:
+            init_db(conn)
+            original = refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=GitHubClient(fetch_json=lambda _url: release),
+                now="2026-01-01T00:00:00+00:00",
+            )[0]
+            conn.execute(
+                "UPDATE release_note_cache SET metadata_json = ?",
+                (json.dumps({"line_no": 1}),),
+            )
+
+            failed = refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=GitHubClient(fetch_json=fail_fetch),
+                now="2026-01-02T00:00:00+00:00",
+            )[0]
+            before_retry = refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=GitHubClient(fetch_json=fail_fetch),
+                now="2026-01-02T00:14:59+00:00",
+            )[0]
+            retried = refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=GitHubClient(fetch_json=fail_fetch),
+                now="2026-01-02T00:15:00+00:00",
+            )[0]
+
+        for item in (failed, before_retry, retried):
+            self.assertEqual(item.status, "ready")
+            self.assertEqual(item.release_tag, original.release_tag)
+            self.assertEqual(item.title, original.title)
+            self.assertEqual(item.body, original.body)
+            self.assertEqual(item.links, original.links)
+            self.assertEqual(
+                item.security.reason_code,
+                release_notes_module.SECURITY_BACKFILL_FAILURE_REASON_CODE,
+            )
+        self.assertEqual(failed_calls, 2)
 
     def test_lsio_branch_tracking_fetches_matching_release(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
