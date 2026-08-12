@@ -4,6 +4,17 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.58.1](https://github.com/magrhino/wudup/compare/v0.58.0...v0.58.1) (2026-08-12)
+
+
+### Dependencies
+
+* **deps-dev:** bump jsdom in /webui in the npm-development group ([#600](https://github.com/magrhino/wudup/issues/600)) ([bae4252](https://github.com/magrhino/wudup/commit/bae4252aae84484c3eb3f0ec305fa9bbe41e3418))
+* **deps-dev:** bump ruff to 0.16.1 ([64748cc](https://github.com/magrhino/wudup/commit/64748ccb4bcf4afdf5a044132ec1dc0a54347464))
+* **deps:** bump cffi in the python-production group ([#601](https://github.com/magrhino/wudup/issues/601)) ([617701f](https://github.com/magrhino/wudup/commit/617701f87aa25929291e8ff422ee4b46ebbc07b0))
+* **deps:** bump pinia from 3.0.4 to 4.0.2 in /webui ([#569](https://github.com/magrhino/wudup/issues/569)) ([754ad94](https://github.com/magrhino/wudup/commit/754ad9495db5c46404e780061431686587f8966c))
+* **deps:** bump the github-actions group with 4 updates ([#603](https://github.com/magrhino/wudup/issues/603)) ([ee2cafd](https://github.com/magrhino/wudup/commit/ee2cafdbf1c78677cd4379a4e2e360fe30acd190))
+
 ## [0.58.0](https://github.com/magrhino/wudup/compare/v0.57.2...v0.58.0) (2026-08-11)
 
 
