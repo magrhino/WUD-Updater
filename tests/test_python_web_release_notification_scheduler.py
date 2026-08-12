@@ -5,16 +5,6 @@ import logging
 from pathlib import Path
 from types import SimpleNamespace
 
-from wudup import (
-    web_pending_sources,
-    web_release_notifications as notifications_module,
-    web_scheduler,
-)
-from wudup.db import open_db
-from wudup.web_release_notification_state import (
-    RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DEMAND,
-)
-
 from tests.web_test_helpers import (
     _capture_discord_posts,
     _client,
@@ -22,6 +12,18 @@ from tests.web_test_helpers import (
     _install_wud_api,
     _store_web_setting,
     _wud_api_container,
+)
+
+from wudup import (
+    web_pending_sources,
+    web_scheduler,
+)
+from wudup import (
+    web_release_notifications as notifications_module,
+)
+from wudup.db import open_db
+from wudup.web_release_notification_state import (
+    RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DEMAND,
 )
 
 _ENV = {

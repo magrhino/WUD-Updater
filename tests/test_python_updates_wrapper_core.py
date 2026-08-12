@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from tests.updates_wrapper_helpers import UpdatesWrapperTestCase
 
 from wudup.updates import (
     _parse_display_spec,
     _parse_todo_entries,
 )
 
-from tests.updates_wrapper_helpers import UpdatesWrapperTestCase
 
 class UpdatesWrapperCoreTests(UpdatesWrapperTestCase):
     def test_dry_run_does_not_invoke_updater(self) -> None:

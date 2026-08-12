@@ -1,17 +1,20 @@
 from __future__ import annotations
+
 import json
 from pathlib import Path
-from wudup import web_plans as plans_module
-from wudup.config import ConfigError
-from wudup.locks import DirectoryLock, lock_dir_for
+
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
+    _fake_docker_calls,
     _fake_docker_env,
     _make_fake_stack,
-    _fake_docker_calls,
     _wait_apply_job,
 )
+
+from wudup import web_plans as plans_module
+from wudup.config import ConfigError
+from wudup.locks import DirectoryLock, lock_dir_for
 
 
 def test_apply_endpoint_rejects_mixed_plan_with_skipped_lines_without_mutation(

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import ipaddress
 from collections.abc import Mapping
-from dataclasses import dataclass, field as dataclass_field
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -15,6 +16,11 @@ from .config import UpdaterConfig
 
 __all__ = (
     "APPLY_JOB_PROGRESS_STATUSES",
+    "DEFAULT_CORE_UPDATE_TOUR_STEP",
+    "DEFAULT_SECURITY_SCAN_CACHE_DIR",
+    "PASSWORD_MIN_LENGTH",
+    "SELF_UPDATE_RELEASE_NOTES_CAP",
+    "TERMINAL_APPLY_JOB_STATUSES",
     "AdminRecoveryClaim",
     "ApplyJobLogResponse",
     "ApplyJobProgressEvent",
@@ -37,14 +43,12 @@ __all__ = (
     "CreateDependencySnoozeOperation",
     "CreateSnoozeOperation",
     "CsrfResponse",
-    "DEFAULT_CORE_UPDATE_TOUR_STEP",
-    "DEFAULT_SECURITY_SCAN_CACHE_DIR",
     "DeleteDependencySnoozeOperation",
     "DeleteServicePolicyOperation",
     "DeleteSnoozeOperation",
     "DiagnosticsSupportBundleResponse",
-    "DigestTagProvenance",
     "DigestPinLabelRewriteApprovalRequest",
+    "DigestTagProvenance",
     "DoctorCheckResponse",
     "DoctorCheckStatus",
     "DoctorResponse",
@@ -62,7 +66,6 @@ __all__ = (
     "OnboardingChecklistResponse",
     "OnboardingDismissResponse",
     "OnboardingDocLink",
-    "PASSWORD_MIN_LENGTH",
     "PendingCleanupLine",
     "PendingCleanupRemovedLine",
     "PendingCleanupRequest",
@@ -82,17 +85,17 @@ __all__ = (
     "PendingRemovalPlanRequest",
     "PendingRemovalPlanResponse",
     "PendingRemovalRequest",
-    "PendingResponse",
     "PendingRescanLine",
     "PendingRescanRequest",
     "PendingRescanResponse",
     "PendingRescanScope",
     "PendingRescanSkippedLine",
     "PendingRescanStatus",
+    "PendingResponse",
+    "PendingSnoozedCandidate",
     "PendingSourceActive",
     "PendingSourceInfo",
     "PendingSourceMode",
-    "PendingSnoozedCandidate",
     "PendingStackGroup",
     "PendingTagStream",
     "PendingUpdateRecord",
@@ -111,15 +114,16 @@ __all__ = (
     "PlanStack",
     "PlanStatus",
     "PlanSummary",
-    "PlanTagUpdate",
     "PlanTagStreamUpdate",
+    "PlanTagUpdate",
     "PlanTarget",
     "ReadyResponse",
-    "ReleaseNoteInfo",
     "ReleaseNoteChangeType",
     "ReleaseNoteClassification",
     "ReleaseNoteClassificationTag",
+    "ReleaseNoteInfo",
     "ReleaseNoteLink",
+    "ReleaseNotesResponse",
     "ReleaseNotificationDestination",
     "ReleaseNotificationItem",
     "ReleaseNotificationPreviewRequest",
@@ -128,12 +132,9 @@ __all__ = (
     "ReleaseNotificationTestRequest",
     "ReleaseNotificationTestResponse",
     "ReleaseNotificationTrigger",
-    "ReleaseNotesResponse",
     "ResetAdminClaimRequest",
     "RetagApplyRequest",
     "RetagChoiceRequest",
-    "RetagTargetItem",
-    "RetagTargetsResponse",
     "RetagPlanDigestPinUpdate",
     "RetagPlanIssue",
     "RetagPlanLabelRewrite",
@@ -144,13 +145,15 @@ __all__ = (
     "RetagPlanTagUpdate",
     "RetagPreviewJobResponse",
     "RetagRuntimeState",
-    "RunDetail",
-    "RunEventRecord",
-    "RunLogResponse",
+    "RetagTargetItem",
+    "RetagTargetsResponse",
     "RollbackPlanItem",
     "RollbackPlanItemStatus",
     "RollbackPlanResponse",
     "RollbackPlanStatus",
+    "RunDetail",
+    "RunEventRecord",
+    "RunLogResponse",
     "RunSummary",
     "RunVerificationContainerStatus",
     "RunVerificationHealthStatus",
@@ -159,18 +162,17 @@ __all__ = (
     "RunVerificationStatus",
     "RunVerificationSummary",
     "RunVerificationWudStatus",
-    "SecurityScanConfig",
+    "SecretSettingStatus",
     "SecurityScanComparison",
+    "SecurityScanConfig",
     "SecurityScanFinding",
     "SecurityScanInfo",
     "SecurityScanJobResponse",
     "SecurityScanSeverityCounts",
     "SecurityScanState",
     "SecurityScanSubject",
-    "SecurityScansResponse",
     "SecurityScanVerdict",
-    "SELF_UPDATE_RELEASE_NOTES_CAP",
-    "SecretSettingStatus",
+    "SecurityScansResponse",
     "SelfUpdateApplyResponse",
     "SelfUpdateAuditStatus",
     "SelfUpdatePlanResponse",
@@ -195,7 +197,6 @@ __all__ = (
     "StateOperation",
     "StateOperationResponse",
     "StatusResponse",
-    "TERMINAL_APPLY_JOB_STATUSES",
     "TagExclusionMatchType",
     "TagExclusionRuleRecord",
     "TagExclusionScope",
@@ -211,10 +212,10 @@ __all__ = (
     "UpsertTagExclusionOperation",
     "WebApplyJob",
     "WebApplyJobProgressEvent",
-    "WudApiClientConfig",
     "WebSelfUpdatePlan",
     "WebSettings",
     "WudApiAppDiagnostics",
+    "WudApiClientConfig",
     "WudApiConfigurationDiagnostics",
     "WudApiDiagnosticEndpointStatus",
     "WudApiLogDiagnostics",
@@ -224,9 +225,9 @@ __all__ = (
     "WudApiObservationOutcome",
     "WudApiObservationReason",
     "WudApiRegistryDiagnostics",
-    "WudApiStoreDiagnostics",
     "WudApiState",
     "WudApiStatus",
+    "WudApiStoreDiagnostics",
     "WudApiWatcherDiagnostics",
     "WudContainerMetadata",
 )
@@ -761,7 +762,7 @@ class RetagChoiceRequest(BaseModel):
     allow_start: bool = False
 
     @model_validator(mode="after")
-    def target_tag_requires_switch_choice(self) -> "RetagChoiceRequest":
+    def target_tag_requires_switch_choice(self) -> RetagChoiceRequest:
         if self.choice == "keep-current" and self.target_tag is not None:
             raise ValueError(
                 "target_tag is only allowed when choice is switch-to-concrete"
@@ -858,7 +859,7 @@ class RetagPreviewJobResponse(BaseModel):
     plan: RetagPlanResponse | None = None
     warnings: list[str] = Field(default_factory=list)
     error: str = ""
-    progress: list["ApplyJobProgressEvent"] = Field(default_factory=list)
+    progress: list[ApplyJobProgressEvent] = Field(default_factory=list)
 
 class ReleaseNoteLink(BaseModel):
     label: str
@@ -932,7 +933,7 @@ class ReleaseNotificationPreviewRequest(BaseModel):
     resend: bool = False
 
     @model_validator(mode="after")
-    def exactly_one_source(self) -> "ReleaseNotificationPreviewRequest":
+    def exactly_one_source(self) -> ReleaseNotificationPreviewRequest:
         if bool(self.line_numbers) == bool(self.run_id):
             raise ValueError("provide exactly one of line_numbers or run_id")
         return self
@@ -1499,7 +1500,7 @@ class PlanRequest(BaseModel):
     ] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def validate_selection_mode(self) -> "PlanRequest":
+    def validate_selection_mode(self) -> PlanRequest:
         if bool(self.line_numbers) == bool(self.selections):
             raise ValueError("provide exactly one of line_numbers or selections")
         return self
@@ -1779,7 +1780,7 @@ class ApplyPlanRequest(BaseModel):
     confirmation: Literal["apply"]
 
     @model_validator(mode="after")
-    def validate_selection_mode(self) -> "ApplyPlanRequest":
+    def validate_selection_mode(self) -> ApplyPlanRequest:
         if bool(self.line_numbers) == bool(self.selections):
             raise ValueError("provide exactly one of line_numbers or selections")
         return self
@@ -1793,7 +1794,7 @@ class ApplyJobResponse(BaseModel):
     finished_at: str | None = None
     error: str = ""
     selected_line_numbers: list[int] = Field(default_factory=list)
-    progress: list["ApplyJobProgressEvent"] = Field(default_factory=list)
+    progress: list[ApplyJobProgressEvent] = Field(default_factory=list)
 
 class ApplyJobProgressEvent(BaseModel):
     job_id: str

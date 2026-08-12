@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from tests.update_from_wud_helpers import (
+    UpdateFromWudRunnerTestCase,
+)
 
 from wudup.updater import (
     UpdateFromWudRunner,
@@ -9,10 +12,6 @@ from wudup.updater_models import (
     UpdaterOptions,
 )
 
-
-from tests.update_from_wud_helpers import (
-    UpdateFromWudRunnerTestCase,
-)
 
 class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
     def test_up_wait_failure_writes_error_report_with_command_output(self) -> None:

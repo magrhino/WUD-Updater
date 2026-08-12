@@ -13,7 +13,6 @@ from .command import CommandError, CommandResult, CommandRunner
 from .config import DEFAULT_COMPOSE_IGNORE_PATHS, format_compose_ignore_paths
 from .platforms import ImagePlatform, parse_platform
 
-
 COMPOSE_FILENAMES = frozenset(
     {
         "docker-compose.yml",
@@ -852,11 +851,12 @@ def _service_runtime_port_issues_from_config_json(
 
 def _services_from_config_json(config_json: str) -> dict[object, object]:
     parsed = json.loads(config_json)
+    # ValueError is part of the existing Compose parsing contract.
     if not isinstance(parsed, dict):
-        raise ValueError(_COMPOSE_CONFIG_JSON_OBJECT_ERROR)
+        raise ValueError(_COMPOSE_CONFIG_JSON_OBJECT_ERROR)  # noqa: TRY004
     services = parsed.get("services")
     if not isinstance(services, dict):
-        raise ValueError(_COMPOSE_CONFIG_SERVICES_OBJECT_ERROR)
+        raise ValueError(_COMPOSE_CONFIG_SERVICES_OBJECT_ERROR)  # noqa: TRY004
     return services
 
 

@@ -5,18 +5,17 @@ import logging
 from pathlib import Path
 
 from fastapi import HTTPException
-
-from wudup import web_settings as settings_module
-from wudup import web_state as state_module
-from wudup.db import (
-    open_db,
-)
-
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
     _setup_admin,
     _store_web_setting,
+)
+
+from wudup import web_settings as settings_module
+from wudup import web_state as state_module
+from wudup.db import (
+    open_db,
 )
 
 

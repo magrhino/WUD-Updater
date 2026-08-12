@@ -350,7 +350,7 @@ class UpdateFromWudRunner(
         )
         if not self._validate_compose_runtime_ports(preflight_matches):
             if opts.dry_run:
-                self.log.warn(
+                self.log.warning(
                     "Dry-run only; reported Compose runtime port issue without mutating."
                 )
             else:
@@ -371,7 +371,7 @@ class UpdateFromWudRunner(
                 )
         if not self._validate_compose_bind_mount_paths(matches):
             if opts.dry_run:
-                self.log.warn(
+                self.log.warning(
                     "Dry-run only; reported container bind-mount path issue without mutating."
                 )
             else:
@@ -509,10 +509,10 @@ class UpdateFromWudRunner(
             )
         if failed_lines:
             if restorable_failed_lines:
-                self.log.warn(f"Restored failed WUD entries in {opts.wud_file}")
+                self.log.warning(f"Restored failed WUD entries in {opts.wud_file}")
             if stale_failed_lines:
                 stale_lines = ", ".join(str(line) for line in sorted(stale_failed_lines))
-                self.log.warn(
+                self.log.warning(
                     "Removed stale digest WUD entries from "
                     f"{opts.wud_file}: lines {stale_lines}. "
                     "Refresh or replace them before retrying."

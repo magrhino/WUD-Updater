@@ -11,7 +11,6 @@ from .compose import ComposeStack
 from .images import image_repo_ref
 from .updater_models import ImageState, Match, UpResult
 
-
 CONTAINER_SUMMARY_FORMAT = "{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|{{.RestartCount}}|{{.State.ExitCode}}"
 HEALTH_LOG_FORMAT = "{{if .State.Health}}{{range .State.Health.Log}}{{println .Output}}{{end}}{{end}}"
 

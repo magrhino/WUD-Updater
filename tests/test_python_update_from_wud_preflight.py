@@ -7,6 +7,10 @@ from pathlib import Path
 from unittest import mock
 
 from tests.db_helpers import db_connection
+from tests.update_from_wud_helpers import (
+    UpdateFromWudRunnerTestCase,
+)
+
 from wudup.command import CommandRunner
 from wudup.compose import (
     ComposeBindMount,
@@ -18,10 +22,6 @@ from wudup.updater_models import (
     UpdaterOptions,
 )
 
-
-from tests.update_from_wud_helpers import (
-    UpdateFromWudRunnerTestCase,
-)
 
 class UpdateFromWudPreflightTests(UpdateFromWudRunnerTestCase):
     def test_malformed_audit_db_fails_before_mutation(self) -> None:

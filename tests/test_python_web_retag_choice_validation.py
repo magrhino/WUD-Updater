@@ -19,6 +19,7 @@ from tests.web_test_helpers import (
     _make_fake_stack,
     _wait_apply_job,
 )
+
 from wudup.db import open_db
 from wudup.web_models import RetagChoiceRequest
 from wudup.web_retag_choices import validated_retag_choice_map

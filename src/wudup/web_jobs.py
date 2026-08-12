@@ -34,12 +34,13 @@ from .updater_models import (
     DigestUnpinUpdate,
     TagOverride,
     TagStreamUpdate,
-    UpdateSelection,
     UpdaterOptions,
     UpdaterProgressEvent,
+    UpdateSelection,
 )
 from .web_models import (
     APPLY_JOB_PROGRESS_STATUSES,
+    TERMINAL_APPLY_JOB_STATUSES,
     ApplyJobLogResponse,
     ApplyJobProgressEvent,
     ApplyJobProgressStatus,
@@ -47,7 +48,6 @@ from .web_models import (
     ApplyJobStatus,
     LogTail,
     PendingSourceActive,
-    TERMINAL_APPLY_JOB_STATUSES,
     WebApplyJob,
     WebApplyJobProgressEvent,
     WebSettings,
@@ -437,9 +437,7 @@ def _apply_job_stream_snapshot(
             terminal=job.status in TERMINAL_APPLY_JOB_STATUSES,
             last_version=job.version if response is not None else last_version,
             last_progress_count=(
-                progress_count
-                if progress_count > last_progress_count
-                else last_progress_count
+                max(last_progress_count, progress_count)
             ),
         )
 
@@ -584,7 +582,7 @@ def _run_apply_job(
             run_context,
             auto_update_schedule_run_updater,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - the background job records all failures.
         error = exc
         if (
             runner is not None
@@ -730,12 +728,12 @@ def _cleanup_apply_job_resources(
     if wud_lock is not None:
         try:
             wud_lock.close()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - cleanup must attempt every resource.
             cleanup_error = exc
     if temp_dir is not None:
         try:
             temp_dir.cleanup()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - cleanup must attempt every resource.
             if cleanup_error is None:
                 cleanup_error = exc
     return cleanup_error
@@ -752,7 +750,7 @@ def _refresh_api_pending_source_after_apply(
     message = "WUD API pending state refreshed."
     try:
         result = web_wud_api.watch_containers(settings, container_ids)
-    except Exception:  # noqa: BLE001 - best-effort refresh must not fail apply.
+    except Exception:  # Best-effort refresh must not fail a successful apply.
         LOGGER.exception("WUD API pending refresh failed")
         status = "skipped"
         message = "WUD API pending refresh skipped."

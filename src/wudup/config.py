@@ -10,7 +10,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .naming import DB_FILENAME
 
-
 DEFAULT_UPDATE_MODE = "stop"
 DEFAULT_MAX_WAIT = 180
 DEFAULT_LOCK_TIMEOUT = 30

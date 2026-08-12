@@ -14,7 +14,6 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MAP = REPO_ROOT / "wud" / "upstreams.txt"
 JENKINS_VARS_FILE = "jenkins-vars.yml"

@@ -6,7 +6,6 @@ import re
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
-
 _CONTAINER_ID_RE = re.compile(r"\b[0-9a-f]{64}\b")
 
 

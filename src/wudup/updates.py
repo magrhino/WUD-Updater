@@ -27,18 +27,17 @@ from .self_update import (
     self_update_enabled,
 )
 from .terminal import TerminalRenderer
-from .wud_file import WudTarget, parse_wud_text
-
 from .truenas import (
     DEFAULT_TRUENAS_STATUS_TIMEOUT,
     TrueNasCallResult,
     _refresh_truenas_status,
     _truenas_active_alerts,
     _truenas_unreachable_message,
+    _truenas_update_error_reason,
     _truenas_update_status,
     _truenas_update_version,
-    _truenas_update_error_reason,
 )
+from .wud_file import WudTarget, parse_wud_text
 
 DEFAULT_UPDATE_MODE = "stop"
 DEFAULT_MAX_WAIT = "180"
@@ -979,7 +978,7 @@ def options_from_namespace(
 
     env_wud_file = environ.get("WUD_OUT_FILE") or ""
     if getattr(args, "file", None) is not None:
-        wud_file = str(getattr(args, "file"))
+        wud_file = str(args.file)
     elif env_wud_file:
         wud_file = env_wud_file
     else:
@@ -1162,8 +1161,7 @@ def _read_todo_entries_with_sudo(
             ["sudo", "awk", awk_script, wud_file],
             env=dict(environ),
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             check=False,
         )

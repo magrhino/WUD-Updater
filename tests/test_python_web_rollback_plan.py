@@ -3,10 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
-from wudup import web_rollback
-from wudup.compose import ComposeDiscoveryError
-from wudup.db import init_db, insert_update_event, insert_update_run, open_db
 from tests.web_test_helpers import (
     _client,
     _fake_docker_calls,
@@ -15,6 +11,9 @@ from tests.web_test_helpers import (
     _make_fake_stack,
 )
 
+from wudup import web_rollback
+from wudup.compose import ComposeDiscoveryError
+from wudup.db import init_db, insert_update_event, insert_update_run, open_db
 
 OLD_DIGEST = f"sha256:{'a' * 64}"
 OLD_IMAGE_ID = "sha256:old-image"

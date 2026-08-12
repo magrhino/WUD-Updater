@@ -7,7 +7,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal
 
-
 LSIOChangeType = Literal["upstream_update", "image_rebuild", "unknown"]
 LSIOTagKind = Literal["build", "version", "branch", "pseudo_semver", "unknown"]
 

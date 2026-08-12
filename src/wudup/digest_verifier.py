@@ -15,7 +15,6 @@ from .docker_cli import DockerCli
 from .images import normalize_digest, strip_digest
 from .platforms import ImagePlatform, platform_from_parts, platform_value
 
-
 GHCR_REGISTRY = "ghcr.io"
 DOCKER_HUB_REGISTRIES = frozenset(
     ("docker.io", "index.docker.io", "registry-1.docker.io")
@@ -67,7 +66,7 @@ class ManifestLookupError(RuntimeError):
 
 
 class ManifestResolver(Protocol):
-    def fetch(self, image: "RegistryImageRef", reference: str) -> "ManifestDocument":
+    def fetch(self, image: RegistryImageRef, reference: str) -> ManifestDocument:
         """Return a manifest or index document for ``image`` and ``reference``."""
 
 

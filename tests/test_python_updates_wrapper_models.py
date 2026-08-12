@@ -11,6 +11,7 @@ from wudup.updates import (
     UpdatesFileLock,
 )
 
+
 class UpdateSelectionStateTests(unittest.TestCase):
     def test_defaults_are_empty_and_false(self) -> None:
         state = UpdateSelectionState()

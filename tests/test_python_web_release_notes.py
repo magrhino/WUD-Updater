@@ -5,12 +5,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
-from wudup.command import CommandError, CommandResult
-from wudup import web_release_notes as release_notes_module
-from wudup.release_notes import ReleaseNoteInfo as ReleaseNoteData
-from wudup.web_models import WudApiStatus
-
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -20,6 +14,11 @@ from tests.web_test_helpers import (
     _install_wud_api,
     _wud_api_container,
 )
+
+from wudup import web_release_notes as release_notes_module
+from wudup.command import CommandError, CommandResult
+from wudup.release_notes import ReleaseNoteInfo as ReleaseNoteData
+from wudup.web_models import WudApiStatus
 
 
 def _release_client(tmp_path: Path, env: dict[str, str] | None = None):

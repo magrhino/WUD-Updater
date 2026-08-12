@@ -10,7 +10,6 @@ from .compose import ComposeStack
 from .config import DEFAULT_MAX_WAIT, DEFAULT_UPDATE_MODE
 from .wud_file import WudTarget
 
-
 STALE_PENDING_DIGEST_REASON = "stale-pending-digest"
 
 
@@ -36,7 +35,7 @@ class UpdaterOptions:
     no_color: bool = False
     only_lines: str = ""
     remove_lines_before_run: str = ""
-    tag_overrides: tuple["TagOverride", ...] = ()
+    tag_overrides: tuple[TagOverride, ...] = ()
     exclude_tag_lines: str = ""
     recreate_excluded_services: bool = False
     compose_ignore_paths: tuple[Path, ...] = ()
@@ -47,14 +46,14 @@ class UpdaterOptions:
     wud_file_label: str | None = None
     log_dir_label: str | None = None
     metadata_json: str = "{}"
-    digest_pin_plan: tuple["DigestPinUpdate", ...] = ()
-    digest_unpin_plan: tuple["DigestUnpinUpdate", ...] = ()
+    digest_pin_plan: tuple[DigestPinUpdate, ...] = ()
+    digest_unpin_plan: tuple[DigestUnpinUpdate, ...] = ()
     digest_pin_label_rewrite_approvals: tuple[
-        "DigestPinLabelRewriteApproval", ...
+        DigestPinLabelRewriteApproval, ...
     ] = ()
-    update_selections: tuple["UpdateSelection", ...] = ()
-    completed_update_selections: tuple["CompletedUpdateSelection", ...] = ()
-    tag_stream_updates: tuple["TagStreamUpdate", ...] = ()
+    update_selections: tuple[UpdateSelection, ...] = ()
+    completed_update_selections: tuple[CompletedUpdateSelection, ...] = ()
+    tag_stream_updates: tuple[TagStreamUpdate, ...] = ()
 
 
 @dataclass(frozen=True)

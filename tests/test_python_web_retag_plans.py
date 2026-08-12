@@ -7,6 +7,7 @@ from wudup.compose import ComposeStack
 from wudup.digest_provenance import DigestTagProvenance
 from wudup.updater_models import DigestPinUpdate
 from wudup.web_models import RetagPlanIssue, RetagPlanResponse
+from wudup.web_retag_identity import retag_target_id
 from wudup.web_retag_plans import (
     RetagPlanUpdate,
     ordered_retag_stacks,
@@ -14,7 +15,6 @@ from wudup.web_retag_plans import (
     retag_plan_stacks,
     retag_plan_status,
 )
-from wudup.web_retag_identity import retag_target_id
 
 
 def test_retag_plan_helpers_render_ordered_stacks_and_stable_ids(

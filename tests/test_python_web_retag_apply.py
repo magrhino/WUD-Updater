@@ -5,7 +5,6 @@ from pathlib import Path
 from threading import Event
 
 import pytest
-
 from tests.web_retag_test_helpers import (
     _apply_retag_plan,
     _audit_settings,
@@ -26,6 +25,7 @@ from tests.web_test_helpers import (
     _make_fake_stack,
     _wait_apply_job,
 )
+
 from wudup import web_retags as web_retags_module
 from wudup.compose import ComposeStack, ServiceImage
 from wudup.db import open_db

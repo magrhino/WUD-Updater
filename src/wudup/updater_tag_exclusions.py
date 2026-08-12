@@ -20,7 +20,12 @@ from .updater_matching import (
     _ordered_unique,
     _services_for_image,
 )
-from .updater_models import ComposeTagRewriteError, Match, StackStatus, TagExclusionUpdate
+from .updater_models import (
+    ComposeTagRewriteError,
+    Match,
+    StackStatus,
+    TagExclusionUpdate,
+)
 from .updater_planning import (
     _tag_exclusion_updates_by_stack,
     _unique_tag_exclusion_updates,
@@ -62,7 +67,7 @@ def print_tag_exclusion_plan(
                 f"({update.scope})"
             )
     for target, reason in failures:
-        runner.log.warn(
+        runner.log.warning(
             f"Tag exclusion for line {target.line_no} could not be planned: "
             f"{reason}"
         )

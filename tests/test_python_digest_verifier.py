@@ -4,8 +4,15 @@ import unittest
 from collections.abc import Mapping
 from unittest import mock
 
-from wudup.command import CommandRunner
+from tests.update_from_wud_helpers import (
+    MANIFEST_INDEX_TYPE,
+    FakeDockerTestCase,
+    manifest_index,
+    manifest_index_digest,
+    verbose_manifest_item,
+)
 
+from wudup.command import CommandRunner
 from wudup.digest_verifier import (
     DigestVerifier,
     DockerManifestResolver,
@@ -18,14 +25,6 @@ from wudup.digest_verifier import (
 )
 from wudup.docker_cli import DockerCli
 from wudup.platforms import ImagePlatform
-from tests.update_from_wud_helpers import (
-    FakeDockerTestCase,
-    MANIFEST_INDEX_TYPE,
-    manifest_index,
-    manifest_index_digest,
-    verbose_manifest_item,
-)
-
 
 INDEX_TYPE = "application/vnd.oci.image.index.v1+json"
 MANIFEST_TYPE = "application/vnd.oci.image.manifest.v1+json"
@@ -57,8 +56,8 @@ class StaticResolver:
         self.calls: list[tuple[str, str, str]] = []
 
     def fetch(self, image: object, reference: str) -> ManifestDocument:
-        registry = getattr(image, "registry")
-        repo = getattr(image, "repo")
+        registry = image.registry
+        repo = image.repo
         self.calls.append((registry, repo, reference))
         try:
             return self.documents[(registry, repo, reference)]
@@ -71,8 +70,8 @@ class FailingResolver:
         self.calls: list[tuple[str, str, str]] = []
 
     def fetch(self, image: object, reference: str) -> ManifestDocument:
-        registry = getattr(image, "registry")
-        repo = getattr(image, "repo")
+        registry = image.registry
+        repo = image.repo
         self.calls.append((registry, repo, reference))
         raise ManifestLookupError("primary unavailable")
 
@@ -83,8 +82,8 @@ class SequencedHttpResolver(RegistryHttpManifestResolver):
         self.calls: list[tuple[str, str, str]] = []
 
     def fetch(self, image: object, reference: str) -> ManifestDocument:
-        registry = getattr(image, "registry")
-        repo = getattr(image, "repo")
+        registry = image.registry
+        repo = image.repo
         self.calls.append((registry, repo, reference))
         if not self.documents:
             raise ManifestLookupError("no more documents")
@@ -956,7 +955,7 @@ class DockerManifestResolverVerboseTests(FakeDockerTestCase):
 
 
 class DigestVerifierResolveTagDigestTests(FakeDockerTestCase):
-    def _make_verifier(self) -> "DigestVerifier":
+    def _make_verifier(self) -> DigestVerifier:
         command_runner = CommandRunner(env=self.env)
         docker = DockerCli(runner=command_runner)
         resolver = DockerManifestResolver(docker, verbose=True)

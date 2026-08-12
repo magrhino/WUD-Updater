@@ -8,16 +8,16 @@ import urllib.error
 import urllib.parse
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Optional, TypeVar
+from typing import TypeVar
 
 from fastapi.testclient import TestClient
 
 from wudup import web_release_notifications as notifications_module
 from wudup import web_wud_api
 from wudup.db import (
-    open_db,
     init_db,
     insert_update_run,
+    open_db,
 )
 from wudup.release_notes import ReleaseNoteInfo as ReleaseNoteData
 from wudup.release_notes import ReleaseNoteLink as ReleaseNoteLinkData
@@ -377,7 +377,7 @@ def _setup_admin(
     client: TestClient,
     *,
     username: str = "admin",
-    password: Optional[str] = None,
+    password: str | None = None,
 ) -> None:
     if password is None:
         password = DEFAULT_CLAIM_PHRASE

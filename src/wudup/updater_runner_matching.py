@@ -73,9 +73,9 @@ class _RunnerMatchingMixin:
         )
         excluded = parse_wud_file(opts.wud_file, selected_lines=exclude_lines)
         for warning in parsed.warnings:
-            self.log.warn(warning)
+            self.log.warning(warning)
         for warning in excluded.warnings:
-            self.log.warn(warning)
+            self.log.warning(warning)
         return self._apply_tag_overrides(parsed), excluded
 
     def _apply_tag_overrides(

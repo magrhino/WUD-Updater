@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 
-
 _SHELL_SPACE = " \t\n\r\v\f"
 _TAG_VALUE_RE = re.compile(r"^\w[\w.-]{0,127}$", re.ASCII)
 
@@ -122,6 +121,4 @@ def image_matches_resolved_target(
 
     if image_has_tag(resolved) and image_match_key == resolved_key:
         return True
-    if allow_repo and image_repo_match_key == resolved_repo:
-        return True
-    return False
+    return allow_repo and image_repo_match_key == resolved_repo

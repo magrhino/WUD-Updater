@@ -15,6 +15,7 @@ _LEGACY_PACKAGE = __name__
 
 _canonical = importlib.import_module(_CANONICAL_PACKAGE)
 __version__ = getattr(_canonical, "__version__", "")
+# Mirror canonical exports dynamically so legacy imports stay in sync.
 __all__ = getattr(_canonical, "__all__", ())
 
 

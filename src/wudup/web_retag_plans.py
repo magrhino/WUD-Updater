@@ -20,7 +20,6 @@ from .web_models import (
     RetagRuntimeState,
 )
 
-
 RETAG_PLAN_VERSION = 3
 
 

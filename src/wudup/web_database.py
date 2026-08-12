@@ -10,8 +10,8 @@ from pathlib import Path
 from urllib.parse import quote
 
 from .db import (
-    DatabaseError,
     SCHEMA_VERSION,
+    DatabaseError,
 )
 from .db import _user_version as db_user_version
 from .db import _validate_schema as validate_db_schema
@@ -89,7 +89,7 @@ def known_digest_provenance_by_service(
             ).fetchall()
     except ReadOnlyDatabaseMissing:
         return {}
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - this optional status read degrades safely.
         LOGGER.warning("failed to read digest provenance from database: %s", exc)
         return {}
     result: dict[str, DigestTagProvenance] = {}
@@ -124,7 +124,7 @@ def known_digest_state_by_service(
             ).fetchall()
     except ReadOnlyDatabaseMissing:
         return {}
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - this optional status read degrades safely.
         LOGGER.warning("failed to read digest state from database: %s", exc)
         return {}
     result: dict[str, KnownDigestState] = {}

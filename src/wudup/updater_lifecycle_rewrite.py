@@ -11,12 +11,12 @@ from .command import CommandError
 from .compose import ComposeStack, ServiceImage
 from .updater_lifecycle_state import _StackUpdateState
 from .updater_models import (
+    STALE_PENDING_DIGEST_REASON,
     AppliedDigestPinUpdate,
     AppliedDigestUnpinUpdate,
     AppliedTagUpdate,
     ComposeTagRewriteError,
     Match,
-    STALE_PENDING_DIGEST_REASON,
     StackStatus,
 )
 
@@ -411,7 +411,7 @@ class _LifecycleRewriteMixin:
         )
         if failure_health is None:
             failure_health = self._capture_health_details(stack, services)
-        self.log.warn(f"[{stack.name}] Restoring compose file after failed tag update.")
+        self.log.warning(f"[{stack.name}] Restoring compose file after failed tag update.")
         rollback_result = "rollback-failed-manual-review-required"
         rollback_error: CommandError | None = None
         try:
@@ -427,12 +427,12 @@ class _LifecycleRewriteMixin:
             ):
                 rollback_result = "restored-and-healthy"
                 if reason == STALE_PENDING_DIGEST_REASON:
-                    self.log.warn(
+                    self.log.warning(
                         f"[{stack.name}] Rolled back to previous tag; stale WUD "
                         "digest entry was removed and should be refreshed by WUD."
                     )
                 else:
-                    self.log.warn(
+                    self.log.warning(
                         f"[{stack.name}] Rolled back to previous tag; leaving "
                         "WUD entry pending for manual review."
                     )
@@ -514,12 +514,12 @@ class _LifecycleRewriteMixin:
                 owner=self.owner,
             )
         except OSError as exc:
-            self.log.warn(
+            self.log.warning(
                 f"[{stack.name}] Could not create tag update incident log "
                 f"{incident} with owner={self.owner}: {exc}"
             )
             return
-        self.log.warn(f"[{stack.name}] Wrote tag update incident log: {incident}")
+        self.log.warning(f"[{stack.name}] Wrote tag update incident log: {incident}")
 
     def _validate_applied_tag_updates(
         self,

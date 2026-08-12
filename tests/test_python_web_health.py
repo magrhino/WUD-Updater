@@ -3,8 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from wudup import web as web_module
-
 from tests.web_test_helpers import (
     WUD_API_AUTH_CONFIG_KEY,
     _client,
@@ -13,6 +11,8 @@ from tests.web_test_helpers import (
     _install_wud_api,
     _wud_api_container,
 )
+
+from wudup import web as web_module
 
 
 def test_healthz_is_unauthenticated_before_setup(tmp_path: Path) -> None:

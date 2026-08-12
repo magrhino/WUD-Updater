@@ -476,9 +476,10 @@ class MainTests(unittest.TestCase):
             self.assertEqual(main(["github-target"]), 0)
 
     def test_main_prints_target_when_update_available(self) -> None:
-        from wudup.self_update import ReleaseSelfUpdate
-        from io import StringIO
         from contextlib import redirect_stdout
+        from io import StringIO
+
+        from wudup.self_update import ReleaseSelfUpdate
 
         update = ReleaseSelfUpdate(
             local_tag="v0.12.2",

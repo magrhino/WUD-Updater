@@ -4,8 +4,8 @@ import importlib
 import os
 import subprocess
 import sys
-import unittest
 import tempfile
+import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
@@ -47,8 +47,7 @@ class CliTests(unittest.TestCase):
             ],
             env=env,
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             check=False,
         )

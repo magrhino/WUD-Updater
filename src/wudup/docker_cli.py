@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from .command import CommandError, CommandResult, CommandRunner
 
-
 DEFAULT_CONTAINER_FORMAT = "{{.Names}}\t{{.Image}}"
 IMAGE_ID_FORMAT = "{{.Id}}"
 IMAGE_DIGESTS_FORMAT = "{{range .RepoDigests}}{{println .}}{{end}}"

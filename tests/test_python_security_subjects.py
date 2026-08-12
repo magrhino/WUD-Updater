@@ -11,9 +11,9 @@ from wudup.platforms import ImagePlatform
 from wudup.security_subjects import (
     PendingSecurityOptions,
     PendingSecurityRequest,
-    current_security_request,
-    _resolve_missing_reported_digests,
     _request_for_target,
+    _resolve_missing_reported_digests,
+    current_security_request,
     pending_security_context,
 )
 from wudup.web_pending_sources import PendingSourceResult
@@ -242,8 +242,10 @@ class SecuritySubjectTests(unittest.TestCase):
         self.assertEqual(
             request.warnings,
             (
-                "Could not resolve reported digest for repo/app:2.0: "
-                "registry auth failed",
+                (
+                    "Could not resolve reported digest for repo/app:2.0: "
+                    "registry auth failed"
+                ),
             ),
         )
 

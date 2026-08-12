@@ -20,14 +20,13 @@ from .compose import ComposeCli, compose_discovery_message, compose_files_under
 from .config import COMPOSE_IGNORE_PATHS_ENV, ConfigError, parse_compose_ignore_paths
 from .container_identity import container_identity_candidates
 from .naming import env_value
-from .updates import (
-    load_configured_environ,
-)
 from .truenas import (
     DEFAULT_TRUENAS_STATUS_TIMEOUT,
     TRUENAS_MIDDLEWARE_MOUNT,
 )
-
+from .updates import (
+    load_configured_environ,
+)
 
 DEFAULT_CONTAINER_APP_DIR = Path("/app")
 DEFAULT_CONTAINER_DOCKER_BASE = "/host/docker"
@@ -767,12 +766,10 @@ def _check_category(name: str) -> str:
         return "runtime"
     if name.startswith("docker "):
         return "docker"
-    if name.startswith("compose ") or name.startswith("bind mount path safety"):
+    if name.startswith(("compose ", "bind mount path safety")):
         return "compose"
     if (
-        name.startswith("WUD_")
-        or name.startswith("DOCKER_BASE")
-        or name.startswith("HOST_DOCKER_BASE")
+        name.startswith(("WUD_", "DOCKER_BASE", "HOST_DOCKER_BASE"))
         or name == "packaged WUD scripts"
     ):
         return "paths"

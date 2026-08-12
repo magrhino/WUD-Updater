@@ -1,24 +1,27 @@
 from __future__ import annotations
+
 import urllib.parse
 from pathlib import Path
-from wudup import web_jobs, web_plans, web_wud_api
-from wudup.db import open_db
-from wudup.locks import DirectoryLock, WudLockError, lock_dir_for
+
+from tests.web_plan_test_helpers import _seed_known_digest_provenance
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
-    _fake_docker_env,
-    _make_fake_stack,
     _fake_docker_calls,
-    _write_fake_manifest,
-    _write_fake_image_after_pull,
+    _fake_docker_env,
+    _install_wud_api,
+    _make_fake_stack,
     _manifest_index_digest,
     _wait_apply_job,
-    _install_wud_api,
+    _write_fake_image_after_pull,
+    _write_fake_manifest,
     _wud_api_container,
 )
 
-from tests.web_plan_test_helpers import _seed_known_digest_provenance
+from wudup import web_jobs, web_plans, web_wud_api
+from wudup.db import open_db
+from wudup.locks import DirectoryLock, WudLockError, lock_dir_for
+
 
 def test_apply_endpoint_applies_digest_unpin_plan_and_records_provenance(
     tmp_path: Path,
@@ -1643,7 +1646,7 @@ def test_apply_endpoint_holds_wud_lock_for_worker_handoff(
     observed: dict[str, object] = {}
 
     def fake_run(runner: object) -> int:
-        environ = getattr(runner, "environ")
+        environ = runner.environ
         observed["lock_flag"] = environ.get("WUD_LOCK_HELD_BY_PARENT")
         observed["lock_exists"] = lock_dir_for(wud_file).is_dir()
         contender = DirectoryLock(wud_file, timeout_seconds=0)

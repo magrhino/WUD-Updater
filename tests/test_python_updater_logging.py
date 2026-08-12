@@ -100,6 +100,18 @@ class UpdaterLoggingTests(unittest.TestCase):
             "[fixed-time] [INFO] message\n",
         )
 
+    def test_logger_warn_remains_a_compatibility_alias(self) -> None:
+        logger = Logger(self.log_dir / "update.log", no_color=True)
+
+        with mock.patch.object(logger, "_term") as term:
+            logger.warning("new name")
+            logger.warn("legacy name")  # noqa: G010 - compatibility alias coverage
+
+        self.assertEqual(
+            term.call_args_list,
+            [mock.call("WARN", "new name"), mock.call("WARN", "legacy name")],
+        )
+
     def test_safe_component_and_sanitize_stream(self) -> None:
         self.assertEqual(safe_component("release 2.0/arm64"), "release_2.0_arm64")
         self.assertEqual(safe_component(""), "tag")

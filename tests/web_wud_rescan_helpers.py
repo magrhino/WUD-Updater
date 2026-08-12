@@ -5,10 +5,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from tests.web_test_helpers import _web_env
+
 from wudup import web_wud_api
 from wudup.web import load_web_settings
-
-from tests.web_test_helpers import _web_env
 
 
 def settings(tmp_path: Path, base_url: str):

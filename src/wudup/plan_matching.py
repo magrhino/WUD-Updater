@@ -23,7 +23,6 @@ from .updater_matching import _services_for_target_match
 from .updater_models import CompletedUpdateSelection, Match, UpdateSelection
 from .wud_file import ParsedWudFile, WudTarget
 
-
 COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
 COMPOSE_WORKING_DIR_LABEL = "com.docker.compose.project.working_dir"
 COMPOSE_CONFIG_FILES_LABEL = "com.docker.compose.project.config_files"

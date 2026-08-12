@@ -3,15 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from wudup import web_onboarding
-from wudup.db import open_db
-
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
     _doctor_client,
     _setup_admin,
 )
+
+from wudup import web_onboarding
+from wudup.db import open_db
 
 
 def _csrf_headers_for_origin(

@@ -6,10 +6,6 @@ import urllib.parse
 from pathlib import Path
 from urllib.error import HTTPError
 
-from wudup import web_pending_rescan_audit
-from wudup import web_wud_api
-from wudup.db import open_db
-
 from tests.web_test_helpers import _client, _csrf_headers, _install_wud_api
 from tests.web_wud_rescan_helpers import (
     container_payload,
@@ -18,6 +14,9 @@ from tests.web_wud_rescan_helpers import (
     rescan_payload,
     settings,
 )
+
+from wudup import web_pending_rescan_audit, web_wud_api
+from wudup.db import open_db
 
 
 def test_pending_rescan_endpoint_enforces_auth_csrf_and_read_only(

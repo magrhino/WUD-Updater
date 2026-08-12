@@ -16,7 +16,6 @@ from .file_ops import OwnerConfig, OwnerConfigError, apply_configured_owner
 from .terminal import TerminalRenderer
 from .updater_models import UpdaterError
 
-
 _SAFE_COMPONENT_RE = re.compile(r"[^A-Za-z0-9._-]")
 
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
@@ -39,8 +38,11 @@ class Logger:
     def info(self, message: str) -> None:
         self._term("INFO", message)
 
-    def warn(self, message: str) -> None:
+    def warning(self, message: str) -> None:
         self._term("WARN", message)
+
+    def warn(self, message: str) -> None:
+        self.warning(message)
 
     def error(self, message: str) -> None:
         self._term("ERROR", message, stream=sys.stderr)
@@ -194,11 +196,11 @@ def sanitize_stream(value: str) -> str:
 
 
 def timestamp() -> str:
-    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    return datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def file_timestamp() -> str:
-    return datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    return datetime.now().astimezone().strftime("%Y-%m-%dT%H-%M-%S")
 
 
 def _bool_text(value: bool) -> str:

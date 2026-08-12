@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import secrets
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from dataclasses import dataclass, replace
 from threading import Lock
-import secrets
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
+from . import web_jobs
 from .command import CommandRunner
 from .config import ConfigError, parse_bool_env
 from .db import DatabaseError, init_db, open_db, utc_timestamp
@@ -44,6 +45,8 @@ from .web_auth import (
 )
 from .web_database import (
     ReadOnlyDatabaseMissing,
+)
+from .web_database import (
     connect_readonly_db as _connect_readonly_db,
 )
 from .web_models import (
@@ -54,12 +57,10 @@ from .web_models import (
     SecurityScanInfo,
     SecurityScanJobResponse,
     SecurityScanSeverityCounts,
-    SecurityScanSubject,
     SecurityScansResponse,
+    SecurityScanSubject,
     WebSettings,
 )
-from . import web_jobs
-
 
 WUD_SECURITY_SCANNING_ENABLED_ENV = "WUD_SECURITY_SCANNING_ENABLED"
 WUD_SECURITY_SCANNER_EXECUTABLE_ENV = "WUD_SECURITY_SCANNER_EXECUTABLE"

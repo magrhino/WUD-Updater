@@ -78,7 +78,7 @@ _missing_digest_failure_cache_lock = Lock()
 
 
 def pending_security_context(
-    settings: "WebSettings",
+    settings: WebSettings,
     *,
     options: PendingSecurityOptions = PENDING_SECURITY_DEFAULT_OPTIONS,
 ) -> PendingSecurityContext:
@@ -194,7 +194,7 @@ def subject_id(subject: ResolvedImageSubject) -> str:
     )
 
 
-def default_digest_verifier(settings: "WebSettings") -> DigestVerifier:
+def default_digest_verifier(settings: WebSettings) -> DigestVerifier:
     runner = CommandRunner(env=settings.command_env)
     return DigestVerifier(DockerCli(runner=runner))
 
@@ -252,7 +252,7 @@ def _request_for_target(
 
 
 def _resolve_missing_reported_digests(
-    settings: "WebSettings",
+    settings: WebSettings,
     requests: tuple[PendingSecurityRequest, ...],
 ) -> tuple[PendingSecurityRequest, ...]:
     if not settings.security_scan.enabled:
@@ -298,7 +298,7 @@ def _resolve_missing_reported_digests(
 
 
 def _resolve_missing_reported_digest(
-    settings: "WebSettings",
+    settings: WebSettings,
     image: str,
     now: float,
     resolver: DigestVerifier | None,
@@ -386,7 +386,7 @@ def _current_digest(source: PendingSourceResult, target: WudTarget) -> str:
 
 
 def _compose_platforms_by_line(
-    settings: "WebSettings",
+    settings: WebSettings,
     source: PendingSourceResult,
 ) -> tuple[dict[int, ImagePlatform], set[int], tuple[str, ...]]:
     runner = CommandRunner(env=settings.command_env)

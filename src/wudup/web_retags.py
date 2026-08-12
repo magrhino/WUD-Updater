@@ -15,8 +15,7 @@ from contextlib import closing
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from threading import Condition, Lock
-from typing import Any
-from typing import Protocol
+from typing import Any, Protocol
 
 from fastapi import HTTPException, Request
 
@@ -74,6 +73,7 @@ from .updater_models import (
 )
 from .web_auth import _redact_sensitive_text, _safe_exception_detail, _settings
 from .web_database import ReadOnlyDatabaseMissing
+from .web_metadata import json_object as _json_object
 from .web_models import (
     ApplyJobProgressEvent,
     ApplyJobResponse,
@@ -93,21 +93,37 @@ from .web_models import (
 from .web_release_notes import release_note_source_resolver
 from .web_retag_choices import validated_retag_choice_map
 from .web_retag_identity import retag_target_id as _retag_target_id_from_values
-from .web_metadata import json_object as _json_object
 from .web_retag_plans import (
     RetagPlanBuild as _RetagPlanBuild,
+)
+from .web_retag_plans import (
     RetagPlanUpdate as _RetagPlanUpdate,
+)
+from .web_retag_plans import (
     ordered_retag_stacks as _ordered_retag_stacks,
+)
+from .web_retag_plans import (
     retag_compose_hashes as _compose_hashes,
+)
+from .web_retag_plans import (
     retag_plan_digest_update as _retag_plan_digest_update,
+)
+from .web_retag_plans import (
     retag_plan_id as _retag_plan_id,
+)
+from .web_retag_plans import (
     retag_plan_stacks as _retag_plan_stacks,
+)
+from .web_retag_plans import (
     retag_plan_status as _retag_plan_status,
+)
+from .web_retag_plans import (
     retag_plan_tag_update as _retag_plan_tag_update,
+)
+from .web_retag_plans import (
     retag_update_service as _retag_update_service,
 )
 from .wud_file import WudTarget
-
 
 KEEP_CURRENT_CHOICE = "keep-current"
 SWITCH_TO_CONCRETE_CHOICE = "switch-to-concrete"
@@ -341,7 +357,7 @@ def _run_retag_plan_preview_job(
             plan=build.response,
             warnings=tuple(build.response.warnings),
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - the preview job records all failures.
         safe_error = _safe_exception_detail(settings, "retag preview failed", exc)
         _append_retag_preview_progress(
             state,
@@ -697,7 +713,7 @@ def _manual_retag_plan_update_for_choice(
         result = DigestVerifier(
             DockerCli(runner=_command_runner(settings)),
         ).resolve_tag_digest(target_image)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - resolver failures become preview issues.
         return None, _manual_retag_issue(
             item,
             code="retag-manual-digest-error",
@@ -1325,7 +1341,7 @@ def _preview_retag_stack(
             tuple(item.update for item in stack_updates),
             stack_name=stack.name,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - renderer failures become preview issues.
         return [], _retag_preview_failed_issues(settings, stack, stack_updates, exc)
 
     applied_by_service = {
@@ -1531,7 +1547,7 @@ def _run_retag_apply_job(
             run_id=run_id,
             finished_at=utc_timestamp(),
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - the apply job records all failures.
         if isinstance(exc, _RetagApplyFailed):
             successful_updates = exc.successful_updates
         safe_error = _safe_retag_apply_error(settings, exc)

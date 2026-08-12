@@ -7,11 +7,15 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
+from tests.update_from_wud_helpers import (
+    UpdateFromWudRunnerTestCase,
+)
+
+from wudup import updater_audit
 from wudup.command import CommandRunner
 from wudup.compose import (
     ComposeStack,
 )
-from wudup import updater_audit
 from wudup.file_ops import OwnerConfig
 from wudup.updater import (
     UpdateFromWudRunner,
@@ -23,10 +27,6 @@ from wudup.updater_models import (
     UpdaterOptions,
 )
 
-
-from tests.update_from_wud_helpers import (
-    UpdateFromWudRunnerTestCase,
-)
 
 class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
     def test_audit_owner_failure_marks_started_run_failed(self) -> None:
@@ -319,7 +319,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
                 "wudup.updater_logging._create_unique_text_file_exclusive",
                 side_effect=OSError("permission denied"),
             ),
-            mock.patch.object(runner.log, "warn") as warn,
+            mock.patch.object(runner.log, "warning") as warning_log,
         ):
             runner._write_tag_incident_log(
                 stack,
@@ -330,7 +330,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
                 "health=unhealthy\n",
             )
 
-        warning = warn.call_args.args[0]
+        warning = warning_log.call_args.args[0]
         self.assertIn("Could not create tag update incident log", warning)
         self.assertIn("permission denied", warning)
     def test_tag_incident_creation_does_not_follow_existing_symlink(self) -> None:

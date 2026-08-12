@@ -37,7 +37,6 @@ from .updater_models import (
     TagUpdate,
 )
 
-
 RESOLVED_TAG_MARKER_PREFIXES = (
     DIGEST_PIN_MARKER_PREFIX,
     LEGACY_DIGEST_PIN_MARKER_PREFIX,
@@ -949,8 +948,10 @@ def _append_block_label_rewrite(
         source,
         insertion,
         (
-            f"{_block_label_entry_indent(labels, source, line_offsets, labels_col)}"
-            f"{entry}",
+            (
+                f"{_block_label_entry_indent(labels, source, line_offsets, labels_col)}"
+                f"{entry}"
+            ),
         ),
     )
     return insertion, insertion, replacement
@@ -1771,7 +1772,7 @@ def _source_line(
     if line_end == -1:
         line_end = len(source)
     line = source[line_start:line_end]
-    body = line[:-1] if line.endswith("\r") else line
+    body = line.removesuffix("\r")
     return line_start, line_end, body
 
 

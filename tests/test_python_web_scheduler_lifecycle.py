@@ -6,14 +6,14 @@ from pathlib import Path
 from threading import Event, Thread
 from types import SimpleNamespace
 
-from wudup import web_scheduler
-from wudup.db import open_db
-
+from tests.web_scheduler_test_helpers import _auto_update_tick
 from tests.web_test_helpers import (
     _client,
 )
 
-from tests.web_scheduler_test_helpers import _auto_update_tick
+from wudup import web_scheduler
+from wudup.db import open_db
+
 
 def test_auto_update_scheduler_loop_runs_initial_tick_before_wait(
     monkeypatch,

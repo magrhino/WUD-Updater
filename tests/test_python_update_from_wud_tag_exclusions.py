@@ -3,6 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from unittest import mock
 
+from tests.update_from_wud_helpers import (
+    UpdateFromWudRunnerTestCase,
+)
+
 from wudup import updater_tag_exclusions
 from wudup.command import CommandRunner
 from wudup.compose import (
@@ -19,10 +23,6 @@ from wudup.updater_models import (
     UpdaterOptions,
 )
 
-
-from tests.update_from_wud_helpers import (
-    UpdateFromWudRunnerTestCase,
-)
 
 class UpdateFromWudTagExclusionTests(UpdateFromWudRunnerTestCase):
     def test_exclude_tag_line_writes_wud_label_and_cleans_line(self) -> None:

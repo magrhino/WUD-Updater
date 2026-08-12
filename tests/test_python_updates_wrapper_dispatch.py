@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import sys
 
-
 from tests.updates_wrapper_helpers import UpdatesWrapperTestCase
+
 
 class UpdatesWrapperDispatchTests(UpdatesWrapperTestCase):
     def test_config_file_supplies_defaults(self) -> None:

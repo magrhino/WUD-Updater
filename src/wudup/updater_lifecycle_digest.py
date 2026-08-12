@@ -25,17 +25,19 @@ from .updater_digest_pin import (
     digest_pin_update_from_values,
 )
 from .updater_models import (
+    STALE_PENDING_DIGEST_REASON,
     DigestPinCandidate,
     DigestPinUpdate,
     DigestUnpinUpdate,
     Match,
-    STALE_PENDING_DIGEST_REASON,
     TagUpdate,
     UpdaterError,
 )
 from .updater_planning import (
     _digest_check_allow_repo,
     _digest_check_image,
+)
+from .updater_planning import (
     _tag_updates as _shared_tag_updates,
 )
 
@@ -90,7 +92,7 @@ class _LifecycleDigestMixin:
             images,
         )
         if digest_result is not None and digest_result.status == "untrusted":
-            self.log.warn(
+            self.log.warning(
                 f"[{stack.name}] Digest verification was inconclusive for line {line_no} ({target}): wanted {expected}"
             )
             self._log_digest_untrusted(stack.name, digest_result)

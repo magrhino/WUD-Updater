@@ -10,7 +10,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-
 _NUMERIC_ID_RE = re.compile(r"^\d+$", re.ASCII)
 _OWNER_PAIR_ERROR = "OUT_UID and OUT_GID/OUT_GUID must be set together"
 

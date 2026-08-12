@@ -176,9 +176,11 @@ def _follow_up_needed(
 def _image_changed(event: RunEventRecord) -> bool:
     if event.old_image_id and event.new_image_id and event.old_image_id != event.new_image_id:
         return True
-    if event.old_digest and event.new_digest and event.old_digest != event.new_digest:
-        return True
-    return False
+    return bool(
+        event.old_digest
+        and event.new_digest
+        and event.old_digest != event.new_digest
+    )
 
 
 def _event_reason(event: RunEventRecord) -> str:

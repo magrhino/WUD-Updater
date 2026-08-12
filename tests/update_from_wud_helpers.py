@@ -13,6 +13,7 @@ from io import StringIO
 from pathlib import Path
 
 from tests.db_helpers import db_connection
+
 from wudup.command import CommandRunner
 from wudup.digest_verifier import (
     DigestVerifier,
@@ -217,8 +218,7 @@ class UpdateFromWudRunnerTestCase(FakeDockerTestCase):
                 command,
                 env=env,
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 check=False,
                 timeout=30.0,
