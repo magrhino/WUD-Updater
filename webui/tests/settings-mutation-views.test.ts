@@ -539,6 +539,11 @@ describe("settings mutation views", () => {
           ? { ...entry, value: "true", configured: true, source: "configured" as const }
           : entry,
       ),
+      managed: settingsResponse().managed.map((entry) =>
+        entry.key === "release_notifications_mode"
+          ? { ...entry, value: "per_container", source: "configured" as const }
+          : entry,
+      ),
     });
     settings.onboarding = onboardingChecklistResponse({ visible: false });
     vi.spyOn(settings, "loadSettings").mockResolvedValue();
@@ -560,7 +565,7 @@ describe("settings mutation views", () => {
             if (entry.key === "release_notifications_mode") {
               return {
                 ...entry,
-                value: "per_container",
+                value: "digest",
                 source: "configured" as const,
               };
             }
@@ -588,13 +593,24 @@ describe("settings mutation views", () => {
 
     const wrapper = mountWithApp(SettingsView, { pinia });
     await flushPromises();
+    expect(wrapper.text()).toContain(
+      "Summary sends one categorized batch and is unrelated to container image digests.",
+    );
+    expect(wrapper.text()).toContain(
+      "Per container sends one detailed notification for each update.",
+    );
+    expect(
+      wrapper.find('select[aria-label="Release notification message grouping"]').attributes(
+        "aria-describedby",
+      ),
+    ).toBe("release-notification-summary-help release-notification-per-container-help");
     await wrapper.find('input[role="switch"]').setValue(true);
     await wrapper
       .find('input[aria-label="Discord webhook URL"]')
       .setValue("https://discord.com/api/webhooks/123/token-secret");
     emitSelectValue(wrapper, 4, RELEASE_NOTIFICATION_DELIVERY_MODE_ON_DEMAND);
     emitSelectValue(wrapper, 5, "full");
-    emitSelectValue(wrapper, 6, "per_container");
+    emitSelectValue(wrapper, 6, "digest");
     emitSelectValue(wrapper, 7, "cooldown");
     await wrapper
       .find('input[aria-label="Release notification cooldown seconds"]')
@@ -609,7 +625,7 @@ describe("settings mutation views", () => {
       release_notes_enabled: "true",
       release_notifications_delivery_mode:
         RELEASE_NOTIFICATION_DELIVERY_MODE_ON_DEMAND,
-      release_notifications_mode: "per_container",
+      release_notifications_mode: "digest",
       release_notifications_resend_policy: "cooldown",
       release_notifications_cooldown_seconds: "60",
       release_notifications_discord_webhook:

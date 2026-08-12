@@ -258,6 +258,13 @@ const {
                   Source:
                   {{ managedSourceLabel(releaseNotificationModeEntry) }}
                 </span>
+                <span id="release-notification-summary-help" class="wrap-anywhere">
+                  Summary sends one categorized batch and is unrelated to container image
+                  digests.
+                </span>
+                <span id="release-notification-per-container-help" class="wrap-anywhere">
+                  Per container sends one detailed notification for each update.
+                </span>
               </div>
               <div class="settings-preference-controls">
                 <n-select
@@ -265,6 +272,7 @@ const {
                   :options="releaseNotificationModeOptions"
                   :disabled="notificationControlsDisabled || !releaseNotificationModeEditable"
                   aria-label="Release notification message grouping"
+                  aria-describedby="release-notification-summary-help release-notification-per-container-help"
                 />
                 <n-alert
                   v-if="releaseNotificationModeEntry?.disabled_reason"
