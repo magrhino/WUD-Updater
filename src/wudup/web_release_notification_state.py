@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .db import utc_timestamp
+from .images import image_tag
 from .web_metadata import json_object, json_object_or_empty
 
 SENDING_RESERVATION_TTL_SECONDS = 600
@@ -90,14 +91,14 @@ def notification_identity(
     metadata_hash_payload = _metadata_hash_payload(metadata)
     if metadata_hash_payload:
         hash_payload["metadata"] = metadata_hash_payload
-    security_payload = _verified_security_payload(
-        target,
-        note,
-        metadata_payload,
-    )
-    if security_payload:
-        stored_payload["security"] = security_payload
-        hash_payload["security"] = security_payload
+    security_hash_payload = _verified_security_payload(target, note, {})
+    if security_hash_payload:
+        stored_payload["security"] = _verified_security_payload(
+            target,
+            note,
+            metadata_payload,
+        )
+        hash_payload["security"] = security_hash_payload
     canonical = json.dumps(hash_payload, sort_keys=True, separators=(",", ":"))
     return NotificationIdentity(
         notification_key=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
@@ -444,7 +445,7 @@ def _verified_security_payload(
         "severity": str(getattr(security, "severity", "unknown") or "unknown"),
         "release_tag": _value(note, "release_tag"),
         "current_version": _metadata_value(metadata, "local_tag")
-        or _value(target, "tag_token"),
+        or image_tag(_value(target, "first")),
         "local_digest": _metadata_value(metadata, "local_digest"),
         "target_version": _metadata_value(metadata, "remote_tag")
         or _value(target, "desired_tag")

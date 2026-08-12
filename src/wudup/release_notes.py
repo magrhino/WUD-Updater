@@ -70,7 +70,9 @@ VERSION_COMPARISON_RE = re.compile(
 SECURITY_SIGNAL_SCAN_MAX_CHARS = 100_000
 SECURITY_ADVISORY_ID_MAX = 8
 SECURITY_ADVISORY_FETCH_MAX = 4
-SECURITY_RETRYABLE_REASON_CODES = frozenset({"advisory_lookup_failed"})
+SECURITY_RETRYABLE_REASON_CODES = frozenset(
+    {"advisory_lookup_failed", "advisory_unresolved"}
+)
 
 ReleaseNoteStatus = Literal[
     "cached",
@@ -462,6 +464,31 @@ def assess_release_security(
         if _advisory_verifies_exposure(advisory, context, info)
     ]
 
+    if verified:
+        verified_severity = _highest_advisory_severity(verified)
+        verified_ids = _advisory_ids([], verified)
+        current_version, target_version = _security_versions(context, info)
+        identifier = verified_ids[0] if verified_ids else "a GitHub advisory"
+        incomplete = (
+            " Additional advisory lookup was incomplete."
+            if lookup_failed or lookup_truncated
+            else ""
+        )
+        return (
+            ReleaseSecurityAssessment(
+                outcome="verified_critical_high",
+                severity=verified_severity,
+                reason_code="verified_exposure",
+                reason=(
+                    f"Verified {verified_severity.title()} advisory {identifier} "
+                    f"affects {current_version} and is patched by {target_version}."
+                    f"{incomplete}"
+                ),
+                advisory_ids=advisory_ids,
+                lookup_truncated=lookup_truncated,
+            ),
+            links,
+        )
     if lookup_truncated:
         return (
             ReleaseSecurityAssessment(
@@ -486,24 +513,6 @@ def assess_release_security(
                 reason=(
                     "Security signals were found, but GitHub advisory evidence "
                     "could not be checked."
-                ),
-                advisory_ids=advisory_ids,
-            ),
-            links,
-        )
-    if verified:
-        verified_severity = _highest_advisory_severity(verified)
-        verified_ids = _advisory_ids([], verified)
-        current_version, target_version = _security_versions(context, info)
-        identifier = verified_ids[0] if verified_ids else "a GitHub advisory"
-        return (
-            ReleaseSecurityAssessment(
-                outcome="verified_critical_high",
-                severity=verified_severity,
-                reason_code="verified_exposure",
-                reason=(
-                    f"Verified {verified_severity.title()} advisory {identifier} "
-                    f"affects {current_version} and is patched by {target_version}."
                 ),
                 advisory_ids=advisory_ids,
             ),
@@ -736,7 +745,6 @@ def _advisory_package_matches(
         return False
     package_name = str(package.get("name") or "").lower()
     expected = {context.upstream_repo.lower(), context.image_repo.lower()}
-    expected.update(repo.rsplit("/", 1)[-1] for repo in tuple(expected))
     return bool(package_name and package_name in expected)
 
 
@@ -791,6 +799,8 @@ def _patched_versions(vulnerability: Mapping[str, Any]) -> list[tuple[int, int, 
     patched = vulnerability.get("first_patched_version")
     if isinstance(patched, Mapping):
         raw = str(patched.get("identifier") or "")
+    elif isinstance(patched, str):
+        raw = patched
     else:
         raw = str(vulnerability.get("patched_versions") or "")
     versions = [_strict_version(value.strip().removeprefix("=").strip()) for value in raw.split(",")]

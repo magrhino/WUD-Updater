@@ -58,6 +58,15 @@ def test_poll_skips_when_delivery_mode_on_demand(
     )
     _fake_release_refresh(monkeypatch)
     posted = _capture_discord_posts(monkeypatch)
+
+    def fail_trigger_lookup(*_args, **_kwargs):
+        raise AssertionError("ordinary on-demand items must not fetch WUD triggers")
+
+    monkeypatch.setattr(
+        notifications_module.web_wud_api,
+        "container_triggers",
+        fail_trigger_lookup,
+    )
     client = _client(tmp_path, _ENV)
     try:
         response = notifications_module.poll_wud_api_release_notifications(

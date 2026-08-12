@@ -496,9 +496,8 @@ def _notification_response(
         notes,
         config=notification_config,
         resend=payload.resend,
+        verified_only=verified_only,
     )
-    if verified_only:
-        items = [item for item in items if item.category == "security_urgent"]
     sendable_count = sum(1 for item in items if not item.skipped_reason)
     batches = _payload_batches(items, notification_config.mode)
     return ReleaseNotificationResponse(
@@ -722,6 +721,7 @@ def _notification_items(
     *,
     config: web_release_notification_state.ReleaseNotificationConfig,
     resend: bool,
+    verified_only: bool = False,
 ) -> tuple[list[ReleaseNotificationItem], list[str]]:
     candidates: list[ReleaseNotificationItem] = []
     identities: dict[int, web_release_notification_state.NotificationIdentity] = {}
@@ -731,6 +731,8 @@ def _notification_items(
         note = notes.get(target.target.line_no)
         if note is None:
             warnings.append(f"Line {target.target.line_no} has no release-note metadata.")
+            continue
+        if verified_only and note.security.outcome != "verified_critical_high":
             continue
         metadata = source.metadata_by_line.get(target.target.line_no)
         identity = web_release_notification_state.notification_identity(

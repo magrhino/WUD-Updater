@@ -98,10 +98,12 @@ Version proof deliberately accepts only `v?MAJOR.MINOR[.PATCH]`, exact-version
 lists, and comma-separated `<`, `<=`, `>`, `>=`, or `=` comparisons.
 Prereleases, wildcards, branches, suffixes, malformed values, and compound
 ranges are not treated as verified exposure. WUDup extracts at most eight
-advisory IDs and resolves at most four advisories per release. Capped,
-rate-limited, timed-out, or failed lookups become `Needs review`; retryable
-lookup failures use the 15-minute cache interval instead of the normal six-hour
-successful-release interval.
+advisory IDs and resolves at most four advisories per release. If no fetched
+advisory independently proves exposure, capped, rate-limited, timed-out, or
+failed lookups become `Needs review`; retryable lookup failures use the
+15-minute cache interval instead of the normal six-hour successful-release
+interval. If one advisory does prove exposure, the result remains verified and
+notes that additional lookup was incomplete.
 
 Verified Critical/High items are sent through the configured Discord webhook
 on the next scheduler cycle even when delivery mode is `on_demand`, and they
