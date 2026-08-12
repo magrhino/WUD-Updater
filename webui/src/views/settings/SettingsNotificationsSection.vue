@@ -1,8 +1,17 @@
 <script setup lang="ts">
 import { Bell, RotateCcw, Save, Send, Trash2 } from "@lucide/vue";
 import { NAlert, NButton, NFlex, NInput, NModal, NSelect, NSwitch } from "naive-ui";
+import type { Directive } from "vue";
 
 import { useManagedNotifications } from "./useManagedNotifications";
+
+const vSelectTriggerDescription: Directive<HTMLElement, string> = {
+  mounted(element, { value }) {
+    element
+      .querySelector<HTMLElement>(".n-base-selection-label")
+      ?.setAttribute("aria-describedby", value);
+  },
+};
 
 defineProps<{
   compact: boolean;
@@ -268,11 +277,13 @@ const {
               </div>
               <div class="settings-preference-controls">
                 <n-select
+                  v-select-trigger-description="
+                    'release-notification-summary-help release-notification-per-container-help'
+                  "
                   v-model:value="releaseNotificationModeValue"
                   :options="releaseNotificationModeOptions"
                   :disabled="notificationControlsDisabled || !releaseNotificationModeEditable"
                   aria-label="Release notification message grouping"
-                  aria-describedby="release-notification-summary-help release-notification-per-container-help"
                 />
                 <n-alert
                   v-if="releaseNotificationModeEntry?.disabled_reason"

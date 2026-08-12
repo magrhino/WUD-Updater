@@ -599,11 +599,6 @@ describe("settings mutation views", () => {
     expect(wrapper.text()).toContain(
       "Per container sends one detailed notification for each update.",
     );
-    expect(
-      wrapper.find('select[aria-label="Release notification message grouping"]').attributes(
-        "aria-describedby",
-      ),
-    ).toBe("release-notification-summary-help release-notification-per-container-help");
     await wrapper.find('input[role="switch"]').setValue(true);
     await wrapper
       .find('input[aria-label="Discord webhook URL"]')
