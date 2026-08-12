@@ -19,20 +19,20 @@ Configure a Discord webhook from Settings, or set `DISCORD_WEBHOOK` in the
 WUDup runtime environment. Environment webhooks override and disable the
 WebUI-managed webhook field.
 
-The Settings test-webhook action sends a representative digest through the
-same formatter used for real notifications. Use a private Discord test channel
-to verify the rendered message before enabling automatic delivery. Confirm that
-the resolved release appears beside mutable `latest`, the Jellyfin row is
-identified as an LSIO image update, Markdown links remain clickable without
-expanding into separate link-preview cards, and the rows remain readable in
-both desktop and narrow/mobile Discord clients.
+The Settings test-webhook action sends a representative summary notification
+through the same formatter used for real notifications. Use a private Discord
+test channel to verify the rendered message before enabling automatic delivery.
+Confirm that the resolved release appears beside mutable `latest`, the Jellyfin
+row is identified as an LSIO image update, Markdown links remain clickable
+without expanding into separate link-preview cards, and the rows remain readable
+in both desktop and narrow/mobile Discord clients.
 
 WUDup polls WUD's API for pending updates and builds Discord payloads in Python
 from the shared pending-line representation. It previews the notification
-summary without the webhook URL, posts a categorized digest split only when it
-reaches Discord's message limit, and records send history so duplicates follow
-WUDup's resend policy. Digest categories and reason labels come from WUD and
-release-note metadata; WUDup does not generate or summarize prose with AI.
+without the webhook URL, posts a categorized summary, and splits it only when
+it reaches Discord's message limit. Send history ensures duplicates follow
+WUDup's resend policy. The summary's categories and reason labels come from WUD
+and release-note metadata; WUDup does not generate or summarize prose with AI.
 Use the delivery mode setting to choose API polling on detection or on-demand
 sends from preview/apply flows.
 
@@ -46,7 +46,7 @@ If a legacy shell release-note callback is also configured, Discord can receive
 duplicate notifications for the same WUD update. Keep only one notification path
 enabled unless duplicate posts are intentional.
 
-Example digest notification:
+Example summary notification:
 
 ```text
 🧾 WUDup batch — 4 updates found
@@ -71,7 +71,7 @@ assigned by priority-ordered rules. Security evidence takes priority over
 breaking and SemVer cues, which remain visible as secondary context.
 Available release, upstream, changelog, or project links use compact labels.
 Raw digests and full release bodies remain in WUDup details instead of the
-digest copy.
+summary notification.
 
 ## Security Evidence
 
@@ -120,9 +120,14 @@ Release-note notification code never plans, applies, pulls, restarts, or
 otherwise installs an update. Review and apply remain explicit manual actions
 with the existing confirmation and safety checks.
 
-The optional `per_container` mode preserves the detailed embed format. In that
-mode, full verbosity appends the release body and truncates it to Discord's
-embed limits.
+Message grouping defaults to **Summary**, which sends one categorized batch and
+is unrelated to container image digests. WUDup retains the stored value
+`digest` for compatibility with existing WebUI settings, so no migration is
+required.
+
+Choose **Per container** for one detailed notification per update. Its stored
+value remains `per_container`; full verbosity appends the release body and
+truncates it to Discord's embed limits.
 
 ## Legacy Shell Callback
 

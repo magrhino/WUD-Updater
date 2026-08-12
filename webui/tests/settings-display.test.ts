@@ -11,6 +11,7 @@ import {
   settingRows,
   sourceLabel,
   sourceTagType,
+  RELEASE_NOTIFICATION_MODE_LABELS,
   RETAG_DIGEST_PINS_LABELS,
   THEME_PREFERENCE_LABELS,
 } from "../src/views/settings/settingsDisplay";
@@ -68,6 +69,16 @@ describe("settings display helpers", () => {
     expect(managedOptions(retagDigestPinsEntry, RETAG_DIGEST_PINS_LABELS)).toEqual([
       { label: "Use selected tags", value: "false" },
       { label: "Pin resolved digests", value: "true" },
+    ]);
+    const releaseNotificationModeEntry = settingsResponse().managed.find(
+      (entry) => entry.key === "release_notifications_mode",
+    );
+    expect(releaseNotificationModeEntry?.value).toBe("digest");
+    expect(
+      managedOptions(releaseNotificationModeEntry, RELEASE_NOTIFICATION_MODE_LABELS),
+    ).toEqual([
+      { label: "Summary", value: "digest" },
+      { label: "Per container", value: "per_container" },
     ]);
     expect(coreUpdateTourStatusLabel("completed")).toBe("Completed");
     expect(coreUpdateTourStepLabel("runs_history")).toBe("History");

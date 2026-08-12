@@ -99,7 +99,7 @@ export const RELEASE_NOTIFICATION_DELIVERY_MODE_LABELS: Record<
 };
 
 export const RELEASE_NOTIFICATION_MODE_LABELS: Record<string, string> = {
-  digest: "Digest",
+  digest: "Summary",
   per_container: "Per container",
 };
 

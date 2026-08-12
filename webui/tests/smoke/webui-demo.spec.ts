@@ -208,6 +208,14 @@ test("static demo mobile layout stays within the viewport", async ({ page }) => 
     ).first(),
   ).toBeVisible();
   await expect(page.getByText("Retag digest pins", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .locator('.n-select[aria-label="Release notification message grouping"]')
+      .locator(".n-base-selection-label"),
+  ).toHaveAttribute(
+    "aria-describedby",
+    "release-notification-summary-help release-notification-per-container-help",
+  );
   await expectTouchTargetHeight(page, "Download support bundle");
   await expectTouchTargetHeight(page, "Copy");
 
