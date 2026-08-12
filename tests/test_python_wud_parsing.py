@@ -7,10 +7,10 @@ from pathlib import Path
 from wudup.images import (
     drop_registry,
     image_matches_resolved_target,
-    image_tag,
-    image_with_tag,
-    image_with_digest,
     image_repo_ref,
+    image_tag,
+    image_with_digest,
+    image_with_tag,
     normalize_digest,
     strip_digest,
     tag_value_valid,

@@ -7,18 +7,16 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
-
-from wudup import web_auth as web_auth_module
-from wudup.web import create_app
-
-
 from tests.web_test_helpers import (
-    _web_env,
+    _assert_generic_auth_failed,
     _client,
     _csrf_headers,
     _setup_admin,
-    _assert_generic_auth_failed,
+    _web_env,
 )
+
+from wudup import web_auth as web_auth_module
+from wudup.web import create_app
 
 
 def _ipv4(octet1: int, octet2: int, octet3: int, octet4: int) -> str:

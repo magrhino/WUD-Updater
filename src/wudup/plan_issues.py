@@ -35,8 +35,8 @@ from .updater_models import (
     DigestUnpinUpdate,
     Match,
     TagStreamUpdate,
-    UpdateScope,
     UpdaterError,
+    UpdateScope,
 )
 from .updater_planning import _container_bind_mount_path_issue, _tag_updates
 from .wud_file import WudTarget

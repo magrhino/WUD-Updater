@@ -27,12 +27,12 @@ from fastapi.responses import JSONResponse
 from .db import DatabaseError, init_db, open_db, utc_timestamp
 from .web_metadata import json_object as _json_object
 from .web_models import (
+    PASSWORD_MIN_LENGTH,
     AdminRecoveryClaim,
     AuthSessionResponse,
     CsrfResponse,
     LoginRequest,
     LoginThrottleEntry,
-    PASSWORD_MIN_LENGTH,
     ResetAdminClaimRequest,
     SetupClaimRequest,
     SetupStatusResponse,

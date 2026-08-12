@@ -20,14 +20,13 @@ from .compose import ComposeCli, compose_discovery_message, compose_files_under
 from .config import COMPOSE_IGNORE_PATHS_ENV, ConfigError, parse_compose_ignore_paths
 from .container_identity import container_identity_candidates
 from .naming import env_value
-from .updates import (
-    load_configured_environ,
-)
 from .truenas import (
     DEFAULT_TRUENAS_STATUS_TIMEOUT,
     TRUENAS_MIDDLEWARE_MOUNT,
 )
-
+from .updates import (
+    load_configured_environ,
+)
 
 DEFAULT_CONTAINER_APP_DIR = Path("/app")
 DEFAULT_CONTAINER_DOCKER_BASE = "/host/docker"

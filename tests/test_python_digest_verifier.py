@@ -4,8 +4,15 @@ import unittest
 from collections.abc import Mapping
 from unittest import mock
 
-from wudup.command import CommandRunner
+from tests.update_from_wud_helpers import (
+    MANIFEST_INDEX_TYPE,
+    FakeDockerTestCase,
+    manifest_index,
+    manifest_index_digest,
+    verbose_manifest_item,
+)
 
+from wudup.command import CommandRunner
 from wudup.digest_verifier import (
     DigestVerifier,
     DockerManifestResolver,
@@ -18,14 +25,6 @@ from wudup.digest_verifier import (
 )
 from wudup.docker_cli import DockerCli
 from wudup.platforms import ImagePlatform
-from tests.update_from_wud_helpers import (
-    FakeDockerTestCase,
-    MANIFEST_INDEX_TYPE,
-    manifest_index,
-    manifest_index_digest,
-    verbose_manifest_item,
-)
-
 
 INDEX_TYPE = "application/vnd.oci.image.index.v1+json"
 MANIFEST_TYPE = "application/vnd.oci.image.manifest.v1+json"

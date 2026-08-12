@@ -33,7 +33,6 @@ from .db import (
 from .file_ops import OwnerConfig
 from .images import image_tag, repo_key
 from .plan_matching import pending_target_key
-from .tag_streams import pending_tag_stream_hint
 from .plans import (
     DryRunPlanCleanup,
     DryRunPlanCleanupItem,
@@ -42,6 +41,7 @@ from .plans import (
     build_unmatched_cleanup,
     resolve_pending_groups,
 )
+from .tag_streams import pending_tag_stream_hint
 from .updater_models import CompletedUpdateSelection
 from .web_auth import (
     _immediate_transaction,

@@ -15,9 +15,9 @@ from fastapi.testclient import TestClient
 from wudup import web_release_notifications as notifications_module
 from wudup import web_wud_api
 from wudup.db import (
-    open_db,
     init_db,
     insert_update_run,
+    open_db,
 )
 from wudup.release_notes import ReleaseNoteInfo as ReleaseNoteData
 from wudup.release_notes import ReleaseNoteLink as ReleaseNoteLinkData

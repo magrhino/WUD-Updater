@@ -21,14 +21,6 @@ from .images import (
     image_with_tag,
     normalize_digest,
 )
-from .updater_digest_pin import _digest_pin_match_tag
-from .updater_matching import (
-    _ordered_unique,
-    _scope_plan_label,
-    _stacks_to_update,
-)
-from .updater_lifecycle_scope import _UpdateScopeMixin
-from .updater_planning import _tag_updates
 from .plan_actions import render_plan_actions
 from .plan_digest_unpin import recover_digest_unpin_matches
 from .plan_identity import _file_sha256, _plan_id
@@ -60,8 +52,8 @@ from .plan_models import (
     DryRunPlanIssue,
     DryRunPlanLine,
     DryRunPlanSkipped,
-    DryRunPlanStack,
     DryRunPlanSource,
+    DryRunPlanStack,
     DryRunPlanSummary,
     DryRunPlanTagStreamUpdate,
     DryRunPlanTagUpdate,
@@ -75,6 +67,13 @@ from .plan_models import (
     UnmatchedDiagnostic,
 )
 from .tag_streams import pending_tag_stream_hint, plan_tag_stream_changes
+from .updater_digest_pin import _digest_pin_match_tag
+from .updater_lifecycle_scope import _UpdateScopeMixin
+from .updater_matching import (
+    _ordered_unique,
+    _scope_plan_label,
+    _stacks_to_update,
+)
 from .updater_models import (
     CompletedUpdateSelection,
     DigestPinLabelRewrite,
@@ -88,6 +87,7 @@ from .updater_models import (
     TagStreamUpdate,
     UpdateSelection,
 )
+from .updater_planning import _tag_updates
 from .wud_file import (
     ParsedWudFile,
     WudTarget,

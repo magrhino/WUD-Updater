@@ -16,8 +16,8 @@ from .updater_models import (
     DigestUnpinUpdate,
     ImageState,
     Match,
-    TagUpdate,
     TagStreamUpdate,
+    TagUpdate,
     UpdateScope,
 )
 

@@ -50,14 +50,17 @@ from .web_models import (
     WebSettings,
     WudApiStatus,
 )
-from .web_release_notes import release_note_source_resolver, release_notes_disabled_state
+from .web_release_notes import (
+    release_note_source_resolver,
+    release_notes_disabled_state,
+)
 from .web_release_notification_state import (
     RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DETECTION,
 )
 from .web_settings import (
+    effective_release_notes_enabled,
     effective_release_notification_config,
     effective_release_notification_webhook,
-    effective_release_notes_enabled,
 )
 from .wud_file import WudTarget, is_digest_target_line, parse_wud_text
 

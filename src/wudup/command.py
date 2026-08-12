@@ -5,8 +5,8 @@ from __future__ import annotations
 import codecs
 import errno
 import os
-import shutil
 import shlex
+import shutil
 import struct
 import subprocess
 import sys

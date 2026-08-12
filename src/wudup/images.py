@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 
-
 _SHELL_SPACE = " \t\n\r\v\f"
 _TAG_VALUE_RE = re.compile(r"^\w[\w.-]{0,127}$", re.ASCII)
 

@@ -5,18 +5,17 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-
-from wudup import web_state as state_module
-from wudup.db import (
-    open_db,
-    init_db,
-)
-
 from tests.web_test_helpers import (
     DEFAULT_CLAIM_PHRASE,
     _client,
     _csrf_headers,
     _setup_admin,
+)
+
+from wudup import web_state as state_module
+from wudup.db import (
+    init_db,
+    open_db,
 )
 
 

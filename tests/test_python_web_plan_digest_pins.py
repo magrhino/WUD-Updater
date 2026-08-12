@@ -1,17 +1,20 @@
 from __future__ import annotations
+
 from pathlib import Path
-from wudup import web_plans as plans_module
-from wudup.db import DatabaseError
+
+from tests.web_plan_test_helpers import _seed_known_digest_provenance
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
     _fake_docker_env,
     _make_fake_stack,
-    _write_fake_manifest,
     _manifest_index_digest,
+    _write_fake_manifest,
 )
 
-from tests.web_plan_test_helpers import _seed_known_digest_provenance
+from wudup import web_plans as plans_module
+from wudup.db import DatabaseError
+
 
 def test_plan_endpoint_uses_known_image_provenance_for_digest_unpin(
     tmp_path: Path,

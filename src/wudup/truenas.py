@@ -362,7 +362,7 @@ def _midclt_json(
 ) -> TrueNasCallResult:
     if not _has_command("midclt", environ):
         return TrueNasCallResult(ok=False, reason="midclt not available")
-    from .updates import UpdatesError, _parse_seconds, _format_os_error
+    from .updates import UpdatesError, _format_os_error, _parse_seconds
     try:
         timeout = _parse_seconds(
             status_timeout or DEFAULT_TRUENAS_STATUS_TIMEOUT,

@@ -21,7 +21,6 @@ from .config import DEFAULT_LOCK_TIMEOUT, DEFAULT_MAX_WAIT, DEFAULT_TIMEZONE
 from .doctor import run_doctor_from_namespace
 from .naming import CONFIG_DIR_NAME, DB_FILENAME, DISPLAY_NAME, TECHNICAL_NAME
 
-
 PROFILES = ("host", "webui", "helper", "hardened")
 WEB_EXPOSURES = ("loopback", "lan", "reverse-proxy")
 DEFAULT_WEB_PORT = "7417"

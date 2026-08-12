@@ -16,7 +16,6 @@ from .file_ops import OwnerConfig, OwnerConfigError, apply_configured_owner
 from .terminal import TerminalRenderer
 from .updater_models import UpdaterError
 
-
 _SAFE_COMPONENT_RE = re.compile(r"[^A-Za-z0-9._-]")
 
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")

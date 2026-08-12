@@ -6,12 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
-from wudup import web as web_module
-from wudup import web_scheduler
-from wudup import web_settings
-from wudup.db import init_db, open_db, upsert_known_image
-from wudup.digest_provenance import DigestTagProvenance
-
+from tests.web_scheduler_test_helpers import _auto_update_tick
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -19,12 +14,15 @@ from tests.web_test_helpers import (
     _fake_docker_env,
     _install_wud_api,
     _make_fake_stack,
-    _web_env,
     _wait_apply_job,
+    _web_env,
     _wud_api_container,
 )
 
-from tests.web_scheduler_test_helpers import _auto_update_tick
+from wudup import web as web_module
+from wudup import web_scheduler, web_settings
+from wudup.db import init_db, open_db, upsert_known_image
+from wudup.digest_provenance import DigestTagProvenance
 
 
 def test_auto_update_plan_requires_fresh_selected_metadata() -> None:

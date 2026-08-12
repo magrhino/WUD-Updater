@@ -44,7 +44,6 @@ from .web_models import (
     WebSettings,
 )
 
-
 EffectiveConfigLoader = Callable[[WebSettings], UpdaterConfig]
 _effective_config_loader: EffectiveConfigLoader | None = None
 _PLAN_CREATE_ERROR = "could not create plan"

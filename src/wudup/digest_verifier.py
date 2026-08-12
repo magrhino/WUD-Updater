@@ -15,7 +15,6 @@ from .docker_cli import DockerCli
 from .images import normalize_digest, strip_digest
 from .platforms import ImagePlatform, platform_from_parts, platform_value
 
-
 GHCR_REGISTRY = "ghcr.io"
 DOCKER_HUB_REGISTRIES = frozenset(
     ("docker.io", "index.docker.io", "registry-1.docker.io")

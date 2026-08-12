@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import subprocess
 
-
 from tests.updates_wrapper_helpers import UpdatesWrapperTestCase
+
 
 class UpdatesWrapperInvocationTests(UpdatesWrapperTestCase):
     def _write_pending_update(self) -> None:

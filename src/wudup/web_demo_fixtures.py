@@ -17,7 +17,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GENERATED_FIXTURE_PATH = REPO_ROOT / "webui" / "src" / "api" / "demo" / "generatedFixtures.ts"
 DEMO_PYTHON_RUNTIME_DETAIL = "Python 3.x"
@@ -29,20 +28,20 @@ STATIC_DEMO_READ_ONLY_MESSAGE = (
 )
 
 from wudup.db import (  # noqa: E402
-    open_db,
     init_db,
     insert_dependency_snooze,
-    insert_snooze,
     insert_pending_update,
+    insert_snooze,
     insert_update_event,
     insert_update_run,
+    open_db,
     upsert_known_image,
     upsert_tag_exclusion_rule,
 )
+from wudup.digest_provenance import DigestTagProvenance  # noqa: E402
 from wudup.digest_verifier import (  # noqa: E402
     ResolvedImageSubject,
 )
-from wudup.digest_provenance import DigestTagProvenance  # noqa: E402
 from wudup.platforms import ImagePlatform  # noqa: E402
 from wudup.security_scanner import (  # noqa: E402
     SecurityScanFinding,
@@ -51,7 +50,6 @@ from wudup.security_scanner import (  # noqa: E402
 from wudup.security_store import upsert_scan_result  # noqa: E402
 from wudup.security_subjects import PendingSecurityRequest  # noqa: E402
 from wudup.web_retag_identity import retag_target_id  # noqa: E402
-
 
 _WEB_FIXTURE_IMPORTS_READY = False
 Request: Any = None
@@ -94,6 +92,7 @@ def _ensure_web_fixture_imports() -> None:
         return
 
     from starlette.requests import Request as _Request
+
     from wudup import web as _web_app
     from wudup import web_auth as _web_auth
     from wudup import web_diagnostics as _web_diagnostics
@@ -113,11 +112,17 @@ def _ensure_web_fixture_imports() -> None:
     from wudup import web_wud_api as _web_wud_api
     from wudup.release_notes import (
         GitHubClient as _GitHubClient,
+    )
+    from wudup.release_notes import (
         refresh_release_notes as _refresh_release_notes,
     )
     from wudup.web_models import (
-        SelfUpdateResponse as _SelfUpdateResponse,
         SelfUpdatePlanResponse as _SelfUpdatePlanResponse,
+    )
+    from wudup.web_models import (
+        SelfUpdateResponse as _SelfUpdateResponse,
+    )
+    from wudup.web_models import (
         WebSettings as _WebSettings,
     )
 

@@ -8,9 +8,23 @@ from types import SimpleNamespace
 from unittest import mock
 
 import pytest
+from tests.db_helpers import db_connection
+from tests.web_test_helpers import (
+    WEB_DB_NAME,
+    _client,
+    _csrf_headers,
+    _install_wud_api,
+    _poll_until,
+    _wud_api_container,
+)
 
+from wudup import web_jobs, web_security
 from wudup.db import init_db, open_db, utc_timestamp
-from wudup.digest_verifier import DigestResolveResult, DigestVerifier, ResolvedImageSubject
+from wudup.digest_verifier import (
+    DigestResolveResult,
+    DigestVerifier,
+    ResolvedImageSubject,
+)
 from wudup.platforms import ImagePlatform, platform_value
 from wudup.security_scanner import SecurityScanFinding, SecurityScanResult
 from wudup.security_store import (
@@ -27,25 +41,15 @@ from wudup.security_subjects import (
     PendingSecurityOptions,
     PendingSecurityRequest,
 )
-from wudup import web_jobs, web_security
 from wudup.web_models import (
     SecurityScanFinding as SecurityScanFindingModel,
+)
+from wudup.web_models import (
     SecurityScanInfo,
     WebApplyJob,
 )
 from wudup.web_pending_sources import PendingSourceResult
 from wudup.wud_file import parse_wud_text
-
-from tests.db_helpers import db_connection
-from tests.web_test_helpers import (
-    WEB_DB_NAME,
-    _client,
-    _csrf_headers,
-    _install_wud_api,
-    _poll_until,
-    _wud_api_container,
-)
-
 
 VALID_DIGEST = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 DEFAULT_SECURITY_PLATFORM = ImagePlatform("linux", "amd64")

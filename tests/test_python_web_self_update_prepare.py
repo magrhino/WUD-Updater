@@ -1,21 +1,25 @@
 from __future__ import annotations
+
 import json
 from pathlib import Path
+
+from tests.web_test_helpers import (
+    _client,
+    _csrf_headers,
+    _fake_docker_calls,
+    _fake_docker_env,
+    _make_fake_stack,
+    _manifest_index_digest,
+    _self_update_payload,
+    _write_fake_image_after_pull,
+    _write_fake_manifest,
+)
+
 from wudup import web_self_update as self_update_module
 from wudup.db import (
     open_db,
 )
-from tests.web_test_helpers import (
-    _client,
-    _csrf_headers,
-    _self_update_payload,
-    _fake_docker_env,
-    _make_fake_stack,
-    _fake_docker_calls,
-    _write_fake_manifest,
-    _write_fake_image_after_pull,
-    _manifest_index_digest,
-)
+
 
 def test_self_update_get_reports_prepare_strategy_for_pinned_tag_rewrite_targets(
     tmp_path: Path,

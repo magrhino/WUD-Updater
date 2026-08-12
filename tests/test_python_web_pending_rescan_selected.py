@@ -4,10 +4,6 @@ import json
 import urllib.parse
 from pathlib import Path
 
-from wudup import web_wud_api
-from wudup.db import open_db
-from wudup.web_models import WebApplyJob
-
 from tests.web_test_helpers import _client, _csrf_headers
 from tests.web_wud_rescan_helpers import (
     container_payload,
@@ -15,6 +11,10 @@ from tests.web_wud_rescan_helpers import (
     rescan_lines_from_pending,
     rescan_payload,
 )
+
+from wudup import web_wud_api
+from wudup.db import open_db
+from wudup.web_models import WebApplyJob
 
 
 def test_pending_selected_rescan_maps_lines_to_wud_container_ids(

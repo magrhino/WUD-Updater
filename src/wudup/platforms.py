@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-
 _PLATFORM_COMPONENT_RE = re.compile(r"^[A-Za-z0-9_.-]+$", re.ASCII)
 
 

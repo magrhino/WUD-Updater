@@ -27,7 +27,6 @@ from .web_models import (
 from .web_runs import _event_from_row, _run_summary_from_row
 from .web_settings import _effective_config
 
-
 _SHA256_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 

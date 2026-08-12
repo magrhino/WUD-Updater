@@ -37,7 +37,6 @@ from .updater_models import (
     TagUpdate,
 )
 
-
 RESOLVED_TAG_MARKER_PREFIXES = (
     DIGEST_PIN_MARKER_PREFIX,
     LEGACY_DIGEST_PIN_MARKER_PREFIX,

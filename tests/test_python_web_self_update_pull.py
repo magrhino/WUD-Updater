@@ -1,19 +1,23 @@
 from __future__ import annotations
+
 import json
 import sqlite3
 from pathlib import Path
+
+from tests.web_test_helpers import (
+    _client,
+    _csrf_headers,
+    _fake_docker_calls,
+    _fake_docker_env,
+    _self_update_payload,
+    _write_fake_image_after_pull,
+)
+
 from wudup import web_self_update as self_update_module
 from wudup.db import (
     open_db,
 )
-from tests.web_test_helpers import (
-    _client,
-    _csrf_headers,
-    _self_update_payload,
-    _fake_docker_env,
-    _fake_docker_calls,
-    _write_fake_image_after_pull,
-)
+
 
 def test_self_update_endpoint_rejects_stale_confirmation(
     tmp_path: Path,

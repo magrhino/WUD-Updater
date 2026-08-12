@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 import sys
 
-
 from tests.updates_wrapper_helpers import UpdatesWrapperTestCase
+
 
 class UpdatesWrapperTruenasTests(UpdatesWrapperTestCase):
     def test_truenas_checks_skip_when_not_enabled(self) -> None:

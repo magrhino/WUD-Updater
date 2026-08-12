@@ -5,6 +5,7 @@ import unittest
 
 from wudup.updater_digest_pin import digest_pin_update_from_values
 
+
 class DigestPinUpdateFromValuesTests(unittest.TestCase):
     def test_produces_correct_fields(self) -> None:
         update = digest_pin_update_from_values(

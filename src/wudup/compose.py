@@ -13,7 +13,6 @@ from .command import CommandError, CommandResult, CommandRunner
 from .config import DEFAULT_COMPOSE_IGNORE_PATHS, format_compose_ignore_paths
 from .platforms import ImagePlatform, parse_platform
 
-
 COMPOSE_FILENAMES = frozenset(
     {
         "docker-compose.yml",

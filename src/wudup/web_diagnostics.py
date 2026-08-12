@@ -12,8 +12,7 @@ from typing import Any, Literal, get_args, get_origin
 from fastapi import HTTPException, Request
 from pydantic import BaseModel
 
-from . import __version__
-from . import web_jobs, web_pending, web_runs, web_settings, web_wud_api
+from . import __version__, web_jobs, web_pending, web_runs, web_settings, web_wud_api
 from .db import DatabaseError
 from .plans import DryRunPlan
 from .web_auth import (

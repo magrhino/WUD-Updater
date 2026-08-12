@@ -15,7 +15,6 @@ from . import __version__
 from .naming import DISPLAY_NAME, REPOSITORY, env_value
 from .terminal import TerminalRenderer
 
-
 LATEST_RELEASE_URL = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
 DEFAULT_RELEASE_TIMEOUT = 1.0
 

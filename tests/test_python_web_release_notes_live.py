@@ -5,11 +5,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
-from wudup.release_notes import OCI_SOURCE_LABEL
-
 from tests.web_test_helpers import _client
 
+from wudup.release_notes import OCI_SOURCE_LABEL
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("WUD_LIVE_DOCKER_TESTS") != "1",

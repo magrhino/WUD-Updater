@@ -12,9 +12,9 @@ from unittest import mock
 
 from wudup.command import CommandResult
 from wudup.doctor import (
+    REQUIRED_WUD_SCRIPTS,
     Doctor,
     DoctorOptions,
-    REQUIRED_WUD_SCRIPTS,
     _write_probe,
     doctor_result_from_namespace,
     run_doctor_from_namespace,

@@ -7,11 +7,15 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
+from tests.update_from_wud_helpers import (
+    UpdateFromWudRunnerTestCase,
+)
+
+from wudup import updater_audit
 from wudup.command import CommandRunner
 from wudup.compose import (
     ComposeStack,
 )
-from wudup import updater_audit
 from wudup.file_ops import OwnerConfig
 from wudup.updater import (
     UpdateFromWudRunner,
@@ -23,10 +27,6 @@ from wudup.updater_models import (
     UpdaterOptions,
 )
 
-
-from tests.update_from_wud_helpers import (
-    UpdateFromWudRunnerTestCase,
-)
 
 class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
     def test_audit_owner_failure_marks_started_run_failed(self) -> None:

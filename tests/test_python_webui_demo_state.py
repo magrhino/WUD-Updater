@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from tests.db_helpers import db_connection
+
 from wudup.platforms import ImagePlatform
 from wudup.security_subjects import PendingSecurityOptions, pending_security_context
 from wudup.web import load_web_settings

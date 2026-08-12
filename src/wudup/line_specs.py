@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 
-
 _SHELL_SPACE_RE = re.compile(r"\s", re.ASCII)
 _RANGE_RE = re.compile(r"^(\d+)-(\d+)$", re.ASCII)
 _NUMBER_RE = re.compile(r"^\d+$", re.ASCII)
