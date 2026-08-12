@@ -4,6 +4,18 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.59.0](https://github.com/magrhino/wudup/compare/v0.58.1...v0.59.0) (2026-08-12)
+
+
+### Features
+
+* **release-notes:** prioritize verified security updates ([#609](https://github.com/magrhino/wudup/issues/609)) ([609c846](https://github.com/magrhino/wudup/commit/609c84621a5c69165edaaa493ee213f919cfb97f))
+
+
+### Bug Fixes
+
+* **ui:** clarify release notification summary mode ([#608](https://github.com/magrhino/wudup/issues/608)) ([f457598](https://github.com/magrhino/wudup/commit/f4575988c855415166c26320460ef3bc27a25002))
+
 ## [0.58.1](https://github.com/magrhino/wudup/compare/v0.58.0...v0.58.1) (2026-08-12)
 
 
