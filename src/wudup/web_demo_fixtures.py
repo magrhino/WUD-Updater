@@ -156,6 +156,8 @@ DEMO_WUDUP_LATEST_IMAGE = "ghcr.io/magrhino/wudup:latest"
 DEMO_WUDUP_TARGET_TAG = "v0.16.1"
 DEMO_WUDUP_REPO_URL = "https://github.com/magrhino/wudup"
 DEMO_HOME_ASSISTANT_CORE_URL = "https://github.com/home-assistant/core"
+DEMO_HOME_ASSISTANT_ADVISORY = "GHSA-aaaa-bbbb-cccc"
+DEMO_WUDUP_ADVISORY = "GHSA-dddd-eeee-ffff"
 DEMO_OCI_SOURCE_LABEL = "org.opencontainers.image.source"
 DEMO_POSTGRES_IMAGE = "postgres:16"
 DEMO_POSTGRES_DIGEST = (
@@ -1292,6 +1294,9 @@ def _demo_github_json(url: str) -> object:
     if not url.startswith(marker):
         return {"message": "Not Found"}
     path = url.removeprefix(marker)
+    if "/security-advisories/" in path:
+        repo, advisory_id = path.split("/security-advisories/", 1)
+        return _demo_advisory_payload(repo, advisory_id)
     if "/releases/tags/" in path:
         repo, tag = path.split("/releases/tags/", 1)
         return _demo_release_payload(repo, tag)
@@ -1307,7 +1312,7 @@ def _demo_release_payload(repo: str, tag: str) -> dict[str, object]:
     releases = {
         ("home-assistant/core", "2026.5.3"): (
             "Home Assistant Core 2026.5.3",
-            "Patch release for the demo fixture.",
+            f"Security fix for {DEMO_HOME_ASSISTANT_ADVISORY}.",
         ),
         ("radarr/radarr", "v5.22.4"): (
             "Radarr v5.22.4",
@@ -1315,7 +1320,7 @@ def _demo_release_payload(repo: str, tag: str) -> dict[str, object]:
         ),
         ("magrhino/wudup", DEMO_WUDUP_TARGET_TAG): (
             f"WUDup {DEMO_WUDUP_TARGET_TAG}",
-            "Demo WUDup release notes.",
+            f"UPDATE ASAP: critical fix for {DEMO_WUDUP_ADVISORY}.",
         ),
         ("linuxserver/docker-radarr", "latest"): (
             "linuxserver/radarr 5.22.4",
@@ -1342,6 +1347,43 @@ def _demo_release_payload(repo: str, tag: str) -> dict[str, object]:
             "body": body,
         }
     return {"message": "Not Found"}
+
+
+def _demo_advisory_payload(repo: str, advisory_id: str) -> dict[str, object]:
+    normalized = (repo.lower(), advisory_id.upper())
+    advisories = {
+        ("home-assistant/core", DEMO_HOME_ASSISTANT_ADVISORY.upper()): (
+            "high",
+            "< 2026.5.3",
+            "2026.5.3",
+        ),
+        ("magrhino/wudup", DEMO_WUDUP_ADVISORY.upper()): (
+            "critical",
+            "< 0.16.1",
+            "0.16.1",
+        ),
+    }
+    match = advisories.get(normalized)
+    if match is None:
+        return {"message": "Not Found"}
+    severity, vulnerable_range, patched_version = match
+    return {
+        "ghsa_id": advisory_id.upper(),
+        "cve_id": "CVE-2026-9999",
+        "state": "published",
+        "severity": severity,
+        "published_at": DEMO_CREATED_AT,
+        "withdrawn_at": None,
+        "repository_url": f"https://api.github.com/repos/{repo}",
+        "html_url": f"https://github.com/{repo}/security/advisories/{advisory_id}",
+        "vulnerabilities": [
+            {
+                "package": {"ecosystem": "other", "name": repo.rsplit("/", 1)[-1]},
+                "vulnerable_version_range": vulnerable_range,
+                "patched_versions": patched_version,
+            }
+        ],
+    }
 
 
 def _sanitize_payload(value: Any, paths: dict[str, Path]) -> Any:

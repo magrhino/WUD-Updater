@@ -51,6 +51,33 @@ def qbittorrent_upstream_responses(composite_tag: str) -> dict[str, dict[str, st
     }
 
 
+def security_advisory(
+    *,
+    advisory_id: str = "GHSA-aaaa-bbbb-cccc",
+    severity: str = "high",
+    vulnerable_range: str = ">= 1.0.0, < 1.2.1",
+    patched_version: str = "1.2.1",
+    repo: str = "acme/app",
+    withdrawn_at: str | None = None,
+) -> dict[str, object]:
+    return {
+        "ghsa_id": advisory_id,
+        "cve_id": "CVE-2026-12345",
+        "state": "published",
+        "severity": severity,
+        "published_at": "2026-01-02T00:00:00Z",
+        "withdrawn_at": withdrawn_at,
+        "repository_url": f"https://api.github.com/repos/{repo}",
+        "vulnerabilities": [
+            {
+                "package": {"ecosystem": "pip", "name": repo.rsplit("/", 1)[-1]},
+                "vulnerable_version_range": vulnerable_range,
+                "patched_versions": patched_version,
+            }
+        ],
+    }
+
+
 class ReleaseNotesTests(unittest.TestCase):
     def test_shared_parity_spec_covers_repo_routing(self) -> None:
         ghcr = parity_case("ghcr_major")
@@ -167,6 +194,312 @@ class ReleaseNotesTests(unittest.TestCase):
 
         self.assertTrue(breaking)
         self.assertTrue(any("Major version" in reason for reason in reasons))
+
+    def test_security_assessment_skips_advisory_lookup_without_signal(self) -> None:
+        parsed = parse_wud_text("ghcr.io/acme/app:1.2.0 tag=1.2.1\n")
+        calls: list[str] = []
+
+        def fetch_json(url: str) -> object:
+            calls.append(url)
+            return {
+                "tag_name": "v1.2.1",
+                "name": "Routine patch",
+                "html_url": "https://github.com/acme/app/releases/tag/v1.2.1",
+                "body": "Routine bug fixes.",
+                "published_at": "2026-01-02T00:00:00Z",
+            }
+
+        with open_db(":memory:") as conn:
+            init_db(conn)
+            items = refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=GitHubClient(fetch_json=fetch_json),
+            )
+
+        self.assertEqual(items[0].security.outcome, "ordinary")
+        self.assertEqual(
+            calls,
+            ["https://api.github.com/repos/acme/app/releases/tags/v1.2.1"],
+        )
+
+    def test_security_assessment_verifies_exact_high_advisory_exposure(self) -> None:
+        parsed = parse_wud_text("ghcr.io/acme/app:1.2.0 tag=1.2.1\n")
+        advisory_id = "GHSA-aaaa-bbbb-cccc"
+
+        def fetch_json(url: str) -> object:
+            if "/releases/tags/" in url:
+                return {
+                    "tag_name": "v1.2.1",
+                    "name": "Security patch",
+                    "html_url": "https://github.com/acme/app/releases/tag/v1.2.1",
+                    "body": f"Fixes {advisory_id}.",
+                    "published_at": "2026-01-02T00:00:00Z",
+                }
+            if url.lower().endswith(
+                f"/security-advisories/{advisory_id.lower()}"
+            ):
+                return security_advisory(advisory_id=advisory_id)
+            raise AssertionError(f"unexpected GitHub URL: {url}")
+
+        with open_db(":memory:") as conn:
+            init_db(conn)
+            items = refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=GitHubClient(fetch_json=fetch_json),
+            )
+            cached = cached_release_notes(conn, parsed.targets, {})
+            metadata = json.loads(
+                conn.execute(
+                    "SELECT metadata_json FROM release_note_cache LIMIT 1"
+                ).fetchone()[0]
+            )
+
+        security = items[0].security
+        self.assertEqual(security.outcome, "verified_critical_high")
+        self.assertEqual(security.severity, "high")
+        self.assertEqual(
+            security.advisory_ids,
+            ["CVE-2026-12345", advisory_id.upper()],
+        )
+        self.assertEqual(cached[0].security, security)
+        self.assertEqual(metadata["security"]["outcome"], "verified_critical_high")
+        self.assertTrue(
+            any(link.kind == "security_advisory" for link in items[0].links)
+        )
+
+    def test_security_assessment_keeps_mutable_latest_unverified(self) -> None:
+        parsed = parse_wud_text(
+            f"ghcr.io/acme/app:latest sha256={'a' * 64}\n"
+        )
+        advisory_id = "GHSA-aaaa-bbbb-cccc"
+
+        def fetch_json(url: str) -> object:
+            if url.endswith("/releases/latest"):
+                return {
+                    "tag_name": "v1.2.1",
+                    "name": "UPDATE ASAP",
+                    "html_url": "https://github.com/acme/app/releases/tag/v1.2.1",
+                    "body": f"Critical fix for {advisory_id}.",
+                    "published_at": "2026-01-02T00:00:00Z",
+                }
+            return security_advisory(advisory_id=advisory_id)
+
+        with open_db(":memory:") as conn:
+            init_db(conn)
+            items = refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=GitHubClient(fetch_json=fetch_json),
+                target_tag_resolver=lambda _target: "latest",
+            )
+
+        self.assertEqual(items[0].security.outcome, "needs_review")
+        self.assertEqual(items[0].security.severity, "high")
+        self.assertEqual(items[0].security.reason_code, "exposure_unverified")
+        self.assertIn("could not be matched", items[0].security.reason)
+
+    def test_security_assessment_treats_lookup_failures_as_retryable_review(self) -> None:
+        parsed = parse_wud_text("ghcr.io/acme/app:1.2.0 tag=1.2.1\n")
+        advisory_id = "GHSA-aaaa-bbbb-cccc"
+        advisory_calls = 0
+
+        def fetch_json(url: str) -> object:
+            nonlocal advisory_calls
+            if "/releases/tags/" in url:
+                return {
+                    "tag_name": "v1.2.1",
+                    "name": "Security patch",
+                    "html_url": "https://github.com/acme/app/releases/tag/v1.2.1",
+                    "body": f"Fixes {advisory_id}.",
+                    "published_at": "2026-01-02T00:00:00Z",
+                }
+            advisory_calls += 1
+            raise TimeoutError("timed out")
+
+        client = GitHubClient(fetch_json=fetch_json)
+        with open_db(":memory:") as conn:
+            init_db(conn)
+            first = refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=client,
+                now="2026-01-02T00:00:00+00:00",
+            )
+            refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=client,
+                now="2026-01-02T00:14:59+00:00",
+            )
+            refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=client,
+                now="2026-01-02T00:15:00+00:00",
+            )
+
+        self.assertEqual(first[0].status, "ready")
+        self.assertEqual(first[0].security.outcome, "needs_review")
+        self.assertEqual(first[0].security.reason_code, "advisory_lookup_failed")
+        self.assertEqual(advisory_calls, 2)
+
+    def test_security_assessment_caps_advisory_lookups(self) -> None:
+        advisory_ids = [f"GHSA-aaaa-bbbb-{index:04d}" for index in range(5)]
+        context = release_note_contexts(
+            parse_wud_text("ghcr.io/acme/app:1.2.0 tag=1.2.1\n").targets,
+            {},
+        )[0]
+        info = ReleaseNoteInfo(
+            line_no=1,
+            status="ready",
+            provider="github",
+            image_repo="acme/app",
+            upstream_repo="acme/app",
+            release_tag="v1.2.1",
+            title="Security update",
+            body=" ".join(advisory_ids),
+        )
+        calls: list[str] = []
+
+        def fetch_json(url: str) -> object:
+            calls.append(url)
+            return security_advisory(advisory_id=url.rsplit("/", 1)[-1])
+
+        assessment, _links = release_notes_module.assess_release_security(
+            context,
+            info,
+            GitHubClient(fetch_json=fetch_json),
+        )
+
+        self.assertEqual(assessment.outcome, "needs_review")
+        self.assertTrue(assessment.lookup_truncated)
+        self.assertEqual(len(calls), 4)
+
+    def test_security_assessment_caps_cve_query_results(self) -> None:
+        cve_id = "CVE-2026-12345"
+        context = release_note_contexts(
+            parse_wud_text("ghcr.io/acme/app:1.2.0 tag=1.2.1\n").targets,
+            {},
+        )[0]
+        info = ReleaseNoteInfo(
+            line_no=1,
+            status="ready",
+            provider="github",
+            image_repo="acme/app",
+            upstream_repo="acme/app",
+            release_tag="v1.2.1",
+            title=f"Security update for {cve_id}",
+        )
+        calls: list[str] = []
+
+        def fetch_json(url: str) -> object:
+            calls.append(url)
+            return [
+                security_advisory(
+                    advisory_id=f"GHSA-aaaa-bbbb-{index:04d}",
+                )
+                for index in range(4)
+            ]
+
+        assessment, _links = release_notes_module.assess_release_security(
+            context,
+            info,
+            GitHubClient(fetch_json=fetch_json),
+        )
+
+        self.assertEqual(assessment.outcome, "needs_review")
+        self.assertTrue(assessment.lookup_truncated)
+        self.assertEqual(len(calls), 1)
+        self.assertIn("per_page=4", calls[0])
+
+    def test_security_assessment_never_verifies_incomplete_advisory_evidence(self) -> None:
+        context = release_note_contexts(
+            parse_wud_text("ghcr.io/acme/app:1.2.0 tag=1.2.1\n").targets,
+            {},
+        )[0]
+        keyword_info = ReleaseNoteInfo(
+            line_no=1,
+            status="ready",
+            provider="github",
+            image_repo="acme/app",
+            upstream_repo="acme/app",
+            release_tag="v1.2.1",
+            title="Critical security update",
+        )
+        calls: list[str] = []
+        keyword_assessment, _links = release_notes_module.assess_release_security(
+            context,
+            keyword_info,
+            GitHubClient(fetch_json=lambda url: calls.append(url)),
+        )
+        self.assertEqual(keyword_assessment.outcome, "needs_review")
+        self.assertEqual(keyword_assessment.severity, "unknown")
+        self.assertEqual(calls, [])
+
+        advisory_id = "GHSA-aaaa-bbbb-cccc"
+        advisory_info = ReleaseNoteInfo(
+            **{
+                **keyword_info.__dict__,
+                "body": advisory_id,
+            }
+        )
+        cases = (
+            security_advisory(advisory_id=advisory_id, severity="moderate"),
+            security_advisory(
+                advisory_id=advisory_id,
+                withdrawn_at="2026-01-03T00:00:00Z",
+            ),
+            security_advisory(
+                advisory_id=advisory_id,
+                vulnerable_range="1.2.x",
+            ),
+        )
+        for advisory in cases:
+            assessment, _links = release_notes_module.assess_release_security(
+                context,
+                advisory_info,
+                GitHubClient(fetch_json=lambda _url, value=advisory: value),
+            )
+            self.assertEqual(assessment.outcome, "needs_review")
+
+        not_found, _links = release_notes_module.assess_release_security(
+            context,
+            advisory_info,
+            GitHubClient(fetch_json=lambda _url: {"message": "Not Found"}),
+        )
+        self.assertEqual(not_found.outcome, "needs_review")
+        self.assertEqual(not_found.reason_code, "advisory_unresolved")
+
+        def mismatched_advisory(url: str) -> object:
+            if "/security-advisories/" in url:
+                return {"message": "Not Found"}
+            return security_advisory(advisory_id=advisory_id, repo="other/project")
+
+        mismatch, _links = release_notes_module.assess_release_security(
+            context,
+            advisory_info,
+            GitHubClient(fetch_json=mismatched_advisory),
+        )
+        self.assertEqual(mismatch.outcome, "needs_review")
+        self.assertEqual(mismatch.reason_code, "exposure_unverified")
+
+    def test_security_version_evidence_rejects_unsupported_ranges(self) -> None:
+        version = (1, 2, 0)
+
+        self.assertTrue(
+            release_notes_module._version_in_range(version, ">= 1.0.0, < 1.2.1")
+        )
+        self.assertTrue(release_notes_module._version_in_range(version, "1.2.0, 1.2.1"))
+        self.assertFalse(release_notes_module._version_in_range(version, "1.2.x"))
+        self.assertFalse(release_notes_module._version_in_range(version, "1.2.0 || 2.0.0"))
 
     def test_ghcr_release_metadata_marks_breaking_major_bump(self) -> None:
         parsed = parse_wud_text("ghcr.io/acme/app:1.0.0\n")

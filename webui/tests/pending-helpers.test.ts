@@ -314,6 +314,14 @@ describe("pending helper modules", () => {
       line_no: 1,
       breaking: true,
       breaking_reasons: ["Major version update."],
+      security: {
+        outcome: "verified_critical_high",
+        severity: "critical",
+        reason_code: "verified_exposure",
+        reason: "Verified Critical advisory affects 1.2.3 and is patched by 2.0.0.",
+        advisory_ids: ["GHSA-AAAA-BBBB-CCCC"],
+        lookup_truncated: false,
+      },
     });
     const noReleaseNote = releaseNoteInfo({
       line_no: 4,
@@ -336,6 +344,7 @@ describe("pending helper modules", () => {
       snoozes: [snooze({ service_key: "media/app" })],
     }).map((cue) => cue.label);
     expect(majorLabels).toContain("Major bump");
+    expect(majorLabels).toContain("Critical security update");
     expect(majorLabels).toContain("Possible breaking");
     expect(majorLabels).toContain("Snoozed");
     expect(majorLabels).toContain("Auto-update");
@@ -573,6 +582,26 @@ describe("pending helper modules", () => {
       expect.objectContaining({
         key: "security-unknown",
         label: "Security unknown",
+        type: "warning",
+      }),
+    );
+    expect(
+      securityCuesFor(null, {
+        releaseNote: releaseNoteInfo({
+          security: {
+            outcome: "verified_critical_high",
+            severity: "high",
+            reason_code: "verified_exposure",
+            reason: "Structured advisory evidence matches this update.",
+            advisory_ids: ["GHSA-AAAA-BBBB-CCCC"],
+            lookup_truncated: false,
+          },
+        }),
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        key: "security-unknown",
+        label: "Image scan unavailable",
         type: "warning",
       }),
     );

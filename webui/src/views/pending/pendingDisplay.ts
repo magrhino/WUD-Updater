@@ -142,6 +142,15 @@ export function itemsBreakingCount(
   return items.filter((item) => releaseNoteFor(item)?.breaking).length;
 }
 
+export function itemsVerifiedSecurityCount(
+  items: PendingGroupedItem[],
+  releaseNoteFor: (item: PendingGroupedItem) => ReleaseNoteInfo | null,
+): number {
+  return items.filter(
+    (item) => releaseNoteFor(item)?.security?.outcome === "verified_critical_high",
+  ).length;
+}
+
 export function groupedItemServices(item: PendingGroupedItem): string {
   return item.services.length ? item.services.join(", ") : "stack-level";
 }

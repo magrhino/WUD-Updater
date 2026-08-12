@@ -136,6 +136,7 @@ def api_refresh_release_notes(request: Request) -> ReleaseNotesResponse:
                 source_resolver=context.source_resolver,
                 target_tag_resolver=context.target_tag_resolver,
                 redact_error=lambda value: _redact_sensitive_text(settings, value),
+                force=True,
             )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(

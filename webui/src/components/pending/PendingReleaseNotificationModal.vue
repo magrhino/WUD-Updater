@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { RotateCcw, Send } from "@lucide/vue";
+import { AlertTriangle, RotateCcw, Send, ShieldAlert } from "@lucide/vue";
 import { NAlert, NButton, NFlex, NModal, NTag } from "naive-ui";
 
 import type {
@@ -52,6 +52,12 @@ const resendPolicyLabel = computed(() => {
   }
   return "Remote changes";
 });
+const notificationItems = computed(() =>
+  [...(props.response?.items ?? [])].sort((left, right) =>
+    Number(right.security?.outcome === "verified_critical_high") -
+    Number(left.security?.outcome === "verified_critical_high"),
+  ),
+);
 
 function handleModalShowUpdate(value: boolean): void {
   if (!value) {
@@ -66,6 +72,14 @@ function notificationDetail(item: ReleaseNotificationItem): string {
   return item.notification_last_sent_at
     ? `Last sent ${item.notification_last_sent_at}`
     : "";
+}
+
+function securityLabel(item: ReleaseNotificationItem): string {
+  if (item.security?.outcome === "verified_critical_high") {
+    const severity = item.security.severity === "critical" ? "Critical" : "High";
+    return `${severity} security`;
+  }
+  return item.security?.outcome === "needs_review" ? "Security review" : "";
 }
 </script>
 
@@ -206,17 +220,17 @@ function notificationDetail(item: ReleaseNotificationItem): string {
       </section>
 
       <section
-        v-if="response?.items.length"
+        v-if="notificationItems.length"
         class="preflight-impact preflight-block"
         aria-labelledby="release-items-title"
       >
         <div class="preflight-impact-heading">
           <strong id="release-items-title">Notifications</strong>
-          <n-tag size="small">{{ pluralize(response.items.length, "update") }}</n-tag>
+          <n-tag size="small">{{ pluralize(notificationItems.length, "update") }}</n-tag>
         </div>
         <div class="compact-list">
           <div
-            v-for="item in response.items"
+            v-for="item in notificationItems"
             :key="`${item.line_no}-${item.image}`"
             class="list-row plan-line-row"
           >
@@ -233,9 +247,27 @@ function notificationDetail(item: ReleaseNotificationItem): string {
                 {{ notificationDetail(item) }}
               </template>
             </em>
-            <n-tag size="small" :type="notificationStatusType(item.notification_status)">
-              {{ notificationStatusLabel(item.notification_status) }}
-            </n-tag>
+            <span class="release-notification-tags">
+              <n-tag
+                v-if="securityLabel(item)"
+                size="small"
+                :type="item.security.outcome === 'verified_critical_high' ? 'error' : 'warning'"
+                :aria-label="securityLabel(item)"
+              >
+                <template #icon>
+                  <ShieldAlert
+                    v-if="item.security.outcome === 'verified_critical_high'"
+                    :size="14"
+                    aria-hidden="true"
+                  />
+                  <AlertTriangle v-else :size="14" aria-hidden="true" />
+                </template>
+                {{ securityLabel(item) }}
+              </n-tag>
+              <n-tag size="small" :type="notificationStatusType(item.notification_status)">
+                {{ notificationStatusLabel(item.notification_status) }}
+              </n-tag>
+            </span>
           </div>
         </div>
       </section>
@@ -304,5 +336,18 @@ function notificationDetail(item: ReleaseNotificationItem): string {
   line-height: 1.5;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.release-notification-tags {
+  display: flex;
+  grid-column: 2 / -1;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@media (--wud-compact) {
+  .release-notification-tags {
+    grid-column: 1;
+  }
 }
 </style>

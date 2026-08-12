@@ -21,7 +21,10 @@ from wudup import (
 from wudup import (
     web_release_notifications as notifications_module,
 )
-from wudup.db import open_db
+from wudup.db import init_db, insert_snooze, open_db
+from wudup.release_notes import ReleaseNoteInfo as ReleaseNoteData
+from wudup.release_notes import ReleaseNoteLink as ReleaseNoteLinkData
+from wudup.release_notes import ReleaseSecurityAssessment
 from wudup.web_release_notification_state import (
     RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DEMAND,
 )
@@ -65,6 +68,77 @@ def test_poll_skips_when_delivery_mode_on_demand(
 
     assert response is None
     assert posted == []
+
+
+def test_poll_sends_verified_security_notification_in_on_demand_mode(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _store_web_setting(
+        tmp_path,
+        "release_notifications.delivery_mode",
+        RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DEMAND,
+    )
+    _install_wud_api(
+        monkeypatch,
+        containers=[_wud_api_container(name="app")],
+        triggers={"docker.local.app": (200, [])},
+    )
+
+    def verified_release(_conn, targets, _environ, **_kwargs):
+        return [
+            ReleaseNoteData(
+                line_no=target.line_no,
+                status="ready",
+                provider="github",
+                image_repo="acme/app",
+                upstream_repo="acme/app",
+                release_tag="2.0.0",
+                title="Security patch",
+                links=[
+                    ReleaseNoteLinkData(
+                        label="GHSA-aaaa-bbbb-cccc",
+                        url="https://github.com/advisories/GHSA-aaaa-bbbb-cccc",
+                        kind="security_advisory",
+                    )
+                ],
+                security=ReleaseSecurityAssessment(
+                    outcome="verified_critical_high",
+                    severity="critical",
+                    reason_code="verified_exposure",
+                    reason="Verified Critical advisory affects 1.0 and is patched by 2.0.",
+                    advisory_ids=["GHSA-aaaa-bbbb-cccc"],
+                ),
+            )
+            for target in targets
+        ]
+
+    monkeypatch.setattr(
+        notifications_module,
+        "refresh_release_notes",
+        verified_release,
+    )
+    posted = _capture_discord_posts(monkeypatch)
+    client = _client(tmp_path, _ENV)
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        init_db(conn)
+        insert_snooze(
+            conn,
+            service_key="app",
+            snoozed_until="2099-01-01T00:00:00+00:00",
+            reason="demo maintenance",
+        )
+    try:
+        response = notifications_module.poll_wud_api_release_notifications(
+            client.app.state.web_settings,
+        )
+    finally:
+        _shutdown(client)
+
+    assert response is not None
+    assert response.sent is True
+    assert response.items[0].category == "security_urgent"
+    assert "Critical/High security" in posted[0][1]["content"]
 
 
 def test_poll_sends_wud_api_notifications_without_trigger_token(

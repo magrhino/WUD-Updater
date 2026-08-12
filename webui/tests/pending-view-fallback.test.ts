@@ -749,6 +749,26 @@ describe("pending view fallback and release notes", () => {
       releaseNoteInfo({
         breaking: true,
         breaking_reasons: ["Major version changes from 1 to 2."],
+        security: {
+          outcome: "verified_critical_high",
+          severity: "high",
+          reason_code: "verified_exposure",
+          reason: "Verified High advisory GHSA-AAAA-BBBB-CCCC affects 1.0.0 and is patched by 2.0.0.",
+          advisory_ids: ["GHSA-AAAA-BBBB-CCCC"],
+          lookup_truncated: false,
+        },
+        links: [
+          {
+            label: "GitHub release",
+            url: "https://github.com/acme/app/releases/tag/v2.0.0",
+            kind: "github_release",
+          },
+          {
+            label: "GHSA-AAAA-BBBB-CCCC",
+            url: "https://github.com/advisories/GHSA-AAAA-BBBB-CCCC",
+            kind: "security_advisory",
+          },
+        ],
       }),
     ]);
     vi.spyOn(updates, "loadPending").mockResolvedValue();
@@ -761,6 +781,9 @@ describe("pending view fallback and release notes", () => {
 
     expect(wrapper.text()).toContain("GitHub release");
     expect(wrapper.text()).toContain("Possible breaking change");
+    expect(wrapper.text()).toContain("Verified High security update");
+    expect(wrapper.text()).toContain("1 verified security update");
+    expect(wrapper.text()).toContain("Verified High advisory GHSA-AAAA-BBBB-CCCC");
     expect(wrapper.text()).toContain("Read changelog");
     expect(loadChangelog).not.toHaveBeenCalled();
     const link = wrapper.find(
@@ -769,6 +792,40 @@ describe("pending view fallback and release notes", () => {
     expect(link.exists()).toBe(true);
     expect(link.attributes("target")).toBe("_blank");
     expect(link.attributes("rel")).toBe("noopener noreferrer");
+    const advisoryLink = wrapper.find(
+      'a[href="https://github.com/advisories/GHSA-AAAA-BBBB-CCCC"]',
+    );
+    expect(advisoryLink.attributes("target")).toBe("_blank");
+    expect(advisoryLink.attributes("rel")).toBe("noopener noreferrer");
+    expect(
+      wrapper.find('[role="status"][aria-label="Verified High security update"]').exists(),
+    ).toBe(true);
+  });
+
+  it("distinguishes security signals that still need review", () => {
+    const { pinia, settings, updates } = setupStores(false);
+    updates.pending = pendingResponse();
+    updates.releaseNotes = releaseNotesResponse([
+      releaseNoteInfo({
+        security: {
+          outcome: "needs_review",
+          severity: "critical",
+          reason_code: "exposure_unverified",
+          reason: "Critical advisory found; running latest version could not be matched.",
+          advisory_ids: ["GHSA-DDDD-EEEE-FFFF"],
+          lookup_truncated: false,
+        },
+      }),
+    ]);
+    mockPendingLifecycle(settings, updates);
+
+    const wrapper = mountPendingView(pinia);
+
+    expect(wrapper.text()).toContain("Security update needs review");
+    expect(wrapper.text()).toContain(
+      "Critical advisory found; running latest version could not be matched.",
+    );
+    expect(wrapper.text()).not.toContain("Verified Critical security update");
   });
 
   it("loads changelog notes on demand and includes them in pending search", async () => {

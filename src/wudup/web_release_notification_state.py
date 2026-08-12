@@ -90,6 +90,14 @@ def notification_identity(
     metadata_hash_payload = _metadata_hash_payload(metadata)
     if metadata_hash_payload:
         hash_payload["metadata"] = metadata_hash_payload
+    security_payload = _verified_security_payload(
+        target,
+        note,
+        metadata_payload,
+    )
+    if security_payload:
+        stored_payload["security"] = security_payload
+        hash_payload["security"] = security_payload
     canonical = json.dumps(hash_payload, sort_keys=True, separators=(",", ":"))
     return NotificationIdentity(
         notification_key=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
@@ -373,7 +381,7 @@ def _metadata_payload(metadata: Any | None) -> dict[str, object]:
         return _json_mapping(metadata)
 
     payload: dict[str, object] = {}
-    for name in ("local_digest", "remote_tag", "remote_digest", "link"):
+    for name in ("local_tag", "local_digest", "remote_tag", "remote_digest", "link"):
         value = _value(metadata, name)
         if value:
             payload[name] = value
@@ -415,6 +423,35 @@ def _metadata_remote_value(metadata: Mapping[str, object]) -> str:
     if remote_tag and remote_digest:
         return f"{remote_tag}@{remote_digest}"
     return remote_tag or remote_digest
+
+
+def _verified_security_payload(
+    target: Any,
+    note: Any,
+    metadata: Mapping[str, object],
+) -> dict[str, object]:
+    security = getattr(note, "security", None)
+    if str(getattr(security, "outcome", "") or "") != "verified_critical_high":
+        return {}
+    advisory_ids = getattr(security, "advisory_ids", [])
+    stable_ids = (
+        sorted({str(value).upper() for value in advisory_ids if str(value)})
+        if isinstance(advisory_ids, list)
+        else []
+    )
+    return {
+        "advisory_ids": stable_ids,
+        "severity": str(getattr(security, "severity", "unknown") or "unknown"),
+        "release_tag": _value(note, "release_tag"),
+        "current_version": _metadata_value(metadata, "local_tag")
+        or _value(target, "tag_token"),
+        "local_digest": _metadata_value(metadata, "local_digest"),
+        "target_version": _metadata_value(metadata, "remote_tag")
+        or _value(target, "desired_tag")
+        or _value(note, "release_tag"),
+        "remote_digest": _metadata_value(metadata, "remote_digest")
+        or _value(target, "digest"),
+    }
 
 
 def _value(source: Any, name: str) -> str:

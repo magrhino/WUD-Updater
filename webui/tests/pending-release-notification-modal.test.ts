@@ -35,4 +35,45 @@ describe("PendingReleaseNotificationModal", () => {
     expect(wrapper.text()).toContain("Message 1 of 2");
     expect(wrapper.text()).toContain("Message 2 of 2");
   });
+
+  it("orders and labels verified security updates before ordinary items", () => {
+    const base = releaseNotificationResponse().items[0];
+    const wrapper = mount(PendingReleaseNotificationModal, {
+      props: {
+        error: "",
+        loading: false,
+        response: releaseNotificationResponse({
+          count: 2,
+          sendable_count: 2,
+          items: [
+            { ...base, line_no: 2, title: "Routine update" },
+            {
+              ...base,
+              line_no: 1,
+              title: "Urgent update",
+              category: "security_urgent",
+              security: {
+                outcome: "verified_critical_high",
+                severity: "critical",
+                reason_code: "verified_exposure",
+                reason: "Verified exposure.",
+                advisory_ids: ["GHSA-AAAA-BBBB-CCCC"],
+                lookup_truncated: false,
+              },
+            },
+          ],
+        }),
+        sendDisabled: false,
+        sendDisabledMessage: "",
+        show: true,
+      },
+      global: { stubs: naiveStubs },
+    });
+
+    expect(
+      wrapper.findAll(".plan-line-row strong").map((node) => node.text()),
+    ).toEqual(["Urgent update", "Routine update"]);
+    expect(wrapper.text()).toContain("Critical security");
+    expect(wrapper.text()).toContain("Not notified");
+  });
 });

@@ -596,6 +596,28 @@ export interface ReleaseNoteClassification {
   target: ReleaseNoteClassificationTag;
 }
 
+export type ReleaseSecurityOutcome =
+  | "verified_critical_high"
+  | "needs_review"
+  | "ordinary";
+
+export type ReleaseSecuritySeverity =
+  | "critical"
+  | "high"
+  | "moderate"
+  | "low"
+  | "unknown"
+  | "none";
+
+export interface ReleaseSecurityAssessment {
+  outcome: ReleaseSecurityOutcome;
+  severity: ReleaseSecuritySeverity;
+  reason_code: string;
+  reason: string;
+  advisory_ids: string[];
+  lookup_truncated: boolean;
+}
+
 export interface ReleaseNoteInfo {
   line_no: number;
   status: string;
@@ -612,6 +634,7 @@ export interface ReleaseNoteInfo {
   error: string;
   body?: string;
   classification?: ReleaseNoteClassification;
+  security: ReleaseSecurityAssessment;
   notification_key: string;
   notification_status: string;
   notification_last_sent_at: string;
@@ -656,9 +679,10 @@ export interface ReleaseNotificationItem {
   upstream_repo: string;
   current_version: string;
   target_version: string;
-  category: "needs_review" | "worth_noting" | "routine";
+  category: "security_urgent" | "needs_review" | "worth_noting" | "routine";
   reason_code: string;
   reason_label: string;
+  security: ReleaseSecurityAssessment;
   links: ReleaseNoteLink[];
   triggers: ReleaseNotificationTrigger[];
   notification_key: string;
