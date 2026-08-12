@@ -750,7 +750,7 @@ def _refresh_api_pending_source_after_apply(
     message = "WUD API pending state refreshed."
     try:
         result = web_wud_api.watch_containers(settings, container_ids)
-    except Exception:
+    except Exception:  # Best-effort refresh must not fail a successful apply.
         LOGGER.exception("WUD API pending refresh failed")
         status = "skipped"
         message = "WUD API pending refresh skipped."
