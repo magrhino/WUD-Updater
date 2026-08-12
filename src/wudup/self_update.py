@@ -120,9 +120,7 @@ def self_update_image_variant_known(current_image: str) -> bool:
 
     if not current_image or _BARE_IMAGE_ID_RE.fullmatch(current_image):
         return False
-    if "@sha256:" in current_image and not _image_reference_tag(current_image):
-        return False
-    return True
+    return "@sha256:" not in current_image or bool(_image_reference_tag(current_image))
 
 
 def release_self_update_target(

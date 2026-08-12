@@ -47,7 +47,7 @@ class _LifecycleRecreateMixin:
     def _prepare_for_recreate(self, state: _StackUpdateState) -> _StopResult:
         stack = state.stack
         if self.options.mode == "pause":
-            self.log.warn(
+            self.log.warning(
                 f"[{stack.name}] Mode pause is deprecated; pausing before recreate and unpausing before health check"
             )
             try:
@@ -58,11 +58,11 @@ class _LifecycleRecreateMixin:
                     project_directory=stack.project_directory,
                 )
             except CommandError:
-                self.log.warn(f"[{stack.name}] Pause failed; continuing with live recreate")
+                self.log.warning(f"[{stack.name}] Pause failed; continuing with live recreate")
         elif self.options.mode == "stop":
             try:
                 if state.service_scoped:
-                    self.log.warn(
+                    self.log.warning(
                         f"[{stack.name}] Stopping affected service(s): {state.stop_services_label}"
                     )
                     self.compose.stop(
@@ -73,11 +73,11 @@ class _LifecycleRecreateMixin:
                     )
                 else:
                     if state.stop_services_label:
-                        self.log.warn(
+                        self.log.warning(
                             f"[{stack.name}] Stopping stack service(s): {state.stop_services_label}"
                         )
                     else:
-                        self.log.warn(f"[{stack.name}] Stopping stack")
+                        self.log.warning(f"[{stack.name}] Stopping stack")
                     self.compose.stop(
                         stack.directory,
                         stack.file,
@@ -85,7 +85,7 @@ class _LifecycleRecreateMixin:
                         project_directory=stack.project_directory,
                     )
             except CommandError as exc:
-                self.log.warn(
+                self.log.warning(
                     f"[{stack.name}] Stop failed; attempting up for recovery, but this stack will not be marked successful"
                 )
                 return _StopResult(True, exc)
@@ -167,7 +167,7 @@ class _LifecycleRecreateMixin:
         if self.options.mode != "pause":
             return up_result
 
-        self.log.warn(f"[{stack.name}] Unpausing before health check")
+        self.log.warning(f"[{stack.name}] Unpausing before health check")
         try:
             self.compose.unpause(
                 stack.directory,

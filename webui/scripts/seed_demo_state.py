@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Create disposable local demo state for WebUI development."""
 
 from __future__ import annotations

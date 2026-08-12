@@ -863,9 +863,11 @@ def _record_login_failure(
         )
         entry = throttle.get(key)
         if entry is None:
-            if len(throttle) >= _login_throttle_max_entries():
-                if not _evict_login_throttle_entry(throttle, now):
-                    return
+            if (
+                len(throttle) >= _login_throttle_max_entries()
+                and not _evict_login_throttle_entry(throttle, now)
+            ):
+                return
             entry = LoginThrottleEntry(
                 failures=1,
                 first_failed_at=now,
@@ -1509,12 +1511,12 @@ def _print_setup_claim(
 ) -> None:
     setup_url = _setup_url(settings, host=host, port=port, claim=claim)
     print("WUDup WebUI is not configured.", file=sys.stderr)
-    print("", file=sys.stderr)
+    print(file=sys.stderr)
     print("Open this one-time setup link to create the first admin account:", file=sys.stderr)
-    print("", file=sys.stderr)
+    print(file=sys.stderr)
     print(setup_url, file=sys.stderr)
     if host in {"0.0.0.0", "::"} and not settings.public_origin:
-        print("", file=sys.stderr)
+        print(file=sys.stderr)
         print(
             "Set WUD_WEB_PUBLIC_ORIGIN when exposing the WebUI through a "
             "LAN address or reverse proxy.",

@@ -8,7 +8,7 @@ import urllib.error
 import urllib.parse
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Optional, TypeVar
+from typing import TypeVar
 
 from fastapi.testclient import TestClient
 
@@ -377,7 +377,7 @@ def _setup_admin(
     client: TestClient,
     *,
     username: str = "admin",
-    password: Optional[str] = None,
+    password: str | None = None,
 ) -> None:
     if password is None:
         password = DEFAULT_CLAIM_PHRASE

@@ -277,8 +277,10 @@ class WebuiDemoStateTests(unittest.TestCase):
                 "ghcr.io/magrhino/wudup:latest",
                 "v0.16.1",
                 "latest",
-                "ghcr.io/magrhino/wudup@sha256:"
-                "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                (
+                    "ghcr.io/magrhino/wudup@sha256:"
+                    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                ),
             ),
         )
         self.assertIsNotNone(security_scan)
@@ -286,8 +288,10 @@ class WebuiDemoStateTests(unittest.TestCase):
             security_scan[:5],
             (
                 seeded_scan_ref,
-                "sha256:"
-                "1111111111111111111111111111111111111111111111111111111111111111",
+                (
+                    "sha256:"
+                    "1111111111111111111111111111111111111111111111111111111111111111"
+                ),
                 "linux/amd64",
                 "complete",
                 "findings",

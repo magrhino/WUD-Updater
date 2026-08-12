@@ -331,11 +331,12 @@ def detect_breaking(body: str, current_tag: str, release_tag: str) -> tuple[bool
         reasons.append("Release notes mention a migration, incompatibility, or removal.")
     current_major = _semver_major(current_tag)
     release_major = _semver_major(release_tag)
-    if current_major is not None and release_major is not None:
-        if release_major > current_major:
-            reasons.append(
-                f"Major version changes from {current_major} to {release_major}."
-            )
+    if (
+        current_major is not None
+        and release_major is not None
+        and release_major > current_major
+    ):
+        reasons.append(f"Major version changes from {current_major} to {release_major}.")
     return bool(reasons), reasons
 
 

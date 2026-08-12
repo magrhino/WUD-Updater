@@ -56,8 +56,8 @@ class StaticResolver:
         self.calls: list[tuple[str, str, str]] = []
 
     def fetch(self, image: object, reference: str) -> ManifestDocument:
-        registry = getattr(image, "registry")
-        repo = getattr(image, "repo")
+        registry = image.registry
+        repo = image.repo
         self.calls.append((registry, repo, reference))
         try:
             return self.documents[(registry, repo, reference)]
@@ -70,8 +70,8 @@ class FailingResolver:
         self.calls: list[tuple[str, str, str]] = []
 
     def fetch(self, image: object, reference: str) -> ManifestDocument:
-        registry = getattr(image, "registry")
-        repo = getattr(image, "repo")
+        registry = image.registry
+        repo = image.repo
         self.calls.append((registry, repo, reference))
         raise ManifestLookupError("primary unavailable")
 
@@ -82,8 +82,8 @@ class SequencedHttpResolver(RegistryHttpManifestResolver):
         self.calls: list[tuple[str, str, str]] = []
 
     def fetch(self, image: object, reference: str) -> ManifestDocument:
-        registry = getattr(image, "registry")
-        repo = getattr(image, "repo")
+        registry = image.registry
+        repo = image.repo
         self.calls.append((registry, repo, reference))
         if not self.documents:
             raise ManifestLookupError("no more documents")
@@ -955,7 +955,7 @@ class DockerManifestResolverVerboseTests(FakeDockerTestCase):
 
 
 class DigestVerifierResolveTagDigestTests(FakeDockerTestCase):
-    def _make_verifier(self) -> "DigestVerifier":
+    def _make_verifier(self) -> DigestVerifier:
         command_runner = CommandRunner(env=self.env)
         docker = DockerCli(runner=command_runner)
         resolver = DockerManifestResolver(docker, verbose=True)

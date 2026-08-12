@@ -55,7 +55,7 @@ def _has_command(command: str, environ: Mapping[str, str]) -> bool:
 
 
 def _refresh_truenas_status(
-    options: "UpdatesOptions",
+    options: UpdatesOptions,
     environ: Mapping[str, str],
 ) -> TrueNasStatusSnapshot:
     result = _run_truenas_status_helper(options, environ)
@@ -65,7 +65,7 @@ def _refresh_truenas_status(
 
 
 def _run_truenas_status_helper(
-    options: "UpdatesOptions",
+    options: UpdatesOptions,
     environ: Mapping[str, str],
 ) -> TrueNasCallResult:
     if not _has_command("docker", environ):
@@ -119,8 +119,7 @@ def _docker_inspect_current_container(
                 ["docker", "container", "inspect", candidate],
                 env=dict(environ),
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 timeout=helper_timeout,
                 check=False,
@@ -165,7 +164,7 @@ def _truenas_container_from_inspect_stdout(stdout: str) -> TrueNasCallResult:
 
 def _run_truenas_status_container(
     image: str,
-    options: "UpdatesOptions",
+    options: UpdatesOptions,
     environ: Mapping[str, str],
     helper_timeout: int,
 ) -> TrueNasCallResult:
@@ -204,8 +203,7 @@ def _run_truenas_status_container(
             run_command,
             env=dict(environ),
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=helper_timeout,
             check=False,
@@ -378,8 +376,7 @@ def _midclt_json(
             command,
             env=dict(environ),
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=timeout,
             check=False,
@@ -413,12 +410,11 @@ def _midclt_json(
                 ok=False,
                 reason=f"unexpected midclt payload for update.status: {type(data).__name__}",
             )
-    elif method == "alert.list":
-        if not isinstance(data, list):
-            return TrueNasCallResult(
-                ok=False,
-                reason=f"unexpected midclt payload for alert.list: {type(data).__name__}",
-            )
+    elif method == "alert.list" and not isinstance(data, list):
+        return TrueNasCallResult(
+            ok=False,
+            reason=f"unexpected midclt payload for alert.list: {type(data).__name__}",
+        )
 
     return TrueNasCallResult(ok=True, data=data)
 

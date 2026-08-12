@@ -136,11 +136,13 @@ class ComposeTagUpdateYamlSafetyTests(ComposeRewriteTestCase):
             ),
             (
                 "merge.yml",
-                "x-base: &base\n"
-                "  image: repo/app:1.0\n"
-                "services:\n"
-                "  app:\n"
-                "    <<: *base\n",
+                (
+                    "x-base: &base\n"
+                    "  image: repo/app:1.0\n"
+                    "services:\n"
+                    "  app:\n"
+                    "    <<: *base\n"
+                ),
                 "inherited",
             ),
         )

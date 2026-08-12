@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from contextlib import closing
 from datetime import datetime, timezone
-from typing import Callable
 
 from .digest_provenance import DIGEST_PROVENANCE_SQL_COLUMNS
 

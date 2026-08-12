@@ -150,15 +150,19 @@ class ComposeTagUpdateTests(ComposeRewriteTestCase):
         cases = (
             (
                 "    labels:\n        - keep=value\n",
-                "    labels:\n"
-                "        - keep=value\n"
-                "        - wud.tag.include=^\\d+-distroless$$\n",
+                (
+                    "    labels:\n"
+                    "        - keep=value\n"
+                    "        - wud.tag.include=^\\d+-distroless$$\n"
+                ),
             ),
             (
                 "    labels:\n        keep: value\n",
-                "    labels:\n"
-                "        keep: value\n"
-                "        wud.tag.include: ^\\d+-distroless$$\n",
+                (
+                    "    labels:\n"
+                    "        keep: value\n"
+                    "        wud.tag.include: ^\\d+-distroless$$\n"
+                ),
             ),
         )
         for original_labels, expected_labels in cases:
@@ -184,18 +188,24 @@ class ComposeTagUpdateTests(ComposeRewriteTestCase):
         cases = (
             (
                 '    labels: ["keep=value"] # list\n',
-                '    labels: ["keep=value", '
-                "wud.tag.include=^\\d+-distroless$$,] # list\n",
+                (
+                    '    labels: ["keep=value", '
+                    "wud.tag.include=^\\d+-distroless$$,] # list\n"
+                ),
             ),
             (
                 '    labels: {"keep": "value"} # map\n',
-                '    labels: {"keep": "value", '
-                "wud.tag.include: ^\\d+-distroless$$,} # map\n",
+                (
+                    '    labels: {"keep": "value", '
+                    "wud.tag.include: ^\\d+-distroless$$,} # map\n"
+                ),
             ),
             (
                 "    labels: null # empty\n",
-                "    labels: # empty\n"
-                "      - wud.tag.include=^\\d+-distroless$$\n",
+                (
+                    "    labels: # empty\n"
+                    "      - wud.tag.include=^\\d+-distroless$$\n"
+                ),
             ),
         )
         for original_labels, expected_labels in cases:
@@ -259,22 +269,30 @@ class ComposeTagUpdateTests(ComposeRewriteTestCase):
     def test_stream_rewrite_preserves_multiline_flow_label_comments(self) -> None:
         cases = (
             (
-                "    labels: [\n"
-                '      "keep=value" # keep ] inside comment\n'
-                "    ]\n",
-                "    labels: [\n"
-                '      "keep=value", # keep ] inside comment\n'
-                "      wud.tag.include=^\\d+-distroless$$,\n"
-                "    ]\n",
+                (
+                    "    labels: [\n"
+                    '      "keep=value" # keep ] inside comment\n'
+                    "    ]\n"
+                ),
+                (
+                    "    labels: [\n"
+                    '      "keep=value", # keep ] inside comment\n'
+                    "      wud.tag.include=^\\d+-distroless$$,\n"
+                    "    ]\n"
+                ),
             ),
             (
-                "    labels: {\n"
-                '      "keep": "value" # keep } inside comment\n'
-                "    }\n",
-                "    labels: {\n"
-                '      "keep": "value", # keep } inside comment\n'
-                "      wud.tag.include: ^\\d+-distroless$$,\n"
-                "    }\n",
+                (
+                    "    labels: {\n"
+                    '      "keep": "value" # keep } inside comment\n'
+                    "    }\n"
+                ),
+                (
+                    "    labels: {\n"
+                    '      "keep": "value", # keep } inside comment\n'
+                    "      wud.tag.include: ^\\d+-distroless$$,\n"
+                    "    }\n"
+                ),
             ),
         )
         for original_labels, expected_labels in cases:

@@ -1,5 +1,7 @@
 """Shared planning helpers that are not tied to updater orchestration."""
 
+# Compatibility imports deliberately re-export these names unchanged.
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence

@@ -156,7 +156,7 @@ class _RunnerOutputMixin:
     def _print_skipped_tag_updates(self, skipped_tags: Sequence[WudTarget]) -> None:
         if not skipped_tags:
             return
-        self.log.warn("Tag update entries require --allow-tag-updates and were left pending:")
+        self.log.warning("Tag update entries require --allow-tag-updates and were left pending:")
         for target in skipped_tags:
             desired_image = image_with_tag(target.first, target.desired_tag)
             self.log.info(f"  line {target.line_no}: {target.first} -> {desired_image}")

@@ -67,7 +67,7 @@ def print_tag_exclusion_plan(
                 f"({update.scope})"
             )
     for target, reason in failures:
-        runner.log.warn(
+        runner.log.warning(
             f"Tag exclusion for line {target.line_no} could not be planned: "
             f"{reason}"
         )

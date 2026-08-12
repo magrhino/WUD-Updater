@@ -111,7 +111,7 @@ class DryRunPlanDigestPinUpdate:
     label_key: str
     label_value: str
     services: tuple[str, ...]
-    label_rewrites: tuple["DryRunPlanDigestPinLabelRewrite", ...] = ()
+    label_rewrites: tuple[DryRunPlanDigestPinLabelRewrite, ...] = ()
     digest_provenance: DigestTagProvenance | None = None
 
 
@@ -282,7 +282,7 @@ class PendingGroupingItem:
     platform_variant: str = ""
     diagnostic: UnmatchedDiagnostic | None = None
     digest_provenance: DigestTagProvenance | None = None
-    tag_stream: "PendingTagStream | None" = None
+    tag_stream: PendingTagStream | None = None
 
 
 @dataclass(frozen=True)

@@ -130,7 +130,7 @@ def test_self_update_release_notes_are_between_versions_and_capped(
     monkeypatch,
 ) -> None:
     class FakeResponse:
-        def __enter__(self) -> "FakeResponse":
+        def __enter__(self) -> FakeResponse:
             return self
 
         def __exit__(self, *_args: object) -> None:

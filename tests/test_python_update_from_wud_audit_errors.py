@@ -319,7 +319,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
                 "wudup.updater_logging._create_unique_text_file_exclusive",
                 side_effect=OSError("permission denied"),
             ),
-            mock.patch.object(runner.log, "warn") as warn,
+            mock.patch.object(runner.log, "warning") as warning_log,
         ):
             runner._write_tag_incident_log(
                 stack,
@@ -330,7 +330,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
                 "health=unhealthy\n",
             )
 
-        warning = warn.call_args.args[0]
+        warning = warning_log.call_args.args[0]
         self.assertIn("Could not create tag update incident log", warning)
         self.assertIn("permission denied", warning)
     def test_tag_incident_creation_does_not_follow_existing_symlink(self) -> None:

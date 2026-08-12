@@ -213,8 +213,10 @@ class WudFileParsingTests(unittest.TestCase):
         self.assertEqual(
             parsed.warnings,
             (
-                "Ignoring tag update without a tagged source image on WUD line 1: "
-                "repo/app@sha256:good",
+                (
+                    "Ignoring tag update without a tagged source image on WUD line 1: "
+                    "repo/app@sha256:good"
+                ),
             ),
         )
 
