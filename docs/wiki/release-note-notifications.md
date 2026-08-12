@@ -100,10 +100,11 @@ Prereleases, wildcards, branches, suffixes, malformed values, and compound
 ranges are not treated as verified exposure. WUDup extracts at most eight
 advisory IDs and resolves at most four advisories per release. If no fetched
 advisory independently proves exposure, capped, rate-limited, timed-out, or
-failed lookups become `Needs review`; retryable lookup failures use the
-15-minute cache interval instead of the normal six-hour successful-release
-interval. If one advisory does prove exposure, the result remains verified and
-notes that additional lookup was incomplete.
+failed lookups become `Needs review`. `advisory_lookup_failed`,
+`advisory_unresolved`, and `security_backfill_failed` use the 15-minute cache
+interval; capped `advisory_lookup_truncated` results retain the normal six-hour
+successful-release interval. If one advisory does prove exposure, the result
+remains verified and notes that additional lookup was incomplete.
 
 Verified Critical/High items are sent through the configured Discord webhook
 on the next scheduler cycle even when delivery mode is `on_demand`, and they

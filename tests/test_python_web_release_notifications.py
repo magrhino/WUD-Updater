@@ -156,6 +156,22 @@ def test_notification_identity_includes_wud_metadata() -> None:
         ),
         metadata,
     )
+    changed_local_digest = (
+        notifications_module.web_release_notification_state.notification_identity(
+            target,
+            verified_note,
+            SimpleNamespace(**{**metadata.__dict__, "local_digest": "sha256:local-b"}),
+        )
+    )
+    changed_remote_digest = (
+        notifications_module.web_release_notification_state.notification_identity(
+            target,
+            verified_note,
+            SimpleNamespace(
+                **{**metadata.__dict__, "remote_digest": "sha256:remote-b"}
+            ),
+        )
+    )
     verified_without_metadata = (
         notifications_module.web_release_notification_state.notification_identity(
             target,
@@ -165,7 +181,9 @@ def test_notification_identity_includes_wud_metadata() -> None:
 
     assert verified.notification_key != first.notification_key
     assert changed_advisory.notification_key != verified.notification_key
-    assert verified_without_metadata.notification_key == verified.notification_key
+    assert changed_local_digest.notification_key != verified.notification_key
+    assert changed_remote_digest.notification_key != verified.notification_key
+    assert verified_without_metadata.notification_key != verified.notification_key
     assert verified.metadata["security"]["advisory_ids"] == [
         "GHSA-AAAA-BBBB-CCCC"
     ]

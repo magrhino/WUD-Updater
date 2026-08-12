@@ -91,13 +91,13 @@ def notification_identity(
     metadata_hash_payload = _metadata_hash_payload(metadata)
     if metadata_hash_payload:
         hash_payload["metadata"] = metadata_hash_payload
-    security_hash_payload = _verified_security_payload(target, note, {})
+    security_hash_payload = _verified_security_payload(
+        target,
+        note,
+        metadata_payload,
+    )
     if security_hash_payload:
-        stored_payload["security"] = _verified_security_payload(
-            target,
-            note,
-            metadata_payload,
-        )
+        stored_payload["security"] = security_hash_payload
         hash_payload["security"] = security_hash_payload
     canonical = json.dumps(hash_payload, sort_keys=True, separators=(",", ":"))
     return NotificationIdentity(
