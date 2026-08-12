@@ -39,6 +39,7 @@ target-version = "py310"
 
 [tool.ruff.lint]
 extend-select = ["E4", "E7", "E9", "F"]
+# Preserve deliberate string assembly (FLY002) and explicit nested scopes (SIM117).
 ignore = ["FLY002", "SIM117"]
 typing-extensions = false
 
