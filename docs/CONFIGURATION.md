@@ -101,10 +101,10 @@ deployments can only read cached scan metadata.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `WUD_RELEASE_NOTES_ENABLED` | unset | Optional env override for WebUI Discord release-note notifications. Leave unset to manage the setting from Settings; set `true` or `false` only when the deployment should force the value and make the Settings toggle read-only. |
-| `DISCORD_WEBHOOK` | unset | Discord webhook for WebUI-sent release-note notifications and shell helpers. When set, it overrides and disables the WebUI-managed webhook field. |
+| `WUD_RELEASE_NOTES_ENABLED` | unset | Optional env override for WebUI Discord release-note notifications. Leave unset to manage the setting from Settings; set `true` or `false` only when the deployment should force the value and make the Settings toggle read-only. When enabled, verified Critical/High items are delivered immediately even in `on_demand` mode. |
+| `DISCORD_WEBHOOK` | unset | Discord webhook for WebUI-sent release-note notifications, including immediate verified Critical/High alerts, and shell helpers. When set, it overrides and disables the WebUI-managed webhook field. |
 | `ADMIN_WEBHOOK` | selected release webhook | Optional webhook for missing LinuxServer.io upstream mapping alerts. |
-| `GITHUB_TOKEN` | unset | Optional GitHub API token for higher release-note lookup rate limits in WUD notifications and WebUI metadata refreshes. |
+| `GITHUB_TOKEN` | unset | Optional GitHub API token for higher release-note and public advisory lookup rate limits in WUD notifications and WebUI metadata refreshes. |
 | `MAX_COMMITS` | `3` | Maximum representative commits or pull requests included in Discord release embeds. |
 | `COLOR_HEX` | `0x57F287` | Discord embed color used by `/wud/release-notes-to-discord.sh`. |
 | `UPSTREAM_MAP` | `/wud/upstreams.txt` | LinuxServer.io image to upstream repository map used by explicit LSIO release-note mode and legacy `/wud/tag-manager.sh`. |
@@ -122,6 +122,12 @@ WUD container environment when using the legacy shell callback path, or through
 another host-local secret store. Discord release webhooks can also be saved from
 WebUI Settings; the raw URL is stored in SQLite, so protect `WUD_DB_PATH` as a
 secret-bearing file.
+
+Security prioritization applies only after WUD detects an update. It never
+applies the container update automatically. Existing Docker Hub deployments
+should adopt `WUD_REGISTRY_HUB_PUBLIC_WATCHDIGEST=true` from the current Compose
+examples so WUD can detect same-tag digest changes. No additional WUDup setting
+is required for security prioritization.
 
 ## TrueNAS Status Helper
 

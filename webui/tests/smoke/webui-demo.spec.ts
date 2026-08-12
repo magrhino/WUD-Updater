@@ -103,6 +103,12 @@ test("static demo renders current pending state in read-only mode", async ({
   await expect(
     page.getByTitle("ghcr.io/home-assistant/home-assistant:2026.5.1").first(),
   ).toBeVisible();
+  await expect(
+    page.getByText("1 verified security update", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Critical security update", { exact: true }).first(),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: /Preview home plan/ }).click();
   await expect(page.getByRole("heading", { name: "Apply blocked" })).toBeVisible();

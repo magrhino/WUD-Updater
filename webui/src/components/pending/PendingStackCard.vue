@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Play, Repeat2 } from "@lucide/vue";
+import { Play, Repeat2, ShieldAlert } from "@lucide/vue";
 import { NButton, NCheckbox, NTag } from "naive-ui";
 
 import type {
@@ -21,6 +21,7 @@ import {
   groupedItemTarget,
   groupTagChangeCount,
   itemsBreakingCount,
+  itemsVerifiedSecurityCount,
   pendingMetadataStatusLabel,
   pendingMetadataStatus,
   pendingMetadataStatusTagType,
@@ -118,6 +119,16 @@ const previewDisabledMessage = computed(() =>
           <n-tag size="small">{{ pluralize(group.items.length, "update") }}</n-tag>
           <n-tag v-if="groupTagChangeCount(group)" size="small" type="warning">
             {{ pluralize(groupTagChangeCount(group), "tag rewrite") }}
+          </n-tag>
+          <n-tag
+            v-if="itemsVerifiedSecurityCount(group.items, releaseNoteFor)"
+            size="small"
+            type="error"
+          >
+            <template #icon>
+              <ShieldAlert :size="14" aria-hidden="true" />
+            </template>
+            {{ pluralize(itemsVerifiedSecurityCount(group.items, releaseNoteFor), "verified security update") }}
           </n-tag>
           <n-tag
             v-if="itemsBreakingCount(group.items, releaseNoteFor)"

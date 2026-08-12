@@ -1026,6 +1026,14 @@ export function releaseNoteInfo(
     refreshed_at: "2026-01-02T00:00:00Z",
     error: "",
     body: "Full release notes body.",
+    security: {
+      outcome: "ordinary",
+      severity: "none",
+      reason_code: "no_security_signal",
+      reason: "No security urgency signal was found in the release notes.",
+      advisory_ids: [],
+      lookup_truncated: false,
+    },
     notification_key: "notification-key-1",
     notification_status: "new",
     notification_last_sent_at: "",
@@ -1089,6 +1097,14 @@ export function releaseNotificationResponse(
         category: "needs_review",
         reason_code: "major_bump",
         reason_label: "major version bump",
+        security: {
+          outcome: "ordinary",
+          severity: "none",
+          reason_code: "no_security_signal",
+          reason: "No security urgency signal was found in the release notes.",
+          advisory_ids: [],
+          lookup_truncated: false,
+        },
         links: [],
         triggers: [
           {

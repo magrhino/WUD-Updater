@@ -132,6 +132,9 @@ __all__ = (
     "ReleaseNotificationTestRequest",
     "ReleaseNotificationTestResponse",
     "ReleaseNotificationTrigger",
+    "ReleaseSecurityAssessment",
+    "ReleaseSecurityOutcome",
+    "ReleaseSecuritySeverity",
     "ResetAdminClaimRequest",
     "RetagApplyRequest",
     "RetagChoiceRequest",
@@ -277,6 +280,12 @@ SelfUpdateStatus = Literal["available", "up_to_date", "disabled", "unavailable"]
 SelfUpdateStrategy = Literal["pull_image", "prepare_tag_update"]
 
 ReleaseNoteChangeType = Literal["upstream_update", "image_rebuild", "unknown"]
+ReleaseSecurityOutcome = Literal[
+    "verified_critical_high", "needs_review", "ordinary"
+]
+ReleaseSecuritySeverity = Literal[
+    "critical", "high", "moderate", "low", "unknown", "none"
+]
 
 SelfUpdateAuditStatus = Literal[
     "image_prepared",
@@ -884,6 +893,14 @@ class ReleaseNoteClassification(BaseModel):
         default_factory=ReleaseNoteClassificationTag
     )
 
+class ReleaseSecurityAssessment(BaseModel):
+    outcome: ReleaseSecurityOutcome = "ordinary"
+    severity: ReleaseSecuritySeverity = "none"
+    reason_code: str = "no_security_signal"
+    reason: str = "No security urgency signal was found in the release notes."
+    advisory_ids: list[str] = Field(default_factory=list)
+    lookup_truncated: bool = False
+
 class ReleaseNoteInfo(BaseModel):
     line_no: int
     status: str
@@ -901,6 +918,9 @@ class ReleaseNoteInfo(BaseModel):
     body: str = ""
     classification: ReleaseNoteClassification = Field(
         default_factory=ReleaseNoteClassification
+    )
+    security: ReleaseSecurityAssessment = Field(
+        default_factory=ReleaseSecurityAssessment
     )
     notification_key: str = ""
     notification_status: str = "new"
@@ -974,10 +994,13 @@ class ReleaseNotificationItem(BaseModel):
     current_version: str = ""
     target_version: str = ""
     category: Literal[
-        "needs_review", "worth_noting", "routine"
+        "security_urgent", "needs_review", "worth_noting", "routine"
     ] = "needs_review"
     reason_code: str = ""
     reason_label: str = ""
+    security: ReleaseSecurityAssessment = Field(
+        default_factory=ReleaseSecurityAssessment
+    )
     links: list[ReleaseNoteLink] = Field(default_factory=list)
     triggers: list[ReleaseNotificationTrigger] = Field(default_factory=list)
     notification_key: str = ""

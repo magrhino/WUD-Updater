@@ -20,6 +20,8 @@ from wudup.db import init_db, insert_pending_update, insert_update_run, open_db
 from wudup.lsio_updates import LSIOTagParts, LSIOUpdateClassification
 from wudup.release_notes import ReleaseNoteInfo as ReleaseNoteData
 from wudup.release_notes import ReleaseNoteLink as ReleaseNoteLinkData
+from wudup.release_notes import ReleaseSecurityAssessment
+from wudup.web_models import ReleaseSecurityAssessment as WebReleaseSecurityAssessment
 
 _RELEASE_NOTIFICATION_ENV = {
     "WUD_WEB_DEV_NO_AUTH": "true",
@@ -126,6 +128,65 @@ def test_notification_identity_includes_wud_metadata() -> None:
     )
 
     assert first_fallback.notification_key != changed_fallback.notification_key
+
+    verified_note = note.model_copy(
+        update={
+            "security": WebReleaseSecurityAssessment(
+                outcome="verified_critical_high",
+                severity="high",
+                reason_code="verified_exposure",
+                reason="Verified exposure.",
+                advisory_ids=["GHSA-aaaa-bbbb-cccc"],
+            )
+        }
+    )
+    verified = notifications_module.web_release_notification_state.notification_identity(
+        target,
+        verified_note,
+        metadata,
+    )
+    changed_advisory = notifications_module.web_release_notification_state.notification_identity(
+        target,
+        verified_note.model_copy(
+            update={
+                "security": verified_note.security.model_copy(
+                    update={"advisory_ids": ["GHSA-dddd-eeee-ffff"]}
+                )
+            }
+        ),
+        metadata,
+    )
+    changed_local_digest = (
+        notifications_module.web_release_notification_state.notification_identity(
+            target,
+            verified_note,
+            SimpleNamespace(**{**metadata.__dict__, "local_digest": "sha256:local-b"}),
+        )
+    )
+    changed_remote_digest = (
+        notifications_module.web_release_notification_state.notification_identity(
+            target,
+            verified_note,
+            SimpleNamespace(
+                **{**metadata.__dict__, "remote_digest": "sha256:remote-b"}
+            ),
+        )
+    )
+    verified_without_metadata = (
+        notifications_module.web_release_notification_state.notification_identity(
+            target,
+            verified_note,
+        )
+    )
+
+    assert verified.notification_key != first.notification_key
+    assert changed_advisory.notification_key != verified.notification_key
+    assert changed_local_digest.notification_key != verified.notification_key
+    assert changed_remote_digest.notification_key != verified.notification_key
+    assert verified_without_metadata.notification_key != verified.notification_key
+    assert verified.metadata["security"]["advisory_ids"] == [
+        "GHSA-AAAA-BBBB-CCCC"
+    ]
 
 
 def test_failed_notification_history_with_prior_send_is_skipped() -> None:
@@ -430,6 +491,7 @@ def test_digest_reason_priority_uses_deterministic_metadata() -> None:
         provider: str = "github",
         change_type: str = "unknown",
         update_kind: str = "tag",
+        security: dict[str, object] | None = None,
     ) -> tuple[str, str, str]:
         note = notifications_module.ReleaseNoteInfo(
             line_no=1,
@@ -440,6 +502,7 @@ def test_digest_reason_priority_uses_deterministic_metadata() -> None:
             breaking=breaking,
             links=[release_link] if links is None else links,
             classification={"change_type": change_type},
+            **({"security": security} if security is not None else {}),
         )
         metadata = SimpleNamespace(
             semver_diff=semver_diff,
@@ -453,6 +516,22 @@ def test_digest_reason_priority_uses_deterministic_metadata() -> None:
             target_version=target_version,
         )
 
+    assert reason(
+        breaking=True,
+        semver_diff="major",
+        security={
+            "outcome": "verified_critical_high",
+            "severity": "critical",
+            "reason_code": "verified_exposure",
+            "reason": "Verified exposure.",
+            "advisory_ids": ["GHSA-aaaa-bbbb-cccc"],
+            "lookup_truncated": False,
+        },
+    ) == (
+        "security_urgent",
+        "verified_security",
+        "Critical security update (GHSA-aaaa-bbbb-cccc)",
+    )
     assert reason(breaking=True, semver_diff="major") == (
         "needs_review",
         "breaking_change",
@@ -1845,6 +1924,79 @@ def test_release_notification_cooldown_policy_allows_after_cooldown(
     assert blocked.json()["items"][0]["notification_status"] == "skipped_cooldown"
     assert allowed.json()["sendable_count"] == 1
     assert allowed.json()["items"][0]["notification_status"] == "cooldown_ready"
+
+
+def test_verified_security_notification_ignores_cooldown_resend_policy(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def verified_release(_conn, targets, _environ, **_kwargs):
+        return [
+            ReleaseNoteData(
+                line_no=target.line_no,
+                status="ready",
+                provider="github",
+                image_repo="acme/app",
+                upstream_repo="acme/app",
+                release_tag="2.0.0",
+                title="Security patch",
+                security=ReleaseSecurityAssessment(
+                    outcome="verified_critical_high",
+                    severity="high",
+                    reason_code="verified_exposure",
+                    reason="Verified High advisory affects 1.0.0 and is patched by 2.0.0.",
+                    advisory_ids=["GHSA-aaaa-bbbb-cccc"],
+                ),
+            )
+            for target in targets
+        ]
+
+    monkeypatch.setattr(
+        notifications_module,
+        "refresh_release_notes",
+        verified_release,
+    )
+    _capture_discord_posts(monkeypatch)
+    client = _client(tmp_path, _RELEASE_NOTIFICATION_ENV)
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        init_db(conn)
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO web_settings (key, value, updated_at)
+                VALUES ('release_notifications.resend_policy', 'cooldown', ?)
+                """,
+                ("2026-06-01T00:00:00+00:00",),
+            )
+    _write_pending_lines(tmp_path, ["ghcr.io/acme/app:1.0.0 tag=2.0.0"])
+    headers = _csrf_headers(client)
+    sent = client.post(
+        "/api/v1/release-notifications/send",
+        json={"line_numbers": [1], "confirmation": "send-release-notes"},
+        headers=headers,
+    )
+    notification_key = sent.json()["items"][0]["notification_key"]
+    with open_db(db_path) as conn:
+        with conn:
+            conn.execute(
+                """
+                UPDATE release_notification_history
+                SET last_sent_at = '2020-01-01T00:00:00+00:00'
+                WHERE notification_key = ?
+                """,
+                (notification_key,),
+            )
+    preview = client.post(
+        "/api/v1/release-notifications/preview",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+
+    assert sent.status_code == 200
+    assert sent.json()["items"][0]["category"] == "security_urgent"
+    assert preview.json()["sendable_count"] == 0
+    assert preview.json()["items"][0]["notification_status"] == "skipped_duplicate"
 
 
 def test_release_notification_manual_resend_increments_history(

@@ -55,7 +55,7 @@ from .web_release_notes import (
     release_notes_disabled_state,
 )
 from .web_release_notification_state import (
-    RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DETECTION,
+    RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DEMAND,
 )
 from .web_settings import (
     effective_release_notes_enabled,
@@ -75,8 +75,10 @@ DISCORD_WEBHOOK_USER_AGENT = "wudup-webui-release-notifications/1.0"
 DISCORD_WEBHOOK_USERNAME = "WUDup Release Notes"
 DISCORD_SUPPRESS_EMBEDS_FLAG = 1 << 2
 DISCORD_COLOR = 0x57F287
+DISCORD_SECURITY_COLOR = 0xED4245
 DISCORD_DIGEST_FOOTER = "Open WUDup for full notes, digests, and apply plan."
 DISCORD_DIGEST_CATEGORIES = (
+    ("security_urgent", "🛡️ Critical/High security"),
     ("needs_review", "⚠️ Needs review"),
     ("worth_noting", "🟡 Worth noting"),
     ("routine", "🟢 Routine"),
@@ -184,11 +186,8 @@ def poll_wud_api_release_notifications(
     settings: WebSettings,
 ) -> ReleaseNotificationResponse | None:
     api_settings = cast(WebSettings, replace(settings, pending_source="api"))
-    if (
-        effective_release_notification_config(api_settings).delivery_mode
-        != RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DETECTION
-    ):
-        return None
+    delivery_mode = effective_release_notification_config(api_settings).delivery_mode
+    verified_only = delivery_mode == RELEASE_NOTIFICATIONS_DELIVERY_MODE_ON_DEMAND
     try:
         require_release_notification_sendable(api_settings)
     except HTTPException as exc:
@@ -232,6 +231,7 @@ def poll_wud_api_release_notifications(
             request=None,
             actor_type=SCHEDULER_ACTOR_TYPE,
             pending_source=source,
+            verified_only=verified_only,
         )
     except HTTPException as exc:
         if exc.status_code == 422 and exc.detail == NO_RELEASE_NOTIFICATIONS_AVAILABLE_DETAIL:
@@ -272,6 +272,7 @@ def send_release_notifications(
     request: Request | None,
     actor_type: str | None = None,
     pending_source: web_pending_sources.PendingSourceResult | None = None,
+    verified_only: bool = False,
 ) -> ReleaseNotificationResponse:
     webhook = require_release_notification_sendable(settings)
 
@@ -280,6 +281,7 @@ def send_release_notifications(
         payload,
         sent=False,
         pending_source=pending_source,
+        verified_only=verified_only,
     )
     if response.sendable_count <= 0:
         raise HTTPException(
@@ -454,6 +456,7 @@ def _notification_response(
     *,
     sent: bool,
     pending_source: web_pending_sources.PendingSourceResult | None = None,
+    verified_only: bool = False,
 ) -> ReleaseNotificationResponse:
     enabled = effective_release_notes_enabled(settings)
     notification_config = effective_release_notification_config(settings)
@@ -493,6 +496,7 @@ def _notification_response(
         notes,
         config=notification_config,
         resend=payload.resend,
+        verified_only=verified_only,
     )
     sendable_count = sum(1 for item in items if not item.skipped_reason)
     batches = _payload_batches(items, notification_config.mode)
@@ -717,6 +721,7 @@ def _notification_items(
     *,
     config: web_release_notification_state.ReleaseNotificationConfig,
     resend: bool,
+    verified_only: bool = False,
 ) -> tuple[list[ReleaseNotificationItem], list[str]]:
     candidates: list[ReleaseNotificationItem] = []
     identities: dict[int, web_release_notification_state.NotificationIdentity] = {}
@@ -726,6 +731,8 @@ def _notification_items(
         note = notes.get(target.target.line_no)
         if note is None:
             warnings.append(f"Line {target.target.line_no} has no release-note metadata.")
+            continue
+        if verified_only and note.security.outcome != "verified_critical_high":
             continue
         metadata = source.metadata_by_line.get(target.target.line_no)
         identity = web_release_notification_state.notification_identity(
@@ -787,16 +794,45 @@ def _notification_items(
                 category=category,
                 reason_code=reason_code,
                 reason_label=reason_label,
+                security={
+                    "outcome": note.security.outcome,
+                    "severity": note.security.severity,
+                    "reason_code": note.security.reason_code,
+                    "reason": note.security.reason,
+                    "advisory_ids": note.security.advisory_ids,
+                    "lookup_truncated": note.security.lookup_truncated,
+                },
                 links=_release_note_links(note),
                 triggers=triggers,
                 notification_key=identity.notification_key,
             )
         )
+    urgent_lines = {
+        item.line_no for item in candidates if item.category == "security_urgent"
+    }
+    regular_identities = {
+        line_no: identity
+        for line_no, identity in identities.items()
+        if line_no not in urgent_lines
+    }
+    urgent_identities = {
+        line_no: identity
+        for line_no, identity in identities.items()
+        if line_no in urgent_lines
+    }
     annotations = _notification_annotations(
         settings,
         config,
-        identities,
+        regular_identities,
         resend=resend,
+    )
+    annotations.update(
+        _notification_annotations(
+            settings,
+            replace(config, resend_policy="remote_change"),
+            urgent_identities,
+            resend=resend,
+        )
     )
     items: list[ReleaseNotificationItem] = []
     for item in candidates:
@@ -811,6 +847,7 @@ def _notification_items(
                 }
             )
         )
+    items.sort(key=lambda item: 0 if item.category == "security_urgent" else 1)
     return items, warnings
 
 
@@ -821,6 +858,8 @@ def _notification_annotations(
     *,
     resend: bool,
 ) -> dict[int, web_release_notification_state.NotificationAnnotation]:
+    if not identities:
+        return {}
     try:
         with closing(connect_readonly_db(settings)) as conn:
             return web_release_notification_state.notification_annotations(
@@ -914,6 +953,15 @@ def _notification_digest_reason(
     current_version: str,
     target_version: str,
 ) -> tuple[str, str, str]:
+    security = note.security
+    if security.outcome == "verified_critical_high":
+        advisory_label = ", ".join(security.advisory_ids[:3])
+        label = f"{security.severity.title()} security update"
+        if advisory_label:
+            label = f"{label} ({advisory_label})"
+        return "security_urgent", "verified_security", label
+    if security.outcome == "needs_review":
+        return "needs_review", "security_needs_review", "security update needs review"
     semver_diff = str(getattr(metadata, "semver_diff", "") or "").lower()
     if not semver_diff:
         semver_diff = _semver_diff(current_version, target_version)
@@ -1164,6 +1212,16 @@ def _notification_description_lines(
             lines.append(f"LSIO build: `{build_suffix}`")
     elif upstream_update:
         lines.append("Update type: upstream application update")
+    if note.security.outcome == "verified_critical_high":
+        identifiers = ", ".join(note.security.advisory_ids[:4])
+        security_line = f"Security: verified {note.security.severity.title()} advisory"
+        if identifiers:
+            security_line = f"{security_line} ({identifiers})"
+        lines.append(security_line)
+        lines.append(note.security.reason)
+    elif note.security.outcome == "needs_review":
+        lines.append("Security: release needs review")
+        lines.append(note.security.reason)
     lines.append(_status_line(settings, note))
     if note.breaking:
         lines.append("Breaking-risk indicators were detected.")
@@ -1317,6 +1375,8 @@ def _digest_row(item: ReleaseNotificationItem) -> str:
 def _compact_digest_link_label(link: ReleaseNoteLink) -> str:
     kind = link.kind.lower()
     label = link.label.lower()
+    if "advisory" in kind or "ghsa" in label or "cve" in label:
+        return link.label
     if "changelog" in kind or "changelog" in label:
         return "changelog"
     if kind == "lsio_release" or "lsio release" in label:
@@ -1370,6 +1430,14 @@ def _discord_embed(item: ReleaseNotificationItem) -> dict[str, object]:
         )
     if links:
         fields.append({"name": "Links", "value": " - ".join(links)[:1024], "inline": False})
+    if item.security.outcome != "ordinary":
+        fields.append(
+            {
+                "name": "Security",
+                "value": item.security.reason[:1024],
+                "inline": False,
+            }
+        )
     if item.triggers:
         fields.append(
             {
@@ -1381,7 +1449,11 @@ def _discord_embed(item: ReleaseNotificationItem) -> dict[str, object]:
     embed: dict[str, object] = {
         "title": item.title[:256],
         "description": item.description[:DISCORD_EMBED_DESCRIPTION_LIMIT],
-        "color": DISCORD_COLOR,
+        "color": (
+            DISCORD_SECURITY_COLOR
+            if item.category == "security_urgent"
+            else DISCORD_COLOR
+        ),
         "fields": fields[:25],
     }
     first_url = next((link.url for link in item.links if link.url), "")
@@ -1889,6 +1961,11 @@ def _release_notification_identity(
             "release_tag": item.release_tag,
             "image_repo": item.image_repo,
             "upstream_repo": item.upstream_repo,
+            "security": {
+                "outcome": item.security.outcome,
+                "severity": item.security.severity,
+                "advisory_ids": item.security.advisory_ids,
+            },
         },
     )
 
@@ -1983,6 +2060,9 @@ def _audit_items(items: Sequence[ReleaseNotificationItem]) -> list[dict[str, obj
             "notification_last_sent_at": item.notification_last_sent_at,
             "notification_send_count": item.notification_send_count,
             "skipped_reason": item.skipped_reason,
+            "security_outcome": item.security.outcome,
+            "security_severity": item.security.severity,
+            "security_advisory_ids": item.security.advisory_ids,
         }
         for item in items
     ]

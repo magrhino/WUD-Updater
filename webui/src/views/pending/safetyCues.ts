@@ -88,6 +88,7 @@ export function safetyCues(
     cues.push({ key, label, type });
   };
 
+  addReleaseNoteSecurityCue(context.releaseNote, addCue);
   addVersionBumpCue(row, addCue);
 
   if (row.tag_stream) {
@@ -154,9 +155,22 @@ function addReleaseNoteCues(
   }
 }
 
+function addReleaseNoteSecurityCue(
+  note: ReleaseNoteInfo | null,
+  addCue: (key: string, label: string, type: SafetyCue["type"]) => void,
+): void {
+  if (note?.security?.outcome === "verified_critical_high") {
+    const severity = note.security.severity === "critical" ? "Critical" : "High";
+    addCue("verified-security", `${severity} security update`, "error");
+  } else if (note?.security?.outcome === "needs_review") {
+    addCue("security-review", "Security review", "warning");
+  }
+}
+
 function addSecurityScanCues(
   context: Pick<
     SafetyCueContext,
+    | "releaseNote"
     | "securityScan"
     | "securityScansCurrent"
     | "securityScansEnabled"
@@ -178,7 +192,12 @@ function addSecurityScanCues(
   }
   const scan = context.securityScan;
   if (!scan) {
-    addCue("security-unknown", "Security unknown", "warning");
+    const label =
+      context.releaseNote?.security.outcome === "ordinary" ||
+      !context.releaseNote?.security.outcome
+        ? "Security unknown"
+        : "Image scan unavailable";
+    addCue("security-unknown", label, "warning");
     return;
   }
   const display = securityScanCueDisplay(scan);

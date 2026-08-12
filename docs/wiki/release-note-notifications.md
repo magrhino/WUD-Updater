@@ -36,6 +36,12 @@ release-note metadata; WUDup does not generate or summarize prose with AI.
 Use the delivery mode setting to choose API polling on detection or on-demand
 sends from preview/apply flows.
 
+Release-note prioritization starts only after WUD reports an actionable update.
+It does not discover candidates independently or change WUD's watch behavior.
+Existing Docker Hub deployments should set
+`WUD_REGISTRY_HUB_PUBLIC_WATCHDIGEST=true`, as the current Compose examples do,
+so WUD can report same-tag digest changes.
+
 If a legacy shell release-note callback is also configured, Discord can receive
 duplicate notifications for the same WUD update. Keep only one notification path
 enabled unless duplicate posts are intentional.
@@ -43,7 +49,10 @@ enabled unless duplicate posts are intentional.
 Example digest notification:
 
 ```text
-🧾 WUDup batch — 3 updates found
+🧾 WUDup batch — 4 updates found
+
+🛡️ Critical/High security
+• home/home-assistant `2026.5.1` → `2026.5.3` — High security update (GHSA-AAAA-BBBB-CCCC) — [GHSA-AAAA-BBBB-CCCC](https://example.invalid/advisory)
 
 ⚠️ Needs review
 • media/qbittorrent `5.1.4` → `5.2.2` — release notes unavailable
@@ -57,12 +66,59 @@ Example digest notification:
 Open WUDup for full notes, digests, and apply plan.
 ```
 
-`Needs review`, `Worth noting`, and `Routine` are assigned by priority-ordered
-rules such as breaking or major changes, missing release metadata, mutable
-`latest` tags, minor or LSIO updates, patch updates, and digest-only updates.
+`Critical/High security`, `Needs review`, `Worth noting`, and `Routine` are
+assigned by priority-ordered rules. Security evidence takes priority over
+breaking and SemVer cues, which remain visible as secondary context.
 Available release, upstream, changelog, or project links use compact labels.
 Raw digests and full release bodies remain in WUDup details instead of the
 digest copy.
+
+## Security Evidence
+
+WUDup scans the resolved release title and body for bounded urgency signals,
+including `UPDATE ASAP`, `critical`, `security`, GHSA IDs, CVE IDs, and GitHub
+advisory links. A keyword is only a reason to review or fetch structured
+advisory data; it never proves that the running image is affected.
+
+Each release has one of three outcomes:
+
+- **Verified Critical/High**: a published, non-withdrawn GitHub advisory has
+  Critical or High structured severity; its repository or package exactly
+  matches the resolved image/upstream; the current version is in the structured
+  vulnerable range; and the exact pending target is at or beyond a structured
+  patched version and outside the vulnerable range.
+- **Needs review**: release notes signal urgency, but severity, identity,
+  current/target version evidence, or advisory lookup is missing or ambiguous.
+  Mutable tags such as `latest` and digest-only evidence remain here even when
+  the linked advisory is Critical.
+- **Ordinary**: the release has no security urgency signal. No advisory request
+  is made.
+
+Version proof deliberately accepts only `v?MAJOR.MINOR[.PATCH]`, exact-version
+lists, and comma-separated `<`, `<=`, `>`, `>=`, or `=` comparisons.
+Prereleases, wildcards, branches, suffixes, malformed values, and compound
+ranges are not treated as verified exposure. WUDup extracts at most eight
+advisory IDs and resolves at most four advisories per release. If no fetched
+advisory independently proves exposure, capped, rate-limited, timed-out, or
+failed lookups become `Needs review`. `advisory_lookup_failed`,
+`advisory_unresolved`, and `security_backfill_failed` use the 15-minute cache
+interval; capped `advisory_lookup_truncated` results retain the normal six-hour
+successful-release interval. If one advisory does prove exposure, the result
+remains verified and notes that additional lookup was incomplete.
+
+Verified Critical/High items are sent through the configured Discord webhook
+on the next scheduler cycle even when delivery mode is `on_demand`, and they
+are ordered before ordinary release notifications in `on_detection` mode.
+Their stable history key includes the update identity, release, severity,
+advisory IDs, current version/digest, and target version/digest. A successful
+key does not resend after a cooldown; a materially changed exposure can notify
+again, and failed or stale in-progress attempts remain retryable through the
+existing notification history.
+
+Snoozing an update affects Pending selection, not verified security delivery.
+Release-note notification code never plans, applies, pulls, restarts, or
+otherwise installs an update. Review and apply remain explicit manual actions
+with the existing confirmation and safety checks.
 
 The optional `per_container` mode preserves the detailed embed format. In that
 mode, full verbosity appends the release body and truncates it to Discord's

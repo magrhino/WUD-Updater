@@ -479,6 +479,49 @@ def test_release_notes_refresh_works_when_mutations_are_enabled(
     assert body["items"][0]["error"] == "no supported GitHub release source found"
 
 
+def test_release_notes_refresh_only_bypasses_cache_when_forced(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    wud_file.write_text("ghcr.io/acme/app:1.0.0 tag=2.0.0\n", encoding="utf-8")
+    force_values: list[bool] = []
+
+    def fake_refresh_release_notes(_conn, targets, _environ, *, force=False, **_kwargs):
+        force_values.append(force)
+        return [
+            ReleaseNoteData(
+                line_no=target.line_no,
+                status="ready",
+                provider="github",
+                image_repo="acme/app",
+                upstream_repo="acme/app",
+            )
+            for target in targets
+        ]
+
+    monkeypatch.setattr(
+        release_notes_module,
+        "refresh_release_notes",
+        fake_refresh_release_notes,
+    )
+    headers = _csrf_headers(client)
+
+    cached = client.post("/api/v1/release-notes/refresh", headers=headers)
+    forced = client.post("/api/v1/release-notes/refresh?force=true", headers=headers)
+
+    assert cached.status_code == 200
+    assert forced.status_code == 200
+    assert force_values == [False, True]
+
+
 def test_release_note_error_metadata_redacts_configured_secrets(
     tmp_path: Path,
     monkeypatch,
