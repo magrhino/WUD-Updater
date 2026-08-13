@@ -13,7 +13,9 @@ import {
   Tags,
 } from "@lucide/vue";
 import { NTag } from "naive-ui";
+import { useMediaQuery } from "@vueuse/core";
 
+import { responsiveMediaQueries } from "../../responsive";
 import { useConnectionStore } from "../../stores/connection";
 import { runInBackground } from "../../utils/promises";
 import AppBrandMark from "./AppBrandMark.vue";
@@ -21,6 +23,7 @@ import AppBrandMark from "./AppBrandMark.vue";
 const route = useRoute();
 const connection = useConnectionStore();
 const navListRef = ref<HTMLElement | null>(null);
+const appShellLayout = useMediaQuery(responsiveMediaQueries.appShell);
 
 const RELEASES_URL = "https://github.com/magrhino/wudup/releases";
 const VERSION_RELEASE_RE = /^v?\d+\.\d+/;
@@ -147,7 +150,7 @@ async function scrollActiveNavItemIntoView(): Promise<void> {
 }
 
 watch(
-  () => route.name,
+  [() => route.name, appShellLayout],
   () => runInBackground(scrollActiveNavItemIntoView()),
 );
 

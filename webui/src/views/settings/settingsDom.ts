@@ -30,10 +30,11 @@ export function syncSettingsSelectLoadingState(element: HTMLElement): void {
   if (!loadingIndicator) {
     return;
   }
-  loadingIndicator.toggleAttribute(
-    "aria-hidden",
-    loadingIndicator.querySelector(".n-base-loading__placeholder") !== null,
-  );
+  if (loadingIndicator.querySelector(".n-base-loading__placeholder")) {
+    loadingIndicator.setAttribute("aria-hidden", "true");
+  } else {
+    loadingIndicator.removeAttribute("aria-hidden");
+  }
 }
 
 export const vSettingsSelectLoadingState: Directive<HTMLElement> = {

@@ -88,7 +88,10 @@ const {
             <p>Display defaults and first-run interface state.</p>
           </div>
           <div class="settings-preference-list">
-            <div class="settings-preference-row">
+            <div
+              v-settings-select-loading-state
+              class="settings-preference-row"
+            >
               <div>
                 <strong class="wrap-anywhere">Theme preference</strong>
                 <span class="wrap-anywhere">
@@ -97,7 +100,6 @@ const {
                 </span>
               </div>
               <n-select
-                v-settings-select-loading-state
                 v-model:value="themePreferenceValue"
                 :options="themePreferenceOptions"
                 :disabled="preferenceControlsDisabled"
@@ -152,9 +154,11 @@ const {
                   {{ managedSourceLabel(digestPinUpdatesEntry) }}
                 </span>
               </div>
-              <div class="settings-preference-controls">
+              <div
+                v-settings-select-loading-state
+                class="settings-preference-controls"
+              >
                 <n-select
-                  v-settings-select-loading-state
                   v-model:value="digestPinUpdatesValue"
                   :options="digestPinUpdatesOptions"
                   :disabled="preferenceControlsDisabled || !digestPinUpdatesEditable"
@@ -182,9 +186,11 @@ const {
                   {{ managedSourceLabel(retagDigestPinsEntry) }}
                 </span>
               </div>
-              <div class="settings-preference-controls">
+              <div
+                v-settings-select-loading-state
+                class="settings-preference-controls"
+              >
                 <n-select
-                  v-settings-select-loading-state
                   v-model:value="retagDigestPinsValue"
                   :options="retagDigestPinsOptions"
                   :disabled="preferenceControlsDisabled || !retagDigestPinsEditable"
@@ -209,9 +215,11 @@ const {
                   {{ managedSourceLabel(onboardingChecklistEntry) }}
                 </span>
               </div>
-              <div class="settings-preference-controls">
+              <div
+                v-settings-select-loading-state
+                class="settings-preference-controls"
+              >
                 <n-select
-                  v-settings-select-loading-state
                   v-model:value="onboardingChecklistValue"
                   :options="onboardingChecklistOptions"
                   :disabled="preferenceControlsDisabled"

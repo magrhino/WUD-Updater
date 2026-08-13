@@ -138,9 +138,11 @@ const {
                   {{ managedSourceLabel(releaseNotificationDeliveryModeEntry) }}
                 </span>
               </div>
-              <div class="settings-preference-controls">
+              <div
+                v-settings-select-loading-state
+                class="settings-preference-controls"
+              >
                 <n-select
-                  v-settings-select-loading-state
                   v-model:value="releaseNotificationDeliveryModeValue"
                   :options="releaseNotificationDeliveryModeOptions"
                   :disabled="
@@ -242,9 +244,11 @@ const {
                   {{ managedSourceLabel(releaseNotificationVerbosityEntry) }}
                 </span>
               </div>
-              <div class="settings-preference-controls">
+              <div
+                v-settings-select-loading-state
+                class="settings-preference-controls"
+              >
                 <n-select
-                  v-settings-select-loading-state
                   v-model:value="releaseNotificationVerbosityValue"
                   :options="releaseNotificationVerbosityOptions"
                   :disabled="
@@ -278,12 +282,14 @@ const {
                   Per container sends one detailed notification for each update.
                 </span>
               </div>
-              <div class="settings-preference-controls">
+              <div
+                v-settings-select-loading-state
+                class="settings-preference-controls"
+              >
                 <n-select
                   v-select-trigger-description="
                     'release-notification-summary-help release-notification-per-container-help'
                   "
-                  v-settings-select-loading-state
                   v-model:value="releaseNotificationModeValue"
                   :options="releaseNotificationModeOptions"
                   :disabled="notificationControlsDisabled || !releaseNotificationModeEditable"
@@ -307,9 +313,11 @@ const {
                   {{ managedSourceLabel(releaseNotificationResendPolicyEntry) }}
                 </span>
               </div>
-              <div class="settings-preference-controls">
+              <div
+                v-settings-select-loading-state
+                class="settings-preference-controls"
+              >
                 <n-select
-                  v-settings-select-loading-state
                   v-model:value="releaseNotificationResendPolicyValue"
                   :options="releaseNotificationResendPolicyOptions"
                   :disabled="

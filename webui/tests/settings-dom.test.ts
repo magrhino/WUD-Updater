@@ -1,8 +1,12 @@
+import { mount } from "@vue/test-utils";
+import { NSelect } from "naive-ui";
+import { defineComponent, h, withDirectives } from "vue";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   scrollToElementId,
   syncSettingsSelectLoadingState,
+  vSettingsSelectLoadingState,
 } from "../src/views/settings/settingsDom";
 
 describe("settings DOM helpers", () => {
@@ -38,10 +42,36 @@ describe("settings DOM helpers", () => {
     const loadingIndicator = select.querySelector<HTMLElement>(".n-base-loading")!;
 
     syncSettingsSelectLoadingState(select);
-    expect(loadingIndicator.hasAttribute("aria-hidden")).toBe(true);
+    expect(loadingIndicator.getAttribute("aria-hidden")).toBe("true");
 
     loadingIndicator.innerHTML = '<div class="n-base-loading__transition-wrapper"></div>';
     syncSettingsSelectLoadingState(select);
     expect(loadingIndicator.hasAttribute("aria-hidden")).toBe(false);
+  });
+
+  it("hides an idle loading label after a select mounts", () => {
+    const Harness = defineComponent({
+      setup() {
+        return () =>
+          withDirectives(
+            h("div", [
+              h(NSelect, {
+                value: "system",
+                options: [{ label: "System theme", value: "system" }],
+              }),
+            ]),
+            [[vSettingsSelectLoadingState]],
+          );
+      },
+    });
+
+    const wrapper = mount(Harness);
+    const loadingIndicator = wrapper.find(
+      ".n-base-loading[aria-label='loading']",
+    );
+
+    expect(loadingIndicator.exists()).toBe(true);
+    expect(loadingIndicator.attributes("aria-hidden")).toBe("true");
+    wrapper.unmount();
   });
 });
