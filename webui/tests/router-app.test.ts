@@ -5,7 +5,7 @@ import {
   type VueWrapper,
 } from "@vue/test-utils";
 import { createMemoryHistory, type Router } from "vue-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 
 import type { SetupStatusResponse } from "../src/api/types";
@@ -292,8 +292,25 @@ describe("router auth guard", () => {
 });
 
 describe("app shell", () => {
+  const scrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
+    Element.prototype,
+    "scrollIntoView",
+  );
+
   beforeEach(() => {
     setActivePinia(createPinia());
+  });
+
+  afterEach(() => {
+    if (scrollIntoViewDescriptor) {
+      Object.defineProperty(
+        Element.prototype,
+        "scrollIntoView",
+        scrollIntoViewDescriptor,
+      );
+    } else {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    }
   });
 
   it("shows a linked release tag in the shell footer", async () => {
