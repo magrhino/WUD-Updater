@@ -5,7 +5,7 @@ import {
   type VueWrapper,
 } from "@vue/test-utils";
 import { createMemoryHistory, type Router } from "vue-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 
 import type { SetupStatusResponse } from "../src/api/types";
@@ -292,8 +292,25 @@ describe("router auth guard", () => {
 });
 
 describe("app shell", () => {
+  const scrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
+    Element.prototype,
+    "scrollIntoView",
+  );
+
   beforeEach(() => {
     setActivePinia(createPinia());
+  });
+
+  afterEach(() => {
+    if (scrollIntoViewDescriptor) {
+      Object.defineProperty(
+        Element.prototype,
+        "scrollIntoView",
+        scrollIntoViewDescriptor,
+      );
+    } else {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    }
   });
 
   it("shows a linked release tag in the shell footer", async () => {
@@ -481,6 +498,11 @@ describe("app shell", () => {
   });
 
   it("shows settings navigation and refreshes the settings route", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
     const stores = createAppStores();
     vi.spyOn(stores.connection, "loadStatus").mockResolvedValue();
     const loadSettings = vi
@@ -494,8 +516,13 @@ describe("app shell", () => {
       .mockResolvedValue();
 
     const { wrapper } = await mountAppAt(stores, "/settings");
+    await flushPromises();
 
     expect(wrapper.text()).toContain("Settings");
+    const settingsItem = wrapper
+      .findAll(".nav-item")
+      .find((item) => item.text().includes("Settings"));
+    expect(scrollIntoView.mock.contexts).toContain(settingsItem?.element);
     loadSettings.mockClear();
     loadCoreUpdateTour.mockClear();
     await wrapper.find('button[aria-label="Refresh current view"]').trigger("click");

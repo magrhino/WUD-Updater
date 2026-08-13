@@ -97,7 +97,7 @@ body .n-switch:focus-within {
   background: var(--color-surface);
 }
 
-@media (--wud-compact) {
+@media (--wud-app-shell) {
   body .n-button,
   body .n-checkbox,
   body .n-input,
