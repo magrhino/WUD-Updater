@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import { useClipboard } from "@vueuse/core";
 
+import type { DiagnosticsSupportBundleResponse } from "../../api/client";
 import { useConnectionStore } from "../../stores/connection";
 
 function diagnosticsOperationError(error_: unknown, fallback: string): string {
@@ -8,10 +9,16 @@ function diagnosticsOperationError(error_: unknown, fallback: string): string {
 }
 
 export function useSettingsDiagnostics(
-  options: { reuseLoadedText?: boolean } = {},
+  options: {
+    reuseLoadedText?: boolean;
+    artifactLabel?: string;
+    downloadFilename?: string;
+    selectBundle?: (bundle: DiagnosticsSupportBundleResponse) => unknown;
+  } = {},
 ) {
   const connection = useConnectionStore();
   const { copy, isSupported: isClipboardSupported } = useClipboard();
+  const artifactLabel = options.artifactLabel ?? "Diagnostics";
   const diagnosticsDownloading = ref(false);
   const diagnosticsText = ref("");
   const diagnosticsMessage = ref("");
@@ -23,13 +30,17 @@ export function useSettingsDiagnostics(
     diagnosticsDownloading.value = true;
     try {
       const bundle = await connection.diagnosticsSupportBundle();
-      const text = JSON.stringify(bundle, null, 2);
+      const text = JSON.stringify(
+        options.selectBundle?.(bundle) ?? bundle,
+        null,
+        2,
+      );
       diagnosticsText.value = text;
       return text;
     } catch (error_) {
       diagnosticsError.value = diagnosticsOperationError(
         error_,
-        "Failed to load support bundle",
+        `Failed to load ${artifactLabel.toLowerCase()}`,
       );
       return null;
     } finally {
@@ -40,7 +51,7 @@ export function useSettingsDiagnostics(
   async function refreshSupportBundle(): Promise<void> {
     const text = await loadSupportBundleText();
     if (text !== null) {
-      diagnosticsMessage.value = "Issue dump loaded.";
+      diagnosticsMessage.value = `${artifactLabel} loaded.`;
     }
   }
 
@@ -57,12 +68,12 @@ export function useSettingsDiagnostics(
       await copy(text);
       // Since copied is a ref updated by useClipboard asynchronously,
       // we just assume success if it didn't throw and set a generic message.
-      diagnosticsMessage.value = "Diagnostics copied to clipboard.";
+      diagnosticsMessage.value = `${artifactLabel} copied to clipboard.`;
     } catch (error_) {
       diagnosticsMessage.value = "";
       diagnosticsError.value = diagnosticsOperationError(
         error_,
-        "Failed to copy support bundle",
+        `Failed to copy ${artifactLabel.toLowerCase()}`,
       );
     }
   }
@@ -82,11 +93,11 @@ export function useSettingsDiagnostics(
       url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "wudup-diagnostics.json";
+      a.download = options.downloadFilename ?? "wudup-diagnostics.json";
       a.click();
       URL.revokeObjectURL(url);
       url = null;
-      diagnosticsMessage.value = "Diagnostics downloaded successfully.";
+      diagnosticsMessage.value = `${artifactLabel} downloaded successfully.`;
     } catch (error_) {
       if (url !== null) {
         try {
@@ -98,7 +109,7 @@ export function useSettingsDiagnostics(
       diagnosticsMessage.value = "";
       diagnosticsError.value = diagnosticsOperationError(
         error_,
-        "Failed to download support bundle",
+        `Failed to download ${artifactLabel.toLowerCase()}`,
       );
     }
   }

@@ -889,7 +889,10 @@ def test_plan_blocks_mixed_fresh_and_retained_selection(
         if check["code"] == "wud-metadata-current"
     )
     assert fresh_metadata_check["status"] == "WARN"
-    assert "Other WUD observations" in fresh_metadata_check["detail"]
+    assert fresh_metadata_check["detail"] == (
+        "Every selected update has current information. WUD could not refresh "
+        "other containers. View affected containers for details."
+    )
 
 
 def test_apply_endpoint_rejects_stale_api_pending_source_without_editing_file(

@@ -170,7 +170,7 @@ def test_pending_all_rescan_scopes_embedded_429_cooldown_to_container(
         "/api/containers/docker.local.bazarr/watch",
         "/api/containers/docker.local.app/watch",
     ]
-    assert "1 unresolved" in body["wud_api"]["detail"]
+    assert "Update status is unknown for 1 container" in body["wud_api"]["detail"]
 
     calls.clear()
     cooldown = client.post(
@@ -182,7 +182,9 @@ def test_pending_all_rescan_scopes_embedded_429_cooldown_to_container(
     assert cooldown.status_code == 200
     assert cooldown.json()["status"] == "partial"
     assert cooldown.json()["watched_count"] == 1
-    assert "retry paused after HTTP 429" in cooldown.json()["wud_api"]["detail"]
+    assert "WUD temporarily paused registry checks" in (
+        cooldown.json()["wud_api"]["detail"]
+    )
     assert [path for method, path in calls if method == "POST"] == [
         "/api/containers/docker.local.app/watch"
     ]

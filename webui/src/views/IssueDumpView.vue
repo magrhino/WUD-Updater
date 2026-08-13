@@ -4,8 +4,24 @@ import { Copy, Download, RefreshCw } from "@lucide/vue";
 import { NAlert, NButton, NEmpty, NFlex } from "naive-ui";
 
 import { useRouteRefresh } from "../components/app/routeRefresh";
+import type { DiagnosticsSupportBundleResponse } from "../api/client";
 import { runInBackground } from "../utils/promises";
 import { useSettingsDiagnostics } from "./settings/useSettingsDiagnostics";
+
+function affectedContainerDetails(bundle: DiagnosticsSupportBundleResponse) {
+  const observations = bundle.wud_api_observations;
+  return {
+    summary: {
+      containers_affected: observations.counts.degraded,
+      using_previous_results: observations.counts.retained,
+      recovered_from_pending_file: observations.counts.recovered,
+      update_status_unknown: observations.counts.unresolved,
+    },
+    containers: observations.items.filter(
+      (item) => item.outcome !== "unsupported_ignored",
+    ),
+  };
+}
 
 const {
   diagnosticsDownloading,
@@ -16,7 +32,12 @@ const {
   refreshSupportBundle,
   copySupportBundle,
   downloadSupportBundle,
-} = useSettingsDiagnostics({ reuseLoadedText: true });
+} = useSettingsDiagnostics({
+  reuseLoadedText: true,
+  artifactLabel: "Affected container details",
+  downloadFilename: "wudup-affected-containers.json",
+  selectBundle: affectedContainerDetails,
+});
 
 useRouteRefresh(refreshSupportBundle);
 
@@ -29,19 +50,19 @@ onMounted(() => {
   <section class="content-stack">
     <div class="section-heading">
       <div>
-        <p class="eyebrow value-eyebrow">Read-only diagnostics</p>
-        <h2>WUD issue dump</h2>
+        <h2>Affected WUD containers</h2>
         <p class="section-copy">
-          This formatted support bundle is redacted for troubleshooting. Review
-          it before sharing it with an issue.
+          WUD could not refresh these containers during its latest check. This
+          view shows the reported problem for each affected container and omits
+          unrelated diagnostics.
         </p>
       </div>
       <n-flex class="inline-actions" align="center" :size="8">
         <n-button
           quaternary
           circle
-          title="Refresh issue dump"
-          aria-label="Refresh issue dump"
+          title="Refresh affected containers"
+          aria-label="Refresh affected containers"
           :loading="diagnosticsDownloading"
           @click="refreshSupportBundle"
         >
@@ -58,7 +79,7 @@ onMounted(() => {
           <template #icon>
             <Copy :size="17" aria-hidden="true" />
           </template>
-          Copy issue dump
+          Copy container details
         </n-button>
         <n-button
           secondary
@@ -68,7 +89,7 @@ onMounted(() => {
           <template #icon>
             <Download :size="17" aria-hidden="true" />
           </template>
-          Download issue dump
+          Download container details
         </n-button>
       </n-flex>
     </div>
@@ -93,9 +114,9 @@ onMounted(() => {
     <n-empty
       v-if="!diagnosticsText && !diagnosticsDownloading"
       class="empty-state"
-      description="Issue dump is unavailable. Refresh to try again."
+      description="Affected container details are unavailable. Refresh to try again."
       :show-icon="false"
     />
-    <pre v-else class="log-viewer issue-dump-viewer">{{ diagnosticsText || "Loading issue dump…" }}</pre>
+    <pre v-else class="log-viewer issue-dump-viewer">{{ diagnosticsText || "Loading affected containers…" }}</pre>
   </section>
 </template>

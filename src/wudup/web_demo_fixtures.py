@@ -1148,7 +1148,7 @@ def _seed_wud_api_snapshot(settings: WebSettings) -> None:
             available=True,
             metadata_available=True,
             last_checked_at=DEMO_CREATED_AT,
-            detail=f"{len(containers)} WUD update metadata item(s) available",
+            detail=f"{len(containers)} updates are available.",
         ),
         containers=containers,
         metadata_checked=True,

@@ -302,10 +302,9 @@ def test_pending_endpoint_preserves_updates_across_degraded_wud_rows(
     assert degraded_body["source"]["fresh"] is False
     assert degraded_body["source"]["degraded"] is True
     assert degraded_body["source"]["detail"] == (
-        "17 WUD update metadata item(s) available; "
-        "9 container observation(s) degraded; "
-        "9 last-known-good update(s) retained; "
-        "0 unresolved"
+        "17 updates are available. "
+        "WUD could not refresh 9 containers. "
+        "9 updates use results from the last successful WUD check."
     )
     retained = [
         item
@@ -391,8 +390,8 @@ def test_pending_endpoint_stays_fresh_with_unrelated_unsupported_registry_row(
     assert body["source"]["degraded"] is False
     assert body["warnings"] == []
     assert body["wud_api"]["detail"] == (
-        "1 WUD update metadata item(s) available; "
-        "1 unsupported container observation(s) ignored"
+        "1 update is available. "
+        "WUD skipped 1 container because its registry is unsupported."
     )
     assert calls == [("GET", "/health"), ("GET", "/api/containers")]
 
