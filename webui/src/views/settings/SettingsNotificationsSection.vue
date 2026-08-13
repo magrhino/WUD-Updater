@@ -3,6 +3,7 @@ import { Bell, RotateCcw, Save, Send, Trash2 } from "@lucide/vue";
 import { NAlert, NButton, NFlex, NInput, NModal, NSelect, NSwitch } from "naive-ui";
 import type { Directive } from "vue";
 
+import { vSettingsSelectLoadingState } from "./settingsDom";
 import { useManagedNotifications } from "./useManagedNotifications";
 
 const vSelectTriggerDescription: Directive<HTMLElement, string> = {
@@ -137,7 +138,10 @@ const {
                   {{ managedSourceLabel(releaseNotificationDeliveryModeEntry) }}
                 </span>
               </div>
-              <div class="settings-preference-controls">
+              <div
+                v-settings-select-loading-state
+                class="settings-preference-controls"
+              >
                 <n-select
                   v-model:value="releaseNotificationDeliveryModeValue"
                   :options="releaseNotificationDeliveryModeOptions"
@@ -240,7 +244,10 @@ const {
                   {{ managedSourceLabel(releaseNotificationVerbosityEntry) }}
                 </span>
               </div>
-              <div class="settings-preference-controls">
+              <div
+                v-settings-select-loading-state
+                class="settings-preference-controls"
+              >
                 <n-select
                   v-model:value="releaseNotificationVerbosityValue"
                   :options="releaseNotificationVerbosityOptions"
@@ -275,7 +282,10 @@ const {
                   Per container sends one detailed notification for each update.
                 </span>
               </div>
-              <div class="settings-preference-controls">
+              <div
+                v-settings-select-loading-state
+                class="settings-preference-controls"
+              >
                 <n-select
                   v-select-trigger-description="
                     'release-notification-summary-help release-notification-per-container-help'
@@ -303,7 +313,10 @@ const {
                   {{ managedSourceLabel(releaseNotificationResendPolicyEntry) }}
                 </span>
               </div>
-              <div class="settings-preference-controls">
+              <div
+                v-settings-select-loading-state
+                class="settings-preference-controls"
+              >
                 <n-select
                   v-model:value="releaseNotificationResendPolicyValue"
                   :options="releaseNotificationResendPolicyOptions"

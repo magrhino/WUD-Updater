@@ -154,7 +154,7 @@ import { SETTINGS_NAV_GROUPS } from "./settingsDisplay";
   }
 }
 
-@media (--wud-compact) {
+@media (--wud-app-shell) {
   .settings-map-link {
     min-height: var(--size-touch-target);
   }
