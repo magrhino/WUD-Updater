@@ -2,6 +2,7 @@
 import { RotateCcw, Save } from "@lucide/vue";
 import { NAlert, NButton, NFlex, NInput, NSelect } from "naive-ui";
 
+import { vSettingsSelectLoadingState } from "./settingsDom";
 import { useManagedPreferences } from "./useManagedPreferences";
 
 defineProps<{
@@ -96,6 +97,7 @@ const {
                 </span>
               </div>
               <n-select
+                v-settings-select-loading-state
                 v-model:value="themePreferenceValue"
                 :options="themePreferenceOptions"
                 :disabled="preferenceControlsDisabled"
@@ -152,6 +154,7 @@ const {
               </div>
               <div class="settings-preference-controls">
                 <n-select
+                  v-settings-select-loading-state
                   v-model:value="digestPinUpdatesValue"
                   :options="digestPinUpdatesOptions"
                   :disabled="preferenceControlsDisabled || !digestPinUpdatesEditable"
@@ -181,6 +184,7 @@ const {
               </div>
               <div class="settings-preference-controls">
                 <n-select
+                  v-settings-select-loading-state
                   v-model:value="retagDigestPinsValue"
                   :options="retagDigestPinsOptions"
                   :disabled="preferenceControlsDisabled || !retagDigestPinsEditable"
@@ -207,6 +211,7 @@ const {
               </div>
               <div class="settings-preference-controls">
                 <n-select
+                  v-settings-select-loading-state
                   v-model:value="onboardingChecklistValue"
                   :options="onboardingChecklistOptions"
                   :disabled="preferenceControlsDisabled"

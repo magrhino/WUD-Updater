@@ -3,6 +3,7 @@ import { Bell, RotateCcw, Save, Send, Trash2 } from "@lucide/vue";
 import { NAlert, NButton, NFlex, NInput, NModal, NSelect, NSwitch } from "naive-ui";
 import type { Directive } from "vue";
 
+import { vSettingsSelectLoadingState } from "./settingsDom";
 import { useManagedNotifications } from "./useManagedNotifications";
 
 const vSelectTriggerDescription: Directive<HTMLElement, string> = {
@@ -139,6 +140,7 @@ const {
               </div>
               <div class="settings-preference-controls">
                 <n-select
+                  v-settings-select-loading-state
                   v-model:value="releaseNotificationDeliveryModeValue"
                   :options="releaseNotificationDeliveryModeOptions"
                   :disabled="
@@ -242,6 +244,7 @@ const {
               </div>
               <div class="settings-preference-controls">
                 <n-select
+                  v-settings-select-loading-state
                   v-model:value="releaseNotificationVerbosityValue"
                   :options="releaseNotificationVerbosityOptions"
                   :disabled="
@@ -280,6 +283,7 @@ const {
                   v-select-trigger-description="
                     'release-notification-summary-help release-notification-per-container-help'
                   "
+                  v-settings-select-loading-state
                   v-model:value="releaseNotificationModeValue"
                   :options="releaseNotificationModeOptions"
                   :disabled="notificationControlsDisabled || !releaseNotificationModeEditable"
@@ -305,6 +309,7 @@ const {
               </div>
               <div class="settings-preference-controls">
                 <n-select
+                  v-settings-select-loading-state
                   v-model:value="releaseNotificationResendPolicyValue"
                   :options="releaseNotificationResendPolicyOptions"
                   :disabled="
