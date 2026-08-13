@@ -398,6 +398,10 @@
     display: grid;
   }
 
+  .section-heading > .section-heading-icon {
+    display: none;
+  }
+
   .list-row {
     grid-template-columns: 1fr;
   }

@@ -481,6 +481,11 @@ describe("app shell", () => {
   });
 
   it("shows settings navigation and refreshes the settings route", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
     const stores = createAppStores();
     vi.spyOn(stores.connection, "loadStatus").mockResolvedValue();
     const loadSettings = vi
@@ -494,8 +499,13 @@ describe("app shell", () => {
       .mockResolvedValue();
 
     const { wrapper } = await mountAppAt(stores, "/settings");
+    await flushPromises();
 
     expect(wrapper.text()).toContain("Settings");
+    const settingsItem = wrapper
+      .findAll(".nav-item")
+      .find((item) => item.text().includes("Settings"));
+    expect(scrollIntoView.mock.contexts).toContain(settingsItem?.element);
     loadSettings.mockClear();
     loadCoreUpdateTour.mockClear();
     await wrapper.find('button[aria-label="Refresh current view"]').trigger("click");

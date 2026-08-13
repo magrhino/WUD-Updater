@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, type Component } from "vue";
+import { computed, nextTick, onMounted, ref, watch, type Component } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import {
   BellOff,
@@ -20,6 +20,7 @@ import AppBrandMark from "./AppBrandMark.vue";
 
 const route = useRoute();
 const connection = useConnectionStore();
+const navListRef = ref<HTMLElement | null>(null);
 
 const RELEASES_URL = "https://github.com/magrhino/wudup/releases";
 const VERSION_RELEASE_RE = /^v?\d+\.\d+/;
@@ -122,21 +123,39 @@ function isNavItemActive(item: NavItem): boolean {
   );
 }
 
-function scrollNavItemIntoView(event: FocusEvent): void {
-  if (!(event.currentTarget instanceof HTMLElement)) {
-    return;
-  }
-
-  event.currentTarget.scrollIntoView({
+function scrollNavElementIntoView(element: HTMLElement): void {
+  element.scrollIntoView?.({
     block: "nearest",
     inline: "nearest",
   });
 }
 
+function scrollNavItemIntoView(event: FocusEvent): void {
+  if (event.currentTarget instanceof HTMLElement) {
+    scrollNavElementIntoView(event.currentTarget);
+  }
+}
+
+async function scrollActiveNavItemIntoView(): Promise<void> {
+  await nextTick();
+  const activeItem = navListRef.value?.querySelector<HTMLElement>(
+    ".nav-item-active",
+  );
+  if (activeItem) {
+    scrollNavElementIntoView(activeItem);
+  }
+}
+
+watch(
+  () => route.name,
+  () => runInBackground(scrollActiveNavItemIntoView()),
+);
+
 onMounted(() => {
   if (connection.status === null) {
     runInBackground(connection.loadStatus());
   }
+  runInBackground(scrollActiveNavItemIntoView());
 });
 </script>
 
@@ -147,7 +166,7 @@ onMounted(() => {
       <span>WUDup</span>
     </RouterLink>
 
-    <nav class="nav-list">
+    <nav ref="navListRef" class="nav-list">
       <RouterLink
         v-for="item in navItems"
         :key="item.to"
