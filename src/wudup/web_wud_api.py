@@ -596,6 +596,41 @@ def _count_phrase(count: int, noun: str) -> str:
     return f"{count} {noun}{'' if count == 1 else 's'}"
 
 
+def _degraded_observation_detail(
+    degraded_container_count: int,
+    retained_update_count: int,
+    recovered_update_count: int,
+) -> str:
+    detail = (
+        f" WUD could not refresh "
+        f"{_count_phrase(degraded_container_count, 'container')}."
+    )
+    if retained_update_count:
+        retained = _count_phrase(retained_update_count, "update")
+        detail += (
+            f" {retained} {'uses the result' if retained_update_count == 1 else 'use results'} "
+            "from the last successful WUD check."
+        )
+    if recovered_update_count:
+        recovered = _count_phrase(recovered_update_count, "update")
+        detail += (
+            f" {recovered} {'was' if recovered_update_count == 1 else 'were'} "
+            "recovered from the pending file."
+        )
+    unresolved_count = max(
+        0,
+        degraded_container_count
+        - retained_update_count
+        - recovered_update_count,
+    )
+    if unresolved_count:
+        detail += (
+            " Update status is unknown for "
+            f"{_count_phrase(unresolved_count, 'container')}."
+        )
+    return detail
+
+
 def _observation_status_detail(
     available_update_count: int,
     degraded_container_count: int,
@@ -606,33 +641,11 @@ def _observation_status_detail(
     updates = _count_phrase(available_update_count, "update")
     detail = f"{updates} {'is' if available_update_count == 1 else 'are'} available."
     if degraded_container_count:
-        detail += (
-            f" WUD could not refresh "
-            f"{_count_phrase(degraded_container_count, 'container')}."
+        detail += _degraded_observation_detail(
+            degraded_container_count,
+            retained_update_count,
+            recovered_update_count,
         )
-        if retained_update_count:
-            retained = _count_phrase(retained_update_count, "update")
-            detail += (
-                f" {retained} {'uses the result' if retained_update_count == 1 else 'use results'} "
-                "from the last successful WUD check."
-            )
-        if recovered_update_count:
-            recovered = _count_phrase(recovered_update_count, "update")
-            detail += (
-                f" {recovered} {'was' if recovered_update_count == 1 else 'were'} "
-                "recovered from the pending file."
-            )
-        unresolved_count = max(
-            0,
-            degraded_container_count
-            - retained_update_count
-            - recovered_update_count,
-        )
-        if unresolved_count:
-            detail += (
-                " Update status is unknown for "
-                f"{_count_phrase(unresolved_count, 'container')}."
-            )
     if unsupported_container_count:
         containers = _count_phrase(unsupported_container_count, "container")
         registry = "its registry is" if unsupported_container_count == 1 else "their registries are"

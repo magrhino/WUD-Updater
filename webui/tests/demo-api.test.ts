@@ -23,6 +23,7 @@ describe("demo web API", () => {
       dev_auth_bypass: false,
       mutations_enabled: false,
       auto_update_scheduler_enabled: false,
+      wud_api: { detail: "3 updates are available." },
     });
     await expect(api.settings()).resolves.toMatchObject({
       updater: expect.arrayContaining([
