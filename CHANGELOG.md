@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.59.1](https://github.com/magrhino/wudup/compare/v0.59.0...v0.59.1) (2026-08-14)
+
+
+### Bug Fixes
+
+* **settings:** harden responsive accessibility ([#614](https://github.com/magrhino/wudup/issues/614)) ([485e1ca](https://github.com/magrhino/wudup/commit/485e1ca8cdbb0cdead2be80d9f2232ba043346aa))
+* **webui:** clarify degraded WUD notifications ([#613](https://github.com/magrhino/wudup/issues/613)) ([e509d58](https://github.com/magrhino/wudup/commit/e509d58661e81171990256d586c6ceb2811de360))
+
 ## [0.59.0](https://github.com/magrhino/wudup/compare/v0.58.1...v0.59.0) (2026-08-12)
 
 
