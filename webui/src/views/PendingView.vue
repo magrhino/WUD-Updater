@@ -561,15 +561,15 @@ async function retryPendingStatus(): Promise<void> {
   pendingStatusError.value = "";
   await updates.loadPending().catch(() => undefined);
   if (updates.error) {
-    pendingStatusError.value = `WUD status check failed: ${updates.error}`;
+    pendingStatusError.value = `WUD check failed: ${updates.error}`;
     return;
   }
   pendingStatusMessage.value = pendingSourceDegraded.value
-    ? "WUD status checked. Some update metadata is still unavailable."
-    : "WUD status checked. Update metadata is current.";
+    ? "WUD checked again. Some container update checks are still unavailable."
+    : "WUD checked again. Container update information is current.";
 }
 
-function viewIssueDump(): void {
+function viewAffectedContainers(): void {
   void router.push({ name: "issue-dump" });
 }
 
@@ -838,8 +838,8 @@ onBeforeUnmount(() => {
         align="center"
         :size="8"
       >
-        <n-button size="small" type="primary" @click="viewIssueDump">
-          View issue dump
+        <n-button size="small" type="primary" @click="viewAffectedContainers">
+          View affected containers
         </n-button>
         <n-button
           size="small"

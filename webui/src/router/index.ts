@@ -90,7 +90,7 @@ export const routes: RouteRecordRaw[] = [
     path: "/diagnostics/issue-dump",
     name: "issue-dump",
     component: () => import("../views/IssueDumpView.vue"),
-    meta: { requiresAuth: true, title: "Issue dump" },
+    meta: { requiresAuth: true, title: "Affected containers" },
   },
   {
     path: "/runs/:id",

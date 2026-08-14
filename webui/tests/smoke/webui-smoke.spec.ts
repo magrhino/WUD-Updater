@@ -50,7 +50,7 @@ function wudApiStatus() {
     available: true,
     metadata_available: true,
     last_checked_at: "2026-01-02T00:00:00+00:00",
-    detail: "1 WUD update metadata item(s) available",
+    detail: "1 update is available.",
   };
 }
 

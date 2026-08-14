@@ -194,7 +194,7 @@ def test_diagnostics_support_bundle_includes_wud_observation_issue_dump(
         for index in range(7)
     ]
     degraded = []
-    for index in range(5):
+    for index in range(12):
         row = _wud_api_container(
             name=f"degraded-{index}",
             image=f"ghcr.io/acme/degraded-{index}",
@@ -230,16 +230,16 @@ def test_diagnostics_support_bundle_includes_wud_observation_issue_dump(
     observations = body["wud_api_observations"]
     assert observations["counts"] == {
         "available": 7,
-        "degraded": 5,
+        "degraded": 12,
         "retained": 0,
         "recovered": 0,
-        "unresolved": 5,
+        "unresolved": 12,
         "unsupported_ignored": 9,
     }
-    assert len(observations["items"]) == 14
+    assert len(observations["items"]) == 21
     assert [item["outcome"] for item in observations["items"]].count(
         "unresolved"
-    ) == 5
+    ) == 12
     assert [item["outcome"] for item in observations["items"]].count(
         "unsupported_ignored"
     ) == 9
@@ -257,11 +257,10 @@ def test_diagnostics_support_bundle_includes_wud_observation_issue_dump(
         "error": "WUD registry request failed with HTTP status 429",
     }
     assert body["pending_summary"]["wud_api"]["detail"] == (
-        "7 WUD update metadata item(s) available; "
-        "5 container observation(s) degraded; "
-        "0 last-known-good update(s) retained; "
-        "5 unresolved; "
-        "9 unsupported container observation(s) ignored"
+        "7 updates are available. "
+        "WUD could not refresh 12 containers. "
+        "Update status is unknown for 12 containers. "
+        "WUD skipped 9 containers because their registries are unsupported."
     )
     assert "raw-payload-marker" not in serialized
     assert "rawOnly" not in serialized

@@ -479,7 +479,7 @@ describe("pending view fallback and release notes", () => {
     expect(wrapper.find('[role="status"]').exists()).toBe(true);
     const viewDump = wrapper
       .findAll("button")
-      .find((button) => button.text().includes("View issue dump"));
+      .find((button) => button.text().includes("View affected containers"));
     const retry = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Check WUD status again"));
@@ -532,7 +532,7 @@ describe("pending view fallback and release notes", () => {
     expect(lifecycle.loadSecurityScans).toHaveBeenCalledTimes(1);
     expect(lifecycle.refreshReleaseNotes).toHaveBeenCalledTimes(1);
     expect(wrapper.text()).toContain(
-      "WUD status checked. Some update metadata is still unavailable.",
+      "WUD checked again. Some container update checks are still unavailable.",
     );
   });
 
@@ -563,7 +563,7 @@ describe("pending view fallback and release notes", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain(
-      "WUD status check failed: WUD API timed out",
+      "WUD check failed: WUD API timed out",
     );
   });
 

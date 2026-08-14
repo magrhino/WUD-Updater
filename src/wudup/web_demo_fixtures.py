@@ -1141,6 +1141,16 @@ def _seed_wud_api_snapshot(settings: WebSettings) -> None:
             },
         ),
     )
+    update_count = sum(
+        bool(
+            (container.remote_tag and container.remote_tag != container.local_tag)
+            or (
+                container.remote_digest
+                and container.remote_digest != container.local_digest
+            )
+        )
+        for container in containers
+    )
     base_url = settings.wud_api_base_url or web_wud_api.DEFAULT_WUD_API_BASE_URL
     snapshot = web_wud_api.WudApiSnapshot(
         status=web_wud_api.WudApiStatus(
@@ -1148,7 +1158,13 @@ def _seed_wud_api_snapshot(settings: WebSettings) -> None:
             available=True,
             metadata_available=True,
             last_checked_at=DEMO_CREATED_AT,
-            detail=f"{len(containers)} WUD update metadata item(s) available",
+            detail=web_wud_api._observation_status_detail(
+                update_count,
+                0,
+                0,
+                0,
+                0,
+            ),
         ),
         containers=containers,
         metadata_checked=True,

@@ -28,12 +28,24 @@ vi.mock("@vueuse/core", () => ({
 }));
 
 function supportBundle(): DiagnosticsSupportBundleResponse {
+  const observations = wudApiObservationDiagnostics();
+  observations.items.push({
+    ...observations.items[0],
+    outcome: "unsupported_ignored",
+    reason_code: "unsupported_registry",
+    container_id: "docker.local.socket-proxy",
+    name: "socket-proxy",
+    image: "lscr.io/linuxserver/socket-proxy:latest",
+    retryable: false,
+    error: "Unsupported registry",
+  });
+  observations.counts.unsupported_ignored = 1;
   return {
     wudup_version: "0.24.2",
     settings: settingsResponse(),
     doctor_result: doctorResponse(),
     wud_api_diagnostics: wudApiConfigurationDiagnostics(),
-    wud_api_observations: wudApiObservationDiagnostics(),
+    wud_api_observations: observations,
     pending_summary: pendingResponse(),
     last_run_status: null,
     diagnostics_warnings: [],
@@ -74,19 +86,24 @@ describe("IssueDumpView", () => {
   });
 
   it("loads formatted observation diagnostics in read-only mode", async () => {
-    const { wrapper, ensureCsrf, diagnosticsSupportBundle } =
+    const { wrapper, router, ensureCsrf, diagnosticsSupportBundle } =
       await mountIssueDump(async () => supportBundle());
 
     expect(diagnosticsSupportBundle).toHaveBeenCalledTimes(1);
     expect(ensureCsrf).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain("Issue dump loaded.");
+    expect(router.currentRoute.value.meta.title).toBe("Affected containers");
+    expect(wrapper.text()).toContain("Affected container details loaded.");
     const dump = wrapper.find(".issue-dump-viewer").element.textContent ?? "";
-    expect(dump).toContain('\n  "wud_api_observations": {');
+    expect(dump).toContain('"containers_affected": 1');
     expect(dump).toContain('"reason_code": "reported_error"');
+    expect(dump).not.toContain("socket-proxy");
+    expect(dump).not.toContain('"outcome": "unsupported_ignored"');
+    expect(dump).not.toContain('"pending_summary"');
+    expect(dump).not.toContain('"wud_api_diagnostics"');
     expect(
       wrapper
         .findAll("button")
-        .find((button) => button.text().includes("Copy issue dump"))
+        .find((button) => button.text().includes("Copy container details"))
         ?.attributes("disabled"),
     ).toBeUndefined();
   });
@@ -100,13 +117,15 @@ describe("IssueDumpView", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Copy issue dump"))
+      .find((button) => button.text().includes("Copy container details"))
       ?.trigger("click");
     await flushPromises();
 
     expect(clipboardCopy).toHaveBeenCalledWith(displayed);
     expect(diagnosticsSupportBundle).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain("Diagnostics copied to clipboard.");
+    expect(wrapper.text()).toContain(
+      "Affected container details copied to clipboard.",
+    );
 
     const createObjectURL = vi.fn(() => "blob:issue-dump");
     const revokeObjectURL = vi.fn();
@@ -121,15 +140,20 @@ describe("IssueDumpView", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Download issue dump"))
+      .find((button) => button.text().includes("Download container details"))
       ?.trigger("click");
     await flushPromises();
 
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(click).toHaveBeenCalledTimes(1);
+    expect(click.mock.instances[0]?.download).toBe(
+      "wudup-affected-containers.json",
+    );
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:issue-dump");
     expect(diagnosticsSupportBundle).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain("Diagnostics downloaded successfully.");
+    expect(wrapper.text()).toContain(
+      "Affected container details downloaded successfully.",
+    );
   });
 
   it("preserves the displayed snapshot and surfaces a refresh failure", async () => {
@@ -143,7 +167,7 @@ describe("IssueDumpView", () => {
       wrapper.find(".issue-dump-viewer").element.textContent ?? "";
 
     await wrapper
-      .find('button[aria-label="Refresh issue dump"]')
+      .find('button[aria-label="Refresh affected containers"]')
       .trigger("click");
     await flushPromises();
 
@@ -161,7 +185,7 @@ describe("IssueDumpView", () => {
 
     expect(initial.wrapper.text()).toContain("Support bundle unavailable");
     expect(initial.wrapper.text()).toContain(
-      "Issue dump is unavailable. Refresh to try again.",
+      "Affected container details are unavailable. Refresh to try again.",
     );
   });
 

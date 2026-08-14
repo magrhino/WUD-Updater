@@ -592,6 +592,67 @@ def get_observation_diagnostics(
     )
 
 
+def _count_phrase(count: int, noun: str) -> str:
+    return f"{count} {noun}{'' if count == 1 else 's'}"
+
+
+def _degraded_observation_detail(
+    degraded_container_count: int,
+    retained_update_count: int,
+    recovered_update_count: int,
+) -> str:
+    detail = (
+        f" WUD could not refresh "
+        f"{_count_phrase(degraded_container_count, 'container')}."
+    )
+    if retained_update_count:
+        retained = _count_phrase(retained_update_count, "update")
+        detail += (
+            f" {retained} {'uses the result' if retained_update_count == 1 else 'use results'} "
+            "from the last successful WUD check."
+        )
+    if recovered_update_count:
+        recovered = _count_phrase(recovered_update_count, "update")
+        detail += (
+            f" {recovered} {'was' if recovered_update_count == 1 else 'were'} "
+            "recovered from the pending file."
+        )
+    unresolved_count = max(
+        0,
+        degraded_container_count
+        - retained_update_count
+        - recovered_update_count,
+    )
+    if unresolved_count:
+        detail += (
+            " Update status is unknown for "
+            f"{_count_phrase(unresolved_count, 'container')}."
+        )
+    return detail
+
+
+def _observation_status_detail(
+    available_update_count: int,
+    degraded_container_count: int,
+    retained_update_count: int,
+    recovered_update_count: int,
+    unsupported_container_count: int,
+) -> str:
+    updates = _count_phrase(available_update_count, "update")
+    detail = f"{updates} {'is' if available_update_count == 1 else 'are'} available."
+    if degraded_container_count:
+        detail += _degraded_observation_detail(
+            degraded_container_count,
+            retained_update_count,
+            recovered_update_count,
+        )
+    if unsupported_container_count:
+        containers = _count_phrase(unsupported_container_count, "container")
+        registry = "its registry is" if unsupported_container_count == 1 else "their registries are"
+        detail += f" WUD skipped {containers} because {registry} unsupported."
+    return detail
+
+
 def _snapshot_cache_ttl(snapshot: WudApiSnapshot) -> float:
     if snapshot.status.state in {"unavailable", "error"} or snapshot.degraded_container_count:
         return WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS
@@ -895,28 +956,13 @@ def _refresh_snapshot_serialized(
         previous=_pending_observations(cache_key),
         observed_at=checked_at,
     )
-    detail = f"{len(containers)} WUD update metadata item(s) available"
-    if degraded_container_count:
-        unresolved_count = max(
-            0,
-            degraded_container_count
-            - retained_update_count
-            - recovered_update_count,
-        )
-        detail = (
-            f"{detail}; {degraded_container_count} container observation(s) degraded; "
-            f"{retained_update_count} last-known-good update(s) retained; "
-            f"{unresolved_count} unresolved"
-        )
-    if recovered_update_count:
-        detail = (
-            f"{detail}; {recovered_update_count} pending-file update(s) recovered"
-        )
-    if unsupported_container_count:
-        detail = (
-            f"{detail}; {unsupported_container_count} unsupported container "
-            "observation(s) ignored"
-        )
+    detail = _observation_status_detail(
+        len(containers),
+        degraded_container_count,
+        retained_update_count,
+        recovered_update_count,
+        unsupported_container_count,
+    )
     snapshot = replace(
         _snapshot(
             "ready",
@@ -1238,12 +1284,13 @@ def _with_watch_rate_limit_detail(
     snapshot: WudApiSnapshot,
     cooldown_remaining: float,
 ) -> WudApiSnapshot:
+    cooldown_seconds = math.ceil(cooldown_remaining)
     detail = (
-        f"WUD API registry retry paused after HTTP 429; try again in "
-        f"{math.ceil(cooldown_remaining)} second(s)"
+        "WUD temporarily paused registry checks after receiving HTTP 429. "
+        f"Try again in {_count_phrase(cooldown_seconds, 'second')}."
     )
     if snapshot.status.detail:
-        detail = f"{snapshot.status.detail}; {detail}"
+        detail = f"{snapshot.status.detail.rstrip(';. ')}. {detail}"
     return replace(
         snapshot,
         status=snapshot.status.model_copy(update={"detail": detail}),

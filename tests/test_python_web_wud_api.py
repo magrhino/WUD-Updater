@@ -272,8 +272,8 @@ def test_wud_api_snapshot_tracks_only_retryable_degraded_container_ids(
     assert snapshot.degraded_container_count == 1
     assert snapshot.retained_update_count == 0
     assert snapshot.recovered_update_count == 0
-    assert "1 unresolved" in snapshot.status.detail
-    assert "1 unsupported container observation(s) ignored" in snapshot.status.detail
+    assert "Update status is unknown for 1 container" in snapshot.status.detail
+    assert "WUD skipped 1 container" in snapshot.status.detail
     diagnostics = web_wud_api.get_observation_diagnostics(settings)
     assert diagnostics.counts.model_dump() == {
         "available": 1,
@@ -839,8 +839,8 @@ def test_wud_api_ignores_unsupported_registry_observation_with_pending_target(
     assert snapshot.retained_update_count == 0
     assert snapshot.recovered_update_count == 0
     assert snapshot.status.detail == (
-        "1 WUD update metadata item(s) available; "
-        "1 unsupported container observation(s) ignored"
+        "1 update is available. "
+        "WUD skipped 1 container because its registry is unsupported."
     )
 
 
@@ -914,11 +914,9 @@ def test_wud_api_recovers_cold_start_update_from_matching_pending_file(
     assert snapshot.retained_update_count == 0
     assert snapshot.recovered_update_count == 1
     assert snapshot.status.detail == (
-        "1 WUD update metadata item(s) available; "
-        "1 container observation(s) degraded; "
-        "0 last-known-good update(s) retained; "
-        "0 unresolved; "
-        "1 pending-file update(s) recovered"
+        "1 update is available. "
+        "WUD could not refresh 1 container. "
+        "1 update was recovered from the pending file."
     )
     diagnostic = snapshot.observation_diagnostics[0]
     assert diagnostic.outcome == "recovered"
