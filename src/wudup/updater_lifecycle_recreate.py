@@ -21,19 +21,46 @@ class _LifecycleRecreateMixin:
 
         stop_result = self._prepare_for_recreate(state)
         self._log_compose_up_scope(state)
-        up_result = self._run_compose_up(
-            stack,
-            state.services,
-            force_recreate=state.scope.force_recreate,
-            no_deps=state.scope.up_no_deps,
-        )
-        if not up_result.ok:
-            return self._handle_compose_up_failure(state, stop_result, up_result)
+        if state.stopped_services:
+            stopped_result = self._run_compose_up_no_start(
+                stack,
+                state.stopped_services,
+                force_recreate=state.scope.force_recreate,
+            )
+            if not stopped_result.ok:
+                return self._handle_compose_up_failure(
+                    state,
+                    stop_result,
+                    stopped_result,
+                )
+
+        up_result = UpResult(True, False)
+        if state.running_services:
+            up_result = self._run_compose_up(
+                stack,
+                state.running_services,
+                force_recreate=state.scope.force_recreate,
+                no_deps=state.scope.up_no_deps or bool(state.stopped_services),
+            )
+            if not up_result.ok:
+                return self._handle_compose_up_failure(state, stop_result, up_result)
+
+        if state.stopped_services:
+            preserved = self._verify_services_stopped(
+                stack,
+                state.stopped_services,
+            )
+            if not preserved.ok:
+                return self._handle_compose_up_failure(
+                    state,
+                    stop_result,
+                    preserved,
+                )
 
         self._progress(
             "recreate",
             "success",
-            f"[{stack.name}] Containers were recreated.",
+            f"[{stack.name}] Containers were recreated with their prior running state.",
             stack=stack.name,
             services=state.services,
             matches=state.matches,
@@ -46,6 +73,9 @@ class _LifecycleRecreateMixin:
 
     def _prepare_for_recreate(self, state: _StackUpdateState) -> _StopResult:
         stack = state.stack
+        stop_services = state.running_stop_services or state.running_services
+        if not stop_services:
+            return _StopResult()
         if self.options.mode == "pause":
             self.log.warning(
                 f"[{stack.name}] Mode pause is deprecated; pausing before recreate and unpausing before health check"
@@ -54,7 +84,7 @@ class _LifecycleRecreateMixin:
                 self.compose.pause(
                     stack.directory,
                     stack.file,
-                    state.services,
+                    stop_services,
                     project_directory=stack.project_directory,
                 )
             except CommandError:
@@ -63,25 +93,27 @@ class _LifecycleRecreateMixin:
             try:
                 if state.service_scoped:
                     self.log.warning(
-                        f"[{stack.name}] Stopping affected service(s): {state.stop_services_label}"
+                        f"[{stack.name}] Stopping affected running service(s): "
+                        f"{' '.join(stop_services)}"
                     )
                     self.compose.stop(
                         stack.directory,
                         stack.file,
-                        state.stop_services,
+                        stop_services,
                         project_directory=stack.project_directory,
                     )
                 else:
-                    if state.stop_services_label:
+                    if stop_services:
                         self.log.warning(
-                            f"[{stack.name}] Stopping stack service(s): {state.stop_services_label}"
+                            f"[{stack.name}] Stopping running stack service(s): "
+                            f"{' '.join(stop_services)}"
                         )
                     else:
                         self.log.warning(f"[{stack.name}] Stopping stack")
                     self.compose.stop(
                         stack.directory,
                         stack.file,
-                        state.stop_services,
+                        stop_services,
                         project_directory=stack.project_directory,
                     )
             except CommandError as exc:
@@ -92,12 +124,21 @@ class _LifecycleRecreateMixin:
         return _StopResult()
 
     def _log_compose_up_scope(self, state: _StackUpdateState) -> None:
-        if state.service_scoped:
+        if state.stopped_services:
             self.log.info(
-                f"[{state.stack.name}] Bringing affected service(s) up: {state.services_label}"
+                f"[{state.stack.name}] Recreating stopped service(s) without "
+                f"starting them: {' '.join(state.stopped_services)}"
             )
-        else:
-            self.log.info(f"[{state.stack.name}] Bringing stack up")
+        if state.running_services and state.service_scoped:
+            self.log.info(
+                f"[{state.stack.name}] Bringing affected running service(s) up: "
+                f"{' '.join(state.running_services)}"
+            )
+        elif state.running_services:
+            self.log.info(
+                f"[{state.stack.name}] Bringing running stack service(s) up: "
+                f"{' '.join(state.running_services)}"
+            )
 
     def _handle_compose_up_failure(
         self,
@@ -164,7 +205,7 @@ class _LifecycleRecreateMixin:
         up_result: UpResult,
     ) -> UpResult | StackStatus:
         stack = state.stack
-        if self.options.mode != "pause":
+        if self.options.mode != "pause" or not state.running_services:
             return up_result
 
         self.log.warning(f"[{stack.name}] Unpausing before health check")
@@ -172,7 +213,7 @@ class _LifecycleRecreateMixin:
             self.compose.unpause(
                 stack.directory,
                 stack.file,
-                state.services,
+                state.running_services,
                 project_directory=stack.project_directory,
             )
         except CommandError as exc:
@@ -207,19 +248,43 @@ class _LifecycleRecreateMixin:
         up_result: UpResult,
     ) -> StackStatus:
         stack = state.stack
+        if not state.running_services:
+            self._progress(
+                "health",
+                "skipped",
+                f"[{stack.name}] Stopped services remained stopped; health wait was skipped.",
+                stack=stack.name,
+                services=state.stopped_services,
+                matches=state.matches,
+            )
+            self.log.info(f"[{stack.name}] Updated without starting stopped services")
+            if state.digest_pin_updates:
+                self._remember_applied_digest_pins(
+                    stack,
+                    state.matches,
+                    state.digest_pin_updates,
+                )
+            if state.digest_unpin_updates:
+                self._remember_applied_digest_unpins(
+                    stack,
+                    state.matches,
+                    state.digest_unpin_updates,
+                )
+            return StackStatus("success", "updated")
+
         if up_result.wait_handled:
             self._progress(
                 "health",
                 "success",
                 f"[{stack.name}] Compose reported healthy containers.",
                 stack=stack.name,
-                services=state.services,
+                services=state.running_services,
                 matches=state.matches,
             )
 
         if up_result.wait_handled or self._wait_for_health(
             stack,
-            state.services,
+            state.running_services,
             state.matches,
         ):
             self.log.info(f"[{stack.name}] Healthy")
@@ -265,7 +330,7 @@ class _LifecycleRecreateMixin:
                 )
             return StackStatus("success", "updated")
 
-        health_details = self._capture_health_details(stack, state.services)
+        health_details = self._capture_health_details(stack, state.running_services)
         if state.compose_rewrite_applied and state.compose_backup is not None:
             return self._handle_compose_rewrite_failure(
                 state,

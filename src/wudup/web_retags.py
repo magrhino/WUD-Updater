@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 import secrets
 import shutil
@@ -21,7 +20,15 @@ from fastapi import HTTPException, Request
 
 from . import web_database, web_jobs
 from .command import CommandError, CommandRunner
-from .compose import ComposeCli, ComposeDiscoveryError, ComposeStack, ServiceImage
+from .compose import (
+    COMPOSE_RUNTIME_FORMAT,
+    ComposeCli,
+    ComposeDiscoveryError,
+    ComposeStack,
+    ServiceImage,
+    compose_runtime_service_key,
+    compose_runtime_service_keys,
+)
 from .compose_rewrite import (
     WUD_TAG_INCLUDE_LABEL,
     _backup_compose,
@@ -142,15 +149,6 @@ _GHCR_GITHUB_REPO_RE = re.compile(
     r"(?P<repo>[A-Za-z0-9._-]{1,100})$",
     re.ASCII,
 )
-_RETAG_COMPOSE_RUNTIME_FORMAT = (
-    '{{.Label "com.docker.compose.project.working_dir"}}\t'
-    '{{.Label "com.docker.compose.project.config_files"}}\t'
-    '{{.Label "com.docker.compose.project"}}\t'
-    '{{.Label "com.docker.compose.service"}}\t'
-    '{{.Label "com.docker.compose.oneoff"}}'
-)
-
-
 @dataclass(frozen=True)
 class _RetagTargetRecord:
     item: RetagTargetItem
@@ -881,43 +879,10 @@ def _running_retag_compose_service_keys(
 ) -> set[tuple[frozenset[Path], str, str]] | None:
     docker = DockerCli(runner=_command_runner(settings))
     try:
-        rows = docker.ps_format(_RETAG_COMPOSE_RUNTIME_FORMAT)
+        rows = docker.ps_format(COMPOSE_RUNTIME_FORMAT)
     except CommandError:
         return None
-
-    keys: set[tuple[frozenset[Path], str, str]] = set()
-    for row in rows:
-        fields = row.split("\t", 4)
-        if len(fields) != 5:
-            continue
-        working_dir, config_files, project, service, oneoff = fields
-        if oneoff.strip().casefold() == "true":
-            continue
-        service = service.strip()
-        if not service:
-            continue
-        config_paths = _retag_runtime_config_paths(working_dir, config_files)
-        if config_paths is not None:
-            keys.add((config_paths, project.strip(), service))
-    return keys
-
-
-def _retag_runtime_config_paths(
-    working_dir: str,
-    config_files: str,
-) -> frozenset[Path] | None:
-    paths: set[Path] = set()
-    for value in config_files.split(","):
-        value = value.strip()
-        if not value:
-            continue
-        path = Path(value)
-        if not path.is_absolute():
-            if not working_dir:
-                return None
-            path = Path(working_dir) / path
-        paths.add(_normalized_retag_compose_path(path))
-    return frozenset(paths) if paths else None
+    return compose_runtime_service_keys(rows)
 
 
 def _retag_compose_service_key(
@@ -927,15 +892,12 @@ def _retag_compose_service_key(
     project_name: str | None = None,
 ) -> tuple[frozenset[Path], str, str]:
     project_directory = stack.project_directory or stack.directory
-    return (
-        frozenset({_normalized_retag_compose_path(project_directory / stack.file)}),
+    return compose_runtime_service_key(
+        project_directory,
+        stack.file,
         stack.project_name if project_name is None else project_name,
         service,
     )
-
-
-def _normalized_retag_compose_path(path: Path) -> Path:
-    return Path(os.path.normpath(path))
 
 
 def _discover_retag_stacks(

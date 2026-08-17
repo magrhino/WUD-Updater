@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from tests.update_from_wud_helpers import (
     UpdateFromWudRunnerTestCase,
 )
@@ -17,7 +19,7 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
     def test_up_wait_failure_writes_error_report_with_command_output(self) -> None:
         self.env["FAKE_COMPOSE_UP_WAIT"] = "1"
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
-        self.make_stack("app", [("app", "repo/app:latest", None)])
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
         self.set_image_state("repo/app:latest", "old", "sha256:old")
         self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
         stack_state = self.fake_root / "stacks" / "app"
@@ -38,7 +40,74 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         self.assertIn("--wait --wait-timeout 0 app", report)
         self.assertIn("compose stdout before failure", report)
         self.assertIn("network create failed", report)
-        self.assertIn("health: docker compose ps -q returned no containers", report)
+        self.assertIn("health: container=cid-app status=running health=healthy", report)
+
+    def test_stopped_service_is_recreated_without_being_started(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", None)])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        calls = self.calls()
+        self.assertIn(
+            "compose -f docker-compose.yml up -d --remove-orphans --no-deps --no-start app",
+            calls,
+        )
+        self.assertNotIn("compose -f docker-compose.yml stop app", calls)
+        self.assertNotIn("--wait", calls)
+        event = self.db_rows(
+            "SELECT metadata_json FROM update_events ORDER BY id DESC LIMIT 1"
+        )[0]
+        self.assertEqual(
+            json.loads(str(event["metadata_json"])),
+            {
+                "reason": "updated",
+                "runtime_state_after": "not-running",
+                "runtime_state_before": "not-running",
+            },
+        )
+
+    def test_update_fails_closed_when_runtime_state_cannot_be_verified(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        (self.fake_root / "stacks" / "app" / "ps_fail").write_text(
+            "",
+            encoding="utf-8",
+        )
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:latest\n",
+        )
+        calls = self.calls()
+        self.assertNotIn("compose -f docker-compose.yml pull", calls)
+        self.assertNotIn("compose -f docker-compose.yml up", calls)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("reason=runtime-state-unavailable", report)
+
+    def test_stopped_service_tag_update_preserves_stopped_state(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", None)])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:2.0", "new", "sha256:new")
+
+        result = self.run_python("--yes", "--allow-tag-updates")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn(
+            "image: repo/app:2.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        self.assertIn("--no-start app", self.calls())
+        self.assertNotIn("compose -f docker-compose.yml stop app", self.calls())
     def test_pull_failure_writes_error_report(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
@@ -254,10 +323,9 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         self.assertNotRegex(calls, r"compose -f docker-compose.yml pull mamapi")
         self.assertNotRegex(calls, r"compose -f docker-compose.yml stop .*gluetun")
         self.assertNotRegex(calls, r"compose -f docker-compose.yml stop .*mamapi")
-    def test_network_mode_consumer_up_includes_missing_provider(self) -> None:
+    def test_network_mode_consumer_preserves_stopped_provider(self) -> None:
         compose_file = self.prepare_network_mode_media_stack(
             include_provider_cid=False,
-            write_provider_hook=True,
         )
 
         result = self.run_python("--yes", "--allow-tag-updates")
@@ -273,8 +341,11 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         self.assertRegex(calls, r"compose -f docker-compose.yml stop qbittorrent")
         self.assertRegex(
             calls,
-            r"compose -f docker-compose.yml up -d --remove-orphans gluetun qbittorrent",
+            r"compose -f docker-compose.yml up -d --remove-orphans --no-deps --no-start gluetun",
         )
-        self.assertNotRegex(calls, r"compose -f docker-compose.yml up -d .*--no-deps")
+        self.assertRegex(
+            calls,
+            r"compose -f docker-compose.yml up -d --remove-orphans --no-deps qbittorrent",
+        )
         self.assertNotRegex(calls, r"compose -f docker-compose.yml pull gluetun")
         self.assertNotRegex(calls, r"compose -f docker-compose.yml stop .*gluetun")

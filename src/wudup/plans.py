@@ -1144,6 +1144,7 @@ def _pending_stack_groups(
                 directory=str(stack.directory),
                 compose_file=stack.file,
                 project_directory=_project_directory_text(stack.project_directory),
+                project_name=stack.project_name,
                 services_label=_pending_services_label(services),
                 services=services,
                 line_numbers=tuple(item.line_no for item in items),

@@ -841,6 +841,27 @@ class ComposeCliTests(FakeDockerCase):
             ],
         )
 
+    def test_up_can_recreate_service_without_starting_it(self) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", None)])
+
+        self.compose.up(
+            stack,
+            "docker-compose.yml",
+            ["app"],
+            no_start=True,
+        )
+
+        self.assertEqual(
+            self.call_commands(),
+            [
+                "compose -f docker-compose.yml up -d --remove-orphans --no-deps --no-start app",
+            ],
+        )
+        self.assertEqual(
+            self.compose.ps_quiet_checked(stack, "docker-compose.yml", ["app"]),
+            [],
+        )
+
 
 def _safe_name(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]", "_", value)

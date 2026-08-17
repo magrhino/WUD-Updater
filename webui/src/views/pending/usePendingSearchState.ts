@@ -10,7 +10,10 @@ import type {
 } from "../../api/client";
 import type { ReleaseChangelogState } from "../../utils/releaseChangelog";
 import type { SafetyCue } from "./safetyCues";
-import type { SnoozedPendingItem } from "./snoozeSelection";
+import type {
+  RuntimeDeferredPendingItem,
+  SnoozedPendingItem,
+} from "./snoozeSelection";
 import {
   filterPendingItems,
   filterPendingStackGroups,
@@ -25,6 +28,7 @@ type UsePendingSearchStateOptions = {
   groupingReady: ComputedRef<boolean>;
   snoozedCandidates: ComputedRef<PendingSnoozedCandidate[]>;
   snoozedItems: ComputedRef<SnoozedPendingItem[]>;
+  stoppedItems: ComputedRef<RuntimeDeferredPendingItem[]>;
   selectableLineNumbers: ComputedRef<number[]>;
   selectableSelections: ComputedRef<PlanSelectionRequest[]>;
   selectAllLabel: ComputedRef<string>;
@@ -74,6 +78,13 @@ export function usePendingSearchState(options: UsePendingSearchStateOptions) {
       pendingSearchContext,
     ),
   );
+  const filteredStoppedItems = computed(() =>
+    filterSnoozedItems(
+      options.stoppedItems.value,
+      pendingSearchText.value,
+      pendingSearchContext,
+    ),
+  );
   const filteredSnoozedCandidates = computed(() =>
     filterSnoozedCandidates(
       options.snoozedCandidates.value,
@@ -92,6 +103,7 @@ export function usePendingSearchState(options: UsePendingSearchStateOptions) {
       return [
         ...filteredStackGroups.value.flatMap((group) => group.visibleLineNumbers),
         ...filteredSnoozedItems.value.map(({ item }) => item.line_no),
+        ...filteredStoppedItems.value.map(({ item }) => item.line_no),
         ...filteredUnmatchedItems.value.map((item) => item.line_no),
       ];
     }
@@ -107,6 +119,10 @@ export function usePendingSearchState(options: UsePendingSearchStateOptions) {
           })),
         ),
         ...filteredSnoozedItems.value.map(({ item }) => ({
+          line_no: item.line_no,
+          selection_id: item.selection_id ?? "",
+        })),
+        ...filteredStoppedItems.value.map(({ item }) => ({
           line_no: item.line_no,
           selection_id: item.selection_id ?? "",
         })),
@@ -183,6 +199,7 @@ export function usePendingSearchState(options: UsePendingSearchStateOptions) {
     filteredSnoozedCandidates,
     filteredSnoozedItems,
     filteredStackGroups,
+    filteredStoppedItems,
     filteredUnmatchedItems,
     pendingSearchActive,
     pendingSearchEmpty,

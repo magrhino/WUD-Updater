@@ -16,6 +16,8 @@ export type SnoozedPendingItem = {
   item: PendingGroupedItem;
 };
 
+export type RuntimeDeferredPendingItem = SnoozedPendingItem;
+
 export function activeSnoozedServiceKeys(
   snoozes: SnoozeSelectionRecord[],
 ): Set<string> {
@@ -71,6 +73,29 @@ export function stackGroupsWithoutSnoozedItems(
         group.items.filter(
           (item) => !itemHasSnoozedService(group, item, snoozedServiceKeys),
         ),
+      ),
+    )
+    .filter((group) => group.items.length > 0);
+}
+
+export function runtimeDeferredItemsForGroups(
+  groups: PendingStackGroup[],
+): RuntimeDeferredPendingItem[] {
+  return groups.flatMap((group) =>
+    group.items
+      .filter((item) => item.runtime_state !== "running")
+      .map((item) => ({ group, item })),
+  );
+}
+
+export function stackGroupsWithoutRuntimeDeferredItems(
+  groups: PendingStackGroup[],
+): PendingStackGroup[] {
+  return groups
+    .map((group) =>
+      stackGroupWithItems(
+        group,
+        group.items.filter((item) => item.runtime_state === "running"),
       ),
     )
     .filter((group) => group.items.length > 0);

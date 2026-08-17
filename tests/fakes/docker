@@ -280,6 +280,7 @@ service_cids(){
     file="$ROOT/stacks/$id/cids.txt"
     [[ -f "$file" ]] && cat "$file"
   fi
+  return 0
 }
 
 apply_image_after_pull(){
@@ -450,6 +451,12 @@ compose_cmd(){
         emit_failure_output "$id" up
         return 19
       fi
+      local up_arg
+      for up_arg in "$@"; do
+        if [[ "$up_arg" == "--no-start" ]]; then
+          return 0
+        fi
+      done
       run_post_up_hook "$id" "$file" "$@"
       return 0
       ;;
@@ -468,6 +475,10 @@ compose_cmd(){
       return 0
       ;;
     ps)
+      if [[ -f "$ROOT/stacks/$id/ps_fail" ]]; then
+        emit_failure_output "$id" ps
+        return 22
+      fi
       if [[ "${1:-}" == "-q" ]]; then
         shift
         if (($#)); then

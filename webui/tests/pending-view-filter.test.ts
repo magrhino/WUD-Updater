@@ -30,6 +30,7 @@ function stackGroup(
     directory: `/docker/${name}`,
     compose_file: "docker-compose.yml",
     project_directory: `/docker/${name}`,
+    project_name: name,
     services_label: services.join(", "),
     services,
     line_numbers: items.map((item) => item.line_no),
@@ -155,6 +156,31 @@ describe("pending view search filter", () => {
     await setPendingSearch(wrapper, "feedface");
 
     expect(wrapper.text()).toContain("repo/cache:latest");
+    expect(wrapper.text()).toContain("1 visible update matched");
+    expect(wrapper.text()).not.toContain("linuxserver/radarr:4.0");
+  });
+
+  it("finds stopped updates by runtime state", async () => {
+    const stopped = pendingGroupedItem({
+      line_no: 4,
+      image: "repo/worker:1.0",
+      repo: "repo/worker",
+      services: ["worker"],
+      runtime_state: "not-running",
+      stopped_services: ["worker"],
+    });
+    const wrapper = mountFilteredPendingView(
+      pendingWithGroups([
+        stackGroup("media", [radarrItem()]),
+        stackGroup("jarvis", [stopped]),
+      ]),
+    ).wrapper;
+    await flushPromises();
+
+    await setPendingSearch(wrapper, "stopped");
+
+    expect(wrapper.text()).toContain("Stopped or unverified containers");
+    expect(wrapper.text()).toContain("repo/worker:1.0");
     expect(wrapper.text()).toContain("1 visible update matched");
     expect(wrapper.text()).not.toContain("linuxserver/radarr:4.0");
   });

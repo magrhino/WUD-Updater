@@ -297,6 +297,7 @@ class PendingStackGroup:
     directory: str
     compose_file: str
     project_directory: str
+    project_name: str
     services_label: str
     services: tuple[str, ...]
     line_numbers: tuple[int, ...]

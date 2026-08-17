@@ -166,6 +166,8 @@ class _RunnerOperationsMixin:
         failure_health: str | None = None,
         force_recreate: bool = False,
         no_deps: bool = True,
+        running_services: Sequence[str] | None = None,
+        stopped_services: Sequence[str] = (),
     ) -> StackStatus:
         return self.lifecycle._handle_tag_update_failure(
             stack,
@@ -179,6 +181,8 @@ class _RunnerOperationsMixin:
             failure_health=failure_health,
             force_recreate=force_recreate,
             no_deps=no_deps,
+            running_services=running_services,
+            stopped_services=stopped_services,
         )
 
     def _write_tag_incident_log(

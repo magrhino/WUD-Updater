@@ -92,6 +92,7 @@ __all__ = (
     "PendingRescanSkippedLine",
     "PendingRescanStatus",
     "PendingResponse",
+    "PendingRuntimeState",
     "PendingSnoozedCandidate",
     "PendingSourceActive",
     "PendingSourceInfo",
@@ -246,6 +247,8 @@ LineNumber = Annotated[int, Field(ge=1)]
 PlanStatus = Literal["ready", "empty", "blocked"]
 
 PendingGroupingStatus = Literal["ready", "unavailable"]
+
+PendingRuntimeState = Literal["running", "not-running", "mixed", "unknown"]
 
 PendingRescanScope = Literal["all", "selected"]
 
@@ -648,12 +651,16 @@ class PendingGroupedItem(PendingItem):
     action: str
     selection_id: str = ""
     diagnostic: PendingDiagnostic | None = None
+    runtime_state: PendingRuntimeState = "unknown"
+    running_services: list[str] = Field(default_factory=list)
+    stopped_services: list[str] = Field(default_factory=list)
 
 class PendingStackGroup(BaseModel):
     name: str
     directory: str
     compose_file: str
     project_directory: str
+    project_name: str
     services_label: str
     services: list[str] = Field(default_factory=list)
     line_numbers: list[int] = Field(default_factory=list)

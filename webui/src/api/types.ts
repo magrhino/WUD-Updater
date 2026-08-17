@@ -148,6 +148,11 @@ export interface PendingDiagnostic {
 }
 
 export type PendingGroupingStatus = "ready" | "unavailable";
+export type PendingRuntimeState =
+  | "running"
+  | "not-running"
+  | "mixed"
+  | "unknown";
 
 export interface PendingGroupedItem extends PendingItem {
   selection_id?: string;
@@ -157,6 +162,9 @@ export interface PendingGroupedItem extends PendingItem {
   services: string[];
   action: string;
   diagnostic: PendingDiagnostic | null;
+  runtime_state: PendingRuntimeState;
+  running_services: string[];
+  stopped_services: string[];
 }
 
 export interface PendingStackGroup {
@@ -164,6 +172,7 @@ export interface PendingStackGroup {
   directory: string;
   compose_file: string;
   project_directory: string;
+  project_name: string;
   services_label: string;
   services: string[];
   line_numbers: number[];

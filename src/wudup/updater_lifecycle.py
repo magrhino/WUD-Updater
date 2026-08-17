@@ -95,6 +95,11 @@ class StackLifecycleExecutor(
         scope = self._update_scope(stack, matches)
         self._log_stack_scope(stack, scope)
 
+        runtime_state = self._initial_service_runtime(stack, scope, matches)
+        if isinstance(runtime_state, StackStatus):
+            return runtime_state
+        running_services, stopped_services = runtime_state
+
         images = tuple(stack.images)
         before = self._image_state(images)
         tag_updates = self._tag_updates(matches)
@@ -158,7 +163,69 @@ class StackLifecycleExecutor(
             digest_unpin_updates=digest_unpin_updates,
             compose_tag_updates=compose_tag_updates,
             tag_stream_updates=tag_stream_updates,
+            running_services=running_services,
+            stopped_services=stopped_services,
         )
+
+    def _initial_service_runtime(
+        self,
+        stack: ComposeStack,
+        scope: UpdateScope,
+        matches: Sequence[Match],
+    ) -> tuple[tuple[str, ...], tuple[str, ...]] | StackStatus:
+        if scope.services is not None:
+            services = scope.services
+        elif scope.stop_services is not None:
+            services = tuple(reversed(scope.stop_services))
+        else:
+            services = tuple(
+                item.service for item in stack.service_images if item.service
+            )
+        services = tuple(dict.fromkeys(services))
+        running: list[str] = []
+        stopped: list[str] = []
+        try:
+            for service in services:
+                cids = self.compose.ps_quiet_checked(
+                    stack.directory,
+                    stack.file,
+                    (service,),
+                    project_directory=stack.project_directory,
+                )
+                (running if cids else stopped).append(service)
+        except CommandError as exc:
+            self.log.error(
+                f"[{stack.name}] Could not verify whether selected services are running; "
+                "the update was not applied."
+            )
+            self._record_failure(
+                stack,
+                matches,
+                phase="preflight",
+                reason="runtime-state-unavailable",
+                services=services,
+                command_error=exc,
+            )
+            self._progress(
+                "preflight",
+                "failure",
+                f"[{stack.name}] Selected service runtime state could not be verified.",
+                stack=stack.name,
+                services=services,
+                matches=matches,
+            )
+            return StackStatus("failure", "runtime-state-unavailable")
+
+        self.runner.stack_runtime_states[stack.index] = (
+            tuple(running),
+            tuple(stopped),
+        )
+        if stopped:
+            self.log.warning(
+                f"[{stack.name}] Selected service(s) already stopped and will remain "
+                f"stopped: {' '.join(stopped)}"
+            )
+        return tuple(running), tuple(stopped)
 
     def _log_stack_scope(self, stack: ComposeStack, scope: UpdateScope) -> None:
         opts = self.options
