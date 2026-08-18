@@ -4,6 +4,22 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.59.2](https://github.com/magrhino/wudup/compare/v0.59.1...v0.59.2) (2026-08-18)
+
+
+### Bug Fixes
+
+* **updater:** preserve stopped container state ([#623](https://github.com/magrhino/wudup/issues/623)) ([bd0c3f5](https://github.com/magrhino/wudup/commit/bd0c3f557b05db0233999bd0f74faa617d9811fa))
+
+
+### Dependencies
+
+* **deps-dev:** bump ruff in the python-development group ([#617](https://github.com/magrhino/wudup/issues/617)) ([43c9694](https://github.com/magrhino/wudup/commit/43c9694365b97be4cc281fe3ac575b90a235ba28))
+* **deps-dev:** bump the npm-development group in /webui with 2 updates ([#621](https://github.com/magrhino/wudup/issues/621)) ([42983a3](https://github.com/magrhino/wudup/commit/42983a3227b1c69bb3963a16ec4029f88f21d9c0))
+* **deps:** bump dorny/paths-filter in the github-actions group ([#622](https://github.com/magrhino/wudup/issues/622)) ([038af96](https://github.com/magrhino/wudup/commit/038af962b4e6702b01707bc18d30e9c614f65cf5))
+* **deps:** bump the npm-production group in /webui with 2 updates ([#620](https://github.com/magrhino/wudup/issues/620)) ([44218ca](https://github.com/magrhino/wudup/commit/44218ca9aabdaf476a3219ec50691b827c798160))
+* **deps:** bump the python-production group with 2 updates ([#616](https://github.com/magrhino/wudup/issues/616)) ([244cfd5](https://github.com/magrhino/wudup/commit/244cfd512218ca540b7ab42b1822ab6037681886))
+
 ## [0.59.1](https://github.com/magrhino/wudup/compare/v0.59.0...v0.59.1) (2026-08-14)
 
 
