@@ -510,14 +510,20 @@ def _event_metadata_for_match(
     runner: Any,
     match: Match,
     status: StackStatus,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     metadata = {"reason": status.reason}
     runtime_state = runner.stack_runtime_states.get(match.stack.index)
-    if runtime_state is not None and match.service in runtime_state[1]:
-        metadata["runtime_state_before"] = "not-running"
-        metadata["runtime_state_after"] = (
-            "not-running" if status.status == "success" else "unknown"
-        )
+    if runtime_state is not None:
+        stopped_services = runtime_state[1]
+        if stopped_services:
+            metadata["stopped_services_before"] = list(stopped_services)
+            if status.status == "success":
+                metadata["stopped_services_after"] = list(stopped_services)
+        if match.service in stopped_services:
+            metadata["runtime_state_before"] = "not-running"
+            metadata["runtime_state_after"] = (
+                "not-running" if status.status == "success" else "unknown"
+            )
     failure = _failure_for_match(runner, match, status)
     if failure is None:
         return metadata

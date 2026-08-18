@@ -397,6 +397,10 @@ compose_cmd(){
           fi
           ;;
         --services)
+          if [[ -f "$ROOT/stacks/$id/config_services_fail" ]]; then
+            emit_failure_output "$id" config_services
+            return 16
+          fi
           if compose_services_from_file "$file"; then
             :
           elif [[ -f "$ROOT/stacks/$id/services.txt" ]]; then

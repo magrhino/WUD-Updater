@@ -44,6 +44,7 @@ from .updater_lifecycle_scope import (
 )
 from .updater_lifecycle_scope import (
     _UpdateScopeMixin,
+    runtime_services_for_scope,
 )
 from .updater_lifecycle_state import _StackUpdateState
 from .updater_models import (
@@ -173,15 +174,7 @@ class StackLifecycleExecutor(
         scope: UpdateScope,
         matches: Sequence[Match],
     ) -> tuple[tuple[str, ...], tuple[str, ...]] | StackStatus:
-        if scope.services is not None:
-            services = scope.services
-        elif scope.stop_services is not None:
-            services = tuple(reversed(scope.stop_services))
-        else:
-            services = tuple(
-                item.service for item in stack.service_images if item.service
-            )
-        services = tuple(dict.fromkeys(services))
+        services = runtime_services_for_scope(scope)
         if not services:
             self.log.error(
                 f"[{stack.name}] Could not determine which Compose services are "

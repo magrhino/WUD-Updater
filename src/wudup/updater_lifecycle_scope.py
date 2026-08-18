@@ -18,6 +18,18 @@ from .updater_matching import (
 from .updater_models import Match, UpdateScope
 
 
+def runtime_services_for_scope(
+    scope: UpdateScope,
+) -> tuple[str, ...]:
+    if scope.services is not None:
+        services = scope.services
+    elif scope.stop_services is not None:
+        services = tuple(reversed(scope.stop_services))
+    else:
+        services = ()
+    return _ordered_unique(services)
+
+
 class _UpdateScopeMixin:
     def _update_scope(self, stack: ComposeStack, matches: Sequence[Match]) -> UpdateScope:
         services = _update_services(matches)

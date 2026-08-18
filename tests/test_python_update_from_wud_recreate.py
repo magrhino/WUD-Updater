@@ -68,6 +68,8 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
                 "reason": "updated",
                 "runtime_state_after": "not-running",
                 "runtime_state_before": "not-running",
+                "stopped_services_after": ["app"],
+                "stopped_services_before": ["app"],
             },
         )
 
@@ -90,6 +92,33 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         calls = self.calls()
         self.assertNotIn("compose -f docker-compose.yml pull", calls)
         self.assertNotIn("compose -f docker-compose.yml up", calls)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("reason=runtime-state-unavailable", report)
+
+    def test_stack_update_fails_closed_when_service_list_is_unavailable(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        (self.fake_root / "containers" / "cid-app.labels").write_text(
+            "WUD-UPDATER-RECREATE-STACK=true\n",
+            encoding="utf-8",
+        )
+        (self.fake_root / "stacks" / "app" / "config_services_fail").write_text(
+            "",
+            encoding="utf-8",
+        )
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:latest\n",
+        )
+        calls = self.calls()
+        self.assertIn("compose -f docker-compose.yml config --services", calls)
+        self.assertNotIn("compose -f docker-compose.yml pull", calls)
+        self.assertNotIn("compose -f docker-compose.yml up", calls)
+        self.assertNotIn("compose -f docker-compose.yml stop", calls)
         report = self.latest_error_report().read_text(encoding="utf-8")
         self.assertIn("reason=runtime-state-unavailable", report)
 
@@ -148,6 +177,8 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         metadata = json.loads(str(worker_event["metadata_json"]))
         self.assertEqual(metadata["runtime_state_before"], "not-running")
         self.assertEqual(metadata["runtime_state_after"], "unknown")
+        self.assertEqual(metadata["stopped_services_before"], ["worker"])
+        self.assertNotIn("stopped_services_after", metadata)
 
     def test_tag_rollback_recovers_running_sibling_when_no_start_fails(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
@@ -424,3 +455,9 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         )
         self.assertNotRegex(calls, r"compose -f docker-compose.yml pull gluetun")
         self.assertNotRegex(calls, r"compose -f docker-compose.yml stop .*gluetun")
+        event = self.db_rows(
+            "SELECT metadata_json FROM update_events ORDER BY id DESC LIMIT 1"
+        )[0]
+        metadata = json.loads(str(event["metadata_json"]))
+        self.assertEqual(metadata["stopped_services_before"], ["gluetun"])
+        self.assertEqual(metadata["stopped_services_after"], ["gluetun"])
