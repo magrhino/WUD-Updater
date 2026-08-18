@@ -818,11 +818,14 @@ def _pending_item_runtime(
             service,
         )
         expected = expected_paths, expected_project, expected_service
-        states = {
+        service_states = tuple(
             state
             for key, state in runtime_service_states
             if compose_runtime_service_key_matches(expected, key)
-        }
+        )
+        if len(service_states) > 1:
+            return "unknown", (), ()
+        states = set(service_states)
         if states == {"running"}:
             running_services.append(service)
         elif not states or states <= {"created", "dead", "exited"}:

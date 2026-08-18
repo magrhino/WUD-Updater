@@ -4,6 +4,7 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
 from tests.web_test_helpers import (
     _assert_pending_grouping_did_not_mutate,
     _client,
@@ -1162,6 +1163,40 @@ def test_pending_endpoint_reports_unknown_for_mixed_scaled_service(
     assert item["running_services"] == []
     assert item["stopped_services"] == []
     assert "ps --all --format" in _fake_docker_calls(fake_root)
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+@pytest.mark.parametrize("state", ["running", "exited"])
+def test_pending_endpoint_reports_unknown_for_homogeneous_scaled_service(
+    tmp_path: Path,
+    state: str,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-running")],
+    )
+    runtime_row = (
+        f"{compose_dir}\t{compose_dir / 'docker-compose.yml'}\t"
+        f"stack\tapp\tFalse\t{state}\n"
+    )
+    (fake_root / "compose-runtime-all.tsv").write_text(
+        runtime_row * 2,
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    item = response.json()["grouping"]["groups"][0]["items"][0]
+    assert item["runtime_state"] == "unknown"
+    assert item["running_services"] == []
+    assert item["stopped_services"] == []
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 

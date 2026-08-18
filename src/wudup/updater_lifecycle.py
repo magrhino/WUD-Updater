@@ -223,11 +223,14 @@ class StackLifecycleExecutor(
                     service,
                     runtime_states,
                 )
-                if service_states and service_states != {"running"} and not (
-                    service_states <= INACTIVE_CONTAINER_STATES
+                state_values = set(service_states)
+                if len(service_states) > 1 or (
+                    state_values
+                    and state_values != {"running"}
+                    and not state_values <= INACTIVE_CONTAINER_STATES
                 ):
                     self.log.error(
-                        f"[{stack.name}] Compose service {service} has mixed or "
+                        f"[{stack.name}] Compose service {service} has scaled or "
                         "unverified container state; the update was not applied."
                     )
                     self._record_failure(
@@ -237,20 +240,22 @@ class StackLifecycleExecutor(
                         reason="runtime-state-unavailable",
                         services=(service,),
                         note=(
-                            f"Compose service {service} runtime states: "
-                            f"{', '.join(sorted(service_states))}."
+                            f"Compose service {service} observed "
+                            f"{len(service_states)} replica(s); runtime states: "
+                            f"{', '.join(sorted(state_values))}."
                         ),
                     )
                     self._progress(
                         "preflight",
                         "failure",
-                        f"[{stack.name}] Service {service} has mixed replica state.",
+                        f"[{stack.name}] Service {service} replica state cannot be "
+                        "safely preserved.",
                         stack=stack.name,
                         services=(service,),
                         matches=matches,
                     )
                     return StackStatus("failure", "runtime-state-unavailable")
-                (running if service_states == {"running"} else stopped).append(service)
+                (running if state_values == {"running"} else stopped).append(service)
         except (CommandError, ValueError) as exc:
             self.log.error(
                 f"[{stack.name}] Could not verify whether selected services are running; "
@@ -295,18 +300,18 @@ class StackLifecycleExecutor(
         stack: ComposeStack,
         service: str,
         runtime_states: Sequence[ComposeRuntimeServiceState],
-    ) -> set[str]:
+    ) -> tuple[str, ...]:
         expected = compose_runtime_service_key(
             stack.project_directory or stack.directory,
             stack.file,
             stack.project_name,
             service,
         )
-        return {
+        return tuple(
             state
             for key, state in runtime_states
             if compose_runtime_service_key_matches(expected, key)
-        }
+        )
 
     def _log_stack_scope(self, stack: ComposeStack, scope: UpdateScope) -> None:
         opts = self.options

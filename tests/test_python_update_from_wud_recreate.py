@@ -126,6 +126,49 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         report = self.latest_error_report().read_text(encoding="utf-8")
         self.assertIn("runtime states: exited, running", report)
 
+    def test_update_fails_closed_for_scaled_running_service(self) -> None:
+        self._assert_scaled_service_fails_closed("running", "cid-running")
+
+    def test_update_fails_closed_for_scaled_stopped_service(self) -> None:
+        self._assert_scaled_service_fails_closed("exited", None)
+
+    def _assert_scaled_service_fails_closed(
+        self,
+        state: str,
+        cid: str | None,
+    ) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        stack_dir = self.make_stack(
+            "app",
+            [("app", "repo/app:latest", cid)],
+        )
+        runtime_row = (
+            f"{stack_dir}\t{stack_dir / 'docker-compose.yml'}\t"
+            f"app\tapp\tFalse\t{state}\n"
+        )
+        (self.fake_root / "compose-runtime-all.tsv").write_text(
+            runtime_row * 2,
+            encoding="utf-8",
+        )
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:latest\n",
+        )
+        calls = self.calls()
+        self.assertNotIn("compose -f docker-compose.yml pull", calls)
+        self.assertNotIn("compose -f docker-compose.yml up", calls)
+        self.assertNotIn("compose -f docker-compose.yml stop", calls)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn(
+            f"observed 2 replica(s); runtime states: {state}",
+            report,
+        )
+
     def test_stopped_oneoff_container_does_not_make_service_mixed(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         stack_dir = self.make_stack(
