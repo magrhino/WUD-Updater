@@ -512,26 +512,7 @@ def _event_metadata_for_match(
     status: StackStatus,
 ) -> dict[str, Any]:
     metadata = {"reason": status.reason}
-    runtime_state = runner.stack_runtime_states.get(match.stack.index)
-    if runtime_state is not None:
-        stopped_services = runtime_state[1]
-        verified_after = runner.stack_runtime_states_after.get(match.stack.index)
-        after_running = () if verified_after is None else verified_after[0]
-        after_stopped = () if verified_after is None else verified_after[1]
-        if stopped_services:
-            metadata["stopped_services_before"] = list(stopped_services)
-            if status.status == "success":
-                metadata["stopped_services_after"] = list(stopped_services)
-            elif verified_after is not None:
-                metadata["stopped_services_after"] = list(after_stopped)
-        if match.service in stopped_services:
-            metadata["runtime_state_before"] = "not-running"
-            if status.status == "success" or match.service in after_stopped:
-                metadata["runtime_state_after"] = "not-running"
-            elif match.service in after_running:
-                metadata["runtime_state_after"] = "running"
-            else:
-                metadata["runtime_state_after"] = "unknown"
+    metadata.update(_runtime_metadata_for_match(runner, match, status))
     failure = _failure_for_match(runner, match, status)
     if failure is None:
         return metadata
@@ -539,6 +520,38 @@ def _event_metadata_for_match(
     health_evidence = _health_evidence(failure)
     if health_evidence:
         metadata["health_evidence"] = health_evidence
+    return metadata
+
+
+def _runtime_metadata_for_match(
+    runner: Any,
+    match: Match,
+    status: StackStatus,
+) -> dict[str, Any]:
+    runtime_state = runner.stack_runtime_states.get(match.stack.index)
+    if runtime_state is None:
+        return {}
+
+    metadata: dict[str, Any] = {}
+    stopped_services = runtime_state[1]
+    verified_after = runner.stack_runtime_states_after.get(match.stack.index)
+    after_running, after_stopped = verified_after or ((), ())
+    if stopped_services:
+        metadata["stopped_services_before"] = list(stopped_services)
+        if status.status == "success":
+            metadata["stopped_services_after"] = list(stopped_services)
+        elif verified_after is not None:
+            metadata["stopped_services_after"] = list(after_stopped)
+    if match.service not in stopped_services:
+        return metadata
+
+    metadata["runtime_state_before"] = "not-running"
+    if status.status == "success" or match.service in after_stopped:
+        metadata["runtime_state_after"] = "not-running"
+    elif match.service in after_running:
+        metadata["runtime_state_after"] = "running"
+    else:
+        metadata["runtime_state_after"] = "unknown"
     return metadata
 
 

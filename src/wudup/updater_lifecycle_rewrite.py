@@ -427,32 +427,13 @@ class _LifecycleRewriteMixin:
                 if running_services is None
                 else tuple(running_services)
             )
-            stopped_result = UpResult(True, False)
-            if stopped_services:
-                stopped_result = self._run_compose_up_no_start(
-                    stack,
-                    stopped_services,
-                    force_recreate=force_recreate,
-                )
-            rollback_up = UpResult(True, False)
-            if active_services:
-                rollback_up = self._run_compose_up(
-                    stack,
-                    active_services,
-                    force_recreate=force_recreate,
-                    no_deps=no_deps or bool(stopped_services),
-                )
-            if stopped_result.ok and rollback_up.ok and stopped_services:
-                stopped_result = self._verify_services_stopped(
-                    stack,
-                    stopped_services,
-                )
-            rollback_ok = stopped_result.ok and rollback_up.ok
-            if rollback_ok and active_services:
-                rollback_ok = rollback_up.wait_handled or self._wait_for_health(
-                    stack,
-                    active_services,
-                )
+            rollback_ok, rollback_error = self._restore_tag_update_services(
+                stack,
+                active_services,
+                stopped_services,
+                force_recreate=force_recreate,
+                no_deps=no_deps,
+            )
             if rollback_ok:
                 self.runner.stack_runtime_states_after[stack.index] = (
                     tuple(active_services),
@@ -474,9 +455,6 @@ class _LifecycleRewriteMixin:
                         "WUD entry pending for manual review."
                     )
             else:
-                rollback_error = (
-                    stopped_result.command_error or rollback_up.command_error
-                )
                 self.log.error(f"[{stack.name}] Rollback failed; manual review required.")
         except OSError:
             self.log.error(f"[{stack.name}] Rollback failed; manual review required.")
@@ -504,6 +482,43 @@ class _LifecycleRewriteMixin:
             failure_health,
         )
         return StackStatus("failure", reason)
+
+    def _restore_tag_update_services(
+        self,
+        stack: ComposeStack,
+        active_services: Sequence[str],
+        stopped_services: Sequence[str],
+        *,
+        force_recreate: bool,
+        no_deps: bool,
+    ) -> tuple[bool, CommandError | None]:
+        stopped_result = UpResult(True, False)
+        if stopped_services:
+            stopped_result = self._run_compose_up_no_start(
+                stack,
+                stopped_services,
+                force_recreate=force_recreate,
+            )
+        rollback_up = UpResult(True, False)
+        if active_services:
+            rollback_up = self._run_compose_up(
+                stack,
+                active_services,
+                force_recreate=force_recreate,
+                no_deps=no_deps or bool(stopped_services),
+            )
+        if stopped_result.ok and rollback_up.ok and stopped_services:
+            stopped_result = self._verify_services_stopped(
+                stack,
+                stopped_services,
+            )
+        rollback_ok = stopped_result.ok and rollback_up.ok
+        if rollback_ok and active_services:
+            rollback_ok = rollback_up.wait_handled or self._wait_for_health(
+                stack,
+                active_services,
+            )
+        return rollback_ok, stopped_result.command_error or rollback_up.command_error
 
     def _write_tag_incident_log(
         self,
