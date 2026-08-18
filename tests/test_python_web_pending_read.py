@@ -1290,6 +1290,32 @@ def test_pending_endpoint_fails_safe_when_runtime_state_is_unavailable(
     assert item["stopped_services"] == []
 
 
+def test_pending_endpoint_fails_safe_when_runtime_state_times_out(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    (fake_root / "ps_hang").write_text("", encoding="utf-8")
+    monkeypatch.setattr(pending_module, "_PENDING_DOCKER_TIMEOUT_SECONDS", 0.01)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    item = response.json()["grouping"]["groups"][0]["items"][0]
+    assert item["runtime_state"] == "unknown"
+    assert item["running_services"] == []
+    assert item["stopped_services"] == []
+
+
 def test_pending_endpoint_reports_unknown_without_compose_project_identity(
     tmp_path: Path,
 ) -> None:

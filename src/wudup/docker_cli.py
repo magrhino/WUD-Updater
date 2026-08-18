@@ -36,6 +36,7 @@ class DockerCli:
         fmt: str = DEFAULT_CONTAINER_FORMAT,
         *,
         all_containers: bool = False,
+        timeout_seconds: float | None = None,
     ) -> list[str]:
         args = [self.executable, "ps"]
         if all_containers:
@@ -44,6 +45,7 @@ class DockerCli:
         return self.runner.capture_lines(
             args,
             check=True,
+            timeout_seconds=timeout_seconds,
         )
 
     def container_images(self) -> list[ContainerImage]:

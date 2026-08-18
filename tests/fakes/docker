@@ -623,6 +623,9 @@ ps_cmd(){
   fi
   if [[ "${1:-}" == "--format" ]]; then
     local format="${2:-}" runtime_file=""
+    if [[ "$include_all" -eq 1 && "$format" == *'{{.State}}'* && -f "$ROOT/ps_hang" ]]; then
+      kill -STOP "$$"
+    fi
     if [[ "$format" == *'com.docker.compose.project.working_dir'* && "$format" == *'com.docker.compose.project.config_files'* && "$format" == *'com.docker.compose.service'* ]]; then
       if [[ "$include_all" -eq 1 && -f "$ROOT/compose-runtime-all.tsv" ]]; then
         runtime_file="$ROOT/compose-runtime-all.tsv"

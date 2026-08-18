@@ -90,6 +90,8 @@ from .wud_file import (
     remove_lines_before_run,
 )
 
+_PENDING_DOCKER_TIMEOUT_SECONDS = 10.0
+
 
 class EffectiveConfigLoader(Protocol):
     def __call__(self, settings: WebSettings) -> UpdaterConfig: ...
@@ -788,6 +790,7 @@ def _pending_runtime_service_states(
         rows = DockerCli(runner=runner).ps_format(
             COMPOSE_RUNTIME_STATE_FORMAT,
             all_containers=True,
+            timeout_seconds=_PENDING_DOCKER_TIMEOUT_SECONDS,
         )
     except CommandError:
         return None

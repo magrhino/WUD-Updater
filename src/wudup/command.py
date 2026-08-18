@@ -128,10 +128,17 @@ class CommandRunner:
         cwd: str | Path | None = None,
         env: Mapping[str, str] | None = None,
         check: bool = True,
+        timeout_seconds: float | None = None,
     ) -> list[str]:
         """Run a command and return stdout split into lines."""
 
-        return self.capture(args, cwd=cwd, env=env, check=check).stdout_lines
+        return self.capture(
+            args,
+            cwd=cwd,
+            env=env,
+            check=check,
+            timeout_seconds=timeout_seconds,
+        ).stdout_lines
 
     def run(
         self,
