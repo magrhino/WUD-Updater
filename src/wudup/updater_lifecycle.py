@@ -8,7 +8,14 @@ from collections.abc import Sequence
 from typing import Any
 
 from .command import CommandError
-from .compose import ComposeStack
+from .compose import (
+    COMPOSE_RUNTIME_STATE_FORMAT,
+    ComposeRuntimeServiceState,
+    ComposeStack,
+    compose_runtime_service_key,
+    compose_runtime_service_key_matches,
+    compose_runtime_service_states,
+)
 from .updater_digest_pin import _digest_pin_tag_materialization_updates
 from .updater_lifecycle_digest import _LifecycleDigestMixin
 from .updater_lifecycle_health import (
@@ -54,6 +61,8 @@ from .updater_models import (
     UpdaterError,
     UpdateScope,
 )
+
+INACTIVE_CONTAINER_STATES = frozenset({"created", "dead", "exited"})
 
 
 class StackLifecycleExecutor(
@@ -200,15 +209,49 @@ class StackLifecycleExecutor(
         running: list[str] = []
         stopped: list[str] = []
         try:
-            for service in services:
-                cids = self.compose.ps_quiet_checked(
-                    stack.directory,
-                    stack.file,
-                    (service,),
-                    project_directory=stack.project_directory,
+            if not stack.project_name:
+                raise ValueError("Compose project identity is unavailable.")
+            runtime_states = compose_runtime_service_states(
+                self.docker.ps_format(
+                    COMPOSE_RUNTIME_STATE_FORMAT,
+                    all_containers=True,
                 )
-                (running if cids else stopped).append(service)
-        except CommandError as exc:
+            )
+            for service in services:
+                service_states = self._compose_service_runtime_states(
+                    stack,
+                    service,
+                    runtime_states,
+                )
+                if service_states and service_states != {"running"} and not (
+                    service_states <= INACTIVE_CONTAINER_STATES
+                ):
+                    self.log.error(
+                        f"[{stack.name}] Compose service {service} has mixed or "
+                        "unverified container state; the update was not applied."
+                    )
+                    self._record_failure(
+                        stack,
+                        matches,
+                        phase="preflight",
+                        reason="runtime-state-unavailable",
+                        services=(service,),
+                        note=(
+                            f"Compose service {service} runtime states: "
+                            f"{', '.join(sorted(service_states))}."
+                        ),
+                    )
+                    self._progress(
+                        "preflight",
+                        "failure",
+                        f"[{stack.name}] Service {service} has mixed replica state.",
+                        stack=stack.name,
+                        services=(service,),
+                        matches=matches,
+                    )
+                    return StackStatus("failure", "runtime-state-unavailable")
+                (running if service_states == {"running"} else stopped).append(service)
+        except (CommandError, ValueError) as exc:
             self.log.error(
                 f"[{stack.name}] Could not verify whether selected services are running; "
                 "the update was not applied."
@@ -219,7 +262,8 @@ class StackLifecycleExecutor(
                 phase="preflight",
                 reason="runtime-state-unavailable",
                 services=services,
-                command_error=exc,
+                command_error=exc if isinstance(exc, CommandError) else None,
+                note=str(exc) if isinstance(exc, ValueError) else "",
             )
             self._progress(
                 "preflight",
@@ -235,12 +279,34 @@ class StackLifecycleExecutor(
             tuple(running),
             tuple(stopped),
         )
+        self.runner.stack_runtime_states_after[stack.index] = (
+            tuple(running),
+            tuple(stopped),
+        )
         if stopped:
             self.log.warning(
                 f"[{stack.name}] Selected service(s) already stopped and will remain "
                 f"stopped: {' '.join(stopped)}"
             )
         return tuple(running), tuple(stopped)
+
+    @staticmethod
+    def _compose_service_runtime_states(
+        stack: ComposeStack,
+        service: str,
+        runtime_states: Sequence[ComposeRuntimeServiceState],
+    ) -> set[str]:
+        expected = compose_runtime_service_key(
+            stack.project_directory or stack.directory,
+            stack.file,
+            stack.project_name,
+            service,
+        )
+        return {
+            state
+            for key, state in runtime_states
+            if compose_runtime_service_key_matches(expected, key)
+        }
 
     def _log_stack_scope(self, stack: ComposeStack, scope: UpdateScope) -> None:
         opts = self.options

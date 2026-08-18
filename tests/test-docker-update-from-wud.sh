@@ -41,6 +41,7 @@ setup_case(){
   FAKE_ROOT="$TEST_TMP/fake"
   mkdir -p "$BASE" "$LOG_DIR" "$FAKE_ROOT/images" "$FAKE_ROOT/manifests" "$FAKE_ROOT/stacks" "$FAKE_ROOT/containers"
   : > "$FAKE_ROOT/containers.tsv"
+  : > "$FAKE_ROOT/compose-runtime.tsv"
   : > "$FAKE_ROOT/calls.log"
 }
 
@@ -75,6 +76,9 @@ add_service(){
     printf '%s\n' "$cid" >> "$FAKE_ROOT/stacks/$id/cids.txt"
     printf '%s\n' "$cid" > "$FAKE_ROOT/stacks/$id/cids-$service.txt"
     printf '/%s|running|healthy|0|0\n' "$cid" > "$FAKE_ROOT/containers/$cid.summary"
+    printf '%s\t%s\t%s\t%s\tFalse\n' \
+      "$BASE/$id" "$BASE/$id/docker-compose.yml" "$id" "$service" \
+      >> "$FAKE_ROOT/compose-runtime.tsv"
   fi
 }
 
@@ -113,6 +117,11 @@ YAML
   printf '/cid-gluetun|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-gluetun.summary"
   printf '/cid-qbittorrent|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-qbittorrent.summary"
   printf '/cid-mamapi|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-mamapi.summary"
+  for service in gluetun qbittorrent mamapi; do
+    printf '%s\t%s\t%s\t%s\tFalse\n' \
+      "$BASE/$id" "$BASE/$id/docker-compose.yml" "$id" "$service" \
+      >> "$FAKE_ROOT/compose-runtime.tsv"
+  done
 }
 
 set_image_state(){
@@ -566,6 +575,9 @@ YAML
   printf '%s\n' cid-qbittorrent > "$FAKE_ROOT/stacks/media/cids.txt"
   printf '%s\n' cid-qbittorrent > "$FAKE_ROOT/stacks/media/cids-qbittorrent.txt"
   printf '/cid-qbittorrent|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-qbittorrent.summary"
+  printf '%s\t%s\t%s\t%s\tFalse\n' \
+    "$BASE/media" "$BASE/media/docker-compose.yml" media qbittorrent \
+    >> "$FAKE_ROOT/compose-runtime.tsv"
   set_image_state "$QBIT_IMAGE" old "$OLD_DIGEST"
   set_image_after_pull "$QBIT_NEW_IMAGE" new "$NEW_DIGEST"
 

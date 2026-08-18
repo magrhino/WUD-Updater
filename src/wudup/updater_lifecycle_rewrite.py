@@ -421,6 +421,7 @@ class _LifecycleRewriteMixin:
         rollback_error: CommandError | None = None
         try:
             shutil.copy2(compose_backup, stack.directory / stack.file)
+            self.runner.stack_runtime_states_after.pop(stack.index, None)
             active_services = (
                 tuple(services or ())
                 if running_services is None
@@ -453,6 +454,10 @@ class _LifecycleRewriteMixin:
                     active_services,
                 )
             if rollback_ok:
+                self.runner.stack_runtime_states_after[stack.index] = (
+                    tuple(active_services),
+                    tuple(stopped_services),
+                )
                 rollback_result = (
                     "restored-and-healthy"
                     if active_services

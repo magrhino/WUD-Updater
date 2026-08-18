@@ -616,10 +616,24 @@ ps_cmd(){
     printf 'fake docker ps failed\n' >&2
     return 24
   fi
+  local include_all=0
+  if [[ "${1:-}" == "--all" ]]; then
+    include_all=1
+    shift
+  fi
   if [[ "${1:-}" == "--format" ]]; then
-    local format="${2:-}"
+    local format="${2:-}" runtime_file=""
     if [[ "$format" == *'com.docker.compose.project.working_dir'* && "$format" == *'com.docker.compose.project.config_files'* && "$format" == *'com.docker.compose.service'* ]]; then
-      [[ -f "$ROOT/compose-runtime.tsv" ]] && cat "$ROOT/compose-runtime.tsv"
+      if [[ "$include_all" -eq 1 && -f "$ROOT/compose-runtime-all.tsv" ]]; then
+        runtime_file="$ROOT/compose-runtime-all.tsv"
+      else
+        runtime_file="$ROOT/compose-runtime.tsv"
+      fi
+      if [[ -f "$runtime_file" && "$format" == *'{{.State}}'* ]]; then
+        awk 'BEGIN {FS=OFS="\t"} NF == 5 {print $0, "running"; next} {print}' "$runtime_file"
+      elif [[ -f "$runtime_file" ]]; then
+        cat "$runtime_file"
+      fi
     else
       [[ -f "$ROOT/containers.tsv" ]] && cat "$ROOT/containers.tsv"
     fi

@@ -244,6 +244,21 @@ class DockerCliTests(FakeDockerCase):
         self.assertIn("image inspect repo/web:latest", self.call_commands())
         self.assertIn("inspect cid-web", self.call_commands())
 
+    def test_ps_format_can_include_stopped_containers(self) -> None:
+        (self.fake_root / "containers.tsv").write_text(
+            "web\trepo/web:latest\n",
+            encoding="utf-8",
+        )
+
+        self.assertEqual(
+            self.docker.ps_format(all_containers=True),
+            ["web\trepo/web:latest"],
+        )
+        self.assertIn(
+            "ps --all --format {{.Names}}\t{{.Image}}",
+            self.call_commands(),
+        )
+
 
 class ComposeCliTests(FakeDockerCase):
     def test_discover_stacks_skips_missing_docker_executable(self) -> None:
@@ -861,7 +876,6 @@ class ComposeCliTests(FakeDockerCase):
             self.compose.ps_quiet_checked(stack, "docker-compose.yml", ["app"]),
             [],
         )
-
 
 def _safe_name(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]", "_", value)

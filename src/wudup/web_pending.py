@@ -23,12 +23,13 @@ from . import (
 )
 from .command import CommandError, CommandRunner
 from .compose import (
-    COMPOSE_RUNTIME_FORMAT,
+    COMPOSE_RUNTIME_STATE_FORMAT,
     ComposeCli,
     ComposeDiscoveryError,
-    ComposeRuntimeServiceKey,
+    ComposeRuntimeServiceState,
     compose_runtime_service_key,
-    compose_runtime_service_keys,
+    compose_runtime_service_key_matches,
+    compose_runtime_service_states,
 )
 from .config import ConfigError, UpdaterConfig
 from .db import (
@@ -678,7 +679,7 @@ def _pending_grouping_response(
         ),
         completed_update_selections=completed_update_selections,
     )
-    running_service_keys = _pending_running_service_keys(settings)
+    runtime_service_states = _pending_runtime_service_states(settings)
     return PendingGrouping(
         status=grouping.status,
         groups=[
@@ -698,7 +699,7 @@ def _pending_grouping_response(
                         source=source,
                         source_ids_by_line=source_ids_by_line,
                         metadata_status_by_line=metadata_status_by_line,
-                        runtime=_pending_item_runtime(group, item, running_service_keys),
+                        runtime=_pending_item_runtime(group, item, runtime_service_states),
                     )
                     for item in group.items
                 ],
@@ -779,32 +780,36 @@ def _pending_grouped_item(
     )
 
 
-def _pending_running_service_keys(
+def _pending_runtime_service_states(
     settings: WebSettings,
-) -> set[ComposeRuntimeServiceKey] | None:
+) -> tuple[ComposeRuntimeServiceState, ...] | None:
     runner = (
         CommandRunner(env=settings.command_env)
         if settings.command_env is not None
         else CommandRunner()
     )
     try:
-        rows = DockerCli(runner=runner).ps_format(COMPOSE_RUNTIME_FORMAT)
+        rows = DockerCli(runner=runner).ps_format(
+            COMPOSE_RUNTIME_STATE_FORMAT,
+            all_containers=True,
+        )
     except CommandError:
         return None
-    return compose_runtime_service_keys(rows)
+    return compose_runtime_service_states(rows)
 
 
 def _pending_item_runtime(
     group: Any,
     item: Any,
-    running_service_keys: set[ComposeRuntimeServiceKey] | None,
+    runtime_service_states: tuple[ComposeRuntimeServiceState, ...] | None,
 ) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
     services = tuple(item.runtime_services)
-    if running_service_keys is None or not services or not group.project_name:
+    if runtime_service_states is None or not services or not group.project_name:
         return "unknown", (), ()
 
     project_directory = group.project_directory or group.directory
     running_services: list[str] = []
+    stopped_services: list[str] = []
     for service in services:
         expected_paths, expected_project, expected_service = compose_runtime_service_key(
             project_directory,
@@ -812,16 +817,20 @@ def _pending_item_runtime(
             group.project_name,
             service,
         )
-        if any(
-            expected_paths.issubset(runtime_paths)
-            and expected_project == runtime_project
-            and expected_service == runtime_service
-            for runtime_paths, runtime_project, runtime_service in running_service_keys
-        ):
+        expected = expected_paths, expected_project, expected_service
+        states = {
+            state
+            for key, state in runtime_service_states
+            if compose_runtime_service_key_matches(expected, key)
+        }
+        if states == {"running"}:
             running_services.append(service)
+        elif not states or states <= {"created", "dead", "exited"}:
+            stopped_services.append(service)
+        else:
+            return "unknown", (), ()
     running = tuple(running_services)
-    running_set = set(running)
-    stopped = tuple(service for service in services if service not in running_set)
+    stopped = tuple(stopped_services)
     if not stopped:
         runtime_state = "running"
     elif not running:

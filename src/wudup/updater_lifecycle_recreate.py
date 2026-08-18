@@ -10,6 +10,7 @@ from .updater_models import StackStatus, UpResult
 class _LifecycleRecreateMixin:
     def _recreate_and_verify_stack(self, state: _StackUpdateState) -> StackStatus:
         stack = state.stack
+        self.runner.stack_runtime_states_after.pop(stack.index, None)
         self._progress(
             "recreate",
             "running",

@@ -31,8 +31,10 @@ COMPOSE_RUNTIME_FORMAT = (
     '{{.Label "com.docker.compose.service"}}\t'
     '{{.Label "com.docker.compose.oneoff"}}'
 )
+COMPOSE_RUNTIME_STATE_FORMAT = f"{COMPOSE_RUNTIME_FORMAT}\t{{{{.State}}}}"
 
 ComposeRuntimeServiceKey = tuple[frozenset[Path], str, str]
+ComposeRuntimeServiceState = tuple[ComposeRuntimeServiceKey, str]
 
 
 @dataclass(frozen=True)
@@ -74,19 +76,34 @@ class ComposeStack:
 def compose_runtime_service_keys(
     rows: Iterable[str],
 ) -> set[ComposeRuntimeServiceKey]:
-    keys: set[ComposeRuntimeServiceKey] = set()
+    return set(compose_runtime_service_key_rows(rows))
+
+
+def compose_runtime_service_key_rows(
+    rows: Iterable[str],
+) -> tuple[ComposeRuntimeServiceKey, ...]:
+    keys: list[ComposeRuntimeServiceKey] = []
     for row in rows:
         fields = row.split("\t", 4)
-        if len(fields) != 5:
+        key = _compose_runtime_service_key_from_fields(fields)
+        if key is not None:
+            keys.append(key)
+    return tuple(keys)
+
+
+def compose_runtime_service_states(
+    rows: Iterable[str],
+) -> tuple[ComposeRuntimeServiceState, ...]:
+    states: list[ComposeRuntimeServiceState] = []
+    for row in rows:
+        fields = row.split("\t", 5)
+        if len(fields) != 6:
             continue
-        working_dir, config_files, project, service, oneoff = fields
-        if oneoff.strip().casefold() == "true":
-            continue
-        service = service.strip()
-        config_paths = _compose_runtime_config_paths(working_dir, config_files)
-        if service and config_paths is not None:
-            keys.add((config_paths, project.strip(), service))
-    return keys
+        key = _compose_runtime_service_key_from_fields(fields[:5])
+        state = fields[5].strip().casefold()
+        if key is not None and state:
+            states.append((key, state))
+    return tuple(states)
 
 
 def compose_runtime_service_key(
@@ -106,6 +123,34 @@ def compose_runtime_service_key(
         project_name,
         service,
     )
+
+
+def compose_runtime_service_key_matches(
+    expected: ComposeRuntimeServiceKey,
+    actual: ComposeRuntimeServiceKey,
+) -> bool:
+    expected_paths, expected_project, expected_service = expected
+    runtime_paths, runtime_project, runtime_service = actual
+    return (
+        expected_paths.issubset(runtime_paths)
+        and expected_project == runtime_project
+        and expected_service == runtime_service
+    )
+
+
+def _compose_runtime_service_key_from_fields(
+    fields: Sequence[str],
+) -> ComposeRuntimeServiceKey | None:
+    if len(fields) != 5:
+        return None
+    working_dir, config_files, project, service, oneoff = fields
+    if oneoff.strip().casefold() == "true":
+        return None
+    service = service.strip()
+    config_paths = _compose_runtime_config_paths(working_dir, config_files)
+    if not service or config_paths is None:
+        return None
+    return config_paths, project.strip(), service
 
 
 def _compose_runtime_config_paths(

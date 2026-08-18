@@ -106,6 +106,10 @@ class UpdateFromWudRunner(
             int,
             tuple[tuple[str, ...], tuple[str, ...]],
         ] = {}
+        self.stack_runtime_states_after: dict[
+            int,
+            tuple[tuple[str, ...], tuple[str, ...]],
+        ] = {}
         self.digest_pin_update_cache: dict[
             tuple[DigestPinCandidate, ...],
             tuple[DigestPinUpdate, ...],
