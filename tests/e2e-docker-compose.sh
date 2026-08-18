@@ -537,7 +537,7 @@ run_stack_recreate_label_e2e(){
   log_content="$(volume_file_content "$LOG_VOLUME" "$log_name")"
   [[ "$log_content" == *"stack-level recreate"* ]] ||
     fail "stack recreate log missing stack-level recreate message"
-  [[ "$log_content" == *"Bringing stack up"* ]] ||
+  [[ "$log_content" == *"Bringing running stack service(s) up:"* ]] ||
     fail "stack recreate log missing stack up message"
 }
 

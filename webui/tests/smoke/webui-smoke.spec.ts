@@ -90,6 +90,9 @@ function pendingResponse() {
     target_image: "repo/app:1.1",
     compose_images: ["repo/app:1.0"],
     services: ["app"],
+    runtime_state: "running",
+    running_services: ["app"],
+    stopped_services: [],
     action: "tag-update",
   };
   return {
@@ -107,6 +110,7 @@ function pendingResponse() {
           directory: "/docker/media",
           compose_file: "docker-compose.yml",
           project_directory: "/docker/media",
+          project_name: "media",
           services_label: "app",
           services: ["app"],
           line_numbers: [1],

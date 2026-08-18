@@ -192,7 +192,7 @@ test("static demo mobile layout stays within the viewport", async ({ page }) => 
       level: 1,
     }),
   ).toBeVisible();
-  await expect(page.getByRole("checkbox", { name: /Select stack media/ })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: /Select stack data/ })).toBeVisible();
   await expectTouchTargetHeight(page, "Pull image");
   await expectNoHorizontalOverflow(page, 390);
 
