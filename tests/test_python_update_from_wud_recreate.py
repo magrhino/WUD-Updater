@@ -108,6 +108,81 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         )
         self.assertIn("--no-start app", self.calls())
         self.assertNotIn("compose -f docker-compose.yml stop app", self.calls())
+
+    def test_stopped_recreate_failure_does_not_touch_running_sibling(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:latest\nrepo/worker:latest\n",
+            encoding="utf-8",
+        )
+        self.make_stack(
+            "app",
+            [
+                ("app", "repo/app:latest", "cid-app"),
+                ("worker", "repo/worker:latest", None),
+            ],
+        )
+        (self.fake_root / "containers" / "cid-app.labels").write_text(
+            "WUD-UPDATER-RECREATE-STACK=true\n",
+            encoding="utf-8",
+        )
+        for image in ("repo/app:latest", "repo/worker:latest"):
+            self.set_image_state(image, f"old-{image}", "sha256:old")
+            self.set_image_after_pull(image, f"new-{image}", "sha256:new")
+        (self.fake_root / "stacks" / "app" / "up_no_start_fail").write_text(
+            "",
+            encoding="utf-8",
+        )
+
+        result = self.run_python("--yes", "--mode", "pause")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        calls = self.calls()
+        self.assertIn("--no-start worker", calls)
+        self.assertNotIn("compose -f docker-compose.yml stop app", calls)
+        self.assertNotIn("compose -f docker-compose.yml pause app", calls)
+        self.assertNotIn("compose -f docker-compose.yml unpause app", calls)
+        worker_event = self.db_rows(
+            "SELECT metadata_json FROM update_events "
+            "WHERE service_name = 'worker' ORDER BY id DESC LIMIT 1"
+        )[0]
+        metadata = json.loads(str(worker_event["metadata_json"]))
+        self.assertEqual(metadata["runtime_state_before"], "not-running")
+        self.assertEqual(metadata["runtime_state_after"], "unknown")
+
+    def test_tag_rollback_recovers_running_sibling_when_no_start_fails(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack(
+            "app",
+            [
+                ("app", "repo/app:1.0", "cid-app"),
+                ("worker", "repo/worker:latest", None),
+            ],
+        )
+        (self.fake_root / "containers" / "cid-app.labels").write_text(
+            "WUD-UPDATER-RECREATE-STACK=true\n",
+            encoding="utf-8",
+        )
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:2.0", "new", "sha256:new")
+        (self.fake_root / "stacks" / "app" / "up_no_start_fail").write_text(
+            "",
+            encoding="utf-8",
+        )
+
+        result = self.run_python("--yes", "--allow-tag-updates")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertIn(
+            "image: repo/app:1.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        calls = self.calls()
+        self.assertNotIn("compose -f docker-compose.yml stop app", calls)
+        self.assertIn(
+            "compose -f docker-compose.yml up -d --remove-orphans --no-deps app",
+            calls,
+        )
+
     def test_pull_failure_writes_error_report(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])

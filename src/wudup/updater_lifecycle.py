@@ -182,6 +182,28 @@ class StackLifecycleExecutor(
                 item.service for item in stack.service_images if item.service
             )
         services = tuple(dict.fromkeys(services))
+        if not services:
+            self.log.error(
+                f"[{stack.name}] Could not determine which Compose services are "
+                "selected; the update was not applied."
+            )
+            self._record_failure(
+                stack,
+                matches,
+                phase="preflight",
+                reason="runtime-state-unavailable",
+                services=services,
+                note="Compose service discovery returned no services.",
+            )
+            self._progress(
+                "preflight",
+                "failure",
+                f"[{stack.name}] Selected Compose services could not be determined.",
+                stack=stack.name,
+                services=services,
+                matches=matches,
+            )
+            return StackStatus("failure", "runtime-state-unavailable")
         running: list[str] = []
         stopped: list[str] = []
         try:

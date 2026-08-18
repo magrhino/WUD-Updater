@@ -447,16 +447,20 @@ compose_cmd(){
         fi
         return 0
       fi
-      if [[ -f "$ROOT/stacks/$id/up_fail" ]]; then
+      local up_arg no_start=0
+      for up_arg in "$@"; do
+        if [[ "$up_arg" == "--no-start" ]]; then
+          no_start=1
+        fi
+      done
+      if [[ -f "$ROOT/stacks/$id/up_fail" ||
+            "$no_start" -eq 1 && -f "$ROOT/stacks/$id/up_no_start_fail" ]]; then
         emit_failure_output "$id" up
         return 19
       fi
-      local up_arg
-      for up_arg in "$@"; do
-        if [[ "$up_arg" == "--no-start" ]]; then
-          return 0
-        fi
-      done
+      if [[ "$no_start" -eq 1 ]]; then
+        return 0
+      fi
       run_post_up_hook "$id" "$file" "$@"
       return 0
       ;;

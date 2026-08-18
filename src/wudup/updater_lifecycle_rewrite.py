@@ -434,7 +434,7 @@ class _LifecycleRewriteMixin:
                     force_recreate=force_recreate,
                 )
             rollback_up = UpResult(True, False)
-            if stopped_result.ok and active_services:
+            if active_services:
                 rollback_up = self._run_compose_up(
                     stack,
                     active_services,

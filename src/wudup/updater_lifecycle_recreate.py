@@ -19,7 +19,6 @@ class _LifecycleRecreateMixin:
             matches=state.matches,
         )
 
-        stop_result = self._prepare_for_recreate(state)
         self._log_compose_up_scope(state)
         if state.stopped_services:
             stopped_result = self._run_compose_up_no_start(
@@ -30,10 +29,12 @@ class _LifecycleRecreateMixin:
             if not stopped_result.ok:
                 return self._handle_compose_up_failure(
                     state,
-                    stop_result,
+                    _StopResult(),
                     stopped_result,
+                    prepared=False,
                 )
 
+        stop_result = self._prepare_for_recreate(state)
         up_result = UpResult(True, False)
         if state.running_services:
             up_result = self._run_compose_up(
@@ -145,9 +146,13 @@ class _LifecycleRecreateMixin:
         state: _StackUpdateState,
         stop_result: _StopResult,
         up_result: UpResult,
+        *,
+        prepared: bool = True,
     ) -> StackStatus:
         stack = state.stack
-        unpaused = self._unpause_after_recreate(state, up_result)
+        unpaused = (
+            self._unpause_after_recreate(state, up_result) if prepared else up_result
+        )
         if isinstance(unpaused, StackStatus):
             return unpaused
         up_result = unpaused
