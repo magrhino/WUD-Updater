@@ -39,6 +39,8 @@ class _StackUpdateState:
     applied_digest_pins: tuple[AppliedDigestPinUpdate, ...] = ()
     applied_digest_unpins: tuple[AppliedDigestUnpinUpdate, ...] = ()
     compose_backup: Path | None = None
+    running_services: tuple[str, ...] = ()
+    stopped_services: tuple[str, ...] = ()
 
     @property
     def services(self) -> tuple[str, ...] | None:
@@ -67,6 +69,13 @@ class _StackUpdateState:
     @property
     def stop_services_label(self) -> str:
         return " ".join(self.stop_services or ())
+
+    @property
+    def running_stop_services(self) -> tuple[str, ...]:
+        running = set(self.running_services)
+        return tuple(
+            service for service in (self.stop_services or ()) if service in running
+        )
 
     @property
     def compose_rewrite_applied(self) -> bool:

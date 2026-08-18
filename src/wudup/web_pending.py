@@ -21,8 +21,16 @@ from . import (
     web_wud_api,
     web_wud_refresh,
 )
-from .command import CommandRunner
-from .compose import ComposeCli, ComposeDiscoveryError
+from .command import CommandError, CommandRunner
+from .compose import (
+    COMPOSE_RUNTIME_STATE_FORMAT,
+    ComposeCli,
+    ComposeDiscoveryError,
+    ComposeRuntimeServiceState,
+    compose_runtime_service_key,
+    compose_runtime_service_key_matches,
+    compose_runtime_service_states,
+)
 from .config import ConfigError, UpdaterConfig
 from .db import (
     DatabaseError,
@@ -30,6 +38,7 @@ from .db import (
     open_db,
     utc_timestamp,
 )
+from .docker_cli import DockerCli
 from .file_ops import OwnerConfig
 from .images import image_tag, repo_key
 from .plan_matching import pending_target_key
@@ -80,6 +89,8 @@ from .wud_file import (
     parse_wud_file,
     remove_lines_before_run,
 )
+
+_PENDING_DOCKER_TIMEOUT_SECONDS = 10.0
 
 
 class EffectiveConfigLoader(Protocol):
@@ -670,6 +681,7 @@ def _pending_grouping_response(
         ),
         completed_update_selections=completed_update_selections,
     )
+    runtime_service_states = _pending_runtime_service_states(settings)
     return PendingGrouping(
         status=grouping.status,
         groups=[
@@ -678,6 +690,7 @@ def _pending_grouping_response(
                 directory=group.directory,
                 compose_file=group.compose_file,
                 project_directory=group.project_directory,
+                project_name=group.project_name,
                 services_label=group.services_label,
                 services=list(group.services),
                 line_numbers=list(group.line_numbers),
@@ -688,6 +701,7 @@ def _pending_grouping_response(
                         source=source,
                         source_ids_by_line=source_ids_by_line,
                         metadata_status_by_line=metadata_status_by_line,
+                        runtime=_pending_item_runtime(group, item, runtime_service_states),
                     )
                     for item in group.items
                 ],
@@ -701,6 +715,7 @@ def _pending_grouping_response(
                 source=source,
                 source_ids_by_line=source_ids_by_line,
                 metadata_status_by_line=metadata_status_by_line,
+                runtime=("unknown", (), ()),
             )
             for item in grouping.unmatched
         ],
@@ -715,7 +730,9 @@ def _pending_grouped_item(
     source: str,
     source_ids_by_line: dict[int, str],
     metadata_status_by_line: dict[int, PendingMetadataStatus],
+    runtime: tuple[str, tuple[str, ...], tuple[str, ...]],
 ) -> PendingGroupedItem:
+    runtime_state, running_services, stopped_services = runtime
     return PendingGroupedItem(
         line_no=item.line_no,
         raw=item.raw,
@@ -742,6 +759,9 @@ def _pending_grouped_item(
             if item.diagnostic is None
             else PendingDiagnostic.model_validate(asdict(item.diagnostic))
         ),
+        runtime_state=runtime_state,
+        running_services=list(running_services),
+        stopped_services=list(stopped_services),
         digest_provenance=(
             None
             if item.digest_provenance is None
@@ -760,6 +780,66 @@ def _pending_grouped_item(
         ),
         metadata_status=metadata_status_by_line.get(item.line_no, "fresh"),
     )
+
+
+def _pending_runtime_service_states(
+    settings: WebSettings,
+) -> tuple[ComposeRuntimeServiceState, ...] | None:
+    runner = CommandRunner(env=settings.command_env)
+    try:
+        rows = DockerCli(runner=runner).ps_format(
+            COMPOSE_RUNTIME_STATE_FORMAT,
+            all_containers=True,
+            timeout_seconds=_PENDING_DOCKER_TIMEOUT_SECONDS,
+        )
+    except CommandError:
+        return None
+    return compose_runtime_service_states(rows)
+
+
+def _pending_item_runtime(
+    group: Any,
+    item: Any,
+    runtime_service_states: tuple[ComposeRuntimeServiceState, ...] | None,
+) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
+    services = tuple(item.runtime_services)
+    if runtime_service_states is None or not services or not group.project_name:
+        return "unknown", (), ()
+
+    project_directory = group.project_directory or group.directory
+    running_services: list[str] = []
+    stopped_services: list[str] = []
+    for service in services:
+        expected_paths, expected_project, expected_service = compose_runtime_service_key(
+            project_directory,
+            group.compose_file,
+            group.project_name,
+            service,
+        )
+        expected = expected_paths, expected_project, expected_service
+        service_states = tuple(
+            state
+            for key, state in runtime_service_states
+            if compose_runtime_service_key_matches(expected, key)
+        )
+        if len(service_states) > 1:
+            return "unknown", (), ()
+        states = set(service_states)
+        if states == {"running"}:
+            running_services.append(service)
+        elif not states or states <= {"created", "dead", "exited"}:
+            stopped_services.append(service)
+        else:
+            return "unknown", (), ()
+    running = tuple(running_services)
+    stopped = tuple(stopped_services)
+    if not stopped:
+        runtime_state = "running"
+    elif not running:
+        runtime_state = "not-running"
+    else:
+        runtime_state = "mixed"
+    return runtime_state, running, stopped
 
 
 def _pending_tag_stream(

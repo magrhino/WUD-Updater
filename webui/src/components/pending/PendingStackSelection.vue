@@ -9,7 +9,10 @@ import type {
   ReleaseNoteInfo,
   SecurityScanInfo,
 } from "../../api/client";
-import type { SnoozedPendingItem } from "../../views/pending/snoozeSelection";
+import type {
+  RuntimeDeferredPendingItem,
+  SnoozedPendingItem,
+} from "../../views/pending/snoozeSelection";
 import {
   pendingMetadataStatus,
   type PendingTagInputProps,
@@ -39,6 +42,7 @@ defineProps<{
   snoozedCandidates: PendingSnoozedCandidate[];
   snoozedItems: SnoozedPendingItem[];
   stackGroups: PendingStackGroup[];
+  stoppedItems: RuntimeDeferredPendingItem[];
   stackHasSelection: (group: PendingStackGroup) => boolean;
   stackIndeterminate: (group: PendingStackGroup) => boolean;
   stackSelected: (group: PendingStackGroup) => boolean;
@@ -97,6 +101,7 @@ function verifiedLineNumbers(group: PendingStackGroup): number[] {
       :selected-selection-key-set="selectedSelectionKeySet"
       :snoozed-candidates="snoozedCandidates"
       :snoozed-items="snoozedItems"
+      :stopped-items="stoppedItems"
       :tag-input-props="tagInputProps"
       :tag-override-value="tagOverrideValue"
       @toggle-item="(item, checked) => emit('toggleItem', item, checked)"
@@ -156,6 +161,7 @@ function verifiedLineNumbers(group: PendingStackGroup): number[] {
         !stackGroups.length &&
         !snoozedCandidates.length &&
         !snoozedItems.length &&
+        !stoppedItems.length &&
         !unmatchedItems.length
       "
       :latest-run-id="latestRunId"

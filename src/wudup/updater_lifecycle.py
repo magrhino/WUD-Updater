@@ -8,7 +8,14 @@ from collections.abc import Sequence
 from typing import Any
 
 from .command import CommandError
-from .compose import ComposeStack
+from .compose import (
+    COMPOSE_RUNTIME_STATE_FORMAT,
+    ComposeRuntimeServiceState,
+    ComposeStack,
+    compose_runtime_service_key,
+    compose_runtime_service_key_matches,
+    compose_runtime_service_states,
+)
 from .updater_digest_pin import _digest_pin_tag_materialization_updates
 from .updater_lifecycle_digest import _LifecycleDigestMixin
 from .updater_lifecycle_health import (
@@ -44,6 +51,7 @@ from .updater_lifecycle_scope import (
 )
 from .updater_lifecycle_scope import (
     _UpdateScopeMixin,
+    runtime_services_for_scope,
 )
 from .updater_lifecycle_state import _StackUpdateState
 from .updater_models import (
@@ -53,6 +61,8 @@ from .updater_models import (
     UpdaterError,
     UpdateScope,
 )
+
+INACTIVE_CONTAINER_STATES = frozenset({"created", "dead", "exited"})
 
 
 class StackLifecycleExecutor(
@@ -94,6 +104,11 @@ class StackLifecycleExecutor(
     ) -> _StackUpdateState | StackStatus:
         scope = self._update_scope(stack, matches)
         self._log_stack_scope(stack, scope)
+
+        runtime_state = self._initial_service_runtime(stack, scope, matches)
+        if isinstance(runtime_state, StackStatus):
+            return runtime_state
+        running_services, stopped_services = runtime_state
 
         images = tuple(stack.images)
         before = self._image_state(images)
@@ -158,6 +173,139 @@ class StackLifecycleExecutor(
             digest_unpin_updates=digest_unpin_updates,
             compose_tag_updates=compose_tag_updates,
             tag_stream_updates=tag_stream_updates,
+            running_services=running_services,
+            stopped_services=stopped_services,
+        )
+
+    def _initial_service_runtime(
+        self,
+        stack: ComposeStack,
+        scope: UpdateScope,
+        matches: Sequence[Match],
+    ) -> tuple[tuple[str, ...], tuple[str, ...]] | StackStatus:
+        services = runtime_services_for_scope(scope)
+        if not services:
+            self.log.error(
+                f"[{stack.name}] Could not determine which Compose services are "
+                "selected; the update was not applied."
+            )
+            self._record_failure(
+                stack,
+                matches,
+                phase="preflight",
+                reason="runtime-state-unavailable",
+                services=services,
+                note="Compose service discovery returned no services.",
+            )
+            self._progress(
+                "preflight",
+                "failure",
+                f"[{stack.name}] Selected Compose services could not be determined.",
+                stack=stack.name,
+                services=services,
+                matches=matches,
+            )
+            return StackStatus("failure", "runtime-state-unavailable")
+        running: list[str] = []
+        stopped: list[str] = []
+        try:
+            if not stack.project_name:
+                raise ValueError("Compose project identity is unavailable.")
+            runtime_states = compose_runtime_service_states(
+                self.docker.ps_format(
+                    COMPOSE_RUNTIME_STATE_FORMAT,
+                    all_containers=True,
+                )
+            )
+            for service in services:
+                service_states = self._compose_service_runtime_states(
+                    stack,
+                    service,
+                    runtime_states,
+                )
+                state_values = set(service_states)
+                if len(service_states) > 1 or (
+                    state_values
+                    and state_values != {"running"}
+                    and not state_values <= INACTIVE_CONTAINER_STATES
+                ):
+                    self.log.error(
+                        f"[{stack.name}] Compose service {service} has scaled or "
+                        "unverified container state; the update was not applied."
+                    )
+                    self._record_failure(
+                        stack,
+                        matches,
+                        phase="preflight",
+                        reason="runtime-state-unavailable",
+                        services=(service,),
+                        note=(
+                            f"Compose service {service} observed "
+                            f"{len(service_states)} replica(s); runtime states: "
+                            f"{', '.join(sorted(state_values))}."
+                        ),
+                    )
+                    self._progress(
+                        "preflight",
+                        "failure",
+                        f"[{stack.name}] Service {service} replica state cannot be "
+                        "safely preserved.",
+                        stack=stack.name,
+                        services=(service,),
+                        matches=matches,
+                    )
+                    return StackStatus("failure", "runtime-state-unavailable")
+                (running if state_values == {"running"} else stopped).append(service)
+        except (CommandError, ValueError) as exc:
+            self.log.error(
+                f"[{stack.name}] Could not verify whether selected services are running; "
+                "the update was not applied."
+            )
+            self._record_failure(
+                stack,
+                matches,
+                phase="preflight",
+                reason="runtime-state-unavailable",
+                services=services,
+                command_error=exc if isinstance(exc, CommandError) else None,
+                note=str(exc) if isinstance(exc, ValueError) else "",
+            )
+            self._progress(
+                "preflight",
+                "failure",
+                f"[{stack.name}] Selected service runtime state could not be verified.",
+                stack=stack.name,
+                services=services,
+                matches=matches,
+            )
+            return StackStatus("failure", "runtime-state-unavailable")
+
+        runtime_state = tuple(running), tuple(stopped)
+        self.runner.stack_runtime_states[stack.index] = runtime_state
+        self.runner.stack_runtime_states_after[stack.index] = runtime_state
+        if stopped:
+            self.log.warning(
+                f"[{stack.name}] Selected service(s) already stopped and will remain "
+                f"stopped: {' '.join(stopped)}"
+            )
+        return runtime_state
+
+    @staticmethod
+    def _compose_service_runtime_states(
+        stack: ComposeStack,
+        service: str,
+        runtime_states: Sequence[ComposeRuntimeServiceState],
+    ) -> tuple[str, ...]:
+        expected = compose_runtime_service_key(
+            stack.project_directory or stack.directory,
+            stack.file,
+            stack.project_name,
+            service,
+        )
+        return tuple(
+            state
+            for key, state in runtime_states
+            if compose_runtime_service_key_matches(expected, key)
         )
 
     def _log_stack_scope(self, stack: ComposeStack, scope: UpdateScope) -> None:

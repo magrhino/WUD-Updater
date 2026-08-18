@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from unittest import mock
+
 from tests.update_from_wud_helpers import (
     UpdateFromWudRunnerTestCase,
 )
@@ -17,7 +20,7 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
     def test_up_wait_failure_writes_error_report_with_command_output(self) -> None:
         self.env["FAKE_COMPOSE_UP_WAIT"] = "1"
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
-        self.make_stack("app", [("app", "repo/app:latest", None)])
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
         self.set_image_state("repo/app:latest", "old", "sha256:old")
         self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
         stack_state = self.fake_root / "stacks" / "app"
@@ -38,7 +41,333 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         self.assertIn("--wait --wait-timeout 0 app", report)
         self.assertIn("compose stdout before failure", report)
         self.assertIn("network create failed", report)
-        self.assertIn("health: docker compose ps -q returned no containers", report)
+        self.assertIn("health: container=cid-app status=running health=healthy", report)
+
+    def test_stopped_service_is_recreated_without_being_started(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", None)])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        calls = self.calls()
+        self.assertIn(
+            "compose -f docker-compose.yml up -d --remove-orphans --no-deps --no-start app",
+            calls,
+        )
+        self.assertNotIn("compose -f docker-compose.yml stop app", calls)
+        self.assertNotIn("--wait", calls)
+        event = self.db_rows(
+            "SELECT metadata_json FROM update_events ORDER BY id DESC LIMIT 1"
+        )[0]
+        self.assertEqual(
+            json.loads(str(event["metadata_json"])),
+            {
+                "reason": "updated",
+                "runtime_state_after": "not-running",
+                "runtime_state_before": "not-running",
+                "stopped_services_after": ["app"],
+                "stopped_services_before": ["app"],
+            },
+        )
+
+    def test_update_fails_closed_when_runtime_state_cannot_be_verified(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        (self.fake_root / "ps_fail").write_text(
+            "",
+            encoding="utf-8",
+        )
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:latest\n",
+        )
+        calls = self.calls()
+        self.assertNotIn("compose -f docker-compose.yml pull", calls)
+        self.assertNotIn("compose -f docker-compose.yml up", calls)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("reason=runtime-state-unavailable", report)
+
+    def test_update_fails_closed_for_mixed_scaled_service_runtime(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        stack_dir = self.make_stack(
+            "app",
+            [("app", "repo/app:latest", "cid-running")],
+        )
+        runtime_prefix = (
+            f"{stack_dir}\t{stack_dir / 'docker-compose.yml'}\tapp\tapp\tFalse\t"
+        )
+        (self.fake_root / "compose-runtime-all.tsv").write_text(
+            f"{runtime_prefix}running\n{runtime_prefix}exited\n",
+            encoding="utf-8",
+        )
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:latest\n",
+        )
+        calls = self.calls()
+        self.assertIn("ps --all --format", calls)
+        self.assertNotIn("compose -f docker-compose.yml pull", calls)
+        self.assertNotIn("compose -f docker-compose.yml up", calls)
+        self.assertNotIn("compose -f docker-compose.yml stop", calls)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("runtime states: exited, running", report)
+
+    def test_update_fails_closed_for_scaled_running_service(self) -> None:
+        self._assert_scaled_service_fails_closed("running", "cid-running")
+
+    def test_update_fails_closed_for_scaled_stopped_service(self) -> None:
+        self._assert_scaled_service_fails_closed("exited", None)
+
+    def _assert_scaled_service_fails_closed(
+        self,
+        state: str,
+        cid: str | None,
+    ) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        stack_dir = self.make_stack(
+            "app",
+            [("app", "repo/app:latest", cid)],
+        )
+        runtime_row = (
+            f"{stack_dir}\t{stack_dir / 'docker-compose.yml'}\t"
+            f"app\tapp\tFalse\t{state}\n"
+        )
+        (self.fake_root / "compose-runtime-all.tsv").write_text(
+            runtime_row * 2,
+            encoding="utf-8",
+        )
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:latest\n",
+        )
+        calls = self.calls()
+        self.assertNotIn("compose -f docker-compose.yml pull", calls)
+        self.assertNotIn("compose -f docker-compose.yml up", calls)
+        self.assertNotIn("compose -f docker-compose.yml stop", calls)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn(
+            f"observed 2 replica(s); runtime states: {state}",
+            report,
+        )
+
+    def test_stopped_oneoff_container_does_not_make_service_mixed(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        stack_dir = self.make_stack(
+            "app",
+            [("app", "repo/app:latest", "cid-running")],
+        )
+        runtime_prefix = (
+            f"{stack_dir}\t{stack_dir / 'docker-compose.yml'}\tapp\tapp\t"
+        )
+        (self.fake_root / "compose-runtime-all.tsv").write_text(
+            f"{runtime_prefix}False\trunning\n"
+            f"{runtime_prefix}True\texited\n",
+            encoding="utf-8",
+        )
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+
+    def test_stack_update_fails_closed_when_service_list_is_unavailable(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        (self.fake_root / "containers" / "cid-app.labels").write_text(
+            "WUD-UPDATER-RECREATE-STACK=true\n",
+            encoding="utf-8",
+        )
+        (self.fake_root / "stacks" / "app" / "config_services_fail").write_text(
+            "",
+            encoding="utf-8",
+        )
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:latest\n",
+        )
+        calls = self.calls()
+        self.assertIn("compose -f docker-compose.yml config --services", calls)
+        self.assertNotIn("compose -f docker-compose.yml pull", calls)
+        self.assertNotIn("compose -f docker-compose.yml up", calls)
+        self.assertNotIn("compose -f docker-compose.yml stop", calls)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("reason=runtime-state-unavailable", report)
+
+    def test_stopped_service_tag_update_preserves_stopped_state(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", None)])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:2.0", "new", "sha256:new")
+
+        result = self.run_python("--yes", "--allow-tag-updates")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn(
+            "image: repo/app:2.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        self.assertIn("--no-start app", self.calls())
+        self.assertNotIn("compose -f docker-compose.yml stop app", self.calls())
+
+    def test_stopped_recreate_failure_does_not_touch_running_sibling(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:latest\nrepo/worker:latest\n",
+            encoding="utf-8",
+        )
+        self.make_stack(
+            "app",
+            [
+                ("app", "repo/app:latest", "cid-app"),
+                ("worker", "repo/worker:latest", None),
+            ],
+        )
+        (self.fake_root / "containers" / "cid-app.labels").write_text(
+            "WUD-UPDATER-RECREATE-STACK=true\n",
+            encoding="utf-8",
+        )
+        for image in ("repo/app:latest", "repo/worker:latest"):
+            self.set_image_state(image, f"old-{image}", "sha256:old")
+            self.set_image_after_pull(image, f"new-{image}", "sha256:new")
+        (self.fake_root / "stacks" / "app" / "up_no_start_fail").write_text(
+            "",
+            encoding="utf-8",
+        )
+
+        result = self.run_python("--yes", "--mode", "pause")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        calls = self.calls()
+        self.assertIn("--no-start worker", calls)
+        self.assertNotIn("compose -f docker-compose.yml stop app", calls)
+        self.assertNotIn("compose -f docker-compose.yml pause app", calls)
+        self.assertNotIn("compose -f docker-compose.yml unpause app", calls)
+        worker_event = self.db_rows(
+            "SELECT metadata_json FROM update_events "
+            "WHERE service_name = 'worker' ORDER BY id DESC LIMIT 1"
+        )[0]
+        metadata = json.loads(str(worker_event["metadata_json"]))
+        self.assertEqual(metadata["runtime_state_before"], "not-running")
+        self.assertEqual(metadata["runtime_state_after"], "unknown")
+        self.assertEqual(metadata["stopped_services_before"], ["worker"])
+        self.assertNotIn("stopped_services_after", metadata)
+
+    def test_tag_rollback_recovers_running_sibling_when_no_start_fails(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack(
+            "app",
+            [
+                ("app", "repo/app:1.0", "cid-app"),
+                ("worker", "repo/worker:latest", None),
+            ],
+        )
+        (self.fake_root / "containers" / "cid-app.labels").write_text(
+            "WUD-UPDATER-RECREATE-STACK=true\n",
+            encoding="utf-8",
+        )
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:2.0", "new", "sha256:new")
+        (self.fake_root / "stacks" / "app" / "up_no_start_fail").write_text(
+            "",
+            encoding="utf-8",
+        )
+
+        result = self.run_python("--yes", "--allow-tag-updates")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertIn(
+            "image: repo/app:1.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        calls = self.calls()
+        self.assertNotIn("compose -f docker-compose.yml stop app", calls)
+        self.assertIn(
+            "compose -f docker-compose.yml up -d --remove-orphans --no-deps app",
+            calls,
+        )
+
+    def test_verified_tag_rollback_records_stopped_sibling_after_state(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        self.make_stack(
+            "app",
+            [
+                ("app", "repo/app:1.0", "cid-app"),
+                ("worker", "repo/worker:latest", None),
+            ],
+        )
+        (self.fake_root / "containers" / "cid-app.labels").write_text(
+            "WUD-UPDATER-RECREATE-STACK=true\n",
+            encoding="utf-8",
+        )
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:2.0", "new", "sha256:new")
+        (self.fake_root / "stacks" / "app" / "unpause_fail").write_text(
+            "",
+            encoding="utf-8",
+        )
+
+        result = self.run_python(
+            "--yes",
+            "--allow-tag-updates",
+            "--mode",
+            "pause",
+        )
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        event = self.db_rows(
+            "SELECT metadata_json FROM update_events ORDER BY id DESC LIMIT 1"
+        )[0]
+        metadata = json.loads(str(event["metadata_json"]))
+        self.assertEqual(metadata["stopped_services_before"], ["worker"])
+        self.assertEqual(metadata["stopped_services_after"], ["worker"])
+
+    def test_failed_pre_recreate_rollback_keeps_after_state_unknown(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:1.0", None)])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        (self.fake_root / "stacks" / "app" / "up_no_start_fail").write_text(
+            "",
+            encoding="utf-8",
+        )
+        runner = self.make_runner(allow_tag_updates=True)
+
+        with mock.patch.object(runner, "_refresh_stack_images", return_value=None):
+            status = runner.run()
+
+        self.assertEqual(status, 1)
+        event = self.db_rows(
+            "SELECT metadata_json FROM update_events ORDER BY id DESC LIMIT 1"
+        )[0]
+        metadata = json.loads(str(event["metadata_json"]))
+        self.assertEqual(metadata["runtime_state_before"], "not-running")
+        self.assertEqual(metadata["runtime_state_after"], "unknown")
+        self.assertEqual(metadata["stopped_services_before"], ["app"])
+        self.assertNotIn("stopped_services_after", metadata)
+
     def test_pull_failure_writes_error_report(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
@@ -56,6 +385,34 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         self.assertIn("exit_code=17", report)
         self.assertIn("manifest fetch failed", report)
         self.assertIn("health: container=cid-app status=running health=healthy", report)
+
+    def test_stopped_service_pull_failure_records_known_after_state(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", None)])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        (self.fake_root / "stacks" / "app" / "pull_fail").write_text(
+            "",
+            encoding="utf-8",
+        )
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        event = self.db_rows(
+            "SELECT metadata_json FROM update_events ORDER BY id DESC LIMIT 1"
+        )[0]
+        self.assertEqual(
+            json.loads(str(event["metadata_json"])),
+            {
+                "failure_phase": "pull",
+                "health_evidence": "service_disappeared",
+                "reason": "pull-failed",
+                "runtime_state_after": "not-running",
+                "runtime_state_before": "not-running",
+                "stopped_services_after": ["app"],
+                "stopped_services_before": ["app"],
+            },
+        )
     def test_stop_failure_reports_failed_phase_after_recovery(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
@@ -254,10 +611,9 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         self.assertNotRegex(calls, r"compose -f docker-compose.yml pull mamapi")
         self.assertNotRegex(calls, r"compose -f docker-compose.yml stop .*gluetun")
         self.assertNotRegex(calls, r"compose -f docker-compose.yml stop .*mamapi")
-    def test_network_mode_consumer_up_includes_missing_provider(self) -> None:
+    def test_network_mode_consumer_preserves_stopped_provider(self) -> None:
         compose_file = self.prepare_network_mode_media_stack(
             include_provider_cid=False,
-            write_provider_hook=True,
         )
 
         result = self.run_python("--yes", "--allow-tag-updates")
@@ -273,8 +629,17 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         self.assertRegex(calls, r"compose -f docker-compose.yml stop qbittorrent")
         self.assertRegex(
             calls,
-            r"compose -f docker-compose.yml up -d --remove-orphans gluetun qbittorrent",
+            r"compose -f docker-compose.yml up -d --remove-orphans --no-deps --no-start gluetun",
         )
-        self.assertNotRegex(calls, r"compose -f docker-compose.yml up -d .*--no-deps")
+        self.assertRegex(
+            calls,
+            r"compose -f docker-compose.yml up -d --remove-orphans --no-deps qbittorrent",
+        )
         self.assertNotRegex(calls, r"compose -f docker-compose.yml pull gluetun")
         self.assertNotRegex(calls, r"compose -f docker-compose.yml stop .*gluetun")
+        event = self.db_rows(
+            "SELECT metadata_json FROM update_events ORDER BY id DESC LIMIT 1"
+        )[0]
+        metadata = json.loads(str(event["metadata_json"]))
+        self.assertEqual(metadata["stopped_services_before"], ["gluetun"])
+        self.assertEqual(metadata["stopped_services_after"], ["gluetun"])

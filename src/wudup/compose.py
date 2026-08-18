@@ -24,6 +24,17 @@ COMPOSE_FILENAMES = frozenset(
 _WAIT_FLAG_RE = re.compile(r"(^|\s)--wait([=,\s]|$)")
 _COMPOSE_CONFIG_JSON_OBJECT_ERROR = "Compose config JSON is not an object."
 _COMPOSE_CONFIG_SERVICES_OBJECT_ERROR = "Compose config JSON has no services object."
+COMPOSE_RUNTIME_FORMAT = (
+    '{{.Label "com.docker.compose.project.working_dir"}}\t'
+    '{{.Label "com.docker.compose.project.config_files"}}\t'
+    '{{.Label "com.docker.compose.project"}}\t'
+    '{{.Label "com.docker.compose.service"}}\t'
+    '{{.Label "com.docker.compose.oneoff"}}'
+)
+COMPOSE_RUNTIME_STATE_FORMAT = f"{COMPOSE_RUNTIME_FORMAT}\t{{{{.State}}}}"
+
+ComposeRuntimeServiceKey = tuple[frozenset[Path], str, str]
+ComposeRuntimeServiceState = tuple[ComposeRuntimeServiceKey, str]
 
 
 @dataclass(frozen=True)
@@ -60,6 +71,101 @@ class ComposeStack:
     service_images: tuple[ServiceImage, ...]
     project_directory: Path | None = None
     project_name: str = ""
+
+
+def compose_runtime_service_keys(
+    rows: Iterable[str],
+) -> set[ComposeRuntimeServiceKey]:
+    keys: set[ComposeRuntimeServiceKey] = set()
+    for row in rows:
+        key = _compose_runtime_service_key_from_fields(row.split("\t", 4))
+        if key is not None:
+            keys.add(key)
+    return keys
+
+
+def compose_runtime_service_states(
+    rows: Iterable[str],
+) -> tuple[ComposeRuntimeServiceState, ...]:
+    states: list[ComposeRuntimeServiceState] = []
+    for row in rows:
+        fields = row.split("\t", 5)
+        if len(fields) != 6:
+            continue
+        key = _compose_runtime_service_key_from_fields(fields[:5])
+        state = fields[5].strip().casefold()
+        if key is not None and state:
+            states.append((key, state))
+    return tuple(states)
+
+
+def compose_runtime_service_key(
+    project_directory: str | Path,
+    compose_file: str,
+    project_name: str,
+    service: str,
+) -> ComposeRuntimeServiceKey:
+    return (
+        frozenset(
+            {
+                _normalized_compose_runtime_path(
+                    Path(project_directory) / compose_file
+                )
+            }
+        ),
+        project_name,
+        service,
+    )
+
+
+def compose_runtime_service_key_matches(
+    expected: ComposeRuntimeServiceKey,
+    actual: ComposeRuntimeServiceKey,
+) -> bool:
+    expected_paths, expected_project, expected_service = expected
+    runtime_paths, runtime_project, runtime_service = actual
+    return (
+        expected_paths.issubset(runtime_paths)
+        and expected_project == runtime_project
+        and expected_service == runtime_service
+    )
+
+
+def _compose_runtime_service_key_from_fields(
+    fields: Sequence[str],
+) -> ComposeRuntimeServiceKey | None:
+    if len(fields) != 5:
+        return None
+    working_dir, config_files, project, service, oneoff = fields
+    if oneoff.strip().casefold() == "true":
+        return None
+    service = service.strip()
+    config_paths = _compose_runtime_config_paths(working_dir, config_files)
+    if not service or config_paths is None:
+        return None
+    return config_paths, project.strip(), service
+
+
+def _compose_runtime_config_paths(
+    working_dir: str,
+    config_files: str,
+) -> frozenset[Path] | None:
+    paths: set[Path] = set()
+    for value in config_files.split(","):
+        value = value.strip()
+        if not value:
+            continue
+        path = Path(value)
+        if not path.is_absolute():
+            if not working_dir:
+                return None
+            path = Path(working_dir) / path
+        paths.add(_normalized_compose_runtime_path(path))
+    return frozenset(paths) if paths else None
+
+
+def _normalized_compose_runtime_path(path: Path) -> Path:
+    return Path(os.path.normpath(path))
 
 
 class ComposeCli:
@@ -402,6 +508,7 @@ class ComposeCli:
         wait_timeout: int | None = None,
         force_recreate: bool = False,
         no_deps: bool = True,
+        no_start: bool = False,
         project_directory: str | Path | None = None,
     ) -> CommandResult:
         args = ["up", "-d", "--remove-orphans"]
@@ -409,6 +516,8 @@ class ComposeCli:
             args.append("--force-recreate")
         if services and no_deps:
             args.append("--no-deps")
+        if no_start:
+            args.append("--no-start")
         if wait:
             args.append("--wait")
             if wait_timeout is not None:
@@ -430,21 +539,36 @@ class ComposeCli:
         project_directory: str | Path | None = None,
     ) -> list[str]:
         try:
-            return _nonblank_lines(
-                self.runner.capture_lines(
-                    self._compose_args(
-                        file,
-                        "ps",
-                        "-q",
-                        *_service_args(services),
-                        project_directory=project_directory,
-                    ),
-                    cwd=directory,
-                    check=True,
-                )
+            return self.ps_quiet_checked(
+                directory,
+                file,
+                services,
+                project_directory=project_directory,
             )
         except CommandError:
             return []
+
+    def ps_quiet_checked(
+        self,
+        directory: str | Path,
+        file: str,
+        services: Sequence[str] | None = None,
+        *,
+        project_directory: str | Path | None = None,
+    ) -> list[str]:
+        return _nonblank_lines(
+            self.runner.capture_lines(
+                self._compose_args(
+                    file,
+                    "ps",
+                    "-q",
+                    *_service_args(services),
+                    project_directory=project_directory,
+                ),
+                cwd=directory,
+                check=True,
+            )
+        )
 
     def up_wait_supported(
         self,

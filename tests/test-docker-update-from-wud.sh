@@ -41,6 +41,7 @@ setup_case(){
   FAKE_ROOT="$TEST_TMP/fake"
   mkdir -p "$BASE" "$LOG_DIR" "$FAKE_ROOT/images" "$FAKE_ROOT/manifests" "$FAKE_ROOT/stacks" "$FAKE_ROOT/containers"
   : > "$FAKE_ROOT/containers.tsv"
+  : > "$FAKE_ROOT/compose-runtime.tsv"
   : > "$FAKE_ROOT/calls.log"
 }
 
@@ -75,6 +76,9 @@ add_service(){
     printf '%s\n' "$cid" >> "$FAKE_ROOT/stacks/$id/cids.txt"
     printf '%s\n' "$cid" > "$FAKE_ROOT/stacks/$id/cids-$service.txt"
     printf '/%s|running|healthy|0|0\n' "$cid" > "$FAKE_ROOT/containers/$cid.summary"
+    printf '%s\t%s\t%s\t%s\tFalse\n' \
+      "$BASE/$id" "$BASE/$id/docker-compose.yml" "$id" "$service" \
+      >> "$FAKE_ROOT/compose-runtime.tsv"
   fi
 }
 
@@ -113,6 +117,11 @@ YAML
   printf '/cid-gluetun|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-gluetun.summary"
   printf '/cid-qbittorrent|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-qbittorrent.summary"
   printf '/cid-mamapi|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-mamapi.summary"
+  for service in gluetun qbittorrent mamapi; do
+    printf '%s\t%s\t%s\t%s\tFalse\n' \
+      "$BASE/$id" "$BASE/$id/docker-compose.yml" "$id" "$service" \
+      >> "$FAKE_ROOT/compose-runtime.tsv"
+  done
 }
 
 set_image_state(){
@@ -566,6 +575,9 @@ YAML
   printf '%s\n' cid-qbittorrent > "$FAKE_ROOT/stacks/media/cids.txt"
   printf '%s\n' cid-qbittorrent > "$FAKE_ROOT/stacks/media/cids-qbittorrent.txt"
   printf '/cid-qbittorrent|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-qbittorrent.summary"
+  printf '%s\t%s\t%s\t%s\tFalse\n' \
+    "$BASE/media" "$BASE/media/docker-compose.yml" media qbittorrent \
+    >> "$FAKE_ROOT/compose-runtime.tsv"
   set_image_state "$QBIT_IMAGE" old "$OLD_DIGEST"
   set_image_after_pull "$QBIT_NEW_IMAGE" new "$NEW_DIGEST"
 
@@ -832,7 +844,7 @@ test_out_owner_config_requires_uid_and_group(){
   teardown_case
 }
 
-test_stack_level_digest_cleanup_handles_no_service_map(){
+test_stack_level_digest_cleanup_fails_closed_without_service_map(){
   setup_case
   printf 'repo/app@sha256:good\n' > "$WUD_FILE"
   make_stack app "$BASE/app" docker-compose.yml
@@ -844,19 +856,27 @@ test_stack_level_digest_cleanup_handles_no_service_map(){
 
   run_script --yes --mode stop
 
-  assert_status 0
-  assert_file_equals "$WUD_FILE" ''
+  assert_status 1
+  assert_file_equals "$WUD_FILE" 'repo/app@sha256:good'
+  grep -q 'Could not determine which Compose services are selected' "$TEST_TMP/output.log" || fail "missing service discovery error"
+  assert_calls_not_contain 'compose -f docker-compose.yml pull'
   assert_calls_not_contain 'compose -f docker-compose.yml down'
-  assert_calls_contain 'compose -f docker-compose.yml stop[[:space:]]*$'
-  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --force-recreate$'
+  assert_calls_not_contain 'compose -f docker-compose.yml stop'
+  assert_calls_not_contain 'compose -f docker-compose.yml up'
   teardown_case
 }
 
 test_empty_health_ps_fails(){
   setup_case
   printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE" ""
-  : > "$FAKE_ROOT/stacks/app/cids.txt"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE" cid-app
+  cat > "$FAKE_ROOT/post-up-hook" <<'HOOK'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+: > "${FAKE_DOCKER_ROOT:?}/stacks/app/cids.txt"
+: > "${FAKE_DOCKER_ROOT:?}/stacks/app/cids-app.txt"
+HOOK
+  chmod +x "$FAKE_ROOT/post-up-hook"
   set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
   set_image_after_pull "$APP_LATEST_IMAGE" new "$NEW_DIGEST"
 
@@ -870,8 +890,7 @@ test_empty_health_ps_fails(){
 test_up_failure_writes_error_report(){
   setup_case
   printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE" ""
-  : > "$FAKE_ROOT/stacks/app/cids.txt"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE" cid-app
   : > "$FAKE_ROOT/stacks/app/up_fail"
   printf 'compose stderr failure\n' > "$FAKE_ROOT/stacks/app/up_stderr"
   set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
@@ -889,7 +908,7 @@ test_up_failure_writes_error_report(){
   grep -q -- 'reason=up-or-health-failed' "$report" || fail "report missing up failure reason"
   grep -q -- 'exit_code=19' "$report" || fail "report missing command exit code"
   grep -q -- 'compose stderr failure' "$report" || fail "report missing command stderr"
-  grep -q -- 'health: docker compose ps -q returned no containers' "$report" || fail "report missing health detail"
+  grep -q -- 'health: container=cid-app status=running health=healthy' "$report" || fail "report missing health detail"
   grep -q -- 'wud_entries_restored=yes' "$report" || fail "report missing WUD restore state"
   teardown_case
 }
@@ -1010,9 +1029,8 @@ test_recreate_stack_label_forces_stack_level_update(){
   assert_calls_not_contain 'compose -f docker-compose.yml pull db'
   assert_calls_not_contain 'compose -f docker-compose.yml down[[:space:]]*$'
   assert_calls_contain 'compose -f docker-compose.yml stop db app'
-  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans$'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --no-deps app db'
   assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--force-recreate'
-  assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--no-deps'
   teardown_case
 }
 
@@ -1039,9 +1057,8 @@ test_recreate_stack_label_preserves_gluetun_network_stack(){
   assert_calls_not_contain 'compose -f docker-compose.yml pull gluetun'
   assert_calls_not_contain 'compose -f docker-compose.yml down'
   assert_calls_contain 'compose -f docker-compose.yml stop thelounge speedtest-tracker mamapi qbittorrent gluetun'
-  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans$'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --no-deps gluetun qbittorrent mamapi speedtest-tracker thelounge'
   assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--force-recreate'
-  assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--no-deps'
   teardown_case
 }
 
@@ -1084,7 +1101,7 @@ main(){
   run_test test_cleanup_preserves_wud_file_owner_and_mode
   run_test test_out_owner_config_accepts_out_guid_for_logs_and_cleanup
   run_test test_out_owner_config_requires_uid_and_group
-  run_test test_stack_level_digest_cleanup_handles_no_service_map
+  run_test test_stack_level_digest_cleanup_fails_closed_without_service_map
   run_test test_empty_health_ps_fails
   run_test test_up_failure_writes_error_report
   run_test test_comments_and_blank_lines_preserved

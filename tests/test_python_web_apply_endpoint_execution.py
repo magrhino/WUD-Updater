@@ -1437,7 +1437,9 @@ def test_apply_endpoint_keeps_same_named_nested_stacks_separate(
     runtime_path.write_text(
         runtime_path.read_text(encoding="utf-8")
         .replace(str(first_source), str(first_stack))
-        .replace(str(second_source), str(second_stack)),
+        .replace(str(second_source), str(second_stack))
+        .replace("\tjarvis-a\t", "\tjarvis\t")
+        .replace("\tjarvis-b\t", "\tjarvis\t"),
         encoding="utf-8",
     )
     (fake_root / "images" / "n8nio_runners_2.34.4-distroless.after_id").write_text(
@@ -1502,6 +1504,11 @@ def test_apply_endpoint_routes_same_directory_compose_files_separately(
         (compose_dir / "docker-compose.yml").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    with (fake_root / "compose-runtime.tsv").open("a", encoding="utf-8") as file:
+        file.write(
+            f"{compose_dir}\t{alternate_compose}\t"
+            "jarvis\ttask-runner\tFalse\n"
+        )
     (fake_root / "images" / "n8nio_runners_2.34.4-distroless.after_id").write_text(
         "new\n",
         encoding="utf-8",

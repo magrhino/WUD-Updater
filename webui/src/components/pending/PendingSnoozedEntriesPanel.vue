@@ -7,7 +7,10 @@ import type {
   PendingSnoozedCandidate,
   SecurityScanInfo,
 } from "../../api/client";
-import type { SnoozedPendingItem } from "../../views/pending/snoozeSelection";
+import type {
+  RuntimeDeferredPendingItem,
+  SnoozedPendingItem,
+} from "../../views/pending/snoozeSelection";
 import {
   groupedItemServices,
   type PendingTagInputProps,
@@ -26,6 +29,7 @@ defineProps<{
   selectedSelectionKeySet: Set<string>;
   snoozedCandidates: PendingSnoozedCandidate[];
   snoozedItems: SnoozedPendingItem[];
+  stoppedItems: RuntimeDeferredPendingItem[];
   tagInputProps: (item: Pick<PendingItem, "image">) => PendingTagInputProps;
   tagOverrideValue: (item: PendingItem) => string;
 }>();
@@ -60,9 +64,78 @@ function candidateMeta(candidate: PendingSnoozedCandidate): string {
   }
   return parts.join(" | ");
 }
+
+function runtimeStatusLabel(item: PendingGroupedItem): string {
+  if (item.runtime_state === "not-running") {
+    return "Stopped";
+  }
+  if (item.runtime_state === "mixed") {
+    return pluralize(item.stopped_services.length, "stopped service");
+  }
+  return "Runtime unknown";
+}
+
+function runtimeMeta(item: PendingGroupedItem): string {
+  if (item.runtime_state === "not-running") {
+    return `Stopped before this update: ${item.stopped_services.join(", ")}. WUDup will recreate without starting them.`;
+  }
+  if (item.runtime_state === "mixed") {
+    return `Stopped before this update: ${item.stopped_services.join(", ")}. Running services: ${item.running_services.join(", ")}.`;
+  }
+  return "Runtime state could not be verified. WUDup will check again before making changes.";
+}
 </script>
 
 <template>
+  <article v-if="stoppedItems.length" class="stack-card needs-review">
+    <div class="stack-card-header">
+      <div class="stack-title-block">
+        <strong class="wrap-anywhere">Stopped or unverified containers</strong>
+        <span class="stack-path wrap-anywhere">
+          Excluded from bulk selection. Select individually to update without
+          starting stopped containers.
+        </span>
+      </div>
+      <div class="stack-card-side">
+        <div class="stack-card-tags">
+          <n-tag size="small" type="warning">
+            {{ pluralize(stoppedItems.length, "item") }}
+          </n-tag>
+        </div>
+      </div>
+    </div>
+    <details class="stack-details">
+      <summary
+        class="disclosure-summary disclosure-summary-triangle"
+        aria-label="Details for stopped or unverified updates"
+      >
+        Details
+      </summary>
+      <div class="stack-items">
+        <PendingUpdateRow
+          v-for="{ group, item } in stoppedItems"
+          :key="`stopped-${pendingSelectionKey(pendingSelectionForItem(item))}`"
+          :item="item"
+          :selected="selectedSelectionKeySet.has(pendingSelectionKey(pendingSelectionForItem(item)))"
+          :group-name="group.name"
+          :service-label="groupedItemServices(item)"
+          :status-label="runtimeStatusLabel(item)"
+          status-tag-type="warning"
+          :risk-cues="riskCues(item)"
+          :security-scan="securityScanFor(item)"
+          :meta-detail="runtimeMeta(item)"
+          :show-diagnostic="false"
+          :show-release-notes="false"
+          :tag-override-value="tagOverrideValue(item)"
+          :show-tag-input="Boolean(item.desired_tag)"
+          :tag-input-props="tagInputProps(item)"
+          @toggle="(_lineNo, checked) => emit('toggleItem', item, checked)"
+          @update-tag="emit('updateTag', item, $event)"
+        />
+      </div>
+    </details>
+  </article>
+
   <article
     v-if="snoozedItems.length || snoozedCandidates.length"
     class="stack-card needs-review"

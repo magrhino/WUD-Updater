@@ -274,6 +274,7 @@ class PendingGroupingItem:
     target_image: str
     compose_images: tuple[str, ...]
     services: tuple[str, ...]
+    runtime_services: tuple[str, ...]
     action: str
     selection_id: str = ""
     platform: str = ""
@@ -297,6 +298,7 @@ class PendingStackGroup:
     directory: str
     compose_file: str
     project_directory: str
+    project_name: str
     services_label: str
     services: tuple[str, ...]
     line_numbers: tuple[int, ...]

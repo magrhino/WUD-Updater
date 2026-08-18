@@ -62,7 +62,9 @@ import {
 import { mountWithApp, naiveStubs } from "./helpers/mount";
 import {
   activeSnoozedServiceKeys,
+  runtimeDeferredItemsForGroups,
   snoozedItemsForGroups,
+  stackGroupsWithoutRuntimeDeferredItems,
 } from "../src/views/pending/snoozeSelection";
 
 type RenderColumn = {
@@ -279,6 +281,31 @@ describe("pending helper modules", () => {
     expect([...activeKeys]).toEqual(["media/radarr", "media/sonarr"]);
     expect(
       snoozedItemsForGroups(groups, activeKeys).map(({ item }) => item.line_no),
+    ).toEqual([1]);
+  });
+
+  it("separates stopped updates from bulk-selectable stack groups", () => {
+    const running = pendingGroupedItem({
+      line_no: 1,
+      services: ["api"],
+      running_services: ["api"],
+    });
+    const stopped = pendingGroupedItem({
+      line_no: 2,
+      services: ["worker"],
+      runtime_state: "not-running",
+      running_services: [],
+      stopped_services: ["worker"],
+    });
+    const groups = pendingGrouping([running, stopped]).groups;
+
+    expect(
+      runtimeDeferredItemsForGroups(groups).map(({ item }) => item.line_no),
+    ).toEqual([2]);
+    expect(
+      stackGroupsWithoutRuntimeDeferredItems(groups).flatMap((group) =>
+        group.items.map((item) => item.line_no),
+      ),
     ).toEqual([1]);
   });
 

@@ -16,6 +16,77 @@ HEALTH_LOG_FORMAT = "{{if .State.Health}}{{range .State.Health.Log}}{{println .O
 
 
 class _LifecycleHealthMixin:
+    def _run_compose_up_no_start(
+        self,
+        stack: ComposeStack,
+        services: Sequence[str],
+        *,
+        force_recreate: bool = False,
+    ) -> UpResult:
+        try:
+            self.compose.up(
+                stack.directory,
+                stack.file,
+                services,
+                force_recreate=force_recreate,
+                no_deps=True,
+                no_start=True,
+                project_directory=stack.project_directory,
+            )
+        except CommandError as exc:
+            self.log.error(
+                f"[{stack.name}] Could not recreate stopped service(s) without "
+                "starting them"
+            )
+            return UpResult(False, False, exc)
+
+        return self._verify_services_stopped(stack, services)
+
+    def _verify_services_stopped(
+        self,
+        stack: ComposeStack,
+        services: Sequence[str],
+    ) -> UpResult:
+        try:
+            running_cids = self.compose.ps_quiet_checked(
+                stack.directory,
+                stack.file,
+                services,
+                project_directory=stack.project_directory,
+            )
+        except CommandError as exc:
+            self.log.error(
+                f"[{stack.name}] Could not verify that recreated service(s) remained stopped"
+            )
+            self._restore_services_stopped(stack, services)
+            return UpResult(False, False, exc)
+        if running_cids:
+            self.log.error(
+                f"[{stack.name}] Recreated service(s) unexpectedly started: "
+                f"{' '.join(services)}"
+            )
+            self._restore_services_stopped(stack, services)
+            return UpResult(False, False)
+        return UpResult(True, False)
+
+    def _restore_services_stopped(
+        self,
+        stack: ComposeStack,
+        services: Sequence[str],
+    ) -> None:
+        try:
+            self.compose.stop(
+                stack.directory,
+                stack.file,
+                services,
+                project_directory=stack.project_directory,
+            )
+        except CommandError as exc:
+            self.log.error(
+                f"[{stack.name}] Could not restore unexpectedly started service(s) "
+                f"to stopped: {' '.join(services)} ({exc})"
+            )
+
     def _run_compose_up(
         self,
         stack: ComposeStack,

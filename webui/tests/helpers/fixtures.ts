@@ -651,15 +651,23 @@ export function pendingGroupedItem(
   overrides: Partial<PendingGroupedItem> = {},
 ): PendingGroupedItem {
   const item = pendingItem(overrides);
+  const services = overrides.services ?? ["app"];
+  const runtimeState = overrides.runtime_state ?? "running";
   return {
     ...item,
     selection_id: `selection-${item.line_no}`,
     resolved_image: item.image,
     target_image: item.desired_tag ? `${item.repo}:${item.desired_tag}` : item.image,
     compose_images: [item.image],
-    services: ["app"],
+    services,
     action: item.desired_tag ? "tag-update" : "recreate_service",
     diagnostic: null,
+    runtime_state: runtimeState,
+    running_services:
+      overrides.running_services ?? (runtimeState === "running" ? services : []),
+    stopped_services:
+      overrides.stopped_services ??
+      (runtimeState === "not-running" ? services : []),
     ...overrides,
   };
 }
@@ -769,6 +777,7 @@ export function pendingGrouping(
               directory: "/docker/media",
               compose_file: "docker-compose.yml",
               project_directory: "/docker/media",
+              project_name: "media",
               services_label: "app",
               services: ["app"],
               line_numbers: items.map((item) => item.line_no),

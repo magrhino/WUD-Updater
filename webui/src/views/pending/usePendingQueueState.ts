@@ -19,9 +19,11 @@ import {
   activeSnoozedServiceKeys as buildActiveSnoozedServiceKeys,
   matchingSnoozedServiceKeys,
   pendingServiceKeysForGroups,
+  runtimeDeferredItemsForGroups,
   selectableLineNumbersForGroups,
   snoozedItemsForGroups,
   stackGroupsWithoutSnoozedItems,
+  stackGroupsWithoutRuntimeDeferredItems,
 } from "./snoozeSelection";
 import { pluralize } from "./utils";
 
@@ -77,11 +79,17 @@ export function usePendingQueueState() {
   const snoozedCandidates = computed(
     () => updates.pending?.snoozed_candidates ?? [],
   );
-  const stackGroups = computed(() =>
+  const unsnoozedStackGroups = computed(() =>
     stackGroupsWithoutSnoozedItems(
       rawStackGroups.value,
       bulkSnoozedServiceKeys.value,
     ),
+  );
+  const stoppedItems = computed(() =>
+    runtimeDeferredItemsForGroups(unsnoozedStackGroups.value),
+  );
+  const stackGroups = computed(() =>
+    stackGroupsWithoutRuntimeDeferredItems(unsnoozedStackGroups.value),
   );
   const unmatchedItems = computed(() =>
     groupingReady.value ? (updates.pending?.grouping.unmatched ?? []) : [],
@@ -233,6 +241,7 @@ export function usePendingQueueState() {
     snoozedItems,
     stackGroups,
     stackLineNumbers,
+    stoppedItems,
     unmatchedItems,
   };
 }

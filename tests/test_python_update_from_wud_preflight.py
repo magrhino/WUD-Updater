@@ -244,6 +244,12 @@ class UpdateFromWudPreflightTests(UpdateFromWudRunnerTestCase):
             (self.base / "app" / "docker-compose.yml").read_text(encoding="utf-8"),
             encoding="utf-8",
         )
+        (self.fake_root / "compose-runtime.tsv").write_text(
+            f"{expected_project_directory}\t"
+            f"{expected_project_directory / 'docker-compose.yml'}\t"
+            "app\tapp\tFalse\n",
+            encoding="utf-8",
+        )
         options = UpdaterOptions(
             docker_base=self.base,
             wud_file=self.wud_file,

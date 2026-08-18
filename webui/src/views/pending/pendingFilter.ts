@@ -64,6 +64,7 @@ export function pendingGroupMatchesSearch(
     group.directory,
     group.compose_file,
     group.project_directory,
+    group.project_name,
   ]).includes(normalizedQuery);
 }
 
@@ -198,8 +199,13 @@ function groupedItemParts(item: PendingItem): string[] {
     item.action,
     item.action.replace(/[-_]+/g, " "),
     groupedItemActionLabel(item),
+    item.runtime_state,
+    item.runtime_state.replace(/-/g, " "),
+    item.runtime_state === "running" ? "running" : "stopped unverified",
     ...item.compose_images,
     ...item.services,
+    ...item.running_services,
+    ...item.stopped_services,
     ...diagnosticParts(item),
   ];
 }

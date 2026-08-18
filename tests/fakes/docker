@@ -280,6 +280,7 @@ service_cids(){
     file="$ROOT/stacks/$id/cids.txt"
     [[ -f "$file" ]] && cat "$file"
   fi
+  return 0
 }
 
 apply_image_after_pull(){
@@ -383,6 +384,10 @@ compose_cmd(){
       case "${1:-}" in
         --format)
           if [[ "${2:-}" == "json" ]]; then
+            if [[ -f "$ROOT/stacks/$id/config_json_fail" ]]; then
+              emit_failure_output "$id" config_json
+              return 16
+            fi
             compose_config_json_from_file "$file" "$project_directory"
           else
             return 1
@@ -396,6 +401,10 @@ compose_cmd(){
           fi
           ;;
         --services)
+          if [[ -f "$ROOT/stacks/$id/config_services_fail" ]]; then
+            emit_failure_output "$id" config_services
+            return 16
+          fi
           if compose_services_from_file "$file"; then
             :
           elif [[ -f "$ROOT/stacks/$id/services.txt" ]]; then
@@ -446,9 +455,19 @@ compose_cmd(){
         fi
         return 0
       fi
-      if [[ -f "$ROOT/stacks/$id/up_fail" ]]; then
+      local up_arg no_start=0
+      for up_arg in "$@"; do
+        if [[ "$up_arg" == "--no-start" ]]; then
+          no_start=1
+        fi
+      done
+      if [[ -f "$ROOT/stacks/$id/up_fail" ||
+            "$no_start" -eq 1 && -f "$ROOT/stacks/$id/up_no_start_fail" ]]; then
         emit_failure_output "$id" up
         return 19
+      fi
+      if [[ "$no_start" -eq 1 ]]; then
+        return 0
       fi
       run_post_up_hook "$id" "$file" "$@"
       return 0
@@ -468,6 +487,10 @@ compose_cmd(){
       return 0
       ;;
     ps)
+      if [[ -f "$ROOT/stacks/$id/ps_fail" ]]; then
+        emit_failure_output "$id" ps
+        return 22
+      fi
       if [[ "${1:-}" == "-q" ]]; then
         shift
         if (($#)); then
@@ -593,10 +616,27 @@ ps_cmd(){
     printf 'fake docker ps failed\n' >&2
     return 24
   fi
+  local include_all=0
+  if [[ "${1:-}" == "--all" ]]; then
+    include_all=1
+    shift
+  fi
   if [[ "${1:-}" == "--format" ]]; then
-    local format="${2:-}"
+    local format="${2:-}" runtime_file=""
+    if [[ "$include_all" -eq 1 && "$format" == *'{{.State}}'* && -f "$ROOT/ps_hang" ]]; then
+      kill -STOP "$$"
+    fi
     if [[ "$format" == *'com.docker.compose.project.working_dir'* && "$format" == *'com.docker.compose.project.config_files'* && "$format" == *'com.docker.compose.service'* ]]; then
-      [[ -f "$ROOT/compose-runtime.tsv" ]] && cat "$ROOT/compose-runtime.tsv"
+      if [[ "$include_all" -eq 1 && -f "$ROOT/compose-runtime-all.tsv" ]]; then
+        runtime_file="$ROOT/compose-runtime-all.tsv"
+      else
+        runtime_file="$ROOT/compose-runtime.tsv"
+      fi
+      if [[ -f "$runtime_file" && "$format" == *'{{.State}}'* ]]; then
+        awk 'BEGIN {FS=OFS="\t"} NF == 5 {print $0, "running"; next} {print}' "$runtime_file"
+      elif [[ -f "$runtime_file" ]]; then
+        cat "$runtime_file"
+      fi
     else
       [[ -f "$ROOT/containers.tsv" ]] && cat "$ROOT/containers.tsv"
     fi

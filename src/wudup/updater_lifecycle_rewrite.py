@@ -18,6 +18,7 @@ from .updater_models import (
     ComposeTagRewriteError,
     Match,
     StackStatus,
+    UpResult,
 )
 
 
@@ -376,6 +377,8 @@ class _LifecycleRewriteMixin:
             failure_health=failure_health,
             force_recreate=state.scope.force_recreate,
             no_deps=state.scope.up_no_deps,
+            running_services=state.running_services,
+            stopped_services=state.stopped_services,
         )
 
     @staticmethod
@@ -400,6 +403,8 @@ class _LifecycleRewriteMixin:
         failure_health: str | None = None,
         force_recreate: bool = False,
         no_deps: bool = True,
+        running_services: Sequence[str] | None = None,
+        stopped_services: Sequence[str] = (),
     ) -> StackStatus:
         self._progress(
             _tag_update_failure_progress_phase(phase),
@@ -416,16 +421,29 @@ class _LifecycleRewriteMixin:
         rollback_error: CommandError | None = None
         try:
             shutil.copy2(compose_backup, stack.directory / stack.file)
-            rollback_up = self._run_compose_up(
+            self.runner.stack_runtime_states_after.pop(stack.index, None)
+            active_services = (
+                tuple(services or ())
+                if running_services is None
+                else tuple(running_services)
+            )
+            rollback_ok, rollback_error = self._restore_tag_update_services(
                 stack,
-                services,
+                active_services,
+                stopped_services,
                 force_recreate=force_recreate,
                 no_deps=no_deps,
             )
-            if rollback_up.ok and (
-                rollback_up.wait_handled or self._wait_for_health(stack, services)
-            ):
-                rollback_result = "restored-and-healthy"
+            if rollback_ok:
+                self.runner.stack_runtime_states_after[stack.index] = (
+                    tuple(active_services),
+                    tuple(stopped_services),
+                )
+                rollback_result = (
+                    "restored-and-healthy"
+                    if active_services
+                    else "restored-and-stopped"
+                )
                 if reason == STALE_PENDING_DIGEST_REASON:
                     self.log.warning(
                         f"[{stack.name}] Rolled back to previous tag; stale WUD "
@@ -437,7 +455,6 @@ class _LifecycleRewriteMixin:
                         "WUD entry pending for manual review."
                     )
             else:
-                rollback_error = rollback_up.command_error
                 self.log.error(f"[{stack.name}] Rollback failed; manual review required.")
         except OSError:
             self.log.error(f"[{stack.name}] Rollback failed; manual review required.")
@@ -465,6 +482,43 @@ class _LifecycleRewriteMixin:
             failure_health,
         )
         return StackStatus("failure", reason)
+
+    def _restore_tag_update_services(
+        self,
+        stack: ComposeStack,
+        active_services: Sequence[str],
+        stopped_services: Sequence[str],
+        *,
+        force_recreate: bool,
+        no_deps: bool,
+    ) -> tuple[bool, CommandError | None]:
+        stopped_result = UpResult(True, False)
+        if stopped_services:
+            stopped_result = self._run_compose_up_no_start(
+                stack,
+                stopped_services,
+                force_recreate=force_recreate,
+            )
+        rollback_up = UpResult(True, False)
+        if active_services:
+            rollback_up = self._run_compose_up(
+                stack,
+                active_services,
+                force_recreate=force_recreate,
+                no_deps=no_deps or bool(stopped_services),
+            )
+        if stopped_result.ok and rollback_up.ok and stopped_services:
+            stopped_result = self._verify_services_stopped(
+                stack,
+                stopped_services,
+            )
+        rollback_ok = stopped_result.ok and rollback_up.ok
+        if rollback_ok and active_services:
+            rollback_ok = rollback_up.wait_handled or self._wait_for_health(
+                stack,
+                active_services,
+            )
+        return rollback_ok, stopped_result.command_error or rollback_up.command_error
 
     def _write_tag_incident_log(
         self,
@@ -505,7 +559,11 @@ class _LifecycleRewriteMixin:
         )
         content.append(
             "\nmanual_review_required="
-            + ("no\n" if rollback_result == "restored-and-healthy" else "yes\n")
+            + (
+                "no\n"
+                if rollback_result in {"restored-and-healthy", "restored-and-stopped"}
+                else "yes\n"
+            )
         )
         try:
             incident = updater_logging._create_unique_text_file_exclusive(

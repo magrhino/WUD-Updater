@@ -85,6 +85,8 @@ const {
   snoozedCandidates,
   snoozedItems,
   stackGroups,
+  stoppedItems,
+  rawStackGroups,
   unmatchedItems,
 } = usePendingQueueState();
 const {
@@ -93,6 +95,7 @@ const {
   filteredSnoozedCandidates,
   filteredSnoozedItems,
   filteredStackGroups,
+  filteredStoppedItems,
   filteredUnmatchedItems,
   pendingSearchActive,
   pendingSearchEmpty,
@@ -107,6 +110,7 @@ const {
   groupingReady,
   snoozedCandidates,
   snoozedItems,
+  stoppedItems,
   selectableLineNumbers,
   selectableSelections,
   selectAllLabel,
@@ -438,7 +442,7 @@ const {
   selectedLineNumbers,
   selectedSelections,
   selectedSelectionKeySet,
-  stackGroups,
+  stackGroups: rawStackGroups,
   tagOverrideErrorForLines,
   unmatchedItems,
 });
@@ -979,6 +983,7 @@ onBeforeUnmount(() => {
         :show-setup-link="showSetupLink"
         :snoozed-candidates="filteredSnoozedCandidates"
         :snoozed-items="filteredSnoozedItems"
+        :stopped-items="filteredStoppedItems"
         :stack-groups="filteredStackGroups"
         :stack-has-selection="stackHasSelection"
         :stack-indeterminate="stackIndeterminate"

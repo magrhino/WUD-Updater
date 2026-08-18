@@ -75,6 +75,56 @@ describe("pending view selection actions", () => {
     setActivePinia(createPinia());
   });
 
+  it("keeps updates with stopped effective services out of bulk selection", async () => {
+    const running = pendingGroupedItem({
+      line_no: 1,
+      image: "repo/api:1.0",
+      repo: "repo/api",
+      services: ["api"],
+      running_services: ["api"],
+    });
+    const stopped = pendingGroupedItem({
+      line_no: 2,
+      image: "repo/worker:1.0",
+      repo: "repo/worker",
+      services: ["worker"],
+      runtime_state: "mixed",
+      running_services: ["worker"],
+      stopped_services: ["sidecar"],
+    });
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = {
+      ...pendingResponse([running, stopped]),
+      grouping: pendingGrouping([running, stopped]),
+    };
+    mockPendingLifecycle(settings, updates);
+    const wrapper = mountPendingView(pinia);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Stopped or unverified containers");
+    expect(wrapper.text()).toContain("Excluded from bulk selection");
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Select all stack updates"))
+      ?.trigger("click");
+
+    const runningInput = wrapper.find<HTMLInputElement>(
+      'input[aria-label="Select update repo/api:1.0"]',
+    );
+    const stoppedInput = wrapper.find<HTMLInputElement>(
+      'input[aria-label="Select update repo/worker:1.0"]',
+    );
+    expect(runningInput.element.checked).toBe(true);
+    expect(stoppedInput.element.checked).toBe(false);
+
+    await stoppedInput.setValue(true);
+
+    expect(stoppedInput.element.checked).toBe(true);
+    expect(wrapper.text()).toContain(
+      "Stopped before this update: sidecar. Running services: worker.",
+    );
+  });
+
   it("offers only the verified subset of a mixed metadata selection", async () => {
     const fresh = pendingItem({
       line_no: 1,

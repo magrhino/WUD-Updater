@@ -31,10 +31,21 @@ class DockerCli:
         self.runner = runner or CommandRunner()
         self.executable = executable
 
-    def ps_format(self, fmt: str = DEFAULT_CONTAINER_FORMAT) -> list[str]:
+    def ps_format(
+        self,
+        fmt: str = DEFAULT_CONTAINER_FORMAT,
+        *,
+        all_containers: bool = False,
+        timeout_seconds: float | None = None,
+    ) -> list[str]:
+        args = [self.executable, "ps"]
+        if all_containers:
+            args.append("--all")
+        args.extend(("--format", fmt))
         return self.runner.capture_lines(
-            [self.executable, "ps", "--format", fmt],
+            args,
             check=True,
+            timeout_seconds=timeout_seconds,
         )
 
     def container_images(self) -> list[ContainerImage]:

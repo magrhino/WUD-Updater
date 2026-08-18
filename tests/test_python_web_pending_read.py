@@ -4,6 +4,7 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
 from tests.web_test_helpers import (
     _assert_pending_grouping_did_not_mutate,
     _client,
@@ -1081,6 +1082,7 @@ def test_pending_endpoint_groups_items_by_compose_stack_without_mutation(
     assert group["compose_file"] == "docker-compose.yml"
     assert group["directory"] == str(compose_dir)
     assert group["project_directory"] == ""
+    assert group["project_name"] == "stack"
     assert group["services"] == ["app", "db"]
     assert group["services_label"] == "app, db"
     assert group["line_numbers"] == [1, 2]
@@ -1090,11 +1092,257 @@ def test_pending_endpoint_groups_items_by_compose_stack_without_mutation(
     assert group["items"][0]["resolved_image"] == "repo/app:latest"
     assert group["items"][0]["target_image"] == "repo/app:latest"
     assert group["items"][0]["action"] == "recreate_service"
+    assert group["items"][0]["runtime_state"] == "running"
+    assert group["items"][0]["running_services"] == ["app"]
+    assert group["items"][0]["stopped_services"] == []
     assert wud_file.read_text(encoding="utf-8") == original
     assert (
         (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
         == compose_before
     )
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_pending_endpoint_reports_stopped_service_runtime_state(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\nrepo/worker:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("worker", "repo/worker:latest", None),
+        ],
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    items = response.json()["grouping"]["groups"][0]["items"]
+    by_service = {item["services"][0]: item for item in items}
+    assert by_service["app"]["runtime_state"] == "running"
+    assert by_service["app"]["running_services"] == ["app"]
+    assert by_service["worker"]["runtime_state"] == "not-running"
+    assert by_service["worker"]["running_services"] == []
+    assert by_service["worker"]["stopped_services"] == ["worker"]
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_pending_endpoint_reports_unknown_for_mixed_scaled_service(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-running")],
+    )
+    runtime_row = (
+        f"{compose_dir}\t{compose_dir / 'docker-compose.yml'}\t"
+        "stack\tapp\tFalse\t"
+    )
+    (fake_root / "compose-runtime-all.tsv").write_text(
+        f"{runtime_row}running\n{runtime_row}exited\n",
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    item = response.json()["grouping"]["groups"][0]["items"][0]
+    assert item["runtime_state"] == "unknown"
+    assert item["running_services"] == []
+    assert item["stopped_services"] == []
+    assert "ps --all --format" in _fake_docker_calls(fake_root)
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+@pytest.mark.parametrize("state", ["running", "exited"])
+def test_pending_endpoint_reports_unknown_for_homogeneous_scaled_service(
+    tmp_path: Path,
+    state: str,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-running")],
+    )
+    runtime_row = (
+        f"{compose_dir}\t{compose_dir / 'docker-compose.yml'}\t"
+        f"stack\tapp\tFalse\t{state}\n"
+    )
+    (fake_root / "compose-runtime-all.tsv").write_text(
+        runtime_row * 2,
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    item = response.json()["grouping"]["groups"][0]["items"][0]
+    assert item["runtime_state"] == "unknown"
+    assert item["running_services"] == []
+    assert item["stopped_services"] == []
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_pending_endpoint_includes_stopped_network_provider_in_runtime_state(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("provider", "repo/provider:latest", None),
+            ("app", "repo/app:latest", "cid-app"),
+        ],
+    )
+    (compose_dir / "docker-compose.yml").write_text(
+        "services:\n"
+        "  provider:\n"
+        "    image: repo/provider:latest\n"
+        "  app:\n"
+        "    image: repo/app:latest\n"
+        "    network_mode: service:provider\n",
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    item = response.json()["grouping"]["groups"][0]["items"][0]
+    assert item["services"] == ["app"]
+    assert item["runtime_state"] == "mixed"
+    assert item["running_services"] == ["app"]
+    assert item["stopped_services"] == ["provider"]
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_pending_endpoint_matches_running_multi_file_compose_service(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    (fake_root / "compose-runtime.tsv").write_text(
+        f"{compose_dir}\t{compose_dir / 'docker-compose.yml'},"
+        f"{compose_dir / 'compose.override.yml'}\tstack\tapp\tFalse\n",
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    item = response.json()["grouping"]["groups"][0]["items"][0]
+    assert item["runtime_state"] == "running"
+    assert item["running_services"] == ["app"]
+    assert item["stopped_services"] == []
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_pending_endpoint_fails_safe_when_runtime_state_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    (fake_root / "ps_fail").write_text("", encoding="utf-8")
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    item = response.json()["grouping"]["groups"][0]["items"][0]
+    assert item["runtime_state"] == "unknown"
+    assert item["running_services"] == []
+    assert item["stopped_services"] == []
+
+
+def test_pending_endpoint_fails_safe_when_runtime_state_times_out(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    (fake_root / "ps_hang").write_text("", encoding="utf-8")
+    monkeypatch.setattr(pending_module, "_PENDING_DOCKER_TIMEOUT_SECONDS", 0.01)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    item = response.json()["grouping"]["groups"][0]["items"][0]
+    assert item["runtime_state"] == "unknown"
+    assert item["running_services"] == []
+    assert item["stopped_services"] == []
+
+
+def test_pending_endpoint_reports_unknown_without_compose_project_identity(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    (fake_root / "stacks" / "stack" / "config_json_fail").write_text(
+        "",
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    group = response.json()["grouping"]["groups"][0]
+    assert group["project_name"] == ""
+    item = group["items"][0]
+    assert item["runtime_state"] == "unknown"
+    assert item["running_services"] == []
+    assert item["stopped_services"] == []
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
@@ -1201,7 +1449,7 @@ def test_pending_endpoint_marks_recreate_stack_label_action(
         "stack",
         [
             ("app", "repo/app:latest", "cid-app"),
-            ("db", "repo/db:latest", "cid-db"),
+            ("db", "repo/db:latest", None),
         ],
     )
     _write_fake_container_labels(
@@ -1216,6 +1464,9 @@ def test_pending_endpoint_marks_recreate_stack_label_action(
     group = response.json()["grouping"]["groups"][0]
     assert group["items"][0]["services"] == ["app"]
     assert group["items"][0]["action"] == "recreate_stack"
+    assert group["items"][0]["runtime_state"] == "mixed"
+    assert group["items"][0]["running_services"] == ["app"]
+    assert group["items"][0]["stopped_services"] == ["db"]
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 

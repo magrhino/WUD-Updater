@@ -109,6 +109,21 @@ class FakeDockerTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
+    def append_compose_runtime_service(
+        self,
+        directory: Path,
+        compose_file: Path,
+        project: str,
+        service: str,
+    ) -> None:
+        with (self.fake_root / "compose-runtime.tsv").open(
+            "a",
+            encoding="utf-8",
+        ) as file:
+            file.write(
+                f"{directory}\t{compose_file}\t{project}\t{service}\tFalse\n"
+            )
+
     def make_stack(
         self,
         stack_id: str,
@@ -141,6 +156,12 @@ class FakeDockerTestCase(unittest.TestCase):
                 (self.fake_root / "containers" / f"{cid}.summary").write_text(
                     f"/{cid}|running|healthy|0|0\n",
                     encoding="utf-8",
+                )
+                self.append_compose_runtime_service(
+                    directory,
+                    directory / "docker-compose.yml",
+                    directory.name,
+                    service,
                 )
 
         (directory / "docker-compose.yml").write_text("".join(compose_lines), encoding="utf-8")
@@ -444,6 +465,18 @@ class UpdateFromWudRunnerTestCase(FakeDockerTestCase):
             (self.fake_root / "containers" / f"{cid}.summary").write_text(
                 f"/{cid}|running|healthy|0|0\n",
                 encoding="utf-8",
+            )
+        runtime_services = ["qbittorrent"]
+        if include_provider_cid:
+            runtime_services.insert(0, "gluetun")
+        if include_extra_consumer:
+            runtime_services.append("mamapi")
+        for service in runtime_services:
+            self.append_compose_runtime_service(
+                stack_dir,
+                compose_file,
+                "media",
+                service,
             )
         if write_provider_hook:
             self.write_media_provider_post_up_hook()
