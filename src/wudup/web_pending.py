@@ -804,17 +804,22 @@ def _pending_item_runtime(
         return "unknown", (), ()
 
     project_directory = group.project_directory or group.directory
-    running = tuple(
-        service
-        for service in services
-        if compose_runtime_service_key(
+    running_services: list[str] = []
+    for service in services:
+        expected_paths, expected_project, expected_service = compose_runtime_service_key(
             project_directory,
             group.compose_file,
             group.project_name,
             service,
         )
-        in running_service_keys
-    )
+        if any(
+            expected_paths.issubset(runtime_paths)
+            and expected_project == runtime_project
+            and expected_service == runtime_service
+            for runtime_paths, runtime_project, runtime_service in running_service_keys
+        ):
+            running_services.append(service)
+    running = tuple(running_services)
     running_set = set(running)
     stopped = tuple(service for service in services if service not in running_set)
     if not stopped:
