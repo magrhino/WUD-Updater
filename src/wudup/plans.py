@@ -68,7 +68,10 @@ from .plan_models import (
 )
 from .tag_streams import pending_tag_stream_hint, plan_tag_stream_changes
 from .updater_digest_pin import _digest_pin_match_tag
-from .updater_lifecycle_scope import _UpdateScopeMixin
+from .updater_lifecycle_scope import (
+    _UpdateScopeMixin,
+    runtime_services_for_scope,
+)
 from .updater_matching import (
     _ordered_unique,
     _scope_plan_label,
@@ -1131,6 +1134,8 @@ def _pending_stack_groups(
                 stack_action = "recreate_stack"
         items = _pending_grouping_items(
             stack_matches,
+            stack=stack,
+            scope_builder=scope_builder,
             stack_action=stack_action,
             digest_unpin_updates=_digest_unpin_updates_for_stack(
                 stack.index,
@@ -1157,6 +1162,8 @@ def _pending_stack_groups(
 def _pending_grouping_items(
     matches: Sequence[Match],
     *,
+    stack: ComposeStack,
+    scope_builder: _PlanBuilder | None = None,
     stack_action: str = "",
     digest_unpin_updates: Sequence[DigestUnpinUpdate] = (),
     digest_pin_updates_enabled: bool = True,
@@ -1173,6 +1180,11 @@ def _pending_grouping_items(
         services = _ordered_unique(
             match.service for match in line_matches if match.service
         )
+        runtime_services = services
+        if scope_builder is not None:
+            runtime_services = runtime_services_for_scope(
+                scope_builder._update_scope(stack, line_matches),
+            )
         digest_unpin = _pending_digest_unpin_for_matches(
             line_matches,
             digest_unpin_updates,
@@ -1189,6 +1201,7 @@ def _pending_grouping_items(
                 resolved_image=resolved,
                 compose_images=compose_images,
                 services=services,
+                runtime_services=runtime_services,
                 action=action,
                 digest_provenance=digest_provenance,
                 target_image=_pending_digest_unpin_target_image(digest_unpin),
@@ -1227,6 +1240,7 @@ def _pending_grouping_item(
     resolved_image: str = "",
     compose_images: Sequence[str] = (),
     services: Sequence[str] = (),
+    runtime_services: Sequence[str] = (),
     diagnostic: UnmatchedDiagnostic | None = None,
     digest_provenance: DigestTagProvenance | None = None,
     target_image: str = "",
@@ -1260,6 +1274,7 @@ def _pending_grouping_item(
         target_image=resolved_target_image,
         compose_images=tuple(compose_images),
         services=tuple(services),
+        runtime_services=tuple(runtime_services),
         action=action,
         selection_id=selection_id,
         platform=target.platform_value,

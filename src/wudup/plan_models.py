@@ -274,6 +274,7 @@ class PendingGroupingItem:
     target_image: str
     compose_images: tuple[str, ...]
     services: tuple[str, ...]
+    runtime_services: tuple[str, ...]
     action: str
     selection_id: str = ""
     platform: str = ""

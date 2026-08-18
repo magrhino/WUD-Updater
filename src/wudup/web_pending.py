@@ -799,8 +799,8 @@ def _pending_item_runtime(
     item: Any,
     running_service_keys: set[ComposeRuntimeServiceKey] | None,
 ) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
-    services = tuple(item.services)
-    if running_service_keys is None or not services:
+    services = tuple(item.runtime_services)
+    if running_service_keys is None or not services or not group.project_name:
         return "unknown", (), ()
 
     project_directory = group.project_directory or group.directory

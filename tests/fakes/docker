@@ -384,6 +384,10 @@ compose_cmd(){
       case "${1:-}" in
         --format)
           if [[ "${2:-}" == "json" ]]; then
+            if [[ -f "$ROOT/stacks/$id/config_json_fail" ]]; then
+              emit_failure_output "$id" config_json
+              return 16
+            fi
             compose_config_json_from_file "$file" "$project_directory"
           else
             return 1

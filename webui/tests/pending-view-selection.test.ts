@@ -75,7 +75,7 @@ describe("pending view selection actions", () => {
     setActivePinia(createPinia());
   });
 
-  it("keeps stopped updates out of bulk selection but allows manual selection", async () => {
+  it("keeps updates with stopped effective services out of bulk selection", async () => {
     const running = pendingGroupedItem({
       line_no: 1,
       image: "repo/api:1.0",
@@ -88,9 +88,9 @@ describe("pending view selection actions", () => {
       image: "repo/worker:1.0",
       repo: "repo/worker",
       services: ["worker"],
-      runtime_state: "not-running",
-      running_services: [],
-      stopped_services: ["worker"],
+      runtime_state: "mixed",
+      running_services: ["worker"],
+      stopped_services: ["sidecar"],
     });
     const { pinia, settings, updates } = setupStores(true);
     updates.pending = {
@@ -121,7 +121,7 @@ describe("pending view selection actions", () => {
 
     expect(stoppedInput.element.checked).toBe(true);
     expect(wrapper.text()).toContain(
-      "WUDup will recreate without starting them.",
+      "Stopped before this update: sidecar. Running services: worker.",
     );
   });
 
