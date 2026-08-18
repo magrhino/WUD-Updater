@@ -84,6 +84,27 @@ class StackLifecycleExecutor(
             return state_or_status
 
         state = state_or_status
+        if not self._preflight_expected_digests(stack, matches):
+            self._record_failure(
+                stack,
+                matches,
+                phase="preflight",
+                reason=STALE_PENDING_DIGEST_REASON,
+                services=state.pull_services,
+                note=(
+                    "Stale pending digest entry was removed before any Compose "
+                    "or Docker update; refresh or replace it before retrying."
+                ),
+            )
+            self._progress(
+                "preflight",
+                "failure",
+                f"[{stack.name}] Pending WUD digest is stale; no update was applied.",
+                stack=stack.name,
+                services=state.pull_services,
+                matches=matches,
+            )
+            return StackStatus("failure", STALE_PENDING_DIGEST_REASON)
         for step in (
             self._apply_compose_tag_updates,
             self._apply_compose_digest_unpin_updates,

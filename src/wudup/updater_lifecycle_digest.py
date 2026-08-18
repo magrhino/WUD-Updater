@@ -15,6 +15,7 @@ from .digest_verifier import (
     DockerManifestResolver,
 )
 from .images import (
+    image_has_tag,
     image_matches_resolved_target,
     normalize_digest,
 )
@@ -51,6 +52,48 @@ def _expected_digest_requirement(match: Match) -> str:
 
 
 class _LifecycleDigestMixin:
+    def _preflight_expected_digests(
+        self,
+        stack: ComposeStack,
+        matches: Sequence[Match],
+    ) -> bool:
+        ok = True
+        requirements = {
+            (
+                match.target.line_no,
+                match.target.first,
+                (
+                    _digest_check_image(match)
+                    if match.target.desired_tag
+                    or not image_has_tag(match.compose_image)
+                    else match.compose_image
+                ),
+                expected_digest,
+            )
+            for match in matches
+            if (expected_digest := _expected_digest_requirement(match))
+        }
+        for line_no, target, expected_image, expected in sorted(requirements):
+            result = self.digest_verifier.verify_tag_digest(expected_image, expected)
+            if result.ok:
+                continue
+            if result.reason != "stale-digest" or not result.digest:
+                self.log.warning(
+                    f"[{stack.name}] Digest preflight was inconclusive for line "
+                    f"{line_no} ({target}): wanted {expected}; pull verification "
+                    "will still run"
+                )
+                continue
+            ok = False
+            self._mark_stale_pending_digest(
+                stack,
+                line_no,
+                target,
+                expected,
+                result,
+            )
+        return ok
+
     def _verify_expected_digests(
         self,
         stack: ComposeStack,
@@ -117,6 +160,7 @@ class _LifecycleDigestMixin:
                 "ERROR",
                 f"[{stack.name}] No compose image matched line {line_no} while checking expected digest",
             )
+        self.failed_expected_digest_lines.add((stack.index, line_no))
         return False
 
     def _verify_expected_digest_images(
@@ -146,10 +190,14 @@ class _LifecycleDigestMixin:
         line_no: int,
         target: str,
         expected: str,
-        result: DigestCheckResult,
+        result: DigestCheckResult | DigestResolveResult,
     ) -> None:
         self.stale_pending_digest_lines.add((stack.index, line_no))
-        current = normalize_digest(result.tag_digest)
+        current = normalize_digest(
+            result.tag_digest
+            if isinstance(result, DigestCheckResult)
+            else result.digest
+        )
         current_text = f"; current tag digest is {current}" if current else ""
         self.log.plain(
             "ERROR",
@@ -164,7 +212,8 @@ class _LifecycleDigestMixin:
         matches: Sequence[Match],
     ) -> str:
         match_lines = {(stack.index, match.target.line_no) for match in matches}
-        if match_lines and match_lines.issubset(self.stale_pending_digest_lines):
+        failed_lines = match_lines & self.failed_expected_digest_lines
+        if failed_lines and failed_lines.issubset(self.stale_pending_digest_lines):
             return STALE_PENDING_DIGEST_REASON
         return "expected-digest-not-reached"
 

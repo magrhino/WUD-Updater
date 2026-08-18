@@ -7,7 +7,7 @@ from unittest import mock
 from tests.update_from_wud_helpers import (
     UpdateFromWudRunnerTestCase,
     manifest_image,
-    manifest_index,
+    manifest_index_digest,
 )
 
 from wudup.compose import (
@@ -40,7 +40,7 @@ class UpdateFromWudFacadeTests(unittest.TestCase):
 
 
 class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
-    def test_expected_digest_failure_reason_requires_all_matches_stale(self) -> None:
+    def test_expected_digest_failure_reason_uses_only_failed_requirements(self) -> None:
         stack_dir = self.make_stack(
             "app",
             [
@@ -81,13 +81,22 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
         )
         runner = self.make_runner()
 
-        runner.stale_pending_digest_lines.add((stack.index, targets[0].line_no))
+        first_line = (stack.index, targets[0].line_no)
+        second_line = (stack.index, targets[1].line_no)
+        runner.failed_expected_digest_lines.add(first_line)
+        runner.stale_pending_digest_lines.add(first_line)
+        self.assertEqual(
+            runner.lifecycle._expected_digest_failure_reason(stack, matches),
+            STALE_PENDING_DIGEST_REASON,
+        )
+
+        runner.failed_expected_digest_lines.add(second_line)
         self.assertEqual(
             runner.lifecycle._expected_digest_failure_reason(stack, matches),
             "expected-digest-not-reached",
         )
 
-        runner.stale_pending_digest_lines.add((stack.index, targets[1].line_no))
+        runner.stale_pending_digest_lines.add(second_line)
         self.assertEqual(
             runner.lifecycle._expected_digest_failure_reason(stack, matches),
             STALE_PENDING_DIGEST_REASON,
@@ -264,6 +273,7 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
 
         self.assertEqual(status, 0, stderr + stdout)
         self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertRegex(self.calls(), r"compose -f docker-compose.yml pull app")
         self.assertRegex(self.calls(), r"compose -f docker-compose.yml up -d .* app")
         pending = self.db_rows("SELECT * FROM pending_updates")
         runs = self.db_rows("SELECT * FROM update_runs")
@@ -286,7 +296,7 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
         )
         self.set_manifest_stdout(
             "quay.io/acme/app:latest",
-            manifest_index("sha256:child"),
+            manifest_index_digest("sha256:current", "sha256:child"),
         )
         self.set_manifest_stdout(
             "quay.io/acme/app@sha256:child",
@@ -312,7 +322,7 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
         )
         self.set_manifest_stdout(
             "quay.io/acme/app:latest",
-            manifest_index("sha256:child"),
+            manifest_index_digest("sha256:current", "sha256:child"),
         )
         self.set_manifest_stdout(
             "quay.io/acme/app@sha256:stale",
@@ -325,7 +335,8 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
         self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
         calls = self.calls()
         self.assertIn("manifest inspect quay.io/acme/app:latest", calls)
-        self.assertIn("manifest inspect quay.io/acme/app@sha256:stale", calls)
+        self.assertNotIn("manifest inspect quay.io/acme/app@sha256:stale", calls)
+        self.assertNotRegex(calls, r"compose -f .* pull")
         self.assertNotRegex(calls, r"compose -f .* up -d")
         log_text = max(self.log_dir.glob("update-from-wud-v2-*.log")).read_text(
             encoding="utf-8"
@@ -350,7 +361,7 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
         )
         self.set_manifest_stdout(
             "ghcr.io/acme/app:latest",
-            manifest_index("sha256:child"),
+            manifest_index_digest("sha256:current", "sha256:child"),
         )
         self.set_manifest_stdout(
             "ghcr.io/acme/app@sha256:child",
@@ -376,7 +387,7 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
         )
         self.set_manifest_stdout(
             "ghcr.io/acme/app:latest",
-            manifest_index("sha256:child"),
+            manifest_index_digest("sha256:current", "sha256:child"),
         )
         self.set_manifest_stdout(
             "ghcr.io/acme/app@sha256:stale",
@@ -389,13 +400,13 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
         self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
         calls = self.calls()
         self.assertIn("manifest inspect ghcr.io/acme/app:latest", calls)
-        self.assertIn("manifest inspect ghcr.io/acme/app@sha256:stale", calls)
+        self.assertNotIn("manifest inspect ghcr.io/acme/app@sha256:stale", calls)
+        self.assertNotRegex(calls, r"compose -f .* pull")
         self.assertNotRegex(calls, r"compose -f .* up -d")
         log_text = max(self.log_dir.glob("update-from-wud-v2-*.log")).read_text(
             encoding="utf-8"
         )
         self.assertIn("Pending WUD entry for line 1 is stale", log_text)
-        self.assertIn("Digest verification reason: stale-digest", log_text)
         report = self.latest_error_report().read_text(encoding="utf-8")
         self.assertIn("reason=stale-pending-digest", report)
         self.assertIn("wud_entries_restored=no", report)

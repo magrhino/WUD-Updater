@@ -9,6 +9,7 @@ from tests.update_from_wud_helpers import (
     UpdateFromWudRunnerTestCase,
     manifest_image,
     manifest_index,
+    manifest_index_digest,
 )
 
 from wudup.command import CommandRunner
@@ -553,7 +554,7 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
         calls = self.calls()
         self.assertIn("manifest inspect ghcr.io/acme/app:2.0", calls)
         self.assertIn("manifest inspect ghcr.io/acme/app@sha256:child", calls)
-    def test_stale_digest_after_tag_rewrite_rolls_back_without_restore(self) -> None:
+    def test_stale_digest_blocks_tag_rewrite_before_mutation(self) -> None:
         self.wud_file.write_text(
             "acme/app:1.0@sha256:stale tag=2.0\n",
             encoding="utf-8",
@@ -565,7 +566,10 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
             "sha256:config",
             "sha256:index",
         )
-        self.set_manifest_stdout("ghcr.io/acme/app:2.0", manifest_index("sha256:child"))
+        self.set_manifest_stdout(
+            "ghcr.io/acme/app:2.0",
+            manifest_index_digest("sha256:current", "sha256:child"),
+        )
         self.set_manifest_stdout(
             "ghcr.io/acme/app@sha256:stale",
             manifest_image("sha256:config"),
@@ -580,17 +584,17 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
             (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
         )
         calls = self.calls()
-        self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
-        self.assertRegex(calls, r"compose -f docker-compose.yml up -d .* app")
+        self.assertNotRegex(calls, r"compose -f docker-compose.yml pull app")
+        self.assertNotRegex(calls, r"compose -f docker-compose.yml up -d .* app")
         log_text = max(self.log_dir.glob("update-from-wud-v2-*.log")).read_text(
             encoding="utf-8"
         )
-        self.assertIn("Rolled back to previous tag", log_text)
-        self.assertIn("stale WUD digest entry was removed", log_text)
+        self.assertNotIn("Rolled back to previous tag", log_text)
+        self.assertIn("Pending WUD entry for line 1 is stale", log_text)
         report = self.latest_error_report().read_text(encoding="utf-8")
         self.assertIn("reason=stale-pending-digest", report)
         self.assertIn("wud_entries_restored=no", report)
-        self.assertIn("stale pending digest entry was removed", report)
+        self.assertIn("Stale pending digest entry was removed", report)
         pending = self.db_rows("SELECT * FROM pending_updates")
         self.assertEqual(pending[0]["status"], "failed")
         self.assertEqual(pending[0]["status_reason"], "stale-pending-digest")

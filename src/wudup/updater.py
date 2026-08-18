@@ -82,6 +82,7 @@ class UpdateFromWudRunner(
         )
         self.failures: list[FailureRecord] = []
         self.stale_pending_digest_lines: set[tuple[int, int]] = set()
+        self.failed_expected_digest_lines: set[tuple[int, int]] = set()
         self.partially_selected_line_numbers: tuple[int, ...] = ()
         self.successful_completed_update_selections: tuple[
             CompletedUpdateSelection, ...
