@@ -109,6 +109,21 @@ class FakeDockerTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
+    def append_compose_runtime_service(
+        self,
+        directory: Path,
+        compose_file: Path,
+        project: str,
+        service: str,
+    ) -> None:
+        with (self.fake_root / "compose-runtime.tsv").open(
+            "a",
+            encoding="utf-8",
+        ) as file:
+            file.write(
+                f"{directory}\t{compose_file}\t{project}\t{service}\tFalse\n"
+            )
+
     def make_stack(
         self,
         stack_id: str,
@@ -142,14 +157,12 @@ class FakeDockerTestCase(unittest.TestCase):
                     f"/{cid}|running|healthy|0|0\n",
                     encoding="utf-8",
                 )
-                with (self.fake_root / "compose-runtime.tsv").open(
-                    "a",
-                    encoding="utf-8",
-                ) as file:
-                    file.write(
-                        f"{directory}\t{directory / 'docker-compose.yml'}\t"
-                        f"{directory.name}\t{service}\tFalse\n"
-                    )
+                self.append_compose_runtime_service(
+                    directory,
+                    directory / "docker-compose.yml",
+                    directory.name,
+                    service,
+                )
 
         (directory / "docker-compose.yml").write_text("".join(compose_lines), encoding="utf-8")
         (stack_state / "services.txt").write_text("".join(service_rows), encoding="utf-8")
@@ -458,14 +471,13 @@ class UpdateFromWudRunnerTestCase(FakeDockerTestCase):
             runtime_services.insert(0, "gluetun")
         if include_extra_consumer:
             runtime_services.append("mamapi")
-        with (self.fake_root / "compose-runtime.tsv").open(
-            "a",
-            encoding="utf-8",
-        ) as file:
-            for service in runtime_services:
-                file.write(
-                    f"{stack_dir}\t{compose_file}\tmedia\t{service}\tFalse\n"
-                )
+        for service in runtime_services:
+            self.append_compose_runtime_service(
+                stack_dir,
+                compose_file,
+                "media",
+                service,
+            )
         if write_provider_hook:
             self.write_media_provider_post_up_hook()
         self.set_image_state(
