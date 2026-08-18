@@ -680,7 +680,7 @@ def _handle_apply_job_run_result(
     run_context: ApplyJobRunContext,
     auto_update_schedule_run_updater: AutoUpdateScheduleRunUpdater,
 ) -> dict[str, object]:
-    if _should_refresh_api_pending_source_after_apply(status_code, run_context):
+    if _should_refresh_api_pending_source_after_apply(run_context):
         _refresh_api_pending_source_after_apply(
             settings,
             jobs,
@@ -706,12 +706,10 @@ def _handle_apply_job_run_result(
 
 
 def _should_refresh_api_pending_source_after_apply(
-    status_code: int,
     run_context: ApplyJobRunContext,
 ) -> bool:
     return (
-        status_code == 0
-        and run_context.pending_source_active == "api"
+        run_context.pending_source_active == "api"
         and run_context.pending_source_text is not None
     )
 

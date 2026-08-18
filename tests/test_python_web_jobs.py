@@ -365,6 +365,68 @@ def test_successful_apply_survives_pending_checkpoint_failure(
     assert "checkpoint exploded" not in caplog.text
 
 
+def test_failed_api_apply_refreshes_pending_source_without_masking_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = _settings_for_lock_timeout(tmp_path, {})
+    jobs = {
+        "job": WebApplyJob(
+            id="job",
+            status="running",
+            selected_line_numbers=(1,),
+        )
+    }
+    snapshot = web_wud_api.WudApiSnapshot(
+        status=web_wud_api.WudApiStatus(
+            state="ready",
+            available=True,
+            metadata_available=True,
+            last_checked_at="2026-01-01T00:00:00+00:00",
+        )
+    )
+    watched_ids: list[tuple[str, ...]] = []
+    checkpoints: list[WebSettings] = []
+
+    def watch_selected(_settings, container_ids):
+        watched_ids.append(tuple(container_ids))
+        return web_wud_api.WudApiWatchResult(
+            snapshot=snapshot,
+            watched=True,
+            requested_count=1,
+            watched_count=1,
+        )
+
+    monkeypatch.setattr(web_jobs.web_wud_api, "watch_containers", watch_selected)
+    monkeypatch.setattr(
+        web_jobs.web_wud_api,
+        "checkpoint_pending_observation_cache",
+        checkpoints.append,
+    )
+
+    result = web_jobs._handle_apply_job_run_result(
+        settings,
+        jobs,
+        web_jobs.Condition(),
+        "job",
+        SimpleNamespace(audit_run_id=7, log_file=tmp_path / "apply.log"),
+        1,
+        web_jobs.ApplyJobRunContext(
+            pending_source_active="api",
+            pending_source_text="registry.example/acme/app:1.0.0\n",
+            pending_source_container_ids=("docker.local.app",),
+        ),
+        lambda *_args, **_kwargs: None,
+    )
+
+    assert result["status"] == "failure"
+    assert result["error"] == "updater exited with status 1"
+    assert watched_ids == [("docker.local.app",)]
+    assert checkpoints == [settings]
+    assert jobs["job"].progress[-1].phase == "wud-api-refresh"
+    assert jobs["job"].progress[-1].status == "success"
+
+
 def test_apply_job_refreshes_only_api_pending_source(
     tmp_path: Path,
     monkeypatch,
