@@ -538,18 +538,20 @@ def _runtime_metadata_for_match(
     after_running, after_stopped = verified_after or ((), ())
     if stopped_services:
         metadata["stopped_services_before"] = list(stopped_services)
-        if status.status == "success":
-            metadata["stopped_services_after"] = list(stopped_services)
-        elif verified_after is not None:
+        if verified_after is not None:
             metadata["stopped_services_after"] = list(after_stopped)
+        elif status.status == "success":
+            metadata["stopped_services_after"] = list(stopped_services)
     if match.service not in stopped_services:
         return metadata
 
     metadata["runtime_state_before"] = "not-running"
-    if status.status == "success" or match.service in after_stopped:
+    if match.service in after_stopped:
         metadata["runtime_state_after"] = "not-running"
     elif match.service in after_running:
         metadata["runtime_state_after"] = "running"
+    elif status.status == "success" and verified_after is None:
+        metadata["runtime_state_after"] = "not-running"
     else:
         metadata["runtime_state_after"] = "unknown"
     return metadata

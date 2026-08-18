@@ -23,12 +23,36 @@ from wudup.updater import (
 from wudup.updater_models import (
     AppliedDigestPinUpdate,
     AppliedTagUpdate,
+    StackStatus,
     UpdaterError,
     UpdaterOptions,
 )
 
 
 class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
+    def test_runtime_metadata_prefers_verified_after_state(self) -> None:
+        runner = mock.Mock(
+            stack_runtime_states={1: ((), ("app",))},
+            stack_runtime_states_after={1: (("app",), ())},
+        )
+        match = mock.Mock(stack=mock.Mock(index=1), service="app")
+
+        metadata = updater_audit._runtime_metadata_for_match(
+            runner,
+            match,
+            StackStatus("success", "updated"),
+        )
+
+        self.assertEqual(
+            metadata,
+            {
+                "runtime_state_after": "running",
+                "runtime_state_before": "not-running",
+                "stopped_services_after": [],
+                "stopped_services_before": ["app"],
+            },
+        )
+
     def test_audit_owner_failure_marks_started_run_failed(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
