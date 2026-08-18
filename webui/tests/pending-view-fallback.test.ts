@@ -482,11 +482,14 @@ describe("pending view fallback and release notes", () => {
       .find((button) => button.text().includes("View affected containers"));
     const retry = wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Check WUD status again"));
+      .find((button) => button.text().includes("Refresh WUDup status"));
     expect(viewDump?.attributes("data-button-type")).toBe("primary");
     expect(viewDump?.attributes("disabled")).toBeUndefined();
     expect(retry?.attributes("data-button-type")).not.toBe("primary");
     expect(retry?.attributes("disabled")).toBeUndefined();
+    expect(retry?.attributes("title")).toBe(
+      "Reads current WUD status without triggering a rescan.",
+    );
     expect(
       wrapper
         .findAll("button")
@@ -521,7 +524,7 @@ describe("pending view fallback and release notes", () => {
 
     const retry = wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Check WUD status again"));
+      .find((button) => button.text().includes("Refresh WUDup status"));
 
     await retry?.trigger("click");
     await flushPromises();
@@ -532,7 +535,7 @@ describe("pending view fallback and release notes", () => {
     expect(lifecycle.loadSecurityScans).toHaveBeenCalledTimes(1);
     expect(lifecycle.refreshReleaseNotes).toHaveBeenCalledTimes(1);
     expect(wrapper.text()).toContain(
-      "WUD checked again. Some container update checks are still unavailable.",
+      "WUDup status refreshed. Some container update checks are still unavailable.",
     );
   });
 
@@ -558,12 +561,12 @@ describe("pending view fallback and release notes", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Check WUD status again"))
+      .find((button) => button.text().includes("Refresh WUDup status"))
       ?.trigger("click");
     await flushPromises();
 
     expect(wrapper.text()).toContain(
-      "WUD check failed: WUD API timed out",
+      "WUDup status refresh failed: WUD API timed out",
     );
   });
 
