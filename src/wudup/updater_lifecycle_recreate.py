@@ -264,18 +264,7 @@ class _LifecycleRecreateMixin:
                 matches=state.matches,
             )
             self.log.info(f"[{stack.name}] Updated without starting stopped services")
-            if state.digest_pin_updates:
-                self._remember_applied_digest_pins(
-                    stack,
-                    state.matches,
-                    state.digest_pin_updates,
-                )
-            if state.digest_unpin_updates:
-                self._remember_applied_digest_unpins(
-                    stack,
-                    state.matches,
-                    state.digest_unpin_updates,
-                )
+            self._remember_applied_digest_changes(state)
             return StackStatus("success", "updated")
 
         if up_result.wait_handled:
@@ -322,18 +311,7 @@ class _LifecycleRecreateMixin:
                 )
                 return StackStatus("failure", "down-failed")
 
-            if state.digest_pin_updates:
-                self._remember_applied_digest_pins(
-                    stack,
-                    state.matches,
-                    state.digest_pin_updates,
-                )
-            if state.digest_unpin_updates:
-                self._remember_applied_digest_unpins(
-                    stack,
-                    state.matches,
-                    state.digest_unpin_updates,
-                )
+            self._remember_applied_digest_changes(state)
             return StackStatus("success", "updated")
 
         health_details = self._capture_health_details(stack, state.running_services)
@@ -361,3 +339,17 @@ class _LifecycleRecreateMixin:
             matches=state.matches,
         )
         return StackStatus("failure", "health-failed")
+
+    def _remember_applied_digest_changes(self, state: _StackUpdateState) -> None:
+        if state.digest_pin_updates:
+            self._remember_applied_digest_pins(
+                state.stack,
+                state.matches,
+                state.digest_pin_updates,
+            )
+        if state.digest_unpin_updates:
+            self._remember_applied_digest_unpins(
+                state.stack,
+                state.matches,
+                state.digest_unpin_updates,
+            )

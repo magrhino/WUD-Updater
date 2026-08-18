@@ -783,11 +783,7 @@ def _pending_grouped_item(
 def _pending_runtime_service_states(
     settings: WebSettings,
 ) -> tuple[ComposeRuntimeServiceState, ...] | None:
-    runner = (
-        CommandRunner(env=settings.command_env)
-        if settings.command_env is not None
-        else CommandRunner()
-    )
+    runner = CommandRunner(env=settings.command_env)
     try:
         rows = DockerCli(runner=runner).ps_format(
             COMPOSE_RUNTIME_STATE_FORMAT,

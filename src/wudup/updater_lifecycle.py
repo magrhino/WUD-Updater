@@ -280,20 +280,15 @@ class StackLifecycleExecutor(
             )
             return StackStatus("failure", "runtime-state-unavailable")
 
-        self.runner.stack_runtime_states[stack.index] = (
-            tuple(running),
-            tuple(stopped),
-        )
-        self.runner.stack_runtime_states_after[stack.index] = (
-            tuple(running),
-            tuple(stopped),
-        )
+        runtime_state = tuple(running), tuple(stopped)
+        self.runner.stack_runtime_states[stack.index] = runtime_state
+        self.runner.stack_runtime_states_after[stack.index] = runtime_state
         if stopped:
             self.log.warning(
                 f"[{stack.name}] Selected service(s) already stopped and will remain "
                 f"stopped: {' '.join(stopped)}"
             )
-        return tuple(running), tuple(stopped)
+        return runtime_state
 
     @staticmethod
     def _compose_service_runtime_states(

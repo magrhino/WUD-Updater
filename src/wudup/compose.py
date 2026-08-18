@@ -76,19 +76,12 @@ class ComposeStack:
 def compose_runtime_service_keys(
     rows: Iterable[str],
 ) -> set[ComposeRuntimeServiceKey]:
-    return set(compose_runtime_service_key_rows(rows))
-
-
-def compose_runtime_service_key_rows(
-    rows: Iterable[str],
-) -> tuple[ComposeRuntimeServiceKey, ...]:
-    keys: list[ComposeRuntimeServiceKey] = []
+    keys: set[ComposeRuntimeServiceKey] = set()
     for row in rows:
-        fields = row.split("\t", 4)
-        key = _compose_runtime_service_key_from_fields(fields)
+        key = _compose_runtime_service_key_from_fields(row.split("\t", 4))
         if key is not None:
-            keys.append(key)
-    return tuple(keys)
+            keys.add(key)
+    return keys
 
 
 def compose_runtime_service_states(
