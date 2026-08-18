@@ -1105,6 +1105,7 @@ def _watch_paths(
 
     watched_count = 0
     watched_all = len(watch_items) == len(paths)
+    missing_count = 0
     remaining_watch_seconds = WUD_API_WATCH_BATCH_TIMEOUT_SECONDS
     for path, requested_container_id in watch_items:
         if remaining_watch_seconds <= 0:
@@ -1140,6 +1141,14 @@ def _watch_paths(
                 )
                 watched_all = False
         except urllib.error.HTTPError as exc:
+            if exc.code == 404 and requested_container_id:
+                remaining_watch_seconds -= max(
+                    0.0,
+                    time.monotonic() - request_started,
+                )
+                watched_all = False
+                missing_count += 1
+                continue
             snapshot = _watch_http_error_snapshot(
                 settings,
                 base_url=base_url,
@@ -1175,6 +1184,22 @@ def _watch_paths(
             )
 
     snapshot = get_snapshot(settings, include_containers=True, force=True)
+    if missing_count:
+        missing_detail = (
+            f"WUD skipped {_count_phrase(missing_count, 'container')} that no "
+            "longer exists."
+        )
+        detail = snapshot.status.detail.rstrip(";. ") if snapshot.status.detail else ""
+        snapshot = replace(
+            snapshot,
+            status=snapshot.status.model_copy(
+                update={
+                    "detail": (
+                        f"{detail}. {missing_detail}" if detail else missing_detail
+                    )
+                }
+            ),
+        )
     if cooldown_remaining > 0:
         snapshot = _with_watch_rate_limit_detail(snapshot, cooldown_remaining)
     return WudApiWatchResult(
