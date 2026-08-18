@@ -98,26 +98,17 @@ class _LifecycleRecreateMixin:
                         f"[{stack.name}] Stopping affected running service(s): "
                         f"{' '.join(stop_services)}"
                     )
-                    self.compose.stop(
-                        stack.directory,
-                        stack.file,
-                        stop_services,
-                        project_directory=stack.project_directory,
-                    )
                 else:
-                    if stop_services:
-                        self.log.warning(
-                            f"[{stack.name}] Stopping running stack service(s): "
-                            f"{' '.join(stop_services)}"
-                        )
-                    else:
-                        self.log.warning(f"[{stack.name}] Stopping stack")
-                    self.compose.stop(
-                        stack.directory,
-                        stack.file,
-                        stop_services,
-                        project_directory=stack.project_directory,
+                    self.log.warning(
+                        f"[{stack.name}] Stopping running stack service(s): "
+                        f"{' '.join(stop_services)}"
                     )
+                self.compose.stop(
+                    stack.directory,
+                    stack.file,
+                    stop_services,
+                    project_directory=stack.project_directory,
+                )
             except CommandError as exc:
                 self.log.warning(
                     f"[{stack.name}] Stop failed; attempting up for recovery, but this stack will not be marked successful"
