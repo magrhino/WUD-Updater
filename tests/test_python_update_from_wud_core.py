@@ -88,19 +88,19 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
         runner.failed_expected_digest_requirements.add(first_requirement)
         runner.stale_expected_digest_requirements.add(first_requirement)
         self.assertEqual(
-            runner.lifecycle._expected_digest_failure_reason(stack, matches),
+            runner.lifecycle._expected_digest_failure_reason(matches),
             STALE_PENDING_DIGEST_REASON,
         )
 
         runner.failed_expected_digest_requirements.add(second_requirement)
         self.assertEqual(
-            runner.lifecycle._expected_digest_failure_reason(stack, matches),
+            runner.lifecycle._expected_digest_failure_reason(matches),
             "expected-digest-not-reached",
         )
 
         runner.stale_expected_digest_requirements.add(second_requirement)
         self.assertEqual(
-            runner.lifecycle._expected_digest_failure_reason(stack, matches),
+            runner.lifecycle._expected_digest_failure_reason(matches),
             STALE_PENDING_DIGEST_REASON,
         )
     def test_expected_digest_verification_checks_all_requirements(self) -> None:
@@ -146,7 +146,6 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
         verified = runner.lifecycle._verify_expected_digests(
             stack,
             matches,
-            stack.images,
         )
 
         self.assertFalse(verified)

@@ -326,9 +326,8 @@ class _RunnerOperationsMixin:
         self,
         stack: ComposeStack,
         matches: Sequence[Match],
-        images: Sequence[str],
     ) -> bool:
-        return self.lifecycle._verify_expected_digests(stack, matches, images)
+        return self.lifecycle._verify_expected_digests(stack, matches)
 
     def _verify_digest_pin_updates(
         self,

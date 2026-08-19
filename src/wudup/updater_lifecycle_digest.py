@@ -162,7 +162,6 @@ class _LifecycleDigestMixin:
         self,
         stack: ComposeStack,
         matches: Sequence[Match],
-        images: Sequence[str],
     ) -> bool:
         ok = True
         requirements = {
@@ -211,7 +210,6 @@ class _LifecycleDigestMixin:
                 expected,
                 digest_result,
             )
-        self.failed_expected_digest_lines.add((stack.index, line_no))
         self.failed_expected_digest_requirements.add(requirement_key)
         return False
 
@@ -223,7 +221,6 @@ class _LifecycleDigestMixin:
         expected: str,
         result: DigestCheckResult | DigestResolveResult,
     ) -> None:
-        self.stale_pending_digest_lines.add((stack.index, line_no))
         current = normalize_digest(
             result.tag_digest
             if isinstance(result, DigestCheckResult)
@@ -239,7 +236,6 @@ class _LifecycleDigestMixin:
 
     def _expected_digest_failure_reason(
         self,
-        stack: ComposeStack,
         matches: Sequence[Match],
     ) -> str:
         match_requirements = {_expected_digest_key(match) for match in matches}

@@ -81,11 +81,9 @@ class UpdateFromWudRunner(
             environ=self.environ,
         )
         self.failures: list[FailureRecord] = []
-        self.stale_pending_digest_lines: set[tuple[int, int]] = set()
         self.stale_preflight_digest_requirements: set[tuple[int, int, str]] = set()
         self.viable_preflight_digest_requirements: set[tuple[int, int, str]] = set()
         self.preflight_skipped_pending_line_numbers: set[int] = set()
-        self.failed_expected_digest_lines: set[tuple[int, int]] = set()
         self.failed_expected_digest_requirements: set[tuple[int, int, str]] = set()
         self.stale_expected_digest_requirements: set[tuple[int, int, str]] = set()
         self.viable_expected_digest_requirements: set[tuple[int, int, str]] = set()

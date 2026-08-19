@@ -431,8 +431,8 @@ class StackLifecycleExecutor(
             dict(state.before),
             dict(state.after),
         )
-        if not self._verify_expected_digests(stack, matches, state.images):
-            reason = self._expected_digest_failure_reason(stack, matches)
+        if not self._verify_expected_digests(stack, matches):
+            reason = self._expected_digest_failure_reason(matches)
             failed_matches = tuple(
                 match
                 for match in matches
