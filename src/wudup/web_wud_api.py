@@ -1186,8 +1186,8 @@ def _watch_paths(
     snapshot = get_snapshot(settings, include_containers=True, force=True)
     if missing_count:
         missing_detail = (
-            f"WUD skipped {_count_phrase(missing_count, 'container')} that no "
-            "longer exists."
+            f"WUD skipped {_count_phrase(missing_count, 'container')} that no longer "
+            f"{'exists' if missing_count == 1 else 'exist'}."
         )
         detail = snapshot.status.detail.rstrip(";. ") if snapshot.status.detail else ""
         snapshot = replace(
