@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import shutil
 from collections.abc import Sequence
-from pathlib import Path
 
 from . import compose_rewrite, updater_logging
 from .command import CommandError
@@ -368,19 +367,11 @@ class _LifecycleRewriteMixin:
         if state.compose_backup is None:
             return StackStatus("failure", reason)
         return self._handle_tag_update_failure(
-            state.stack,
-            state.matches,
-            state.services,
-            state.applied_tags,
-            state.compose_backup,
+            state,
             reason,
             phase=phase,
             command_error=command_error,
             failure_health=failure_health,
-            force_recreate=state.scope.force_recreate,
-            no_deps=state.scope.up_no_deps,
-            running_services=state.running_services,
-            stopped_services=state.stopped_services,
             failure_matches=failure_matches,
         )
 
@@ -394,22 +385,20 @@ class _LifecycleRewriteMixin:
 
     def _handle_tag_update_failure(
         self,
-        stack: ComposeStack,
-        matches: Sequence[Match],
-        services: Sequence[str] | None,
-        applied_tags: Sequence[AppliedTagUpdate],
-        compose_backup: Path,
+        state: _StackUpdateState,
         reason: str,
         *,
         phase: str,
         command_error: CommandError | None = None,
         failure_health: str | None = None,
-        force_recreate: bool = False,
-        no_deps: bool = True,
-        running_services: Sequence[str] | None = None,
-        stopped_services: Sequence[str] = (),
         failure_matches: Sequence[Match] | None = None,
     ) -> StackStatus:
+        stack = state.stack
+        matches = state.matches
+        services = state.services
+        compose_backup = state.compose_backup
+        if compose_backup is None:
+            return StackStatus("failure", reason)
         report_matches = matches if failure_matches is None else failure_matches
         report_services = (
             services
@@ -432,22 +421,18 @@ class _LifecycleRewriteMixin:
         try:
             shutil.copy2(compose_backup, stack.directory / stack.file)
             self.runner.stack_runtime_states_after.pop(stack.index, None)
-            active_services = (
-                tuple(services or ())
-                if running_services is None
-                else tuple(running_services)
-            )
+            active_services = tuple(state.running_services)
             rollback_ok, rollback_error = self._restore_tag_update_services(
                 stack,
                 active_services,
-                stopped_services,
-                force_recreate=force_recreate,
-                no_deps=no_deps,
+                state.stopped_services,
+                force_recreate=state.scope.force_recreate,
+                no_deps=state.scope.up_no_deps,
             )
             if rollback_ok:
                 self.runner.stack_runtime_states_after[stack.index] = (
                     tuple(active_services),
-                    tuple(stopped_services),
+                    tuple(state.stopped_services),
                 )
                 rollback_result = (
                     "restored-and-healthy"
@@ -486,7 +471,7 @@ class _LifecycleRewriteMixin:
         self._write_tag_incident_log(
             stack,
             services,
-            applied_tags,
+            state.applied_tags,
             reason,
             rollback_result,
             failure_health,

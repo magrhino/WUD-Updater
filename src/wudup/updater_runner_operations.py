@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from pathlib import Path
 
 from . import updater_preflight, updater_tag_exclusions
 from .command import CommandError, CommandResult
@@ -16,6 +15,7 @@ from .compose import (
 from .digest_verifier import DigestCheckResult, DigestResolveResult
 from .images import normalize_digest
 from .updater_digest_pin import _digest_pin_match_tag
+from .updater_lifecycle_state import _StackUpdateState
 from .updater_matching import _target_image_for_match, _update_services
 from .updater_models import (
     AppliedDigestPinUpdate,
@@ -154,35 +154,21 @@ class _RunnerOperationsMixin:
 
     def _handle_tag_update_failure(
         self,
-        stack: ComposeStack,
-        matches: Sequence[Match],
-        services: Sequence[str] | None,
-        applied_tags: Sequence[AppliedTagUpdate],
-        compose_backup: Path,
+        state: _StackUpdateState,
         reason: str,
         *,
         phase: str,
         command_error: CommandError | None = None,
         failure_health: str | None = None,
-        force_recreate: bool = False,
-        no_deps: bool = True,
-        running_services: Sequence[str] | None = None,
-        stopped_services: Sequence[str] = (),
+        failure_matches: Sequence[Match] | None = None,
     ) -> StackStatus:
         return self.lifecycle._handle_tag_update_failure(
-            stack,
-            matches,
-            services,
-            applied_tags,
-            compose_backup,
+            state,
             reason,
             phase=phase,
             command_error=command_error,
             failure_health=failure_health,
-            force_recreate=force_recreate,
-            no_deps=no_deps,
-            running_services=running_services,
-            stopped_services=stopped_services,
+            failure_matches=failure_matches,
         )
 
     def _write_tag_incident_log(
