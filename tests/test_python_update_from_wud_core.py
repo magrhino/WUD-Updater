@@ -566,7 +566,7 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
                 "stale-digest",
                 tag_digest="sha256:moved",
             )
-            if image.startswith("quay.io/")
+            if image == "quay.io/acme/app:latest"
             else DigestCheckResult(True, "verified", "digest-match")
         )
         runner = self.make_runner(

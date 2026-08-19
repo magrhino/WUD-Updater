@@ -188,21 +188,20 @@ class _LifecycleDigestMixin:
         line_no, target, expected_image, expected = requirement
         requirement_key = (stack.index, line_no, expected_image)
         digest_result = self.digest_verifier.verify(expected_image, expected)
-        if digest_result is not None and digest_result.status == "untrusted":
+        if digest_result.status == "untrusted":
             self.viable_expected_digest_requirements.add(requirement_key)
             self.log.warning(
                 f"[{stack.name}] Digest verification was inconclusive for line {line_no} ({target}): wanted {expected}"
             )
             self._log_digest_untrusted(stack.name, digest_result)
             return True
-        if digest_result is not None and digest_result.ok:
+        if digest_result.ok:
             self.viable_expected_digest_requirements.add(requirement_key)
             return True
         self.log.error(
             f"[{stack.name}] Expected digest not reached for line {line_no} ({target}): wanted {expected}"
         )
-        if digest_result is not None:
-            self._log_digest_mismatch(stack.name, digest_result)
+        self._log_digest_mismatch(stack.name, digest_result)
         if digest_result.reason == "stale-digest":
             self.stale_expected_digest_requirements.add(requirement_key)
             self._mark_stale_pending_digest(
