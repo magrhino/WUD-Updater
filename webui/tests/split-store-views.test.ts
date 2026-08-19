@@ -280,7 +280,7 @@ describe("CoreUpdateTourPanel", () => {
         settings.coreUpdateTour = coreUpdateTourResponse({ status, step });
         return settings.coreUpdateTour;
       });
-    const routerPush = vi.spyOn(router, "push");
+    const routerPush = vi.spyOn(router, "push").mockResolvedValue();
     const wrapper = mountTourPanel(pinia, router, {
       step: "dashboard",
       title: "Start from current state",
