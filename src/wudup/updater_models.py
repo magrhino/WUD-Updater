@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .command import CommandError, CommandResult
@@ -11,6 +11,26 @@ from .config import DEFAULT_MAX_WAIT, DEFAULT_UPDATE_MODE
 from .wud_file import WudTarget
 
 STALE_PENDING_DIGEST_REASON = "stale-pending-digest"
+DigestRequirementKey = tuple[int, int, str]
+
+
+@dataclass
+class DigestRequirementOutcomes:
+    stale: set[DigestRequirementKey] = field(default_factory=set)
+    failed: set[DigestRequirementKey] = field(default_factory=set)
+    viable: set[DigestRequirementKey] = field(default_factory=set)
+
+    def outcome(self, key: DigestRequirementKey) -> str:
+        if key in self.stale:
+            return "stale"
+        if key in self.failed:
+            return "failed"
+        if key in self.viable:
+            return "viable"
+        return ""
+
+    def failed_in_stack(self, stack_index: int) -> bool:
+        return any(key[0] == stack_index for key in self.failed)
 
 
 class UpdaterError(RuntimeError):

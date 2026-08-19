@@ -23,6 +23,7 @@ from .updater_models import (
     AppliedTagUpdate,
     DigestPinCandidate,
     DigestPinUpdate,
+    DigestRequirementKey,
     DigestUnpinUpdate,
     FailureRecord,
     ImageState,
@@ -492,20 +493,12 @@ class _RunnerOperationsMixin:
         line_numbers: Iterable[int],
     ) -> set[int]:
         candidates = set(line_numbers)
-        preflight_requirements_by_line: dict[int, set[tuple[int, int, str]]] = {}
-        expected_requirements_by_line: dict[int, set[tuple[int, int, str]]] = {}
+        requirements_by_line: dict[int, set[DigestRequirementKey]] = {}
         for match in matches:
             if not match.target.digest or "@sha256:" not in match.target.first:
                 continue
             line_no = match.target.line_no
-            preflight_requirements_by_line.setdefault(line_no, set()).add(
-                (
-                    match.stack.index,
-                    line_no,
-                    self.lifecycle._expected_digest_image(match),
-                )
-            )
-            expected_requirements_by_line.setdefault(line_no, set()).add(
+            requirements_by_line.setdefault(line_no, set()).add(
                 (
                     match.stack.index,
                     line_no,
@@ -515,17 +508,16 @@ class _RunnerOperationsMixin:
 
         stale_lines: set[int] = set()
         for line_no in candidates:
-            preflight_requirements = preflight_requirements_by_line.get(line_no, set())
-            expected_requirements = expected_requirements_by_line.get(line_no, set())
+            requirements = requirements_by_line.get(line_no, set())
             if (
-                preflight_requirements
-                and preflight_requirements.issubset(
-                    self.stale_preflight_digest_requirements
+                requirements
+                and requirements.issubset(
+                    self.preflight_digest_outcomes.stale
                 )
             ) or (
-                expected_requirements
-                and expected_requirements.issubset(
-                    self.stale_expected_digest_requirements
+                requirements
+                and requirements.issubset(
+                    self.expected_digest_outcomes.stale
                 )
             ):
                 stale_lines.add(line_no)

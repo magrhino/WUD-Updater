@@ -85,20 +85,20 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
 
         first_requirement = (stack.index, targets[0].line_no, stack.images[0])
         second_requirement = (stack.index, targets[1].line_no, stack.images[1])
-        runner.failed_expected_digest_requirements.add(first_requirement)
-        runner.stale_expected_digest_requirements.add(first_requirement)
+        runner.expected_digest_outcomes.failed.add(first_requirement)
+        runner.expected_digest_outcomes.stale.add(first_requirement)
         self.assertEqual(
             runner.lifecycle._expected_digest_failure_reason(matches),
             STALE_PENDING_DIGEST_REASON,
         )
 
-        runner.failed_expected_digest_requirements.add(second_requirement)
+        runner.expected_digest_outcomes.failed.add(second_requirement)
         self.assertEqual(
             runner.lifecycle._expected_digest_failure_reason(matches),
             "expected-digest-not-reached",
         )
 
-        runner.stale_expected_digest_requirements.add(second_requirement)
+        runner.expected_digest_outcomes.stale.add(second_requirement)
         self.assertEqual(
             runner.lifecycle._expected_digest_failure_reason(matches),
             STALE_PENDING_DIGEST_REASON,

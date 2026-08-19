@@ -101,10 +101,10 @@ class _LifecycleDigestMixin:
             requirement_key = (stack.index, line_no, expected_image)
             result = self.digest_verifier.verify_tag_digest(expected_image, expected)
             if result.ok:
-                self.viable_preflight_digest_requirements.add(requirement_key)
+                self.preflight_digest_outcomes.viable.add(requirement_key)
                 continue
             if result.reason != "stale-digest" or not result.digest:
-                self.viable_preflight_digest_requirements.add(requirement_key)
+                self.preflight_digest_outcomes.viable.add(requirement_key)
                 self.log.warning(
                     f"[{stack.name}] Digest preflight was inconclusive for line "
                     f"{line_no} ({target}): wanted {expected}; pull verification "
@@ -112,7 +112,7 @@ class _LifecycleDigestMixin:
                 )
                 continue
             ok = False
-            self.stale_preflight_digest_requirements.add(requirement_key)
+            self.preflight_digest_outcomes.stale.add(requirement_key)
             self._mark_stale_pending_digest(
                 stack,
                 line_no,
@@ -123,28 +123,13 @@ class _LifecycleDigestMixin:
         return ok
 
     def _preflight_expected_digest_outcome(self, match: Match) -> str:
-        key = _expected_digest_key(match)
-        if key in self.stale_preflight_digest_requirements:
-            return "stale"
-        if key in self.viable_preflight_digest_requirements:
-            return "viable"
-        return ""
+        return self.preflight_digest_outcomes.outcome(_expected_digest_key(match))
 
     def _expected_digest_outcome(self, match: Match) -> str:
-        key = _expected_digest_key(match)
-        if key in self.stale_expected_digest_requirements:
-            return "stale"
-        if key in self.failed_expected_digest_requirements:
-            return "failed"
-        if key in self.viable_expected_digest_requirements:
-            return "viable"
-        return ""
+        return self.expected_digest_outcomes.outcome(_expected_digest_key(match))
 
     def _expected_digest_failed_in_stack(self, stack: ComposeStack) -> bool:
-        return any(
-            stack_index == stack.index
-            for stack_index, _line_no, _image in self.failed_expected_digest_requirements
-        )
+        return self.expected_digest_outcomes.failed_in_stack(stack.index)
 
     def _verify_expected_digests(
         self,
@@ -176,21 +161,21 @@ class _LifecycleDigestMixin:
         requirement_key = (stack.index, line_no, expected_image)
         digest_result = self.digest_verifier.verify(expected_image, expected)
         if digest_result.status == "untrusted":
-            self.viable_expected_digest_requirements.add(requirement_key)
+            self.expected_digest_outcomes.viable.add(requirement_key)
             self.log.warning(
                 f"[{stack.name}] Digest verification was inconclusive for line {line_no} ({target}): wanted {expected}"
             )
             self._log_digest_untrusted(stack.name, digest_result)
             return True
         if digest_result.ok:
-            self.viable_expected_digest_requirements.add(requirement_key)
+            self.expected_digest_outcomes.viable.add(requirement_key)
             return True
         self.log.error(
             f"[{stack.name}] Expected digest not reached for line {line_no} ({target}): wanted {expected}"
         )
         self._log_digest_mismatch(stack.name, digest_result)
         if digest_result.reason == "stale-digest":
-            self.stale_expected_digest_requirements.add(requirement_key)
+            self.expected_digest_outcomes.stale.add(requirement_key)
             self._mark_stale_pending_digest(
                 stack,
                 line_no,
@@ -198,7 +183,7 @@ class _LifecycleDigestMixin:
                 expected,
                 digest_result,
             )
-        self.failed_expected_digest_requirements.add(requirement_key)
+        self.expected_digest_outcomes.failed.add(requirement_key)
         return False
 
     def _mark_stale_pending_digest(
@@ -228,10 +213,10 @@ class _LifecycleDigestMixin:
     ) -> str:
         match_requirements = {_expected_digest_key(match) for match in matches}
         failed_requirements = (
-            match_requirements & self.failed_expected_digest_requirements
+            match_requirements & self.expected_digest_outcomes.failed
         )
         if failed_requirements and failed_requirements.issubset(
-            self.stale_expected_digest_requirements
+            self.expected_digest_outcomes.stale
         ):
             return STALE_PENDING_DIGEST_REASON
         return "expected-digest-not-reached"

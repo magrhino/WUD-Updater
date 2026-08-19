@@ -24,6 +24,7 @@ from .updater_matching import (
 )
 from .updater_models import (
     CompletedUpdateSelection,
+    DigestRequirementOutcomes,
     StackStatus,
     UpdaterError,
 )
@@ -81,12 +82,9 @@ class UpdateFromWudRunner(
             environ=self.environ,
         )
         self.failures: list[FailureRecord] = []
-        self.stale_preflight_digest_requirements: set[tuple[int, int, str]] = set()
-        self.viable_preflight_digest_requirements: set[tuple[int, int, str]] = set()
+        self.preflight_digest_outcomes = DigestRequirementOutcomes()
         self.preflight_skipped_pending_line_numbers: set[int] = set()
-        self.failed_expected_digest_requirements: set[tuple[int, int, str]] = set()
-        self.stale_expected_digest_requirements: set[tuple[int, int, str]] = set()
-        self.viable_expected_digest_requirements: set[tuple[int, int, str]] = set()
+        self.expected_digest_outcomes = DigestRequirementOutcomes()
         self.partially_selected_line_numbers: tuple[int, ...] = ()
         self.successful_completed_update_selections: tuple[
             CompletedUpdateSelection, ...
@@ -499,11 +497,11 @@ class UpdateFromWudRunner(
             return {}
         stale_lines = {
             line_no
-            for _stack_index, line_no, _image in self.stale_preflight_digest_requirements
+            for _stack_index, line_no, _image in self.preflight_digest_outcomes.stale
         }
         viable_lines = {
             line_no
-            for _stack_index, line_no, _image in self.viable_preflight_digest_requirements
+            for _stack_index, line_no, _image in self.preflight_digest_outcomes.viable
         }
         definitively_stale_lines = stale_lines - viable_lines
         self.preflight_skipped_pending_line_numbers = {
