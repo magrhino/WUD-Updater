@@ -82,7 +82,13 @@ class UpdateFromWudRunner(
         )
         self.failures: list[FailureRecord] = []
         self.stale_pending_digest_lines: set[tuple[int, int]] = set()
+        self.stale_preflight_digest_requirements: set[tuple[int, int, str]] = set()
+        self.viable_preflight_digest_requirements: set[tuple[int, int, str]] = set()
+        self.preflight_skipped_pending_line_numbers: set[int] = set()
         self.failed_expected_digest_lines: set[tuple[int, int]] = set()
+        self.failed_expected_digest_requirements: set[tuple[int, int, str]] = set()
+        self.stale_expected_digest_requirements: set[tuple[int, int, str]] = set()
+        self.viable_expected_digest_requirements: set[tuple[int, int, str]] = set()
         self.partially_selected_line_numbers: tuple[int, ...] = ()
         self.successful_completed_update_selections: tuple[
             CompletedUpdateSelection, ...
@@ -243,8 +249,15 @@ class UpdateFromWudRunner(
                 lock,
             )
 
-            exclusion_statuses = self._apply_tag_exclusions(exclusion_updates)
-            stack_statuses = self._update_matching_stacks(matches)
+            stack_statuses = self._preflight_matching_stack_digests(matches)
+            if stack_statuses:
+                exclusion_statuses = {
+                    update.source_line: StackStatus("failure", "preflight-skipped")
+                    for update in exclusion_updates
+                }
+            else:
+                exclusion_statuses = self._apply_tag_exclusions(exclusion_updates)
+                stack_statuses = self._update_matching_stacks(matches)
 
             self._reconcile_pending_entries(
                 audit_parsed,
@@ -467,6 +480,44 @@ class UpdateFromWudRunner(
             if stack_status.status == "success":
                 self._record_successful_completed_update_selections(stack_matches)
         return stack_statuses
+
+    def _preflight_matching_stack_digests(
+        self,
+        matches: Sequence[Match],
+    ) -> dict[int, StackStatus]:
+        stacks = _stacks_to_update(matches)
+        stale_statuses: dict[int, StackStatus] = {}
+        for stack in stacks:
+            stack_matches = [
+                match for match in matches if match.stack.index == stack.index
+            ]
+            status = self.lifecycle._preflight_stack_expected_digests(
+                stack,
+                stack_matches,
+            )
+            if status is not None:
+                stale_statuses[stack.index] = status
+        if not stale_statuses:
+            return {}
+        stale_lines = {
+            line_no
+            for _stack_index, line_no, _image in self.stale_preflight_digest_requirements
+        }
+        viable_lines = {
+            line_no
+            for _stack_index, line_no, _image in self.viable_preflight_digest_requirements
+        }
+        definitively_stale_lines = stale_lines - viable_lines
+        self.preflight_skipped_pending_line_numbers = {
+            match.target.line_no for match in matches
+        } - definitively_stale_lines
+        return {
+            stack.index: stale_statuses.get(
+                stack.index,
+                StackStatus("failure", "preflight-skipped"),
+            )
+            for stack in stacks
+        }
 
     def _reconcile_pending_entries(
         self,

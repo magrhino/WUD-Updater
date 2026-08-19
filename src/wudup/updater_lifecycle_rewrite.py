@@ -10,6 +10,7 @@ from . import compose_rewrite, updater_logging
 from .command import CommandError
 from .compose import ComposeStack, ServiceImage
 from .updater_lifecycle_state import _StackUpdateState
+from .updater_matching import _update_services
 from .updater_models import (
     STALE_PENDING_DIGEST_REASON,
     AppliedDigestPinUpdate,
@@ -362,6 +363,7 @@ class _LifecycleRewriteMixin:
         phase: str,
         command_error: CommandError | None = None,
         failure_health: str | None = None,
+        failure_matches: Sequence[Match] | None = None,
     ) -> StackStatus:
         if state.compose_backup is None:
             return StackStatus("failure", reason)
@@ -379,6 +381,7 @@ class _LifecycleRewriteMixin:
             no_deps=state.scope.up_no_deps,
             running_services=state.running_services,
             stopped_services=state.stopped_services,
+            failure_matches=failure_matches,
         )
 
     @staticmethod
@@ -405,17 +408,24 @@ class _LifecycleRewriteMixin:
         no_deps: bool = True,
         running_services: Sequence[str] | None = None,
         stopped_services: Sequence[str] = (),
+        failure_matches: Sequence[Match] | None = None,
     ) -> StackStatus:
+        report_matches = matches if failure_matches is None else failure_matches
+        report_services = (
+            services
+            if failure_matches is None
+            else _update_services(failure_matches)
+        )
         self._progress(
             _tag_update_failure_progress_phase(phase),
             "failure",
             _tag_update_failure_progress_message(stack.name, phase, reason),
             stack=stack.name,
-            services=services,
-            matches=matches,
+            services=report_services,
+            matches=report_matches,
         )
         if failure_health is None:
-            failure_health = self._capture_health_details(stack, services)
+            failure_health = self._capture_health_details(stack, report_services)
         self.log.warning(f"[{stack.name}] Restoring compose file after failed tag update.")
         rollback_result = "rollback-failed-manual-review-required"
         rollback_error: CommandError | None = None
@@ -446,8 +456,8 @@ class _LifecycleRewriteMixin:
                 )
                 if reason == STALE_PENDING_DIGEST_REASON:
                     self.log.warning(
-                        f"[{stack.name}] Rolled back to previous tag; stale WUD "
-                        "digest entry was removed and should be refreshed by WUD."
+                        f"[{stack.name}] Rolled back to previous tag after a stale "
+                        "WUD digest was detected; refresh WUD before retrying."
                     )
                 else:
                     self.log.warning(
@@ -462,13 +472,13 @@ class _LifecycleRewriteMixin:
         report_error = rollback_error or command_error
         note = f"tag rollback={rollback_result}"
         if reason == STALE_PENDING_DIGEST_REASON:
-            note += "; stale pending digest entry was removed"
+            note += "; stale pending digest detected"
         self._record_failure(
             stack,
-            matches,
+            report_matches,
             phase=phase,
             reason=reason,
-            services=services,
+            services=report_services,
             command_error=report_error,
             health_details=failure_health,
             note=note,

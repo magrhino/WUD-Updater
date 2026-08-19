@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from unittest import mock
 
 from tests.update_from_wud_helpers import (
@@ -14,7 +16,7 @@ from wudup.compose import (
     ComposeStack,
     ServiceImage,
 )
-from wudup.digest_verifier import DigestCheckResult
+from wudup.digest_verifier import DigestCheckResult, DigestResolveResult
 from wudup.updater_lifecycle_health import _updated_images
 from wudup.updater_models import (
     STALE_PENDING_DIGEST_REASON,
@@ -81,22 +83,22 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
         )
         runner = self.make_runner()
 
-        first_line = (stack.index, targets[0].line_no)
-        second_line = (stack.index, targets[1].line_no)
-        runner.failed_expected_digest_lines.add(first_line)
-        runner.stale_pending_digest_lines.add(first_line)
+        first_requirement = (stack.index, targets[0].line_no, stack.images[0])
+        second_requirement = (stack.index, targets[1].line_no, stack.images[1])
+        runner.failed_expected_digest_requirements.add(first_requirement)
+        runner.stale_expected_digest_requirements.add(first_requirement)
         self.assertEqual(
             runner.lifecycle._expected_digest_failure_reason(stack, matches),
             STALE_PENDING_DIGEST_REASON,
         )
 
-        runner.failed_expected_digest_lines.add(second_line)
+        runner.failed_expected_digest_requirements.add(second_requirement)
         self.assertEqual(
             runner.lifecycle._expected_digest_failure_reason(stack, matches),
             "expected-digest-not-reached",
         )
 
-        runner.stale_pending_digest_lines.add(second_line)
+        runner.stale_expected_digest_requirements.add(second_requirement)
         self.assertEqual(
             runner.lifecycle._expected_digest_failure_reason(stack, matches),
             STALE_PENDING_DIGEST_REASON,
@@ -413,6 +415,259 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
         pending = self.db_rows("SELECT * FROM pending_updates")
         self.assertEqual(pending[0]["status"], "failed")
         self.assertEqual(pending[0]["status_reason"], "stale-pending-digest")
+    def test_later_stale_stack_blocks_all_stack_mutation(self) -> None:
+        self.wud_file.write_text(
+            "ghcr.io/acme/current:latest@sha256:current\n"
+            "ghcr.io/acme/stale:latest@sha256:stale\n",
+            encoding="utf-8",
+        )
+        self.make_stack(
+            "a-current",
+            [("app", "ghcr.io/acme/current:latest", "cid-current")],
+        )
+        self.make_stack(
+            "z-stale",
+            [("app", "ghcr.io/acme/stale:latest", "cid-stale")],
+        )
+        self.set_image_state(
+            "ghcr.io/acme/current:latest",
+            "sha256:old-current",
+            "sha256:old-current-index",
+        )
+        self.set_image_state(
+            "ghcr.io/acme/stale:latest",
+            "sha256:old-stale",
+            "sha256:old-stale-index",
+        )
+        self.set_manifest_stdout(
+            "ghcr.io/acme/current:latest",
+            manifest_index_digest("sha256:current", "sha256:current-child"),
+        )
+        self.set_manifest_stdout(
+            "ghcr.io/acme/stale:latest",
+            manifest_index_digest("sha256:moved", "sha256:moved-child"),
+        )
+
+        status, stdout, stderr = self.run_direct()
+
+        self.assertEqual(status, 1, stderr + stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "ghcr.io/acme/current:latest@sha256:current\n",
+        )
+        calls = self.calls()
+        self.assertIn("manifest inspect ghcr.io/acme/current:latest", calls)
+        self.assertIn("manifest inspect ghcr.io/acme/stale:latest", calls)
+        self.assertNotRegex(calls, r"compose -f .* (?:pull|stop|up -d)")
+        pending = self.db_rows("SELECT * FROM pending_updates ORDER BY line_no")
+        self.assertEqual(
+            [(row["status"], row["status_reason"]) for row in pending],
+            [
+                ("failed", "preflight-skipped"),
+                ("failed", "stale-pending-digest"),
+            ],
+        )
+    def test_mixed_identity_stale_digest_restores_shared_pending_line(self) -> None:
+        pending_line = "acme/app:latest@sha256:shared\n"
+        self.wud_file.write_text(pending_line, encoding="utf-8")
+        self.make_stack(
+            "a-current",
+            [("app", "ghcr.io/acme/app:latest", "cid-current")],
+        )
+        self.make_stack(
+            "z-stale",
+            [("app", "quay.io/acme/app:latest", "cid-stale")],
+        )
+        self.set_image_state(
+            "ghcr.io/acme/app:latest",
+            "sha256:old-current",
+            "sha256:old-current-index",
+        )
+        self.set_image_state(
+            "quay.io/acme/app:latest",
+            "sha256:old-stale",
+            "sha256:old-stale-index",
+        )
+        self.set_manifest_stdout(
+            "ghcr.io/acme/app:latest",
+            manifest_index_digest("sha256:shared", "sha256:current-child"),
+        )
+        self.set_manifest_stdout(
+            "quay.io/acme/app:latest",
+            manifest_index_digest("sha256:moved", "sha256:moved-child"),
+        )
+
+        status, stdout, stderr = self.run_direct()
+
+        self.assertEqual(status, 1, stderr + stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), pending_line)
+        self.assertNotRegex(self.calls(), r"compose -f .* (?:pull|stop|up -d)")
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        self.assertEqual(pending[0]["status_reason"], "preflight-skipped")
+        events = self.db_rows("SELECT * FROM update_events ORDER BY stack_name")
+        self.assertEqual(
+            {
+                row["stack_name"]: json.loads(row["metadata_json"])["reason"]
+                for row in events
+            },
+            {
+                "a-current": "preflight-skipped",
+                "z-stale": "stale-pending-digest",
+            },
+        )
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("stack=z-stale", report)
+        self.assertNotIn("stack=a-current", report)
+        self.assertIn("wud_entries_restored=yes", report)
+
+    def test_postpull_mixed_identity_stale_digest_restores_shared_line(self) -> None:
+        pending_line = "acme/app@sha256:shared\n"
+        self.wud_file.write_text(pending_line, encoding="utf-8")
+        self.make_stack(
+            "app",
+            [
+                ("current", "ghcr.io/acme/app", "cid-current"),
+                ("stale", "quay.io/acme/app", "cid-stale"),
+            ],
+        )
+        self.set_image_state(
+            "ghcr.io/acme/app",
+            "sha256:old-current",
+            "sha256:old-current-index",
+        )
+        self.set_image_after_pull(
+            "ghcr.io/acme/app",
+            "sha256:new-current",
+            "sha256:shared",
+        )
+        self.set_image_state(
+            "quay.io/acme/app",
+            "sha256:old-stale",
+            "sha256:old-stale-index",
+        )
+        self.set_image_after_pull(
+            "quay.io/acme/app",
+            "sha256:new-stale",
+            "sha256:moved",
+        )
+        digest_verifier = mock.Mock()
+        digest_verifier.verify_tag_digest.side_effect = (
+            lambda _image, expected: DigestResolveResult(
+                True,
+                "resolved",
+                "digest-match",
+                digest=expected,
+            )
+        )
+        digest_verifier.verify.side_effect = (
+            lambda image, _expected: DigestCheckResult(
+                False,
+                "mismatch",
+                "stale-digest",
+                tag_digest="sha256:moved",
+            )
+            if image.startswith("quay.io/")
+            else DigestCheckResult(True, "verified", "digest-match")
+        )
+        runner = self.make_runner(
+            digest_verifier=digest_verifier,
+            db_path=self.db_path,
+        )
+
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            status = runner.run()
+
+        self.assertEqual(status, 1)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), pending_line)
+        self.assertEqual(
+            {call.args[0] for call in digest_verifier.verify.call_args_list},
+            {
+                "ghcr.io/acme/app:latest",
+                "quay.io/acme/app:latest",
+            },
+        )
+        self.assertRegex(
+            self.calls(),
+            r"app\tcompose -f docker-compose.yml pull current stale",
+        )
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        self.assertEqual(
+            pending[0]["status_reason"],
+            "expected-digest-sibling-failed",
+        )
+        events = self.db_rows("SELECT * FROM update_events ORDER BY service_name")
+        self.assertEqual(
+            {
+                row["service_name"]: json.loads(row["metadata_json"])["reason"]
+                for row in events
+            },
+            {
+                "current": "expected-digest-sibling-failed",
+                "stale": "stale-pending-digest",
+            },
+        )
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertNotIn("compose_image=ghcr.io/acme/app", report)
+        self.assertIn("compose_image=quay.io/acme/app", report)
+        self.assertIn("wud_entries_restored=yes", report)
+    def test_same_stack_stale_digest_classifies_only_failed_line(self) -> None:
+        current_line = "ghcr.io/acme/current:latest@sha256:current\n"
+        self.wud_file.write_text(
+            current_line + "ghcr.io/acme/stale:latest@sha256:stale\n",
+            encoding="utf-8",
+        )
+        self.make_stack(
+            "app",
+            [
+                ("current", "ghcr.io/acme/current:latest", "cid-current"),
+                ("stale", "ghcr.io/acme/stale:latest", "cid-stale"),
+            ],
+        )
+        self.set_image_state(
+            "ghcr.io/acme/current:latest",
+            "sha256:old-current",
+            "sha256:old-current-index",
+        )
+        self.set_image_state(
+            "ghcr.io/acme/stale:latest",
+            "sha256:old-stale",
+            "sha256:old-stale-index",
+        )
+        self.set_manifest_stdout(
+            "ghcr.io/acme/current:latest",
+            manifest_index_digest("sha256:current", "sha256:current-child"),
+        )
+        self.set_manifest_stdout(
+            "ghcr.io/acme/stale:latest",
+            manifest_index_digest("sha256:moved", "sha256:moved-child"),
+        )
+
+        status, stdout, stderr = self.run_direct()
+
+        self.assertEqual(status, 1, stderr + stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), current_line)
+        pending = self.db_rows("SELECT * FROM pending_updates ORDER BY line_no")
+        self.assertEqual(
+            [(row["status"], row["status_reason"]) for row in pending],
+            [
+                ("failed", "preflight-skipped"),
+                ("failed", "stale-pending-digest"),
+            ],
+        )
+        events = self.db_rows("SELECT * FROM update_events ORDER BY service_name")
+        self.assertEqual(
+            {
+                row["service_name"]: json.loads(row["metadata_json"])["reason"]
+                for row in events
+            },
+            {
+                "current": "preflight-skipped",
+                "stale": "stale-pending-digest",
+            },
+        )
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertNotIn("ghcr.io/acme/current:latest", report)
+        self.assertIn("ghcr.io/acme/stale:latest", report)
     def test_multi_stack_failure_keeps_failure_reason_in_pending_audit(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("ok", [("app", "repo/app:latest", "cid-ok")])

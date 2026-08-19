@@ -507,13 +507,53 @@ class _RunnerOperationsMixin:
         line_numbers: Iterable[int],
     ) -> set[int]:
         candidates = set(line_numbers)
-        return {
-            match.target.line_no
-            for match in matches
-            if match.target.line_no in candidates
-            and (match.stack.index, match.target.line_no)
-            in self.stale_pending_digest_lines
-        }
+        preflight_requirements_by_line: dict[int, set[tuple[int, int, str]]] = {}
+        expected_requirements_by_line: dict[int, set[tuple[int, int, str]]] = {}
+        for match in matches:
+            if not match.target.digest or "@sha256:" not in match.target.first:
+                continue
+            line_no = match.target.line_no
+            preflight_requirements_by_line.setdefault(line_no, set()).add(
+                (
+                    match.stack.index,
+                    line_no,
+                    self.lifecycle._preflight_expected_digest_image(match),
+                )
+            )
+            expected_requirements_by_line.setdefault(line_no, set()).add(
+                (
+                    match.stack.index,
+                    line_no,
+                    self.lifecycle._expected_digest_image(match),
+                )
+            )
+
+        stale_lines: set[int] = set()
+        for line_no in candidates:
+            preflight_requirements = preflight_requirements_by_line.get(line_no, set())
+            expected_requirements = expected_requirements_by_line.get(line_no, set())
+            if (
+                preflight_requirements
+                and preflight_requirements.issubset(
+                    self.stale_preflight_digest_requirements
+                )
+            ) or (
+                expected_requirements
+                and expected_requirements.issubset(
+                    self.stale_expected_digest_requirements
+                )
+            ):
+                stale_lines.add(line_no)
+        return stale_lines
+
+    def _preflight_expected_digest_outcome(self, match: Match) -> str:
+        return self.lifecycle._preflight_expected_digest_outcome(match)
+
+    def _expected_digest_outcome(self, match: Match) -> str:
+        return self.lifecycle._expected_digest_outcome(match)
+
+    def _expected_digest_failed_in_stack(self, stack: ComposeStack) -> bool:
+        return self.lifecycle._expected_digest_failed_in_stack(stack)
 
     def _mark_failed_lines_restored(self, failed_lines: Iterable[int]) -> None:
         restored = set(failed_lines)

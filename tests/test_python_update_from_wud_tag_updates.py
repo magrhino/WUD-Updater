@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
@@ -17,6 +18,7 @@ from wudup.compose import (
     ComposeStack,
     ServiceImage,
 )
+from wudup.digest_verifier import DigestCheckResult, DigestResolveResult
 from wudup.updater import (
     UpdateFromWudRunner,
 )
@@ -594,10 +596,95 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
         report = self.latest_error_report().read_text(encoding="utf-8")
         self.assertIn("reason=stale-pending-digest", report)
         self.assertIn("wud_entries_restored=no", report)
-        self.assertIn("Stale pending digest entry was removed", report)
+        self.assertIn("Stale pending digest detected", report)
         pending = self.db_rows("SELECT * FROM pending_updates")
         self.assertEqual(pending[0]["status"], "failed")
         self.assertEqual(pending[0]["status_reason"], "stale-pending-digest")
+
+    def test_postpull_stale_digest_rollback_reports_only_failed_match(self) -> None:
+        current_line = "ghcr.io/acme/current:1.0@sha256:current tag=2.0\n"
+        stale_line = "ghcr.io/acme/stale:1.0@sha256:stale tag=2.0\n"
+        self.wud_file.write_text(current_line + stale_line, encoding="utf-8")
+        stack_dir = self.make_stack(
+            "app",
+            [
+                ("current", "ghcr.io/acme/current:1.0", "cid-current"),
+                ("stale", "ghcr.io/acme/stale:1.0", "cid-stale"),
+            ],
+        )
+        compose_path = stack_dir / "docker-compose.yml"
+        original_compose = compose_path.read_text(encoding="utf-8")
+        for name in ("current", "stale"):
+            self.set_image_state(
+                f"ghcr.io/acme/{name}:1.0",
+                f"sha256:old-{name}",
+                f"sha256:old-{name}-index",
+            )
+            self.set_image_after_pull(
+                f"ghcr.io/acme/{name}:2.0",
+                f"sha256:new-{name}",
+                f"sha256:{name if name == 'current' else 'moved'}",
+            )
+            self.set_manifest_stdout(
+                f"ghcr.io/acme/{name}:2.0",
+                manifest_image(f"sha256:new-{name}"),
+            )
+        digest_verifier = mock.Mock()
+        digest_verifier.verify_tag_digest.side_effect = (
+            lambda _image, expected: DigestResolveResult(
+                True,
+                "resolved",
+                "digest-match",
+                digest=expected,
+            )
+        )
+        digest_verifier.verify.side_effect = (
+            lambda image, _expected: DigestCheckResult(
+                False,
+                "mismatch",
+                "stale-digest",
+                tag_digest="sha256:moved",
+            )
+            if "/stale:" in image
+            else DigestCheckResult(True, "verified", "digest-match")
+        )
+        runner = self.make_runner(
+            allow_tag_updates=True,
+            digest_verifier=digest_verifier,
+            db_path=self.db_path,
+        )
+
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            status = runner.run()
+
+        self.assertEqual(status, 1)
+        self.assertEqual(compose_path.read_text(encoding="utf-8"), original_compose)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), current_line)
+        pending = self.db_rows("SELECT * FROM pending_updates ORDER BY line_no")
+        self.assertEqual(
+            [(row["status"], row["status_reason"]) for row in pending],
+            [
+                ("failed", "expected-digest-sibling-failed"),
+                ("failed", "stale-pending-digest"),
+            ],
+        )
+        events = self.db_rows("SELECT * FROM update_events ORDER BY service_name")
+        self.assertEqual(
+            {
+                row["service_name"]: json.loads(row["metadata_json"])["reason"]
+                for row in events
+            },
+            {
+                "current": "expected-digest-sibling-failed",
+                "stale": "stale-pending-digest",
+            },
+        )
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertNotIn("ghcr.io/acme/current:1.0", report)
+        self.assertIn("ghcr.io/acme/stale:1.0", report)
+        self.assertIn("tag rollback=restored-and-healthy", report)
+        self.assertIn("stale pending digest detected", report)
+        self.assertNotIn("stale pending digest entry was removed", report)
     def test_tag_backup_failure_restores_line_without_traceback(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
