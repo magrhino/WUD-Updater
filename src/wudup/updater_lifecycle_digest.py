@@ -48,7 +48,7 @@ def _expected_digest_requirement(match: Match) -> str:
     return match.target.digest
 
 
-def _preflight_expected_digest_image(match: Match) -> str:
+def _expected_digest_image(match: Match) -> str:
     if match.target.desired_tag:
         tag = match.target.desired_tag
     elif "@sha256:" in match.compose_image:
@@ -68,30 +68,18 @@ def _preflight_expected_digest_image(match: Match) -> str:
     return image_with_tag(match.compose_image, tag)
 
 
-def _preflight_expected_digest_key(match: Match) -> tuple[int, int, str]:
-    return (
-        match.stack.index,
-        match.target.line_no,
-        _preflight_expected_digest_image(match),
-    )
-
-
 def _expected_digest_key(match: Match) -> tuple[int, int, str]:
     return (
         match.stack.index,
         match.target.line_no,
-        _preflight_expected_digest_image(match),
+        _expected_digest_image(match),
     )
 
 
 class _LifecycleDigestMixin:
     @staticmethod
-    def _preflight_expected_digest_image(match: Match) -> str:
-        return _preflight_expected_digest_image(match)
-
-    @staticmethod
     def _expected_digest_image(match: Match) -> str:
-        return _preflight_expected_digest_image(match)
+        return _expected_digest_image(match)
 
     def _preflight_expected_digests(
         self,
@@ -103,7 +91,7 @@ class _LifecycleDigestMixin:
             (
                 match.target.line_no,
                 match.target.first,
-                _preflight_expected_digest_image(match),
+                _expected_digest_image(match),
                 expected_digest,
             )
             for match in matches
@@ -135,7 +123,7 @@ class _LifecycleDigestMixin:
         return ok
 
     def _preflight_expected_digest_outcome(self, match: Match) -> str:
-        key = _preflight_expected_digest_key(match)
+        key = _expected_digest_key(match)
         if key in self.stale_preflight_digest_requirements:
             return "stale"
         if key in self.viable_preflight_digest_requirements:
@@ -168,7 +156,7 @@ class _LifecycleDigestMixin:
             (
                 match.target.line_no,
                 match.target.first,
-                _preflight_expected_digest_image(match),
+                _expected_digest_image(match),
                 expected_digest,
             )
             for match in matches

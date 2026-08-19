@@ -502,7 +502,7 @@ class _RunnerOperationsMixin:
                 (
                     match.stack.index,
                     line_no,
-                    self.lifecycle._preflight_expected_digest_image(match),
+                    self.lifecycle._expected_digest_image(match),
                 )
             )
             expected_requirements_by_line.setdefault(line_no, set()).add(
