@@ -6,6 +6,7 @@ import urllib.parse
 from pathlib import Path
 from urllib.error import HTTPError
 
+import pytest
 from tests.web_test_helpers import _client, _csrf_headers, _install_wud_api
 from tests.web_wud_rescan_helpers import (
     container_payload,
@@ -119,6 +120,77 @@ def test_pending_all_rescan_targets_pending_container_ids_and_audits(
     assert metadata["requested_count"] == 1
     assert metadata["watched_count"] == 1
     assert metadata["wud_api"]["state"] == "ready"
+
+
+@pytest.mark.parametrize(
+    ("missing_count", "watched_count", "missing_detail"),
+    (
+        (1, 2, "WUD skipped 1 container that no longer exists"),
+        (2, 1, "WUD skipped 2 containers that no longer exist"),
+    ),
+)
+def test_pending_all_rescan_continues_after_missing_containers_and_audits_partial(
+    tmp_path: Path,
+    monkeypatch,
+    missing_count: int,
+    watched_count: int,
+    missing_detail: str,
+) -> None:
+    _install_wud_api(
+        monkeypatch,
+        containers=[
+            container_payload(name="missing-one"),
+            container_payload(name="missing-two"),
+            container_payload(name="app"),
+        ],
+    )
+    posts: list[str] = []
+
+    def post_json(url: str, _client_config=None, **_kwargs) -> object:
+        path = urllib.parse.urlsplit(url).path
+        posts.append(path)
+        if len(posts) <= missing_count:
+            raise HTTPError(url=url, code=404, msg="Not Found", hdrs=None, fp=None)
+        return {"status": "ok"}
+
+    monkeypatch.setattr(web_wud_api, "_post_json", post_json)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_API_BASE_URL": "https://wud.rescan-missing.test:3000",
+        },
+    )
+
+    response = client.post(
+        "/api/v1/pending/rescan",
+        json=rescan_payload(),
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "partial"
+    assert body["requested_count"] == 3
+    assert body["watched_count"] == watched_count
+    assert missing_detail in body["wud_api"]["detail"]
+    assert len(posts) == 3
+    assert set(posts) == {
+        "/api/containers/docker.local.missing-one/watch",
+        "/api/containers/docker.local.missing-two/watch",
+        "/api/containers/docker.local.app/watch",
+    }
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        run = conn.execute(
+            "SELECT * FROM update_runs WHERE id = ?",
+            (body["audit_run_id"],),
+        ).fetchone()
+    metadata = json.loads(run["metadata_json"])
+    assert run["status"] == "success"
+    assert metadata["status"] == "partial"
+    assert metadata["requested_count"] == 3
+    assert metadata["watched_count"] == watched_count
 
 
 def test_pending_all_rescan_scopes_embedded_429_cooldown_to_container(

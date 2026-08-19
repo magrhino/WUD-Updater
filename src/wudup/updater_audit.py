@@ -334,11 +334,18 @@ def mark_failed_pending(
         match = _failed_match_for_line(line_no, matches, stack_statuses)
         if match is None:
             continue
-        reason = (
-            STALE_PENDING_DIGEST_REASON
-            if line_no in stale_lines
-            else _line_status_reason(line_no, matches, stack_statuses)
-        )
+        if line_no in runner.preflight_skipped_pending_line_numbers:
+            reason = "preflight-skipped"
+        elif line_no in stale_lines:
+            reason = STALE_PENDING_DIGEST_REASON
+        else:
+            outcome = runner._expected_digest_outcome(match)
+            if outcome == "failed":
+                reason = "expected-digest-not-reached"
+            elif runner._expected_digest_failed_in_stack(match.stack):
+                reason = "expected-digest-sibling-failed"
+            else:
+                reason = _line_status_reason(line_no, matches, stack_statuses)
         update_pending_update(
             runner.audit_conn,
             run_id=runner.audit_run_id,
@@ -387,10 +394,7 @@ def record_update_events(
     if runner.audit_conn is None or runner.audit_run_id is None:
         return
     for match in matches:
-        status = stack_statuses.get(
-            match.stack.index,
-            StackStatus("failure", "missing"),
-        )
+        status = _event_status_for_match(runner, match, stack_statuses)
         digest_provenance = _digest_provenance_for_event(runner, match)
         target_image = runner._target_image_for_match(match)
         old_state, new_state = _image_states_for_match(runner, match, target_image)
@@ -410,6 +414,34 @@ def record_update_events(
             metadata_json=json.dumps(metadata, sort_keys=True),
             digest_provenance=digest_provenance,
         )
+
+
+def _event_status_for_match(
+    runner: Any,
+    match: Match,
+    stack_statuses: Mapping[int, StackStatus],
+) -> StackStatus:
+    status = stack_statuses.get(
+        match.stack.index,
+        StackStatus("failure", "missing"),
+    )
+    if match.target.line_no in runner.preflight_skipped_pending_line_numbers:
+        reason = (
+            STALE_PENDING_DIGEST_REASON
+            if runner._preflight_expected_digest_outcome(match) == "stale"
+            else "preflight-skipped"
+        )
+        return StackStatus("failure", reason)
+    if status.status != "failure" or not runner._expected_digest_failed_in_stack(
+        match.stack
+    ):
+        return status
+    outcome = runner._expected_digest_outcome(match)
+    if outcome == "failed":
+        return StackStatus("failure", "expected-digest-not-reached")
+    if outcome == "stale":
+        return StackStatus("failure", STALE_PENDING_DIGEST_REASON)
+    return StackStatus("failure", "expected-digest-sibling-failed")
 
 
 def record_known_images(

@@ -5,6 +5,7 @@ from unittest import mock
 
 from tests.update_from_wud_helpers import (
     UpdateFromWudRunnerTestCase,
+    manifest_index_digest,
 )
 
 from wudup import updater_tag_exclusions
@@ -81,6 +82,55 @@ class UpdateFromWudTagExclusionTests(UpdateFromWudRunnerTestCase):
         self.assertRegex(
             self.calls(),
             r"compose -f docker-compose.yml up -d --remove-orphans --no-deps app",
+        )
+    def test_stale_digest_blocks_tag_exclusion_rewrite_and_recreate(self) -> None:
+        self.wud_file.write_text(
+            "repo/excluded:1.0 tag=2.0\n"
+            "ghcr.io/acme/stale:latest@sha256:stale\n",
+            encoding="utf-8",
+        )
+        exclusion_stack = self.make_stack(
+            "excluded",
+            [("app", "repo/excluded:1.0", "cid-excluded")],
+        )
+        self.make_stack(
+            "stale",
+            [("app", "ghcr.io/acme/stale:latest", "cid-stale")],
+        )
+        self.set_image_state(
+            "ghcr.io/acme/stale:latest",
+            "sha256:old",
+            "sha256:old-index",
+        )
+        self.set_manifest_stdout(
+            "ghcr.io/acme/stale:latest",
+            manifest_index_digest("sha256:moved", "sha256:moved-child"),
+        )
+
+        result = self.run_python(
+            "--yes",
+            "--exclude-tag-lines",
+            "1",
+            "--recreate-excluded-services",
+        )
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/excluded:1.0 tag=2.0\n",
+        )
+        compose_text = (exclusion_stack / "docker-compose.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("wud.tag.exclude", compose_text)
+        self.assertNotRegex(self.calls(), r"compose -f .* (?:pull|stop|up -d)")
+        pending = self.db_rows("SELECT * FROM pending_updates ORDER BY line_no")
+        self.assertEqual(
+            [(row["status"], row["status_reason"]) for row in pending],
+            [
+                ("failed", "preflight-skipped"),
+                ("failed", "stale-pending-digest"),
+            ],
         )
     def test_exclude_tag_line_does_not_recreate_already_excluded_service(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")

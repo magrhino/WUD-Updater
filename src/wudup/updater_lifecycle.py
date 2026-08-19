@@ -97,6 +97,40 @@ class StackLifecycleExecutor(
 
         return self._recreate_and_verify_stack(state)
 
+    def _preflight_stack_expected_digests(
+        self,
+        stack: ComposeStack,
+        matches: Sequence[Match],
+    ) -> StackStatus | None:
+        if not self._preflight_expected_digests(stack, matches):
+            stale_matches = tuple(
+                match
+                for match in matches
+                if self._preflight_expected_digest_outcome(match) == "stale"
+            )
+            scope = self._update_scope(stack, stale_matches)
+            self._record_failure(
+                stack,
+                stale_matches,
+                phase="preflight",
+                reason=STALE_PENDING_DIGEST_REASON,
+                services=scope.pull_services,
+                note=(
+                    "Stale pending digest detected before any Compose or Docker "
+                    "update; refresh or replace it before retrying."
+                ),
+            )
+            self._progress(
+                "preflight",
+                "failure",
+                f"[{stack.name}] Pending WUD digest is stale; no update was applied.",
+                stack=stack.name,
+                services=scope.pull_services,
+                matches=stale_matches,
+            )
+            return StackStatus("failure", STALE_PENDING_DIGEST_REASON)
+        return None
+
     def _build_stack_update_state(
         self,
         stack: ComposeStack,
@@ -397,11 +431,17 @@ class StackLifecycleExecutor(
             dict(state.before),
             dict(state.after),
         )
-        if not self._verify_expected_digests(stack, matches, state.images):
-            reason = self._expected_digest_failure_reason(stack, matches)
+        if not self._verify_expected_digests(stack, matches):
+            reason = self._expected_digest_failure_reason(matches)
+            failed_matches = tuple(
+                match
+                for match in matches
+                if self._expected_digest_outcome(match) in {"failed", "stale"}
+            )
+            failure_scope = self._update_scope(stack, failed_matches)
             note = (
-                "Stale pending digest entry was removed; refresh or replace it "
-                "before retrying."
+                "Stale pending digest detected; refresh or replace it before "
+                "retrying."
                 if reason == STALE_PENDING_DIGEST_REASON
                 else ""
             )
@@ -410,14 +450,18 @@ class StackLifecycleExecutor(
                     state,
                     reason,
                     phase="digest",
+                    failure_matches=failed_matches,
                 )
             self._record_failure(
                 stack,
-                state.matches,
+                failed_matches,
                 phase="digest",
                 reason=reason,
-                services=state.pull_services,
-                health_details=self._capture_health_details(stack, state.pull_services),
+                services=failure_scope.pull_services,
+                health_details=self._capture_health_details(
+                    stack,
+                    failure_scope.pull_services,
+                ),
                 note=note,
             )
             self._progress(
@@ -425,8 +469,8 @@ class StackLifecycleExecutor(
                 "failure",
                 f"[{stack.name}] Pulled images did not reach the expected digest.",
                 stack=stack.name,
-                services=state.pull_services,
-                matches=state.matches,
+                services=failure_scope.pull_services,
+                matches=failed_matches,
             )
             return StackStatus("failure", reason)
 

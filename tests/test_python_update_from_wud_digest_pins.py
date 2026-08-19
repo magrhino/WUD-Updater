@@ -619,7 +619,7 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
         self.assertEqual(pull_failures[0].stack, "app")
         self.assertEqual(pull_failures[0].services, ("app",))
         self.assertIn("digest", pull_failures[0].message.lower())
-    def test_digest_pin_apply_rejects_moved_tagged_digest_only_latest_child(self) -> None:
+    def test_stale_digest_preflight_rejects_moved_digest_pin_target(self) -> None:
         self.wud_file.write_text(
             "repo/app:latest@sha256:planned\n",
             encoding="utf-8",
@@ -647,19 +647,15 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
         )
 
         self.assertEqual(status, 1, stderr + stdout)
-        self.assertEqual(
-            self.wud_file.read_text(encoding="utf-8"),
-            "repo/app:latest@sha256:planned\n",
-        )
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
         content = compose_file.read_text(encoding="utf-8")
         self.assertIn("image: repo/app:latest", content)
         self.assertNotIn("wudup.resolved-tag", content)
+        self.assertNotRegex(self.calls(), r"compose -f .* pull")
+        self.assertNotRegex(self.calls(), r"compose -f .* up -d")
         pending = self.db_rows("SELECT * FROM pending_updates")
         self.assertEqual(pending[0]["status"], "failed")
-        self.assertEqual(
-            pending[0]["status_reason"],
-            "digest-pin-verification-failed",
-        )
+        self.assertEqual(pending[0]["status_reason"], "stale-pending-digest")
     def test_digest_pin_apply_writes_tagged_digest_only_latest_child(self) -> None:
         self.wud_file.write_text(
             "repo/app:latest@sha256:child\n",

@@ -219,6 +219,15 @@ class WudApiWatchResult:
     remaining_degraded_container_ids: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class _WudApiWatchBatchResult:
+    watched_all: bool
+    watched_count: int
+    missing_count: int
+    cooldown_remaining: float
+    error: WudApiWatchResult | None = None
+
+
 WudApiConfigurationSnapshot = web_wud_config.WudApiConfigurationSnapshot
 WudApiCacheKey = tuple[str, str]
 WudApiWatchCooldownKey = tuple[WudApiCacheKey, str]
@@ -1103,8 +1112,62 @@ def _watch_paths(
             watched_count=0,
         )
 
+    batch = _watch_batch(
+        settings,
+        base_url=base_url,
+        normalized_base_url=normalized_base_url,
+        cache_key=cache_key,
+        watch_items=watch_items,
+        requested_count=len(paths),
+        cooldown_remaining=cooldown_remaining,
+    )
+    if batch.error is not None:
+        return batch.error
+
+    snapshot = get_snapshot(settings, include_containers=True, force=True)
+    if batch.missing_count:
+        missing_detail = (
+            f"WUD skipped {_count_phrase(batch.missing_count, 'container')} that no "
+            f"longer {'exists' if batch.missing_count == 1 else 'exist'}."
+        )
+        detail = snapshot.status.detail.rstrip(";. ") if snapshot.status.detail else ""
+        snapshot = replace(
+            snapshot,
+            status=snapshot.status.model_copy(
+                update={
+                    "detail": (
+                        f"{detail}. {missing_detail}" if detail else missing_detail
+                    )
+                }
+            ),
+        )
+    if batch.cooldown_remaining > 0:
+        snapshot = _with_watch_rate_limit_detail(snapshot, batch.cooldown_remaining)
+    return WudApiWatchResult(
+        snapshot=snapshot,
+        watched=batch.watched_all,
+        requested_count=len(paths),
+        watched_count=batch.watched_count,
+        remaining_degraded_container_ids=_remaining_degraded_container_ids(
+            snapshot,
+            container_ids,
+        ),
+    )
+
+
+def _watch_batch(
+    settings: WebSettings,
+    *,
+    base_url: str,
+    normalized_base_url: str,
+    cache_key: WudApiCacheKey,
+    watch_items: Sequence[tuple[str, str]],
+    requested_count: int,
+    cooldown_remaining: float,
+) -> _WudApiWatchBatchResult:
     watched_count = 0
-    watched_all = len(watch_items) == len(paths)
+    watched_all = len(watch_items) == requested_count
+    missing_count = 0
     remaining_watch_seconds = WUD_API_WATCH_BATCH_TIMEOUT_SECONDS
     for path, requested_container_id in watch_items:
         if remaining_watch_seconds <= 0:
@@ -1140,6 +1203,14 @@ def _watch_paths(
                 )
                 watched_all = False
         except urllib.error.HTTPError as exc:
+            if exc.code == 404 and requested_container_id:
+                remaining_watch_seconds -= max(
+                    0.0,
+                    time.monotonic() - request_started,
+                )
+                watched_all = False
+                missing_count += 1
+                continue
             snapshot = _watch_http_error_snapshot(
                 settings,
                 base_url=base_url,
@@ -1147,11 +1218,17 @@ def _watch_paths(
                 checked_at=_utc_timestamp(),
                 checked_monotonic=time.monotonic(),
             )
-            return WudApiWatchResult(
-                snapshot=snapshot,
-                watched=False,
-                requested_count=len(paths),
+            return _WudApiWatchBatchResult(
+                watched_all=False,
                 watched_count=watched_count,
+                missing_count=missing_count,
+                cooldown_remaining=cooldown_remaining,
+                error=WudApiWatchResult(
+                    snapshot=snapshot,
+                    watched=False,
+                    requested_count=requested_count,
+                    watched_count=watched_count,
+                ),
             )
         except (OSError, ValueError) as exc:
             snapshot = _snapshot(
@@ -1166,26 +1243,24 @@ def _watch_paths(
                 checked_monotonic=time.monotonic(),
                 metadata_checked=True,
             )
-            _store_snapshot(_cache_key(settings, base_url), snapshot)
-            return WudApiWatchResult(
-                snapshot=snapshot,
-                watched=False,
-                requested_count=len(paths),
+            _store_snapshot(cache_key, snapshot)
+            return _WudApiWatchBatchResult(
+                watched_all=False,
                 watched_count=watched_count,
+                missing_count=missing_count,
+                cooldown_remaining=cooldown_remaining,
+                error=WudApiWatchResult(
+                    snapshot=snapshot,
+                    watched=False,
+                    requested_count=requested_count,
+                    watched_count=watched_count,
+                ),
             )
-
-    snapshot = get_snapshot(settings, include_containers=True, force=True)
-    if cooldown_remaining > 0:
-        snapshot = _with_watch_rate_limit_detail(snapshot, cooldown_remaining)
-    return WudApiWatchResult(
-        snapshot=snapshot,
-        watched=watched_all,
-        requested_count=len(paths),
+    return _WudApiWatchBatchResult(
+        watched_all=watched_all,
         watched_count=watched_count,
-        remaining_degraded_container_ids=_remaining_degraded_container_ids(
-            snapshot,
-            container_ids,
-        ),
+        missing_count=missing_count,
+        cooldown_remaining=cooldown_remaining,
     )
 
 

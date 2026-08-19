@@ -565,12 +565,12 @@ async function retryPendingStatus(): Promise<void> {
   pendingStatusError.value = "";
   await updates.loadPending().catch(() => undefined);
   if (updates.error) {
-    pendingStatusError.value = `WUD check failed: ${updates.error}`;
+    pendingStatusError.value = `WUDup status refresh failed: ${updates.error}`;
     return;
   }
   pendingStatusMessage.value = pendingSourceDegraded.value
-    ? "WUD checked again. Some container update checks are still unavailable."
-    : "WUD checked again. Container update information is current.";
+    ? "WUDup status refreshed. Some container update checks are still unavailable."
+    : "WUDup status refreshed. Container update information is current.";
 }
 
 function viewAffectedContainers(): void {
@@ -849,9 +849,10 @@ onBeforeUnmount(() => {
           size="small"
           secondary
           :loading="updates.loading"
+          title="Reads current WUD status without triggering a rescan."
           @click="retryPendingStatus"
         >
-          Check WUD status again
+          Refresh WUDup status
         </n-button>
       </n-flex>
     </n-alert>

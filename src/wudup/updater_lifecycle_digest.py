@@ -16,6 +16,8 @@ from .digest_verifier import (
 )
 from .images import (
     image_matches_resolved_target,
+    image_tag,
+    image_with_tag,
     normalize_digest,
 )
 from .updater_digest_pin import (
@@ -34,10 +36,6 @@ from .updater_models import (
     UpdaterError,
 )
 from .updater_planning import (
-    _digest_check_allow_repo,
-    _digest_check_image,
-)
-from .updater_planning import (
     _tag_updates as _shared_tag_updates,
 )
 
@@ -50,95 +48,143 @@ def _expected_digest_requirement(match: Match) -> str:
     return match.target.digest
 
 
+def _expected_digest_image(match: Match) -> str:
+    if match.target.desired_tag:
+        tag = match.target.desired_tag
+    elif "@sha256:" in match.compose_image:
+        tag = (
+            image_tag(match.resolved)
+            or image_tag(match.target.first)
+            or image_tag(match.compose_image)
+            or "latest"
+        )
+    else:
+        tag = (
+            image_tag(match.compose_image)
+            or image_tag(match.resolved)
+            or image_tag(match.target.first)
+            or "latest"
+        )
+    return image_with_tag(match.compose_image, tag)
+
+
+def _expected_digest_key(match: Match) -> tuple[int, int, str]:
+    return (
+        match.stack.index,
+        match.target.line_no,
+        _expected_digest_image(match),
+    )
+
+
 class _LifecycleDigestMixin:
-    def _verify_expected_digests(
+    @staticmethod
+    def _expected_digest_image(match: Match) -> str:
+        return _expected_digest_image(match)
+
+    def _preflight_expected_digests(
         self,
         stack: ComposeStack,
         matches: Sequence[Match],
-        images: Sequence[str],
     ) -> bool:
         ok = True
         requirements = {
             (
                 match.target.line_no,
                 match.target.first,
-                _digest_check_image(match),
-                _digest_check_allow_repo(match),
+                _expected_digest_image(match),
+                expected_digest,
+            )
+            for match in matches
+            if (expected_digest := _expected_digest_requirement(match))
+        }
+        for line_no, target, expected_image, expected in sorted(requirements):
+            requirement_key = (stack.index, line_no, expected_image)
+            result = self.digest_verifier.verify_tag_digest(expected_image, expected)
+            if result.ok:
+                self.preflight_digest_outcomes.viable.add(requirement_key)
+                continue
+            if result.reason != "stale-digest" or not result.digest:
+                self.preflight_digest_outcomes.viable.add(requirement_key)
+                self.log.warning(
+                    f"[{stack.name}] Digest preflight was inconclusive for line "
+                    f"{line_no} ({target}): wanted {expected}; pull verification "
+                    "will still run"
+                )
+                continue
+            ok = False
+            self.preflight_digest_outcomes.stale.add(requirement_key)
+            self._mark_stale_pending_digest(
+                stack,
+                line_no,
+                target,
+                expected,
+                result,
+            )
+        return ok
+
+    def _preflight_expected_digest_outcome(self, match: Match) -> str:
+        return self.preflight_digest_outcomes.outcome(_expected_digest_key(match))
+
+    def _expected_digest_outcome(self, match: Match) -> str:
+        return self.expected_digest_outcomes.outcome(_expected_digest_key(match))
+
+    def _expected_digest_failed_in_stack(self, stack: ComposeStack) -> bool:
+        return self.expected_digest_outcomes.failed_in_stack(stack.index)
+
+    def _verify_expected_digests(
+        self,
+        stack: ComposeStack,
+        matches: Sequence[Match],
+    ) -> bool:
+        ok = True
+        requirements = {
+            (
+                match.target.line_no,
+                match.target.first,
+                _expected_digest_image(match),
                 expected_digest,
             )
             for match in matches
             if (expected_digest := _expected_digest_requirement(match))
         }
         for requirement in sorted(requirements):
-            if not self._verify_expected_digest_requirement(
-                stack,
-                requirement,
-                images,
-            ):
+            if not self._verify_expected_digest_requirement(stack, requirement):
                 ok = False
         return ok
 
     def _verify_expected_digest_requirement(
         self,
         stack: ComposeStack,
-        requirement: tuple[int, str, str, bool, str],
-        images: Sequence[str],
+        requirement: tuple[int, str, str, str],
     ) -> bool:
-        line_no, target, expected_image, allow_repo, expected = requirement
-        digest_result, stale_result, matched = self._verify_expected_digest_images(
-            expected_image,
-            allow_repo,
-            expected,
-            images,
-        )
-        if digest_result is not None and digest_result.status == "untrusted":
+        line_no, target, expected_image, expected = requirement
+        requirement_key = (stack.index, line_no, expected_image)
+        digest_result = self.digest_verifier.verify(expected_image, expected)
+        if digest_result.status == "untrusted":
+            self.expected_digest_outcomes.viable.add(requirement_key)
             self.log.warning(
                 f"[{stack.name}] Digest verification was inconclusive for line {line_no} ({target}): wanted {expected}"
             )
             self._log_digest_untrusted(stack.name, digest_result)
             return True
-        if digest_result is not None and digest_result.ok:
+        if digest_result.ok:
+            self.expected_digest_outcomes.viable.add(requirement_key)
             return True
         self.log.error(
             f"[{stack.name}] Expected digest not reached for line {line_no} ({target}): wanted {expected}"
         )
-        if digest_result is not None:
-            self._log_digest_mismatch(stack.name, digest_result)
-        if stale_result is not None:
+        self._log_digest_mismatch(stack.name, digest_result)
+        if digest_result.reason == "stale-digest":
+            self.expected_digest_outcomes.stale.add(requirement_key)
             self._mark_stale_pending_digest(
                 stack,
                 line_no,
                 target,
                 expected,
-                stale_result,
+                digest_result,
             )
-        if not matched:
-            self.log.plain(
-                "ERROR",
-                f"[{stack.name}] No compose image matched line {line_no} while checking expected digest",
-            )
+        self.expected_digest_outcomes.failed.add(requirement_key)
         return False
-
-    def _verify_expected_digest_images(
-        self,
-        expected_image: str,
-        allow_repo: bool,
-        expected: str,
-        images: Sequence[str],
-    ) -> tuple[DigestCheckResult | None, DigestCheckResult | None, bool]:
-        matched = False
-        digest_result: DigestCheckResult | None = None
-        stale_result: DigestCheckResult | None = None
-        for image in images:
-            if not image_matches_resolved_target(image, expected_image, allow_repo):
-                continue
-            matched = True
-            digest_result = self.digest_verifier.verify(image, expected)
-            if digest_result.reason == "stale-digest":
-                stale_result = digest_result
-            if digest_result.ok:
-                break
-        return digest_result, stale_result, matched
 
     def _mark_stale_pending_digest(
         self,
@@ -146,25 +192,32 @@ class _LifecycleDigestMixin:
         line_no: int,
         target: str,
         expected: str,
-        result: DigestCheckResult,
+        result: DigestCheckResult | DigestResolveResult,
     ) -> None:
-        self.stale_pending_digest_lines.add((stack.index, line_no))
-        current = normalize_digest(result.tag_digest)
+        current = normalize_digest(
+            result.tag_digest
+            if isinstance(result, DigestCheckResult)
+            else result.digest
+        )
         current_text = f"; current tag digest is {current}" if current else ""
         self.log.plain(
             "ERROR",
             f"[{stack.name}] Pending WUD entry for line {line_no} is stale: "
             f"{target} requested {expected}{current_text}. "
-            "The queued digest was not restored; refresh or replace the pending entry.",
+            "Refresh or replace the pending entry before retrying.",
         )
 
     def _expected_digest_failure_reason(
         self,
-        stack: ComposeStack,
         matches: Sequence[Match],
     ) -> str:
-        match_lines = {(stack.index, match.target.line_no) for match in matches}
-        if match_lines and match_lines.issubset(self.stale_pending_digest_lines):
+        match_requirements = {_expected_digest_key(match) for match in matches}
+        failed_requirements = (
+            match_requirements & self.expected_digest_outcomes.failed
+        )
+        if failed_requirements and failed_requirements.issubset(
+            self.expected_digest_outcomes.stale
+        ):
             return STALE_PENDING_DIGEST_REASON
         return "expected-digest-not-reached"
 

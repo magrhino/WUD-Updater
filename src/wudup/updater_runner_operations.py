@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from pathlib import Path
 
 from . import updater_preflight, updater_tag_exclusions
 from .command import CommandError, CommandResult
@@ -16,6 +15,7 @@ from .compose import (
 from .digest_verifier import DigestCheckResult, DigestResolveResult
 from .images import normalize_digest
 from .updater_digest_pin import _digest_pin_match_tag
+from .updater_lifecycle_state import _StackUpdateState
 from .updater_matching import _target_image_for_match, _update_services
 from .updater_models import (
     AppliedDigestPinUpdate,
@@ -23,6 +23,7 @@ from .updater_models import (
     AppliedTagUpdate,
     DigestPinCandidate,
     DigestPinUpdate,
+    DigestRequirementKey,
     DigestUnpinUpdate,
     FailureRecord,
     ImageState,
@@ -154,35 +155,21 @@ class _RunnerOperationsMixin:
 
     def _handle_tag_update_failure(
         self,
-        stack: ComposeStack,
-        matches: Sequence[Match],
-        services: Sequence[str] | None,
-        applied_tags: Sequence[AppliedTagUpdate],
-        compose_backup: Path,
+        state: _StackUpdateState,
         reason: str,
         *,
         phase: str,
         command_error: CommandError | None = None,
         failure_health: str | None = None,
-        force_recreate: bool = False,
-        no_deps: bool = True,
-        running_services: Sequence[str] | None = None,
-        stopped_services: Sequence[str] = (),
+        failure_matches: Sequence[Match] | None = None,
     ) -> StackStatus:
         return self.lifecycle._handle_tag_update_failure(
-            stack,
-            matches,
-            services,
-            applied_tags,
-            compose_backup,
+            state,
             reason,
             phase=phase,
             command_error=command_error,
             failure_health=failure_health,
-            force_recreate=force_recreate,
-            no_deps=no_deps,
-            running_services=running_services,
-            stopped_services=stopped_services,
+            failure_matches=failure_matches,
         )
 
     def _write_tag_incident_log(
@@ -326,9 +313,8 @@ class _RunnerOperationsMixin:
         self,
         stack: ComposeStack,
         matches: Sequence[Match],
-        images: Sequence[str],
     ) -> bool:
-        return self.lifecycle._verify_expected_digests(stack, matches, images)
+        return self.lifecycle._verify_expected_digests(stack, matches)
 
     def _verify_digest_pin_updates(
         self,
@@ -507,13 +493,44 @@ class _RunnerOperationsMixin:
         line_numbers: Iterable[int],
     ) -> set[int]:
         candidates = set(line_numbers)
-        return {
-            match.target.line_no
-            for match in matches
-            if match.target.line_no in candidates
-            and (match.stack.index, match.target.line_no)
-            in self.stale_pending_digest_lines
-        }
+        requirements_by_line: dict[int, set[DigestRequirementKey]] = {}
+        for match in matches:
+            if not match.target.digest or "@sha256:" not in match.target.first:
+                continue
+            line_no = match.target.line_no
+            requirements_by_line.setdefault(line_no, set()).add(
+                (
+                    match.stack.index,
+                    line_no,
+                    self.lifecycle._expected_digest_image(match),
+                )
+            )
+
+        stale_lines: set[int] = set()
+        for line_no in candidates:
+            requirements = requirements_by_line.get(line_no, set())
+            if (
+                requirements
+                and requirements.issubset(
+                    self.preflight_digest_outcomes.stale
+                )
+            ) or (
+                requirements
+                and requirements.issubset(
+                    self.expected_digest_outcomes.stale
+                )
+            ):
+                stale_lines.add(line_no)
+        return stale_lines
+
+    def _preflight_expected_digest_outcome(self, match: Match) -> str:
+        return self.lifecycle._preflight_expected_digest_outcome(match)
+
+    def _expected_digest_outcome(self, match: Match) -> str:
+        return self.lifecycle._expected_digest_outcome(match)
+
+    def _expected_digest_failed_in_stack(self, stack: ComposeStack) -> bool:
+        return self.lifecycle._expected_digest_failed_in_stack(stack)
 
     def _mark_failed_lines_restored(self, failed_lines: Iterable[int]) -> None:
         restored = set(failed_lines)
