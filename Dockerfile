@@ -14,7 +14,7 @@ COPY src/wudup/discord_webhook_policy.json /src/wudup/discord_webhook_policy.jso
 RUN npm run build
 
 
-FROM python:3.14.6-slim-bookworm@sha256:4ff4b92a68355dbdb52584ab3391dff8d371a61d4e063468bfd0130e3189c6d9 AS wudup-runtime
+FROM python:3.14.7-slim-bookworm@sha256:23c59390fc717bf09f9336908199a0ae75d9c4264bf296123f94ad772fea3b52 AS wudup-runtime
 
 ARG TRUENAS_API_CLIENT_REF=""
 ARG APT_REFRESH="local"
