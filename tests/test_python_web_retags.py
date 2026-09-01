@@ -29,6 +29,7 @@ from wudup import web_retags as web_retags_module
 from wudup.db import init_db, open_db, upsert_known_image
 from wudup.digest_provenance import DigestTagProvenance
 from wudup.digest_verifier import DigestResolveResult
+from wudup.updater_models import ComposeTagRewriteError
 
 
 def test_retag_targets_endpoint_returns_eligible_tagged_service(
@@ -828,7 +829,10 @@ def test_retag_plan_sanitizes_compose_preview_errors(
     headers = _csrf_headers(fixture.client)
 
     def fail_preview(*_args: object, **_kwargs: object) -> None:
-        raise RuntimeError(f"invalid compose at {tmp_path}/secret/docker-compose.yml")
+        raise ComposeTagRewriteError(
+            "Service app has conflicting resolved-tag markers: latest, v1.25.0. "
+            f"Invalid compose at {tmp_path}/secret/docker-compose.yml"
+        )
 
     monkeypatch.setattr(
         web_retags_module,
@@ -849,6 +853,10 @@ def test_retag_plan_sanitizes_compose_preview_errors(
     assert "Could not safely preview retag for stack/app" in message
     assert "[REDACTED_PATH]" in message
     assert str(tmp_path) not in message
+    assert body["issues"][0]["hint"] == (
+        "Remove stale wudup.resolved-tag comments from this Compose service, "
+        "then preview again."
+    )
 
 
 def test_patch_digest_resolution_results_asserts_on_unknown_image(

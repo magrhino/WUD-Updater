@@ -1975,17 +1975,9 @@ def _update_service_resolved_tag_marker(
     service_config: CommentedMap,
     marker: str,
 ) -> None:
+    _clear_service_resolved_tag_markers(services, service, service_config)
     if marker:
         service_config.yaml_set_comment_before_after_key("image", before=marker)
-        return
-    marker_tag = _service_resolved_tag_marker(services, service, service_config)
-    if marker_tag:
-        _remove_service_resolved_tag_marker(
-            services,
-            service,
-            service_config,
-            f"{DIGEST_PIN_MARKER_PREFIX}{marker_tag}",
-        )
 
 
 def _remove_service_resolved_tag_marker(
@@ -2004,6 +1996,26 @@ def _remove_service_resolved_tag_marker(
     _empty_detached_service_comment_lists(services, service, service_config)
     remaining_marker = _service_resolved_tag_marker(services, service, service_config)
     if remaining_marker:
+        raise ComposeTagRewriteError(
+            f"Service {service} resolved-tag marker is attached ambiguously."
+        )
+
+
+def _clear_service_resolved_tag_markers(
+    services: CommentedMap,
+    service: str,
+    service_config: CommentedMap,
+) -> None:
+    for token_list in _service_comment_token_lists(services, service, service_config):
+        token_list.replace(
+            [
+                token
+                for token in token_list.tokens
+                if _clear_comment_token_resolved_tag_markers(token)
+            ]
+        )
+    _empty_detached_service_comment_lists(services, service, service_config)
+    if _service_resolved_tag_marker(services, service, service_config):
         raise ComposeTagRewriteError(
             f"Service {service} resolved-tag marker is attached ambiguously."
         )
@@ -2046,17 +2058,30 @@ def _service_comment_token_lists(
 def _comment_token_resolved_tag_markers(token: object) -> set[str]:
     values: set[str] = set()
     for line in str(getattr(token, "value", "")).splitlines():
-        text = line.strip()
-        if text.startswith("#"):
-            text = text[1:].strip()
-        marker_value = ""
-        for prefix in RESOLVED_TAG_MARKER_PREFIXES:
-            if text.startswith(prefix):
-                marker_value = text.removeprefix(prefix).strip()
-                break
+        marker_value = _comment_line_resolved_tag_marker(line)
         if marker_value:
             values.add(marker_value)
     return values
+
+
+def _clear_comment_token_resolved_tag_markers(token: object) -> bool:
+    value = str(getattr(token, "value", ""))
+    token.value = "".join(
+        line
+        for line in value.splitlines(keepends=True)
+        if not _comment_line_resolved_tag_marker(line)
+    )
+    return bool(token.value)
+
+
+def _comment_line_resolved_tag_marker(line: str) -> str:
+    text = line.strip()
+    if text.startswith("#"):
+        text = text[1:].strip()
+    for prefix in RESOLVED_TAG_MARKER_PREFIXES:
+        if text.startswith(prefix):
+            return text.removeprefix(prefix).strip()
+    return ""
 
 
 def _comment_token_matches_marker(token: object, marker: str) -> bool:

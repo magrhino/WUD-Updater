@@ -18,6 +18,83 @@ from wudup.updater_models import (
 
 
 class ComposeDigestPinTests(ComposeRewriteTestCase):
+    def test_retag_sequence_replaces_then_clears_resolved_tag_marker(
+        self,
+    ) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    # keep operator note\n"
+            "    # wudup.resolved-tag=latest\n"
+            "    image: repo/app:latest\n"
+            "    labels:\n"
+            "    - wud.tag.include=^latest$$\n"
+        )
+
+        rendered, _applied = render_compose_digest_pins(
+            compose_file,
+            (
+                self.digest_pin_update(
+                    old_image="repo/app:latest",
+                    resolved_tag="v1.25.0",
+                    planned_digest="sha256:v125",
+                ),
+            ),
+        )
+
+        self.assertIn("# keep operator note", rendered)
+        self.assertNotIn("wudup.resolved-tag=latest", rendered)
+        self.assertEqual(rendered.count("wudup.resolved-tag=v1.25.0"), 1)
+        compose_file.write_text(rendered, encoding="utf-8")
+        update = replace(
+            self.digest_pin_update(
+                old_image="repo/app@sha256:v125",
+                resolved_tag="v1.33.2",
+                planned_digest="sha256:v133",
+            ),
+            resolved_image="repo/app:v1.33.2",
+            final_image="repo/app:v1.33.2",
+            marker="",
+        )
+
+        rendered, _applied = render_compose_retag_updates(
+            compose_file,
+            (update,),
+        )
+
+        self.assertIn("# keep operator note", rendered)
+        self.assertNotIn("wudup.resolved-tag", rendered)
+        self.assertIn("image: repo/app:v1.33.2", rendered)
+
+    def test_render_retag_clears_conflicting_resolved_tag_markers(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    # keep operator note\n"
+            "    # wudup.resolved-tag=latest\n"
+            "    # wudup.resolved-tag=v1.25.0\n"
+            "    image: repo/app:latest\n"
+            "    labels:\n"
+            "    - wud.tag.include=^latest$$\n"
+        )
+        update = replace(
+            self.digest_pin_update(
+                old_image="repo/app:latest",
+                resolved_tag="v1.33.2",
+            ),
+            final_image="repo/app:v1.33.2",
+            marker="",
+        )
+
+        rendered, _applied = render_compose_retag_updates(
+            compose_file,
+            (update,),
+        )
+
+        self.assertIn("# keep operator note", rendered)
+        self.assertNotIn("wudup.resolved-tag", rendered)
+        self.assertIn("image: repo/app:v1.33.2", rendered)
+
     def test_render_retag_writes_selected_tag_and_removes_digest_marker(
         self,
     ) -> None:
