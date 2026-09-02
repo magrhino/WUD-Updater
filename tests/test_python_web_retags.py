@@ -29,7 +29,10 @@ from wudup import web_retags as web_retags_module
 from wudup.db import init_db, open_db, upsert_known_image
 from wudup.digest_provenance import DigestTagProvenance
 from wudup.digest_verifier import DigestResolveResult
-from wudup.updater_models import ComposeTagRewriteError
+from wudup.updater_models import (
+    ComposeTagRewriteError,
+    ResolvedTagMarkerConflictError,
+)
 
 
 def test_retag_targets_endpoint_returns_eligible_tagged_service(
@@ -853,10 +856,50 @@ def test_retag_plan_sanitizes_compose_preview_errors(
     assert "Could not safely preview retag for stack/app" in message
     assert "[REDACTED_PATH]" in message
     assert str(tmp_path) not in message
-    assert body["issues"][0]["hint"] == (
-        "Remove stale wudup.resolved-tag comments from this Compose service, "
-        "then preview again."
+    assert body["issues"][0]["hint"] == ""
+
+
+@pytest.mark.parametrize(
+    ("conflict_service", "expected_hint"),
+    [
+        (
+            "app",
+            (
+                "Remove stale wudup.resolved-tag comments from this Compose "
+                "service, then preview again."
+            ),
+        ),
+        ("other", ""),
+    ],
+)
+def test_retag_plan_scopes_marker_conflict_hint_to_service(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    conflict_service: str,
+    expected_hint: str,
+) -> None:
+    fixture = _make_retag_fixture(tmp_path)
+
+    def fail_preview(*_args: object, **_kwargs: object) -> None:
+        raise ResolvedTagMarkerConflictError(
+            service=conflict_service,
+            tags=("latest", "v1.25.0"),
+        )
+
+    monkeypatch.setattr(
+        web_retags_module,
+        "render_compose_retag_updates",
+        fail_preview,
     )
+
+    response = fixture.client.post(
+        "/api/v1/retag-plans",
+        json={"choices": [_switch_choice()]},
+        headers=_csrf_headers(fixture.client),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["issues"][0]["hint"] == expected_hint
 
 
 def test_patch_digest_resolution_results_asserts_on_unknown_image(

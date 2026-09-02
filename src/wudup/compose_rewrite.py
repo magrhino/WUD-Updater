@@ -31,6 +31,7 @@ from .updater_models import (
     DigestPinLabelRewriteApprovalRequired,
     DigestPinUpdate,
     DigestUnpinUpdate,
+    ResolvedTagMarkerConflictError,
     TagExclusionUpdate,
     TagStreamLabelRewriteApproval,
     TagStreamUpdate,
@@ -1957,9 +1958,9 @@ def _service_resolved_tag_marker(
     if not values:
         return ""
     if len(values) > 1:
-        raise ComposeTagRewriteError(
-            f"Service {service} has conflicting resolved-tag markers: "
-            f"{', '.join(sorted(values))}."
+        raise ResolvedTagMarkerConflictError(
+            service=service,
+            tags=tuple(sorted(values)),
         )
     tag = next(iter(values))
     if not tag_value_valid(tag):

@@ -76,7 +76,7 @@ from .updater_lifecycle_health import (
 )
 from .updater_models import (
     AppliedDigestPinUpdate,
-    ComposeTagRewriteError,
+    ResolvedTagMarkerConflictError,
     UpdaterProgressEvent,
 )
 from .web_auth import _redact_sensitive_text, _safe_exception_detail, _settings
@@ -1342,8 +1342,8 @@ def _retag_preview_failed_issues(
             hint=(
                 "Remove stale wudup.resolved-tag comments from this Compose "
                 "service, then preview again."
-                if isinstance(exc, ComposeTagRewriteError)
-                and "conflicting resolved-tag markers" in str(exc)
+                if isinstance(exc, ResolvedTagMarkerConflictError)
+                and exc.service == _retag_update_service(item)
                 else ""
             ),
         )
