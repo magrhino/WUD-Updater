@@ -2070,19 +2070,19 @@ def _clear_comment_token_resolved_tag_markers(token: object) -> bool:
     token.value = "".join(
         line
         for line in value.splitlines(keepends=True)
-        if not _comment_line_resolved_tag_marker(line)
+        if _comment_line_resolved_tag_marker(line) is None
     )
     return bool(token.value)
 
 
-def _comment_line_resolved_tag_marker(line: str) -> str:
+def _comment_line_resolved_tag_marker(line: str) -> str | None:
     text = line.strip()
     if text.startswith("#"):
         text = text[1:].strip()
     for prefix in RESOLVED_TAG_MARKER_PREFIXES:
         if text.startswith(prefix):
             return text.removeprefix(prefix).strip()
-    return ""
+    return None
 
 
 def _comment_token_matches_marker(token: object, marker: str) -> bool:

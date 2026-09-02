@@ -95,6 +95,29 @@ class ComposeDigestPinTests(ComposeRewriteTestCase):
         self.assertNotIn("wudup.resolved-tag", rendered)
         self.assertIn("image: repo/app:v1.33.2", rendered)
 
+    def test_render_retag_clears_empty_resolved_tag_markers(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    # keep operator note\n"
+            "    # wudup.resolved-tag=\n"
+            "    # wud-updater.resolved-tag=\n"
+            "    image: repo/app:latest\n"
+        )
+        update = replace(
+            self.digest_pin_update(old_image="repo/app:latest"),
+            final_image="repo/app:v1.33.2",
+            marker="",
+        )
+
+        rendered, _applied = render_compose_retag_updates(
+            compose_file,
+            (update,),
+        )
+
+        self.assertIn("# keep operator note", rendered)
+        self.assertNotIn("resolved-tag=", rendered)
+
     def test_render_retag_writes_selected_tag_and_removes_digest_marker(
         self,
     ) -> None:
