@@ -4,6 +4,26 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.59.4](https://github.com/magrhino/wudup/compare/v0.59.3...v0.59.4) (2026-09-02)
+
+
+### Bug Fixes
+
+* **retags:** repair conflicting resolved-tag markers ([#637](https://github.com/magrhino/wudup/issues/637)) ([3fe8a16](https://github.com/magrhino/wudup/commit/3fe8a165572f814aa4a51911bca73fb8f941cfb5))
+
+
+### Dependencies
+
+* **deps-dev:** bump ruff in the python-development group ([#627](https://github.com/magrhino/wudup/issues/627)) ([ecc9c9e](https://github.com/magrhino/wudup/commit/ecc9c9e7905816e3fa66e1c7449e1bf1c57875a6))
+* **deps-dev:** bump ruff in the python-development group ([#632](https://github.com/magrhino/wudup/issues/632)) ([c7ac82a](https://github.com/magrhino/wudup/commit/c7ac82af4fa4db564092373a7f506de8ee1dc665))
+* **deps-dev:** bump the npm-development group across 1 directory with 4 updates ([#635](https://github.com/magrhino/wudup/issues/635)) ([3c10086](https://github.com/magrhino/wudup/commit/3c10086cc7262baf4b1889ca839e137e2c77b5d5))
+* **deps:** bump the github-actions group with 3 updates ([#636](https://github.com/magrhino/wudup/issues/636)) ([27b752e](https://github.com/magrhino/wudup/commit/27b752ebf41a333f2aca82ed4681000922bce2bb))
+* **deps:** bump the github-actions group with 5 updates ([#630](https://github.com/magrhino/wudup/issues/630)) ([b2573d9](https://github.com/magrhino/wudup/commit/b2573d98a8373d16bc4ddcc5cd6e866ab7bde343))
+* **deps:** bump the npm-production group in /webui with 2 updates ([#629](https://github.com/magrhino/wudup/issues/629)) ([cf1627d](https://github.com/magrhino/wudup/commit/cf1627db27245ad926def62139fdf5a9d11f63ec))
+* **deps:** bump the npm-production group in /webui with 2 updates ([#633](https://github.com/magrhino/wudup/issues/633)) ([65c31c4](https://github.com/magrhino/wudup/commit/65c31c431965a8a1712bbbaaafc139d2b01f6729))
+* **deps:** bump the python-production group with 2 updates ([#631](https://github.com/magrhino/wudup/issues/631)) ([8b351e4](https://github.com/magrhino/wudup/commit/8b351e444d0e7007115e2a34e95c1afdf2a0defc))
+* **deps:** bump the python-production group with 3 updates ([#626](https://github.com/magrhino/wudup/issues/626)) ([1e13299](https://github.com/magrhino/wudup/commit/1e13299d4382dbaab614e7b8736fb7db558ab2c3))
+
 ## [0.59.3](https://github.com/magrhino/wudup/compare/v0.59.2...v0.59.3) (2026-08-19)
 
 
