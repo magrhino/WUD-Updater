@@ -1,19 +1,13 @@
 import type { WebApi } from "../client";
 import type {
-  CoreUpdateTourStatus,
-  CoreUpdateTourStep,
   CsrfResponse,
   DigestPinLabelRewriteApprovalRequest,
-  PendingCleanupLine,
   PendingMetadataRefreshRequest,
   PendingRescanLine,
   PendingRescanScope,
   PlanMutationOptions,
   RetagChoiceRequest,
-  SelfUpdatePlanResponse,
-  SelfUpdateResponse,
   SnoozeState,
-  StateOperation,
   TagExclusionStatusFilter,
   TagOverrideRequest,
 } from "../types";
@@ -25,6 +19,10 @@ import { DemoApiState } from "./state";
 
 function rejectStaticDemoMutation(): never {
   throw new Error(STATIC_DEMO_READ_ONLY_MESSAGE);
+}
+
+async function rejectStaticDemoMutationAsync(): Promise<never> {
+  return rejectStaticDemoMutation();
 }
 
 export function createDemoWebApi(): WebApi {
@@ -51,19 +49,12 @@ export function createDemoWebApi(): WebApi {
     logout: async (_csrfToken: string) => state.session(),
     status: async () => state.status(),
     settings: async () => state.settings(),
-    updateManagedSettings: async (
-      _values: Record<string, string>,
-      _csrfToken: string,
-    ) => rejectStaticDemoMutation(),
+    updateManagedSettings: rejectStaticDemoMutationAsync,
     doctor: async (_csrfToken: string) => state.doctor(),
     onboardingChecklist: async (_csrfToken: string) => state.onboardingChecklist(),
-    dismissOnboarding: async (_csrfToken: string) => rejectStaticDemoMutation(),
+    dismissOnboarding: rejectStaticDemoMutationAsync,
     coreUpdateTour: async () => state.coreUpdateTour,
-    updateCoreUpdateTour: async (
-      _status: CoreUpdateTourStatus,
-      _step: CoreUpdateTourStep,
-      _csrfToken: string,
-    ) => rejectStaticDemoMutation(),
+    updateCoreUpdateTour: rejectStaticDemoMutationAsync,
     pending: async () => state.pendingResponse(),
     pendingMetadata: async (
       request: PendingMetadataRefreshRequest,
@@ -72,8 +63,7 @@ export function createDemoWebApi(): WebApi {
       state.pendingMetadata(request),
     updateTargets: async () => state.updateTargets(),
     retagTargets: async () => state.retagTargets(),
-    refreshRetagGithubLatest: async (_csrfToken: string) =>
-      rejectStaticDemoMutation(),
+    refreshRetagGithubLatest: rejectStaticDemoMutationAsync,
     startRetagPreview: async (
       choices: RetagChoiceRequest[],
       _csrfToken: string,
@@ -86,25 +76,11 @@ export function createDemoWebApi(): WebApi {
       _csrfToken: string,
       _options = {},
     ) => state.createRetagPlan(choices),
-    applyRetagPlan: async (
-      _planId: string,
-      _choices: RetagChoiceRequest[],
-      _csrfToken: string,
-      _options = {},
-    ) => rejectStaticDemoMutation(),
+    applyRetagPlan: rejectStaticDemoMutationAsync,
     diagnosticsSupportBundle: async () => state.diagnosticsSupportBundle(),
-    cleanupPending: async (
-      _cleanupId: string,
-      _lines: PendingCleanupLine[],
-      _csrfToken: string,
-    ) => rejectStaticDemoMutation(),
-    createRemovalPlan: async (_lineNumbers: number[], _csrfToken: string) =>
-      rejectStaticDemoMutation(),
-    removeSelectedPending: async (
-      _removalId: string,
-      _lines: PendingCleanupLine[],
-      _csrfToken: string,
-    ) => rejectStaticDemoMutation(),
+    cleanupPending: rejectStaticDemoMutationAsync,
+    createRemovalPlan: rejectStaticDemoMutationAsync,
+    removeSelectedPending: rejectStaticDemoMutationAsync,
     rescanPending: async (
       scope: PendingRescanScope,
       lines: PendingRescanLine[],
@@ -112,35 +88,23 @@ export function createDemoWebApi(): WebApi {
     ) => state.rescanPending(scope, lines),
     releaseNotes: async () => state.releaseNotes(),
     refreshReleaseNotes: async (_csrfToken: string) => state.releaseNotes(),
-    previewReleaseNotifications: async (_source, _csrfToken: string) =>
-      rejectStaticDemoMutation(),
-    sendReleaseNotifications: async (_source, _csrfToken: string) =>
-      rejectStaticDemoMutation(),
-    testReleaseNotificationWebhook: async (_csrfToken: string) =>
-      rejectStaticDemoMutation(),
+    previewReleaseNotifications: rejectStaticDemoMutationAsync,
+    sendReleaseNotifications: rejectStaticDemoMutationAsync,
+    testReleaseNotificationWebhook: rejectStaticDemoMutationAsync,
     securityScans: async () => state.securityScans(),
-    refreshSecurityScans: async (_csrfToken: string) =>
-      rejectStaticDemoMutation(),
+    refreshSecurityScans: rejectStaticDemoMutationAsync,
     securityScanJob: async (jobId: string) => state.securityScanJob(jobId),
     selfUpdate: async () => state.selfUpdate(),
     planSelfUpdate: async (_csrfToken: string) => state.selfUpdatePlan(),
-    applySelfUpdate: async (
-      _csrfToken: string,
-      _update: SelfUpdateResponse,
-    ) => rejectStaticDemoMutation(),
-    prepareSelfUpdate: async (
-      _csrfToken: string,
-      _update: SelfUpdateResponse,
-      _plan: SelfUpdatePlanResponse,
-    ) => rejectStaticDemoMutation(),
+    applySelfUpdate: rejectStaticDemoMutationAsync,
+    prepareSelfUpdate: rejectStaticDemoMutationAsync,
     servicePolicies: async () => state.servicePolicies(),
     snoozes: async (snoozeState: SnoozeState = "active") =>
       state.snoozeRecords(snoozeState),
     tagExclusions: async (status: TagExclusionStatusFilter = "active") =>
       state.tagExclusionRecords(status),
-    stateOperation: async (_operation: StateOperation, _csrfToken: string) =>
-      rejectStaticDemoMutation(),
-    restartContainer: async (_csrfToken: string) => rejectStaticDemoMutation(),
+    stateOperation: rejectStaticDemoMutationAsync,
+    restartContainer: rejectStaticDemoMutationAsync,
     createPlan: async (
       lineNumbers: number[],
       allowTagUpdates: boolean,
@@ -156,26 +120,10 @@ export function createDemoWebApi(): WebApi {
         digestPinLabelRewriteApprovals,
         options,
       ),
-    createJob: async (
-      _planId: string,
-      _lineNumbers: number[],
-      _allowTagUpdates: boolean,
-      _tagOverrides: TagOverrideRequest[],
-      _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
-      _csrfToken: string,
-      _options: PlanMutationOptions = {},
-    ) => rejectStaticDemoMutation(),
-    applyPlan: async (
-      _planId: string,
-      _lineNumbers: number[],
-      _allowTagUpdates: boolean,
-      _tagOverrides: TagOverrideRequest[],
-      _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
-      _csrfToken: string,
-      _options: PlanMutationOptions = {},
-    ) => rejectStaticDemoMutation(),
-    job: async (_jobId: string) => rejectStaticDemoMutation(),
-    applyJob: async (_jobId: string) => rejectStaticDemoMutation(),
+    createJob: rejectStaticDemoMutationAsync,
+    applyPlan: rejectStaticDemoMutationAsync,
+    job: rejectStaticDemoMutationAsync,
+    applyJob: rejectStaticDemoMutationAsync,
     openJobStream: (_jobId: string) => rejectStaticDemoMutation(),
     runs: async () => state.runSummaries(),
     runDetail: async (runId: number) => state.runDetail(runId),

@@ -325,17 +325,9 @@ def _safe_log_path(settings: WebSettings, raw_log_file: str) -> Path | None:
             status_code=500,
             detail=_safe_exception_detail(settings, "could not resolve log file", exc),
         ) from exc
-    if not _path_is_or_under(resolved_candidate, resolved_log_dir):
+    if not resolved_candidate.is_relative_to(resolved_log_dir):
         raise HTTPException(status_code=403, detail="log file is outside WUD_LOG_DIR")
     return resolved_candidate
-
-
-def _path_is_or_under(path: Path, parent: Path) -> bool:
-    try:
-        path.relative_to(parent)
-    except ValueError:
-        return False
-    return True
 
 
 def _run_log_response(

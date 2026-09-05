@@ -107,23 +107,15 @@ def _container_bind_mount_path_issue(
     if not source.is_absolute():
         return ""
     for prefix in _HELPER_ONLY_MOUNT_PREFIXES:
-        if _path_is_or_under(source, prefix):
+        if source.is_relative_to(prefix):
             base_hint = ""
-            if _path_is_or_under(source, docker_base):
+            if source.is_relative_to(docker_base):
                 base_hint = f" from DOCKER_BASE={docker_base}"
             return (
                 f"the source path is under helper-only prefix {prefix}{base_hint}; "
                 "the Docker daemon must be able to see bind sources at the same path"
             )
     return ""
-
-
-def _path_is_or_under(path: Path, parent: Path) -> bool:
-    try:
-        path.relative_to(parent)
-    except ValueError:
-        return False
-    return True
 
 
 def _digest_check_image(match: Match) -> str:

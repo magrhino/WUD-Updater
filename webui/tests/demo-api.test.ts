@@ -463,6 +463,9 @@ describe("demo web API", () => {
         "csrf",
       ),
       api.restartContainer("csrf"),
+      api.createJob("demo", [], false, [], [], "csrf"),
+      api.job("demo"),
+      api.applyJob("demo"),
       api.applyPlan(
         "demo-session-2-allow-tags-2026.6.0",
         [2],
@@ -475,8 +478,10 @@ describe("demo web API", () => {
     ];
 
     for (const promise of mutationExpectations) {
+      expect(promise).toBeInstanceOf(Promise);
       await expect(promise).rejects.toThrow(READ_ONLY_MESSAGE);
     }
+    expect(() => api.openJobStream("demo")).toThrow(READ_ONLY_MESSAGE);
     await expect(api.status()).resolves.toMatchObject({ pending_count: 8 });
   });
 
