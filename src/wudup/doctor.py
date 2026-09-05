@@ -583,9 +583,9 @@ class Doctor:
 
         if (
             resolved_dst == Path("/")
-            or _path_is_or_under(resolved_dst, resolved_app)
-            or _path_is_or_under(resolved_dst, resolved_base)
-            or _path_is_or_under(resolved_dst, resolved_out)
+            or resolved_dst.is_relative_to(resolved_app)
+            or resolved_dst.is_relative_to(resolved_base)
+            or resolved_dst.is_relative_to(resolved_out)
         ):
             return f"unsafe WUD_SCRIPTS_DIR {dst}"
 
@@ -663,7 +663,7 @@ class Doctor:
             if not source.is_absolute():
                 continue
             for prefix in HELPER_ONLY_MOUNT_PREFIXES:
-                if _path_is_or_under(source, prefix):
+                if source.is_relative_to(prefix):
                     unsafe.append(f"{mount.service}: {source}")
                     break
         if unsafe:
@@ -1135,14 +1135,6 @@ def _canonical_dir_target(path: Path) -> Path | None:
     for part in suffix:
         resolved = resolved / part
     return resolved
-
-
-def _path_is_or_under(path: Path, parent: Path) -> bool:
-    try:
-        path.relative_to(parent)
-    except ValueError:
-        return False
-    return True
 
 
 def _failure_detail(result: CommandResult) -> str:
