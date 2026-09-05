@@ -67,7 +67,7 @@ def test_pending_rescan_endpoint_enforces_auth_csrf_and_read_only(
     assert get_response.status_code == 405
 
 
-def test_pending_all_rescan_targets_pending_container_ids_and_audits(
+def test_pending_all_rescan_runs_global_watch_and_audits(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -100,13 +100,10 @@ def test_pending_all_rescan_targets_pending_container_ids_and_audits(
     assert body["wud_api"]["metadata_available"] is True
     assert calls == [
         ("GET", "/health"),
-        ("GET", "/api/containers"),
-        ("GET", "/health"),
-        ("POST", "/api/containers/docker.local.app/watch"),
+        ("POST", "/api/containers/watch"),
         ("GET", "/health"),
         ("GET", "/api/containers"),
     ]
-    assert ("POST", "/api/containers/watch") not in calls
     with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         run = conn.execute(
             "SELECT * FROM update_runs WHERE id = ?",
@@ -122,154 +119,96 @@ def test_pending_all_rescan_targets_pending_container_ids_and_audits(
     assert metadata["wud_api"]["state"] == "ready"
 
 
-@pytest.mark.parametrize(
-    ("missing_count", "watched_count", "missing_detail"),
-    (
-        (1, 2, "WUD skipped 1 container that no longer exists"),
-        (2, 1, "WUD skipped 2 containers that no longer exist"),
-    ),
-)
-def test_pending_all_rescan_continues_after_missing_containers_and_audits_partial(
-    tmp_path: Path,
-    monkeypatch,
-    missing_count: int,
-    watched_count: int,
-    missing_detail: str,
+@pytest.mark.parametrize("initial_store", ["empty", "stale", "up-to-date"])
+@pytest.mark.parametrize("pending_source", ["api", "file"])
+def test_pending_all_rescan_discovers_containers_outside_pending_store(
+    tmp_path: Path, monkeypatch, initial_store: str, pending_source: str,
 ) -> None:
-    _install_wud_api(
-        monkeypatch,
-        containers=[
-            container_payload(name="missing-one"),
-            container_payload(name="missing-two"),
-            container_payload(name="app"),
-        ],
-    )
-    posts: list[str] = []
+    containers = [] if initial_store == "empty" else [
+        container_payload(name=initial_store, update_available=False)
+    ]
+    discovered = [
+        container_payload(name="new-app"),
+        container_payload(name="current", update_available=False),
+    ]
 
-    def post_json(url: str, _client_config=None, **_kwargs) -> object:
-        path = urllib.parse.urlsplit(url).path
-        posts.append(path)
-        if len(posts) <= missing_count:
-            raise HTTPError(url=url, code=404, msg="Not Found", hdrs=None, fp=None)
-        return {"status": "ok"}
+    def full_watch(path: str) -> object:
+        assert path == "/api/containers/watch"
+        containers[:] = discovered
+        return containers
 
-    monkeypatch.setattr(web_wud_api, "_post_json", post_json)
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_API_BASE_URL": "https://wud.rescan-missing.test:3000",
-        },
-    )
+    calls = install_recording_wud_api(monkeypatch, containers, post_container=full_watch)
+    client = _client(tmp_path, {
+        "WUD_WEB_DEV_NO_AUTH": "true",
+        "WUD_WEB_MUTATIONS_ENABLED": "true",
+        "WUD_PENDING_SOURCE": pending_source,
+        "WUD_API_BASE_URL": "https://wud.rescan-discovery.test:3000",
+    })
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("obsolete\n", encoding="utf-8")
+    client.get("/api/v1/pending")
+    calls.clear()
 
     response = client.post(
-        "/api/v1/pending/rescan",
-        json=rescan_payload(),
-        headers=_csrf_headers(client),
+        "/api/v1/pending/rescan", json=rescan_payload(), headers=_csrf_headers(client),
     )
 
     assert response.status_code == 200
-    body = response.json()
-    assert body["status"] == "partial"
-    assert body["requested_count"] == 3
-    assert body["watched_count"] == watched_count
-    assert missing_detail in body["wud_api"]["detail"]
-    assert len(posts) == 3
-    assert set(posts) == {
-        "/api/containers/docker.local.missing-one/watch",
-        "/api/containers/docker.local.missing-two/watch",
-        "/api/containers/docker.local.app/watch",
+    assert response.json()["status"] == "success"
+    assert response.json()["watched_count"] == 1
+    assert [path for method, path in calls if method == "POST"] == [
+        "/api/containers/watch"
+    ]
+    snapshot = web_wud_api.get_snapshot(
+        settings(tmp_path, "https://wud.rescan-discovery.test:3000"),
+        include_containers=True,
+    )
+    assert {container.id for container in snapshot.containers} == {
+        "docker.local.new-app"
     }
-    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
-        run = conn.execute(
-            "SELECT * FROM update_runs WHERE id = ?",
-            (body["audit_run_id"],),
-        ).fetchone()
-    metadata = json.loads(run["metadata_json"])
-    assert run["status"] == "success"
-    assert metadata["status"] == "partial"
-    assert metadata["requested_count"] == 3
-    assert metadata["watched_count"] == watched_count
+    assert wud_file.read_text(encoding="utf-8") == "obsolete\n"
+    if pending_source == "api":
+        pending = client.get("/api/v1/pending").json()
+        assert pending["count"] == 1
+        assert pending["items"][0]["wud_metadata"]["id"] == "docker.local.new-app"
 
 
-def test_pending_all_rescan_scopes_embedded_429_cooldown_to_container(
-    tmp_path: Path,
-    monkeypatch,
+def test_pending_all_rescan_preserves_global_rate_limit_cooldown(
+    tmp_path: Path, monkeypatch,
 ) -> None:
-    pending = container_payload(name="app")
-    degraded = degraded_container_payload(
-        name="bazarr",
-        image="ghcr.io/linuxserver/bazarr",
-    )
-    unsupported = degraded_container_payload(
-        name="socket-proxy",
-        image="lscr.io/linuxserver/socket-proxy",
-        error="Unsupported Registry unknown",
-    )
-    containers = [pending, degraded, unsupported]
+    degraded = degraded_container_payload(name="app", image="repo/app")
     calls = install_recording_wud_api(
-        monkeypatch,
-        containers,
-        post_container=lambda path: degraded
-        if path == "/api/containers/docker.local.bazarr/watch"
-        else pending,
+        monkeypatch, [degraded], post_container=lambda _path: [degraded],
     )
-    client = _client(
-        tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_PENDING_SOURCE": "api",
-            "WUDUP_LEGACY_SCRIPTS": "false",
-            "WUD_API_BASE_URL": "https://wud.rescan-429.test:3000",
-        },
-    )
-    calls.clear()
-
-    response = client.post(
-        "/api/v1/pending/rescan",
-        json=rescan_payload(),
-        headers=_csrf_headers(client),
-    )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["status"] == "partial"
-    assert body["requested_count"] == 2
-    assert body["watched_count"] == 2
+    client = _client(tmp_path, {
+        "WUD_WEB_DEV_NO_AUTH": "true",
+        "WUD_WEB_MUTATIONS_ENABLED": "true",
+        "WUD_API_BASE_URL": "https://wud.rescan-429.test:3000",
+    })
+    for attempt in range(2):
+        response = client.post(
+            "/api/v1/pending/rescan", json=rescan_payload(), headers=_csrf_headers(client),
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == ("partial" if attempt == 0 else "blocked")
+        assert response.json()["watched_count"] == (1 if attempt == 0 else 0)
+        assert "WUD temporarily paused registry checks" in response.json()["wud_api"]["detail"]
     assert [path for method, path in calls if method == "POST"] == [
-        "/api/containers/docker.local.bazarr/watch",
-        "/api/containers/docker.local.app/watch",
-    ]
-    assert "Update status is unknown for 1 container" in body["wud_api"]["detail"]
-
-    calls.clear()
-    cooldown = client.post(
-        "/api/v1/pending/rescan",
-        json=rescan_payload(),
-        headers=_csrf_headers(client),
-    )
-
-    assert cooldown.status_code == 200
-    assert cooldown.json()["status"] == "partial"
-    assert cooldown.json()["watched_count"] == 1
-    assert "WUD temporarily paused registry checks" in (
-        cooldown.json()["wud_api"]["detail"]
-    )
-    assert [path for method, path in calls if method == "POST"] == [
-        "/api/containers/docker.local.app/watch"
+        "/api/containers/watch"
     ]
 
 
+@pytest.mark.parametrize("clear_degraded", [False, True])
 def test_pending_all_rescan_succeeds_after_degraded_container_clears(
     tmp_path: Path,
     monkeypatch,
+    clear_degraded: bool,
 ) -> None:
     pending = container_payload(name="app")
     degraded = degraded_container_payload(
         name="bazarr",
         image="ghcr.io/linuxserver/bazarr",
+        error="registry lookup failed",
     )
     unsupported = degraded_container_payload(
         name="socket-proxy",
@@ -284,10 +223,10 @@ def test_pending_all_rescan_succeeds_after_degraded_container_clears(
     containers = [pending, degraded, unsupported]
 
     def post_container(path: str) -> object:
-        if path == "/api/containers/docker.local.bazarr/watch":
+        assert path == "/api/containers/watch"
+        if clear_degraded:
             containers[1] = cleared
-            return cleared
-        return pending
+        return containers
 
     calls = install_recording_wud_api(
         monkeypatch,
@@ -314,14 +253,14 @@ def test_pending_all_rescan_succeeds_after_degraded_container_clears(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "success"
-    assert body["requested_count"] == 2
-    assert body["watched_count"] == 2
+    assert body["status"] == ("success" if clear_degraded else "partial")
+    assert body["requested_count"] == 1
+    assert body["watched_count"] == 1
     assert [path for method, path in calls if method == "POST"] == [
-        "/api/containers/docker.local.bazarr/watch",
-        "/api/containers/docker.local.app/watch",
+        "/api/containers/watch",
     ]
-    assert ("POST", "/api/containers/watch") not in calls
+    if not clear_degraded:
+        assert "Update status is unknown for 1 container" in body["wud_api"]["detail"]
 
 
 def test_pending_rescan_does_not_watch_when_audit_start_fails(
@@ -477,7 +416,7 @@ def test_pending_rescan_reports_wud_watch_auth_required_on_http_error(
     assert body["status"] == "blocked"
     assert body["wud_api"]["state"] == "auth_required"
     assert body["wud_api"]["detail"] == "WUD API watch request requires authentication"
-    assert posts == ["/api/containers/docker.local.app/watch"]
+    assert posts == ["/api/containers/watch"]
     snapshot = web_wud_api.get_snapshot(
         settings(tmp_path, base_url),
         include_containers=True,

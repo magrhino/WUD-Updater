@@ -690,7 +690,11 @@ def metadata_by_target(
 
 
 def watch_all(settings: WebSettings) -> WudApiWatchResult:
-    return _watch_paths(settings, ("/api/containers/watch",))
+    result = _watch_paths(settings, ("/api/containers/watch",))
+    return replace(
+        result,
+        remaining_degraded_container_ids=result.snapshot.retryable_degraded_container_ids,
+    )
 
 
 def watch_containers(
@@ -1188,20 +1192,22 @@ def _watch_batch(
                 time.monotonic() - request_started,
             )
             watched_count += 1
-            rate_limited_container_id = _watch_rate_limited_container_id(
-                payload,
-                settings,
-            )
-            if rate_limited_container_id is not None:
-                _start_watch_rate_limit_cooldown(
-                    cache_key,
-                    rate_limited_container_id or requested_container_id,
+            # A global watch returns a list; selected watches return one container.
+            for container_payload in payload if isinstance(payload, list) else [payload]:
+                rate_limited_container_id = _watch_rate_limited_container_id(
+                    container_payload,
+                    settings,
                 )
-                cooldown_remaining = max(
-                    cooldown_remaining,
-                    WUD_API_RATE_LIMIT_COOLDOWN_SECONDS,
-                )
-                watched_all = False
+                if rate_limited_container_id is not None:
+                    _start_watch_rate_limit_cooldown(
+                        cache_key,
+                        rate_limited_container_id or requested_container_id,
+                    )
+                    cooldown_remaining = max(
+                        cooldown_remaining,
+                        WUD_API_RATE_LIMIT_COOLDOWN_SECONDS,
+                    )
+                    watched_all = False
         except urllib.error.HTTPError as exc:
             if exc.code == 404 and requested_container_id:
                 remaining_watch_seconds -= max(

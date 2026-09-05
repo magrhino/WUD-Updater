@@ -628,6 +628,27 @@ describe("pending view selection actions", () => {
     expect(previewReleaseNotifications).not.toHaveBeenCalled();
   });
 
+  it.each(["success", "partial"] as const)("describes a %s full scan without a container count", async (status) => {
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    updates.pendingRescan = pendingRescanResponse({
+      scope: "all",
+      status,
+      requested_count: 1,
+      watched_count: 1,
+      wud_api: wudApiStatus({ detail: "Update status is unknown for 2 containers." }),
+    });
+    const wrapper = mountPendingView(pinia);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Full WUD scan requested.");
+    expect(wrapper.text()).not.toContain("WUD rescan requested for 1 container.");
+    if (status === "partial") {
+      expect(wrapper.text()).toContain("Update status is unknown for 2 containers.");
+    }
+  });
+
   it("disables WUD rescan controls in read-only mode", async () => {
     const { pinia, settings, updates } = setupStores(false);
     updates.pending = pendingResponse();
