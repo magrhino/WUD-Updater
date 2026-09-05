@@ -41,6 +41,16 @@ class ComposeTagRewriteError(RuntimeError):
     """Raised when a Compose tag rewrite cannot be proven safe."""
 
 
+class ResolvedTagMarkerConflictError(ComposeTagRewriteError):
+    def __init__(self, *, service: str, tags: tuple[str, ...]) -> None:
+        self.service = service
+        self.tags = tags
+        super().__init__(
+            f"Service {service} has conflicting resolved-tag markers: "
+            f"{', '.join(tags)}."
+        )
+
+
 @dataclass(frozen=True)
 class UpdaterOptions:
     docker_base: Path

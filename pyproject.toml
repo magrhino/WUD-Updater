@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wudup"
-version = "0.59.3"
+version = "0.59.4"
 description = "Reviewable Docker Compose updates powered by What's Up Docker."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,7 +24,7 @@ dev = [
     "pytest>=8.0,<10",
     "pytest-cov>=4.0,<8",
     "pytest-xdist>=3.5,<4",
-    "ruff==0.16.3",
+    "ruff==0.16.4",
     "pip-tools>=7.4,<8",
 ]
 
