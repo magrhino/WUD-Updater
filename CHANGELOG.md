@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.59.5](https://github.com/magrhino/wudup/compare/v0.59.4...v0.59.5) (2026-09-06)
+
+
+### Bug Fixes
+
+* **wud:** run a full watch from the rescan button ([#639](https://github.com/magrhino/wudup/issues/639)) ([4ea60d1](https://github.com/magrhino/wudup/commit/4ea60d164851f7b6b4e2ec97d052ffe13046b24e))
+
 ## [0.59.4](https://github.com/magrhino/wudup/compare/v0.59.3...v0.59.4) (2026-09-02)
 
 
