@@ -263,14 +263,16 @@ const pendingRescanMessage = computed(() => {
     const detail = rescan.wud_api.detail || "WUD API rescan is unavailable.";
     return `WUD rescan did not run: ${detail}`;
   }
-  const watched = pluralize(rescan.watched_count, "container");
+  const requested = rescan.scope === "all"
+    ? "Full WUD scan requested."
+    : `WUD rescan requested for ${pluralize(rescan.watched_count, "container")}.`;
   if (rescan.status === "partial") {
     const detail = rescan.skipped.length
       ? `${pluralize(rescan.skipped.length, "selected entry")} skipped.`
       : rescan.wud_api.detail || "Some requested containers are still degraded.";
-    return `WUD rescan requested for ${watched}. ${detail}`;
+    return `${requested} ${detail}`;
   }
-  return `WUD rescan requested for ${watched}.`;
+  return requested;
 });
 const releaseNotificationsDisabledReason = computed(() => {
   if (updates.releaseNotes?.notifications_enabled === false) {

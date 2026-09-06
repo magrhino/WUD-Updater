@@ -35,10 +35,17 @@ image, platform, and installed digest or tag to match. Explicit Docker Hub
 aliases are equivalent to the default unqualified registry; other registries
 must match exactly. This prevents already-applied, metadata-free, and unrelated
 lines from being revived. The API remains the active pending source, and an
-explicit selected rescan targets only the recovered WUD container IDs. The
-“rescan all pending updates” action likewise deduplicates and watches only IDs
-represented by current pending entries. Recovery never triggers a global WUD
-watch or changes the file.
+explicit selected rescan targets only the recovered WUD container IDs. Recovery
+never triggers a global WUD watch or changes the file.
+
+The **Rescan WUD** button requests a full scan through `POST /api/containers/watch`.
+WUD runs all configured watchers, discovering eligible containers even when its
+stored container list is empty or contains obsolete IDs. WUD's configured watcher
+filters still apply. Selected rescans refresh only the selected WUD container IDs.
+WUDup leaves the pending file unchanged; WUD's configured triggers may run during
+the scan. Full-scan audit counts represent one global watch request, rather than
+the number of containers discovered. Registry errors remain visible as a partial
+result, and existing rate-limit cooldowns can temporarily block a full scan.
 
 WUDup polls WUD's API directly for WebUI release-note notifications. Set
 `WUDUP_LEGACY_SCRIPTS=false` only after removing legacy WUD command triggers and
