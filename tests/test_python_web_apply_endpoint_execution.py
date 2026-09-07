@@ -890,8 +890,9 @@ def test_plan_blocks_mixed_fresh_and_retained_selection(
     )
     assert fresh_metadata_check["status"] == "WARN"
     assert fresh_metadata_check["detail"] == (
-        "Every selected update has current information. WUD could not refresh "
-        "other containers. View affected containers for details."
+        "Every selected update has current information. The last WUD "
+        "update check failed for other containers. "
+        "View affected containers for details."
     )
 
 
