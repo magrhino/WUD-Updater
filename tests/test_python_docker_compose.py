@@ -703,7 +703,7 @@ class ComposeCliTests(FakeDockerCase):
             [
                 "compose -f docker-compose.yml pull app",
                 "compose -f docker-compose.yml stop app",
-                "compose -f docker-compose.yml up -d --remove-orphans --no-deps app",
+                "compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps app",
             ],
         )
 
@@ -724,7 +724,7 @@ class ComposeCliTests(FakeDockerCase):
                 "compose -f docker-compose.yml pull ",
                 "compose -f docker-compose.yml config --services",
                 "compose -f docker-compose.yml stop app",
-                "compose -f docker-compose.yml up -d --remove-orphans --force-recreate",
+                "compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --force-recreate",
             ],
         )
 
@@ -762,7 +762,7 @@ class ComposeCliTests(FakeDockerCase):
                 "compose -f docker-compose.yml pull ",
                 "compose -f docker-compose.yml config --services",
                 "compose -f docker-compose.yml stop app",
-                "compose -f docker-compose.yml up -d --remove-orphans --force-recreate",
+                "compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --force-recreate",
             ],
         )
 
@@ -783,7 +783,7 @@ class ComposeCliTests(FakeDockerCase):
             [
                 "compose -f docker-compose.yml pull app",
                 "compose -f docker-compose.yml pause app",
-                "compose -f docker-compose.yml up -d --remove-orphans --no-deps app",
+                "compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps app",
                 "compose -f docker-compose.yml unpause app",
             ],
         )
@@ -809,7 +809,7 @@ class ComposeCliTests(FakeDockerCase):
             [
                 "compose -f docker-compose.yml pull app",
                 "compose -f docker-compose.yml pause app",
-                "compose -f docker-compose.yml up -d --remove-orphans --no-deps app",
+                "compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps app",
                 "compose -f docker-compose.yml unpause app",
             ],
         )
@@ -835,7 +835,7 @@ class ComposeCliTests(FakeDockerCase):
         self.assertEqual(
             self.call_commands(),
             [
-                "compose -f docker-compose.yml up -d --remove-orphans --no-deps --wait --wait-timeout 7 app"
+                "compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps --wait --wait-timeout 7 app"
             ],
         )
 
@@ -852,7 +852,7 @@ class ComposeCliTests(FakeDockerCase):
         self.assertEqual(
             self.call_commands(),
             [
-                "compose -f docker-compose.yml up -d --remove-orphans provider app",
+                "compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build provider app",
             ],
         )
 
@@ -869,7 +869,7 @@ class ComposeCliTests(FakeDockerCase):
         self.assertEqual(
             self.call_commands(),
             [
-                "compose -f docker-compose.yml up -d --remove-orphans --no-deps --no-start app",
+                "compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps --no-start app",
             ],
         )
         self.assertEqual(

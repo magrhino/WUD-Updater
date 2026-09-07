@@ -89,7 +89,7 @@ def test_apply_endpoint_applies_digest_unpin_plan_and_records_provenance(
     assert wud_file.read_text(encoding="utf-8") == ""
     calls = _fake_docker_calls(fake_root)
     assert " pull app" in calls
-    assert " up -d --remove-orphans --no-deps" in calls
+    assert " up -d --remove-orphans --pull never --no-build --no-deps" in calls
     assert " app" in calls
     db_path = tmp_path / "state" / "wud.sqlite"
     with open_db(db_path) as conn:
@@ -274,7 +274,7 @@ def test_apply_endpoint_runs_existing_updater_and_records_audit(
     calls = _fake_docker_calls(fake_root)
     assert "compose -f docker-compose.yml pull app" in calls
     assert "compose -f docker-compose.yml stop app" in calls
-    assert "compose -f docker-compose.yml up -d --remove-orphans --no-deps app" in calls
+    assert "compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps app" in calls
 
     detail = client.get(f"/api/v1/runs/{job['run_id']}").json()
     assert detail["metadata"]["source"] == "webui"
@@ -364,7 +364,7 @@ def test_apply_endpoint_uses_api_pending_source_without_editing_wud_file(
     assert wud_file.read_text(encoding="utf-8") == "repo/file:latest\n"
     calls = _fake_docker_calls(fake_root)
     assert "compose -f docker-compose.yml pull app" in calls
-    assert "compose -f docker-compose.yml up -d --remove-orphans --no-deps app" in calls
+    assert "compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps app" in calls
     assert "worker" not in calls
     detail = client.get(f"/api/v1/runs/{job['run_id']}").json()
     assert detail["metadata"]["pending_source"] == "api"

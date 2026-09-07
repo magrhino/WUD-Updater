@@ -511,7 +511,10 @@ class ComposeCli:
         no_start: bool = False,
         project_directory: str | Path | None = None,
     ) -> CommandResult:
-        args = ["up", "-d", "--remove-orphans"]
+        # Pulling and verification happen before recreation. Do not let Compose
+        # replace that local image via pull_policy (including latest) or a build.
+        # Missing images/unsupported flags must fail, never retry without guards.
+        args = ["up", "-d", "--remove-orphans", "--pull", "never", "--no-build"]
         if force_recreate:
             args.append("--force-recreate")
         if services and no_deps:

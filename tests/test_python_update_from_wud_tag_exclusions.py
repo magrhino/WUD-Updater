@@ -81,7 +81,7 @@ class UpdateFromWudTagExclusionTests(UpdateFromWudRunnerTestCase):
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertRegex(
             self.calls(),
-            r"compose -f docker-compose.yml up -d --remove-orphans --no-deps app",
+            r"compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps app",
         )
     def test_stale_digest_blocks_tag_exclusion_rewrite_and_recreate(self) -> None:
         self.wud_file.write_text(
@@ -226,7 +226,7 @@ class UpdateFromWudTagExclusionTests(UpdateFromWudRunnerTestCase):
         calls = self.calls()
         self.assertRegex(
             calls,
-            r"compose -f docker-compose.yml up -d --remove-orphans gluetun qbittorrent",
+            r"compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build gluetun qbittorrent",
         )
         self.assertNotRegex(calls, r"compose -f docker-compose.yml up -d .*--no-deps")
     def test_exclude_tag_line_recreates_only_successful_label_writes(self) -> None:
@@ -281,12 +281,12 @@ class UpdateFromWudTagExclusionTests(UpdateFromWudRunnerTestCase):
         calls = self.calls()
         self.assertIn(
             f"{app_stack}\tcompose -f docker-compose.yml up -d "
-            "--remove-orphans --no-deps app",
+            "--remove-orphans --pull never --no-build --no-deps app",
             calls,
         )
         self.assertNotIn(
             f"{worker_stack}\tcompose -f docker-compose.yml up -d "
-            "--remove-orphans --no-deps worker",
+            "--remove-orphans --pull never --no-build --no-deps worker",
             calls,
         )
         self.assertIn(

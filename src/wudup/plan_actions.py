@@ -106,7 +106,7 @@ def render_plan_actions(
             )
         )
 
-    up_args = ["up", "-d", "--remove-orphans"]
+    up_args = ["up", "-d", "--remove-orphans", "--pull", "never", "--no-build"]
     if scope.force_recreate:
         up_args.append("--force-recreate")
     if scope.services and scope.up_no_deps:

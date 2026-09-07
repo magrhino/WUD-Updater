@@ -103,7 +103,7 @@ def test_auto_update_scheduler_applies_due_policy_at_configured_local_time(
     assert wud_file.read_text(encoding="utf-8") == ""
     calls = _fake_docker_calls(fake_root)
     assert "compose -f docker-compose.yml pull app" in calls
-    assert "compose -f docker-compose.yml up -d --remove-orphans --no-deps app" in calls
+    assert "compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps app" in calls
 
     with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         schedule_rows = conn.execute(
