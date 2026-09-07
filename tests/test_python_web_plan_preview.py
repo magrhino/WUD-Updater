@@ -236,6 +236,15 @@ def test_plan_endpoint_returns_selected_dry_run_without_mutation(
     assert body["stacks"][0]["lines"][0]["service"] == "db"
     assert body["stacks"][0]["actions"][0]["kind"] == "pull"
     assert body["stacks"][0]["actions"][0]["args"][-1] == "db"
+    assert [
+        action["args"]
+        for action in body["stacks"][0]["actions"]
+        if action["kind"] == "up"
+    ] == [[
+        "docker", "compose", "-f", "docker-compose.yml",
+        "up", "-d", "--remove-orphans", "--pull", "never", "--no-build",
+        "--no-deps", "db",
+    ]]
     assert body["issues"] == []
     assert wud_file.read_text(encoding="utf-8") == original
     assert (compose_dir / "docker-compose.yml").read_text(encoding="utf-8") == compose_before
