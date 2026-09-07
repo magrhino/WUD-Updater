@@ -269,7 +269,7 @@ def test_doctor_warns_when_wud_metadata_contains_degraded_observations(
 
     assert response.status_code == 200
     assert check["status"] == "WARN"
-    assert "WUD could not refresh 1 container" in check["detail"]
+    assert "The last WUD update check failed for 1 container" in check["detail"]
 
 
 def test_doctor_endpoint_suggests_verifying_rejected_wud_api_auth(

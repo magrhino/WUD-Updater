@@ -400,8 +400,9 @@ def _wud_metadata_apply_preflight_check(plan: DryRunPlan) -> ApplyPreflightCheck
             code="wud-metadata-current",
             label=_WUD_METADATA_CHECK_LABEL,
             detail=(
-                "Every selected update has current information. WUD could not "
-                "refresh other containers. View affected containers for details."
+                "Every selected update has current information. The last WUD "
+                "update check failed for other containers. "
+                "View affected containers for details."
             ),
             source_check_codes=["wud-api-observations"],
         )

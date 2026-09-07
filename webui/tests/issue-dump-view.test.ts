@@ -93,6 +93,12 @@ describe("IssueDumpView", () => {
     expect(ensureCsrf).not.toHaveBeenCalled();
     expect(router.currentRoute.value.meta.title).toBe("Affected containers");
     expect(wrapper.text()).toContain("Affected container details loaded.");
+    const explanation = wrapper.find(".section-copy").text();
+    expect(explanation).toContain("The last WUD update check failed");
+    expect(explanation).toContain("do not indicate that a container stopped");
+    expect(explanation).toContain(
+      "Refreshing this page only reloads those results",
+    );
     const dump = wrapper.find(".issue-dump-viewer").element.textContent ?? "";
     expect(dump).toContain('"containers_affected": 1');
     expect(dump).toContain('"reason_code": "reported_error"');
@@ -167,7 +173,7 @@ describe("IssueDumpView", () => {
       wrapper.find(".issue-dump-viewer").element.textContent ?? "";
 
     await wrapper
-      .find('button[aria-label="Refresh affected containers"]')
+      .find('button[aria-label="Reload saved check results"]')
       .trigger("click");
     await flushPromises();
 

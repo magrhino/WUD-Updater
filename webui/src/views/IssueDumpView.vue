@@ -52,17 +52,19 @@ onMounted(() => {
       <div>
         <h2>Affected WUD containers</h2>
         <p class="section-copy">
-          WUD could not refresh these containers during its latest check. This
-          view shows the reported problem for each affected container and omits
-          unrelated diagnostics.
+          The last WUD update check failed for the containers listed below.
+          These errors concern update information and do not indicate that a
+          container stopped. WUDup shows WUD's saved results until a successful
+          scan replaces them. Refreshing this page only reloads those results;
+          wait for the next scheduled WUD scan or run a WUD rescan to retry.
         </p>
       </div>
       <n-flex class="inline-actions" align="center" :size="8">
         <n-button
           quaternary
           circle
-          title="Refresh affected containers"
-          aria-label="Refresh affected containers"
+          title="Reload saved check results"
+          aria-label="Reload saved check results"
           :loading="diagnosticsDownloading"
           @click="refreshSupportBundle"
         >

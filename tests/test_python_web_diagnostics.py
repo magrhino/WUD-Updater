@@ -254,11 +254,15 @@ def test_diagnostics_support_bundle_includes_wud_observation_issue_dump(
         "update_available": False,
         "usable_result": False,
         "retryable": True,
-        "error": "WUD registry request failed with HTTP status 429",
+        "error": (
+            "The registry rate-limited the last WUD update check "
+            "(HTTP 429: too many requests). Wait before rescanning; "
+            "a successful check clears this error."
+        ),
     }
     assert body["pending_summary"]["wud_api"]["detail"] == (
         "7 updates are available. "
-        "WUD could not refresh 12 containers. "
+        "The last WUD update check failed for 12 containers. "
         "Update status is unknown for 12 containers. "
         "WUD skipped 9 containers because their registries are unsupported."
     )
@@ -334,9 +338,12 @@ def test_diagnostics_support_bundle_redacts_wud_observation_details(
     assert "unknown-token" not in serialized
     assert "unknown-password" not in serialized
     assert "unknown-header-secret" not in serialized
-    assert item["error"] == "WUD registry request failed with HTTP status 401"
+    assert item["error"] == (
+        "The last WUD update check failed: "
+        "registry request returned HTTP status 401. Check WUD logs for details."
+    )
     assert body["wud_api_observations"]["items"][1]["error"] == (
-        "WUD reported a container observation error"
+        "The last WUD update check failed. Check WUD logs for details."
     )
     assert "<redacted>" in serialized
 

@@ -295,7 +295,11 @@ def test_wud_api_snapshot_tracks_only_retryable_degraded_container_ids(
             "update_available": False,
             "usable_result": False,
             "retryable": True,
-            "error": "WUD registry request failed with HTTP status 429",
+            "error": (
+                "The registry rate-limited the last WUD update check "
+                "(HTTP 429: too many requests). Wait before rescanning; "
+                "a successful check clears this error."
+            ),
         },
         {
             "outcome": "unsupported_ignored",
@@ -915,7 +919,7 @@ def test_wud_api_recovers_cold_start_update_from_matching_pending_file(
     assert snapshot.recovered_update_count == 1
     assert snapshot.status.detail == (
         "1 update is available. "
-        "WUD could not refresh 1 container. "
+        "The last WUD update check failed for 1 container. "
         "1 update was recovered from the pending file."
     )
     diagnostic = snapshot.observation_diagnostics[0]

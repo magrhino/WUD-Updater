@@ -611,7 +611,7 @@ def _degraded_observation_detail(
     recovered_update_count: int,
 ) -> str:
     detail = (
-        f" WUD could not refresh "
+        " The last WUD update check failed for "
         f"{_count_phrase(degraded_container_count, 'container')}."
     )
     if retained_update_count:
@@ -2015,8 +2015,18 @@ def _diagnostic_error_text(settings: WebSettings, value: str) -> str:
         return "Unsupported registry"
     status = _HTTP_STATUS_DETAIL_RE.search(sanitized)
     if status is not None:
-        return f"WUD registry request failed with HTTP status {status.group(1)}"
-    return "WUD reported a container observation error"
+        if status.group(1) == "429":
+            return (
+                "The registry rate-limited the last WUD update check "
+                "(HTTP 429: too many requests). Wait before rescanning; "
+                "a successful check clears this error."
+            )
+        return (
+            "The last WUD update check failed: "
+            f"registry request returned HTTP status {status.group(1)}. "
+            "Check WUD logs for details."
+        )
+    return "The last WUD update check failed. Check WUD logs for details."
 
 
 def _has_usable_scan_result(
