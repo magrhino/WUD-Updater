@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
+from io import StringIO
 from unittest import mock
 
 from tests.update_from_wud_helpers import (
     UpdateFromWudRunnerTestCase,
 )
 
+from wudup.digest_verifier import DigestCheckResult
 from wudup.updater import (
     UpdateFromWudRunner,
 )
@@ -17,6 +21,87 @@ from wudup.updater_models import (
 
 
 class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
+    def test_verified_image_is_not_repulled_with_always_policy(self) -> None:
+        self._assert_recreation_keeps_verified_image(policy="always")
+
+    def test_verified_latest_is_not_repulled_with_native_wait(self) -> None:
+        self._assert_recreation_keeps_verified_image(policy="missing", wait=True)
+
+    def test_verified_image_is_not_rebuilt_in_pause_mode(self) -> None:
+        self._assert_recreation_keeps_verified_image(policy="build", mode="pause")
+
+    def test_verified_stopped_image_is_not_repulled(self) -> None:
+        self._assert_recreation_keeps_verified_image(policy="always", stopped=True)
+
+    def _assert_recreation_keeps_verified_image(
+        self,
+        *,
+        policy: str,
+        wait: bool = False,
+        mode: str = "stop",
+        stopped: bool = False,
+    ) -> None:
+        image = "repo/app:latest"
+        digest_a = "sha256:" + "a" * 64
+        digest_b = "sha256:" + "b" * 64
+        self.env["FAKE_COMPOSE_UP_WAIT"] = "1" if wait else "0"
+        self.wud_file.write_text(f"{image}@{digest_a}\n", encoding="utf-8")
+        stack = self.make_stack("app", [("app", image, None if stopped else "cid-app")])
+        compose_file = stack / "docker-compose.yml"
+        compose_text = compose_file.read_text(encoding="utf-8")
+        compose_text += f"    pull_policy: {policy}\n"
+        if policy == "build":
+            compose_text += "    build: .\n"
+        compose_file.write_text(compose_text, encoding="utf-8")
+        self.set_image_state(image, "old", "sha256:old")
+        self.set_image_after_pull(image, "image-a", digest_a)
+        verifier = mock.Mock()
+        verifier.verify_tag_digest.return_value = DigestCheckResult(
+            True, "verified", "digest-match"
+        )
+        runner = self.make_runner(digest_verifier=verifier)
+        runner.options = replace(runner.options, mode=mode)
+        events = []
+        recreated_images = []
+
+        def verify_pulled_image(actual_image, expected):
+            self.assertEqual((actual_image, expected), (image, digest_a))
+            self.assertEqual(runner.docker.image_id(image), "image-a")
+            events.append("verified-a")
+            # The registry (or build context) now supplies B for the same tag.
+            self.set_image_after_pull(image, "image-b", digest_b)
+            return DigestCheckResult(True, "verified", "digest-match")
+
+        verifier.verify.side_effect = verify_pulled_image
+        run_in_pty = runner.command_runner.run_in_pty
+
+        def compose_execution(args, **kwargs):
+            if "compose" in args and "up" in args:
+                self.assertEqual(events, ["verified-a"])
+                no_pull = "--pull" in args and args[args.index("--pull") + 1] == "never"
+                # Model Compose's always/latest and build policies at creation,
+                # before a container can execute the replacement image.
+                if not no_pull or (policy == "build" and "--no-build" not in args):
+                    self.set_image_state(image, "image-b", digest_b)
+                recreated_images.append(runner.docker.image_id(image))
+                self.assertEqual("--no-start" in args, stopped)
+                self.assertEqual("--wait" in args, wait and not stopped)
+            return run_in_pty(args, **kwargs)
+
+        stdout, stderr = StringIO(), StringIO()
+        with (
+            mock.patch.object(runner.command_runner, "run_in_pty", side_effect=compose_execution),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = runner.run()
+
+        self.assertEqual(status, 0, stdout.getvalue() + stderr.getvalue())
+        self.assertEqual(recreated_images, ["image-a"])
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), compose_text)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertEqual(self.calls().count("compose -f docker-compose.yml pull app"), 1)
+
     def test_up_wait_failure_writes_error_report_with_command_output(self) -> None:
         self.env["FAKE_COMPOSE_UP_WAIT"] = "1"
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
@@ -55,7 +140,7 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
         calls = self.calls()
         self.assertIn(
-            "compose -f docker-compose.yml up -d --remove-orphans --no-deps --no-start app",
+            "compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps --no-start app",
             calls,
         )
         self.assertNotIn("compose -f docker-compose.yml stop app", calls)
@@ -306,7 +391,7 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         calls = self.calls()
         self.assertNotIn("compose -f docker-compose.yml stop app", calls)
         self.assertIn(
-            "compose -f docker-compose.yml up -d --remove-orphans --no-deps app",
+            "compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps app",
             calls,
         )
 
@@ -605,7 +690,7 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         self.assertRegex(calls, r"compose -f docker-compose.yml stop qbittorrent")
         self.assertRegex(
             calls,
-            r"compose -f docker-compose.yml up -d --remove-orphans --no-deps qbittorrent",
+            r"compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps qbittorrent",
         )
         self.assertNotRegex(calls, r"compose -f docker-compose.yml pull gluetun")
         self.assertNotRegex(calls, r"compose -f docker-compose.yml pull mamapi")
@@ -629,11 +714,11 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         self.assertRegex(calls, r"compose -f docker-compose.yml stop qbittorrent")
         self.assertRegex(
             calls,
-            r"compose -f docker-compose.yml up -d --remove-orphans --no-deps --no-start gluetun",
+            r"compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps --no-start gluetun",
         )
         self.assertRegex(
             calls,
-            r"compose -f docker-compose.yml up -d --remove-orphans --no-deps qbittorrent",
+            r"compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps qbittorrent",
         )
         self.assertNotRegex(calls, r"compose -f docker-compose.yml pull gluetun")
         self.assertNotRegex(calls, r"compose -f docker-compose.yml stop .*gluetun")

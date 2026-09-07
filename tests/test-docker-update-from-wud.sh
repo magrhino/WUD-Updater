@@ -613,8 +613,8 @@ test_network_mode_consumer_tag_update_stays_service_scoped(){
   assert_calls_contain 'compose -f docker-compose.yml stop qbittorrent'
   assert_calls_not_contain 'compose -f docker-compose.yml stop .*gluetun'
   assert_calls_not_contain 'compose -f docker-compose.yml stop .*mamapi'
-  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --no-deps qbittorrent$'
-  assert_calls_not_contain 'compose -f docker-compose.yml up -d --remove-orphans gluetun'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps qbittorrent$'
+  assert_calls_not_contain 'compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build gluetun'
   teardown_case
 }
 
@@ -633,7 +633,7 @@ test_network_mode_consumer_tag_update_rollback_uses_service_scope(){
   assert_file_equals "$WUD_FILE" "$QBIT_IMAGE tag=5.2.0"
   grep -q -- "image: $QBIT_IMAGE" "$BASE/media/docker-compose.yml" || fail "compose file was not rolled back"
   local up_count
-  up_count="$(grep -Ec 'compose -f docker-compose.yml up -d --remove-orphans --no-deps qbittorrent$' "$FAKE_ROOT/calls.log")"
+  up_count="$(grep -Ec 'compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps qbittorrent$' "$FAKE_ROOT/calls.log")"
   [[ "$up_count" == "2" ]] || fail "expected update and rollback up scoped to qbittorrent, got $up_count"
   assert_calls_contain 'compose -f docker-compose.yml stop qbittorrent'
   assert_calls_not_contain 'compose -f docker-compose.yml stop .*gluetun'
@@ -656,7 +656,7 @@ test_network_mode_provider_update_includes_consumers(){
   assert_calls_not_contain 'compose -f docker-compose.yml pull qbittorrent'
   assert_calls_not_contain 'compose -f docker-compose.yml pull mamapi'
   assert_calls_contain 'compose -f docker-compose.yml stop qbittorrent mamapi gluetun'
-  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans gluetun mamapi qbittorrent$'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build gluetun mamapi qbittorrent$'
   assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--no-deps'
   teardown_case
 }
@@ -682,7 +682,7 @@ test_network_mode_provider_label_does_not_expand_consumer_update(){
   assert_calls_contain 'compose -f docker-compose.yml stop qbittorrent'
   assert_calls_not_contain 'compose -f docker-compose.yml stop .*gluetun'
   assert_calls_not_contain 'compose -f docker-compose.yml stop .*mamapi'
-  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --no-deps qbittorrent$'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps qbittorrent$'
   assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--force-recreate'
   teardown_case
 }
@@ -1029,7 +1029,7 @@ test_recreate_stack_label_forces_stack_level_update(){
   assert_calls_not_contain 'compose -f docker-compose.yml pull db'
   assert_calls_not_contain 'compose -f docker-compose.yml down[[:space:]]*$'
   assert_calls_contain 'compose -f docker-compose.yml stop db app'
-  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --no-deps app db'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps app db'
   assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--force-recreate'
   teardown_case
 }
@@ -1057,7 +1057,7 @@ test_recreate_stack_label_preserves_gluetun_network_stack(){
   assert_calls_not_contain 'compose -f docker-compose.yml pull gluetun'
   assert_calls_not_contain 'compose -f docker-compose.yml down'
   assert_calls_contain 'compose -f docker-compose.yml stop thelounge speedtest-tracker mamapi qbittorrent gluetun'
-  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --no-deps gluetun qbittorrent mamapi speedtest-tracker thelounge'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --pull never --no-build --no-deps gluetun qbittorrent mamapi speedtest-tracker thelounge'
   assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--force-recreate'
   teardown_case
 }
