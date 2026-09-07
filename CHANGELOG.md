@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.59.6](https://github.com/magrhino/wudup/compare/v0.59.5...v0.59.6) (2026-09-07)
+
+
+### Bug Fixes
+
+* **compose:** prevent image replacement during recreation ([#643](https://github.com/magrhino/wudup/issues/643)) ([5de4f19](https://github.com/magrhino/wudup/commit/5de4f19269803526dad25d970a0a92da895c634c))
+* **webui:** clarify failed WUD update checks ([#641](https://github.com/magrhino/wudup/issues/641)) ([24c3c97](https://github.com/magrhino/wudup/commit/24c3c97d21d14befd5c9bc5d7b67f2999d2602fd))
+
 ## [0.59.5](https://github.com/magrhino/wudup/compare/v0.59.4...v0.59.5) (2026-09-06)
 
 
